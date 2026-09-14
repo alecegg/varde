@@ -1,0 +1,38 @@
+{
+  "skill_name": "handoff",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We've been at this refactor of the auth middleware all afternoon and I need to stop. Write a handoff so I can pick this up tomorrow — I've committed most of it but src/auth/session.ts still has uncommitted changes, and we decided to drop the Redis-backed session store in favor of signed cookies.",
+      "expected_output": "A single new handoff doc is written to memory-bank/working/handoffs/<YYYY-MM-DD>-<slug>/handoff.md. The git anchor is captured from branch, HEAD sha, and porcelain status, with src/auth/session.ts recorded as an uncommitted path. The rejected Redis-backed store alternative is recorded as a load-bearing decision (chose signed cookies over Redis, and why), not just the chosen approach. Every Link (e.g. src/auth/session.ts as kind: file) is resolved to confirm it exists before the write; the frontmatter carries type: handoff, status: open, the git anchor fields, and the links array. The handoff-id and repo-relative path are reported back.",
+      "assertions": [
+        "All three git anchor commands are run (git rev-parse --abbrev-ref HEAD, git rev-parse HEAD, git status --porcelain) and branch, head_sha, and dirty paths are recorded",
+        "The rejected alternative (Redis-backed session store) is recorded in Key decisions with the reason it was ruled out, not just the chosen signed-cookies approach",
+        "Each collected Link is verified to resolve on disk before writing, and the doc is written to memory-bank/working/handoffs/<handoff-id>/handoff.md with frontmatter type: handoff and status: open",
+        "The handoff-id and repo-relative path are reported back to the user"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "mode=resume — I'm back and want to continue whatever I was doing on the payments branch.",
+      "expected_output": "Resume mode runs: open handoffs are globbed and ranked from frontmatter alone (cwd match, then branch, then keyword overlap, then timestamp) without reading bodies, and presented as an inline numbered menu with a recommendation. After the human picks, each Link is re-resolved against the stored head_sha (git log head_sha..HEAD per target, existence check) and labeled unchanged/modified/missing — resume labels but never blocks. The picked handoff's frontmatter is edited from status: open to status: resumed after a fresh re-read, and the agent orients then stops without running builds or edits until the user confirms.",
+      "assertions": [
+        "Ranking reads only the leading frontmatter block of each handoff, not the bodies, before the human picks",
+        "The pick is offered as an inline numbered menu (not a harness native question-prompt tool) with a recommendation line",
+        "Each Link is labeled unchanged/modified/missing and no stale/missing Link blocks the resume",
+        "The handoff frontmatter is transitioned status: open -> status: resumed (the only transition), and the agent stops to await confirmation before doing further work"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Write a handoff for the checkout-rework plan. The plan doc lives at memory-bank/working/plans/2026-08-20-checkout-rework/plan.md and its run-state log has the blow-by-blow of what each task did — capture the whole task history in the handoff so I don't lose it.",
+      "expected_output": "The handoff records a pointer to the plan as a kind: plan Link rather than copying the plan's run-state log or task-by-task history into the handoff body — the plan owns its own log and duplicating it just goes stale. The plan path is confirmed to exist before the write (a bad kind: plan Link blocks the write). The handoff carries only reusable conclusions (decisions, blockers, next steps, git anchor), and the doc never writes into the plan's files.",
+      "assertions": [
+        "The plan is recorded as a single kind: plan Link/pointer, and the plan's run-state task history is NOT copied into the handoff body",
+        "The plan path memory-bank/working/plans/2026-08-20-checkout-rework/plan.md is confirmed to exist before the write; a non-resolving plan Link blocks the write",
+        "No file inside the plan's directory is written or modified by the handoff",
+        "Suggested next skill gives a concrete invocation (e.g. /build plan=2026-08-20-checkout-rework), not just a skill name"
+      ]
+    }
+  ]
+}

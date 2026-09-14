@@ -1,0 +1,36 @@
+{
+  "skill_name": "friction",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Capture this friction: I just wasted twenty minutes because the build command in the README points at a script that was renamed months ago, and I had to grep the Makefile to find the real one.",
+      "expected_output": "A single concrete friction item is written under memory-bank/friction/ describing the stale README build command, the grep workaround, and the wasted time. Before writing, existing open items are searched with Glob/Grep for a matching recurring obstacle; if none matches a new kebab-case markdown file is created with frontmatter (type: friction-item, source, status: open, signal: obstacle, created). The file is re-read before reporting success, and the report names the item file path(s). No skill, doc, command, or application code is edited and no clustering or promotion occurs.",
+      "assertions": [
+        "memory-bank/friction/ is searched with Glob/Grep for a matching open item before any write",
+        "The written item's frontmatter includes status: open and signal: obstacle (obstacle being the default signal)",
+        "The item is re-read with Read before success is reported, and the report states the item file path",
+        "No file outside memory-bank/friction/ is created or edited, and no item is clustered, promoted, or dismissed"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review this session for friction in the use of the varde-plan skill.",
+      "expected_output": "This is a closing-step review invocation, so the review is scoped strictly to the varde-plan skill's own execution — its workflow steps, subagent calls, and tool output — not the full conversation or turns from other skills. Each distinct concrete item found is captured with varde-plan named as source. If no concrete friction occurred in that scope, that is reported and no file is written.",
+      "assertions": [
+        "The review is scoped to the varde-plan skill's own execution, not the entire conversation or other skills' turns",
+        "Captured items use varde-plan as the source value",
+        "If no concrete friction is found in scope, this is reported and no friction file is written"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I kind of feel like our whole planning process is clunky and could probably be better somehow. Log that as friction.",
+      "expected_output": "The request is a vague preference/speculation with no concrete obstacle, failed operation, workaround, or reusable lesson, so it falls under the skill's SKIP condition. No friction item is written; the skill reports that no concrete friction was found (or asks for a concrete event) rather than fabricating an item from the vague sentiment.",
+      "assertions": [
+        "No friction item file is written for the vague preference",
+        "The response reports that no concrete friction was found, or requests a concrete event/source, rather than inventing an item",
+        "No skill, doc, command, or application code is edited"
+      ]
+    }
+  ]
+}

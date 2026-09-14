@@ -1,0 +1,37 @@
+{
+  "skill_name": "agent-doc-authoring",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Can you audit our varde-plan SKILL.md? It feels bloated and a couple people said the agent gets lost in it. Path is /Users/alec/source/varde/skills/varde-plan/SKILL.md.",
+      "expected_output": "The skill runs its reviewing checklist against the target and reports findings first, treating edits as a separate later step the user signs off on. Because the complaint is 'gets lost,' it diagnoses navigation/fan-out (file count, single steps pointing at 4-5 cross-referencing peers) rather than just cutting words, and distinguishes consolidation from condensation. It checks description triggering, negation-phrased lines, duplication across files, dangling references/ pointers, presence of an inline Gotchas section, and whether frontmatter would pass validate-frontmatter.py.",
+      "assertions": [
+        "Findings are reported before any edits are made, with edits framed as a separate step requiring user sign-off",
+        "The 'gets lost' complaint is diagnosed as navigation/reference fan-out (file count and per-step peer references), not treated as pure token/word count",
+        "At least one checklist item is applied concretely to the target: negation phrasing, cross-file duplication, dangling references pointer, or missing inline Gotchas section",
+        "No edit is proposed that condenses prose when the actual diagnosed problem is fan-out (consolidation vs condensation is kept distinct)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Write me a skill for deploying microservices to Kubernetes with best practices for rollbacks and health checks.",
+      "expected_output": "The request has no real source material — no completed task in the conversation, no project docs, runbooks, or version history to draw from. The skill declines to draft from generic LLM knowledge and instead says so and asks for grounding (a completed task, an existing runbook/style guide/incident history, or an interview of the user's own expertise) before producing a SKILL.md. It does not fabricate a plausible-looking Kubernetes deployment skill from general knowledge.",
+      "assertions": [
+        "No SKILL.md body is drafted from generic best-practice knowledge in this turn",
+        "The skill explicitly states it lacks grounding and requests a real source (completed task, existing artifact, or an interview) before drafting",
+        "If it offers to interview the user, it elicits one question at a time prioritizing ambiguities that would change the skill's structure"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I just finished wiring up our internal `deploy-cli` release flow with you this session — the part where we had to run `validate-manifest` before `push` or it silently mismatches env names. Turn that into a skill at ~/.claude/skills/deploy-release/, and make sure it actually triggers when someone says 'cut a release'.",
+      "expected_output": "There is real grounding (the just-completed task and its concrete correction). The skill is authored as a Workflow-type skill with a numbered ## Workflow checklist, captures the validate-before-push correction as a Gotcha / verification loop with its why, and phrases instructions as positive targets rather than prohibitions. The description is written for the model, front-loaded with the leading word the user actually says ('cut a release'/'release'), imperative phrasing, targeting the multi-step release task. Frontmatter name matches the directory (deploy-release) and is validated with validate-frontmatter.py.",
+      "assertions": [
+        "The validate-manifest-before-push correction is captured as a Gotcha or verification loop paired with its rationale, not dropped or stated generically",
+        "The description front-loads the user's leading trigger word ('release'/'cut a release') and uses imperative 'Use when...' phrasing rather than a 'This skill does...' summary",
+        "The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and is checked with validate-frontmatter.py",
+        "Multi-step release procedure is expressed as a numbered ## Workflow checklist with an inline Gotchas section, not narrative prose"
+      ]
+    }
+  ]
+}

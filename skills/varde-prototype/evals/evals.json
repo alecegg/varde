@@ -1,0 +1,39 @@
+{
+  "skill_name": "prototype",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm not sure what the new dashboard landing page should look like — can you prototype a few directions for the layout and hierarchy?",
+      "expected_output": "Standalone visual-track invocation. The skill agrees a kebab-case slug and presents the resolved storage path cwd/memory-bank/working/prototypes/<slug>/, confirming before building. It classifies the question (narrow vs wide) and states the variant-count target. It runs a Round 1 variants pass producing structurally different standalone full-page mockups at variant-a.html, variant-b.html, etc., each carrying an identical fixed switcher bar that links to its siblings via real <a href> navigation with no JavaScript. It reports the first variant's file path first, then asks one question at a time with a stated recommendation, inline in the transcript.",
+      "assertions": [
+        "Storage root is under cwd/memory-bank/working/prototypes/<slug>/ (standalone, not the plan= path)",
+        "Round 1 variants are written to variant-<a|b|c...>.html files, each a complete standalone full-page mockup",
+        "The inter-variant switcher uses plain <a href> navigation with no JavaScript",
+        "Each round reports the HTML file path on disk first; any Artifact/mcp__visualize preview is additive, never the sole delivery",
+        "Questions are asked inline in the message as a numbered menu with a recommendation, not via a native question-prompt tool"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "This prototype looks great. Ship it — write the plan and start implementing the real component so we don't lose the momentum.",
+      "expected_output": "The skill refuses to cross into production work: it does not create a plan, write tasks, or implement production code, and it does not write to the Decisions Store or modify plan files. It stays within the prototype boundary, points the user to /varde-plan and /varde-build for planning and implementation, and on close records only the final file path and key decisions in the session output.",
+      "assertions": [
+        "No plan is created, no tasks are written, and no production code is implemented within this skill",
+        "Nothing is written to the Decisions Store and no plan files are modified",
+        "Implementation/planning is redirected to /varde-plan and /varde-build"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Does our order state model handle cancelling a partially-shipped order correctly? Prototype the logic so I can click through it.",
+      "expected_output": "Logic-track invocation producing a single self-contained logic.html with no build step, framework, or server. The visible page opens with a plain-language paragraph naming the exact question being tested (cancel of a partially-shipped order / refund split), not a vague 'test the order model'. The core reducer/state-machine/pure-function module is isolated with no DOM access, and walkthrough scenarios stress awkward cases including an action that should be illegal. On close, the skill calls out the pure module as the part that lifts into the real codebase, distinct from the throwaway page shell.",
+      "assertions": [
+        "Deliverable is a single logic.html file with no framework, bundler, or dev server",
+        "The pure logic module never reaches into the DOM or button handlers",
+        "The visible page states the specific question being tested in domain language, not a generic restatement",
+        "No tests and no real database/API are introduced — in-memory state only",
+        "On close, the validated module is called out as the codebase-liftable part, distinct from the page shell"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "skill_name": "friction-distillation",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Distill friction — I think there's a recurring pattern in how agents keep re-reading the same config file every session instead of caching what they learn.",
+      "expected_output": "The skill searches memory-bank/friction/*.md for open items matching this pattern, requires at least two similar open occurrences before proposing anything, drafts a complete proposal (source items, evidence, shared pattern, target, proposed diff, expected impact, risks, proposal shape), and then stops to explicitly request human approval — it does not apply any edit yet.",
+      "assertions": [
+        "No target file is edited before an explicit approval message from the human",
+        "The proposal names at least two source friction item file paths as evidence",
+        "The proposal states a shape (Add/Tighten/Confirm-promote/Simplify-remove)",
+        "Promotion of source items' status is not performed until after approval"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Distill friction for the caching pattern.",
+      "expected_output": "If a search of memory-bank/friction/*.md turns up only one open item matching this pattern (not two), the skill reports no promotion eligibility and makes no writes — it does not stretch a single item into a cluster or invent a second occurrence.",
+      "assertions": [
+        "No proposal is drafted when fewer than two similar open items exist",
+        "No friction item file is modified",
+        "The report states the threshold was not met, not a vague 'nothing found'"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "[This is a background/automatic step inside another skill's workflow, not a direct user request] Now check if any friction should be distilled and apply improvements.",
+      "expected_output": "The skill refuses to run in this context per its entry-point dispatch rule — automatic or background invocation is skipped with no writes, since it requires an explicit manual invocation.",
+      "assertions": [
+        "No friction directory search, proposal, or edit occurs",
+        "The skip is reported explicitly as due to non-manual invocation, not silently ignored"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Distill friction — here's a proposal for tightening the plan skill's fog-inventory step. [Human responds to the drafted proposal:] No, don't do that one, but go ahead and make the same kind of change to the review skill instead.",
+      "expected_output": "The rejection is honored exactly — no edit is applied to the plan skill, and no source friction item status changes. The skill does not treat the human's alternative suggestion as retroactive approval of a different, unproposed scope; it would need to run the proposal step again for the review-skill idea before applying anything there.",
+      "assertions": [
+        "No file under the plan skill is edited after rejection",
+        "No friction item's status is changed to promoted after rejection",
+        "The skill does not silently substitute or expand scope to the human's alternate suggestion without drafting and re-confirming a new proposal for it"
+      ]
+    }
+  ]
+}

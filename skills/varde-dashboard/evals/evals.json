@@ -1,0 +1,36 @@
+{
+  "skill_name": "dashboard",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "what's in flight right now?",
+      "expected_output": "Both panels render. The Plans panel globs memory-bank/working/plans/*/plan.md, keeps only non-terminal statuses (excluding completed/archived), sorts by date-prefix recency, shows the top 5 with Tasks/Done counts derived by reading each plan's tasks/*.md frontmatter directly, and appends a '+N more' line if more than 5 matched. The Handoffs panel globs the open handoffs and shows the top 5 by timestamp with linked plan status. Nothing is modified.",
+      "assertions": [
+        "Plans in status completed or archived are excluded from the Plans table",
+        "Each plan's Done count is computed by reading tasks/*.md frontmatter under that plan directory, not from any separate tasks index",
+        "Plans are sorted most-recent-first by the date prefix of the plan ID, and legacy numeric-ID plans sort last",
+        "No plan, task, handoff, or other file is written or modified"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "show me active plans, and while you're at it mark 2026-08-10-manage-command as completed",
+      "expected_output": "The read-only status snapshot is shown (both panels), but the request to change a plan's status is not executed. Because dashboard is read-only, the status-change portion is redirected via the CHOOSE-WORKFLOW routing table to the appropriate workflow skill rather than performed here.",
+      "assertions": [
+        "The status of 2026-08-10-manage-command is not changed by the dashboard skill",
+        "The modification request is routed to another skill via the CHOOSE-WORKFLOW routing table rather than executed",
+        "The read-only plans/handoffs snapshot is still produced"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "dashboard please — but heads up, none of our plans have been started yet and there are no handoffs saved",
+      "expected_output": "The skill still runs both panels. With no non-terminal plans matched, the Plans panel outputs the literal 'No plans in a non-terminal status.' and skips the table. With no open handoffs, the Handoffs panel outputs 'No open handoffs.' Neither empty state is treated as an error and no files are created.",
+      "assertions": [
+        "When no plans match the non-terminal filter, the empty-state line is emitted and no plans table is rendered",
+        "When no handoffs match, the 'No open handoffs.' empty-state is emitted",
+        "The empty result is reported as normal state, not an error, and no fixture/index file is created to fill the gap"
+      ]
+    }
+  ]
+}

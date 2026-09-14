@@ -1,0 +1,25 @@
+[package]
+name = "docwatch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "In-doc agent orchestrator: watches documents and dispatches agents on change."
+
+[lib]
+name = "docwatch"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+fs4 = { version = "1.1.0", features = ["sync"] }
+libc = "0.2"
+notify = "8.2.0"
+notify-debouncer-mini = "0.7.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"

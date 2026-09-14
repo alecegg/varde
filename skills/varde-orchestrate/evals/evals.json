@@ -1,0 +1,36 @@
+{
+  "skill_name": "orchestrate",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Build the whole checkout-revamp feature end to end — group=checkout-revamp has four child plans and I want them all run unattended.",
+      "expected_output": "The skill resolves the group plan (shape: group), discovers its children by directory nesting under memory-bank/working/plans/checkout-revamp/<child-slug>/plan.md (never a children: frontmatter field), and topologically sorts them by plan-level depends_on. It creates one shared feature worktree via varde-worktree create id=orchestrate-checkout-revamp and records the branch/path in run-state.md. It builds each non-completed child in dependency order by delegating to /varde-build plan=<child-id> with the worktree as effective repoRoot, one at a time, recording each outcome. After all children are completed it offers a single Merge/Stop for the one final merge into the original branch.",
+      "assertions": [
+        "Children are discovered by nested plan.md directories, not from a children: frontmatter list",
+        "Exactly one feature worktree is created (varde-worktree create id=orchestrate-checkout-revamp) and its branch/path is recorded in memory-bank/working/plans/checkout-revamp/run-state.md",
+        "Each child is built via /varde-build with the feature worktree as effective repoRoot, sequentially in depends_on topological order",
+        "Only one merge to the original branch occurs, after every child status is completed (base-branch invariant)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Run all the plans for group=data-export. Heads up: the third child plan has been failing intermittently and may block.",
+      "expected_output": "The skill builds children in dependency order until one blocks. When the third child blocks or /varde-build reports a Failure State, it halts the feature run immediately, does not build any later plans, does not merge to the original branch, leaves the feature worktree as-is (completed plans' commits plus the failed plan's partial state), and reports which child stopped and why plus which plans completed.",
+      "assertions": [
+        "On a child block/failure the run halts immediately and no later child plan is built",
+        "No merge to the original branch is performed when a child blocks (fail-closed)",
+        "The feature worktree is left intact rather than cleaned up, and the report names the stopped child and the completed plans"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Please orchestrate plan=refactor-auth-tokens — just get it built.",
+      "expected_output": "refactor-auth-tokens is a non-group plan (no shape: group), so orchestration does not earn its place. The skill cedes directly to /varde-build plan=refactor-auth-tokens and stops — it creates no feature worktree, does no dependency ordering, and does no orchestrate-level merge.",
+      "assertions": [
+        "Because the target lacks shape: group, control is ceded to /varde-build plan=refactor-auth-tokens and the skill stops",
+        "No feature worktree is created (no varde-worktree create) and no orchestrate-level final merge is performed",
+        "The skill adds no execution logic of its own — task decomposition and completion are left to /varde-build"
+      ]
+    }
+  ]
+}

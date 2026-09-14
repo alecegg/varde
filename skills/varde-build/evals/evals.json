@@ -1,0 +1,19 @@
+[
+  { "query": "run plan 2025-08-20-webhook-retry", "should_trigger": true },
+  { "query": "just add a --json flag to the export command", "should_trigger": true },
+  { "query": "the plan's approved, go build it", "should_trigger": true },
+  { "query": "refactor the payments module without changing behavior", "should_trigger": true },
+  { "query": "implement the fix for the null-pointer bug in checkout, the scope is clear", "should_trigger": true },
+  { "query": "execute this plan but stop before the review and merge, i'll finish it myself", "should_trigger": true },
+  { "query": "small change: rename getUser to fetchUser across the api package", "should_trigger": true },
+  { "query": "build plan=2025-09-01-search-cache and just run it unattended", "should_trigger": true },
+
+  { "query": "help me plan the webhook retry system, im not sure of the scope yet", "should_trigger": false, "note": "scope still open -> varde-plan" },
+  { "query": "are we ready to build the CSV import feature?", "should_trigger": false, "note": "says 'build' but it's a readiness question -> varde-plan" },
+  { "query": "build the entire feature, there are 4 child plans to run in dependency order", "should_trigger": false, "note": "says 'build' but multi-plan -> varde-orchestrate" },
+  { "query": "review the changes on this branch for correctness", "should_trigger": false, "note": "structured review -> varde-review" },
+  { "query": "what should this analytics dashboard look like?", "should_trigger": false, "note": "visual design -> varde-prototype" },
+  { "query": "write the acceptance criteria for the new notifications feature", "should_trigger": false, "note": "AC authoring is a planning concern -> varde-plan" },
+  { "query": "clean up the code I just changed on this branch", "should_trigger": false, "note": "diff-scoped tidy -> varde-simplify" },
+  { "query": "clarify the domain terms with me before we start any work", "should_trigger": false, "note": "terminology -> varde-define" }
+]

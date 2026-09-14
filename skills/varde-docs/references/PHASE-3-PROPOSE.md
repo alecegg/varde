@@ -1,0 +1,29 @@
+## Phase 3: Propose edits for all docs
+
+Process one document at a time by default. Delegate only independent documents,
+with at most three delegates active. Each executor:
+
+1. Reads the full document content.
+2. Identifies the most relevant source(s): use the marker's mapping if present;
+   otherwise match by domain name (e.g. `planning-and-build.md` → the
+   plan/build subsystem, `architecture.md` → the architecture layer, `review.md`
+   → the review subsystem) and locate the corresponding source files or specs.
+3. Reads those source(s) in full.
+4. Compares all hand-authored content (any section without a spec-declared marker
+   block) against the source facts. Flags divergences: stale paths, removed or
+   renamed skills or operations, contradicted invariants, missing concepts present
+   in the source.
+5. Produces a list of proposed changes: `{ section, current_text, proposed_text,
+   rationale }`. If no divergences are found, reports "no changes proposed" for that
+   doc.
+6. For unmarked docs: also proposes a freshness marker (format:
+   `references/MARKER-FORMAT.md`) identifying the source(s) that should track this
+   doc going forward.
+
+Present all proposals grouped by document. For each proposed change, show the
+current text, the proposed replacement, and the rationale. The user approves or
+skips each one.
+
+Apply approved proposals by editing each doc in place. For each unmarked doc where the user approved
+at least one change, prepend the proposed freshness marker as the first line of the
+file.

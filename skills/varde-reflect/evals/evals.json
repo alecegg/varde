@@ -1,0 +1,36 @@
+{
+  "skill_name": "reflect",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We just wrapped a big investigation — traced a race condition in the payment retry queue, found the root cause was a missing idempotency key, and I had to fight the test harness for an hour because its fixture loader silently swallows setup errors. I'm stopping for the day. Reflect on this and wrap up the session.",
+      "expected_output": "Recognized as a session boundary ('stopping for the day' / 'wrap up'), so all three sinks are considered with handoff included. Runs sinks in order: friction first (the fixture loader silently swallowing setup errors is a concrete obstacle -> varde-friction), then knowledge harvest (the idempotency-key root cause is a durable finding -> varde-knowledge, noting the written note's path), then handoff last (varde-handoff), passing a kind: knowledge link to the just-written note rather than restating its content. reflect itself composes no friction fields, no note body, and no handoff doc — each write is done by the leaf. Report states what each sink did, with the knowledge note path and handoff id/path.",
+      "assertions": [
+        "varde-friction, varde-knowledge, and varde-handoff are invoked in that order (friction and knowledge before handoff)",
+        "The handoff step passes a link to the knowledge note as a kind: knowledge link rather than embedding the note's content",
+        "reflect delegates every write to a leaf skill and does not itself author friction item fields, a knowledge note body, or the handoff document",
+        "The final report names the knowledge note path and the handoff id/path"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "source=varde-build — closing step after building the auth-refactor plan. During the run I hit a flaky migration step that needed a manual retry, and the plan established that all new endpoints must go through the shared rate-limiter middleware.",
+      "expected_output": "Treated as a mid-session source=<skill> call: only friction and knowledge are considered, and handoff is NOT invoked because the session continues. Friction capture is scoped to varde-build's own run and passed as the source (the flaky migration needing a manual retry). Knowledge harvest writes the durable rate-limiter-middleware decision/pattern via varde-knowledge. No handoff doc is written. Report notes handoff was not applicable for a source= call.",
+      "assertions": [
+        "varde-handoff is not invoked for this source= call",
+        "The friction capture is passed varde-build as its source and scoped to that skill's run",
+        "Only friction and knowledge sinks are considered"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Reflect on the last turn — I just renamed a local variable and re-ran the tests, which passed first try. Nothing surprising happened.",
+      "expected_output": "Assesses the work and finds nothing concrete for any sink: no obstacle or reusable technique (friction), no durable fact a future session couldn't re-derive (knowledge), and no session-boundary context worth carrying (handoff). No leaf skill is invoked and no write is made. reflect does not manufacture a friction item or a knowledge note to justify running. Report states each sink had nothing and was skipped.",
+      "assertions": [
+        "No friction item, knowledge note, or handoff doc is written and no leaf skill is invoked for a write",
+        "The skill does not manufacture an item to justify running when nothing concrete occurred",
+        "The report explicitly states the sinks had nothing and were skipped"
+      ]
+    }
+  ]
+}

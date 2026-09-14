@@ -1,0 +1,9 @@
+# Rust build output (per-folder .gitignores also cover this)
+**/target/
+
+# Agent working memory — local, high-churn, never committed
+# (per-folder .gitignores also cover this; enforced repo-wide here)
+**/memory-bank/
+
+# macOS
+.DS_Store

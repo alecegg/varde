@@ -1,0 +1,35 @@
+{
+  "skill_name": "review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review this diff on the feature/auth branch against main — find bugs in the token handling changes.",
+      "expected_output": "Runs in default mode with active categories CORRECTNESS, CODE, and ARCHITECTURE, stating the resolved mode and categories before proceeding. Creates the review folder under memory-bank/working/reviews/<YYYY-MM-DD>-<branch>-<target>/ with review.md and index.md before any category work. Reads the changed files in full (not just hunks), writes findings into per-category files (CORRECTNESS.md, etc.) as they are found, each with Severity, Label (auto-fix or triage), Disposition (blank until triage), and a repository-relative Location. Reports 'Review complete...' with finding counts. No source file is modified.",
+      "assertions": [
+        "Resolved mode is default and active categories are exactly CORRECTNESS, CODE, ARCHITECTURE — stated before category work begins",
+        "No source file outside the review folder is modified (report-only)",
+        "Findings are written into per-category files (one file per category) with the required fields including a Label of auto-fix or triage and a repository-relative Location",
+        "The review folder is created (review.md + index.md) before any category work starts"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review the error-handling in src/api and just go ahead and fix any bugs you find while you're in there.",
+      "expected_output": "Performs the structured review and writes persisted findings report-only. It does NOT edit source files to apply the fixes, even though the user asked — applying fixes is the job of /varde-review-fix. Findings that are precisely describable and follow an established pattern get Label: auto-fix (so a later /varde-review-fix default pass can process them); the rest get Label: triage. It does not itself run the fix pass.",
+      "assertions": [
+        "No source file is modified — the skill does not apply fixes despite the request",
+        "Findings safe for automated fixing are given Label: auto-fix and others Label: triage; mislabeled findings would be skipped by /varde-review-fix",
+        "Disposition is left blank at review time, not set to fix"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Run /varde-review --mode banana on the current changes.",
+      "expected_output": "The mode is invalid, so the skill prints the valid category options and exits without creating a review folder, running any category, or writing findings.",
+      "assertions": [
+        "The invalid mode is rejected: the valid options are printed and the skill exits",
+        "No review folder is created and no category work runs before exiting"
+      ]
+    }
+  ]
+}

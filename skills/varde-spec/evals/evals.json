@@ -1,0 +1,34 @@
+{
+  "skill_name": "spec",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Regenerate the specs — I renamed the billing module to payments and deleted the old legacy-invoicing package last week.",
+      "expected_output": "Working tree is confirmed clean before anything else. The payments domain is generated fresh (or updated) by reading current source. The stale legacy-invoicing spec document is deleted from memory-bank/knowledge/specs/ as an orphan, since its corresponding code no longer exists. index.md is rewritten to reflect the new domain set. No file outside memory-bank/knowledge/specs/ is touched, and no document is deleted unless its orphan status is certain.",
+      "assertions": [
+        "git status --porcelain is checked before any write/delete, and generation halts with the exact required error message if the tree isn't clean",
+        "The legacy-invoicing spec document is deleted only after confirming no corresponding code exists",
+        "No spec document is deleted outside the flat specs/ directory",
+        "index.md is rewritten and carries no frontmatter"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Regenerate specs for the whole repo. One existing doc, specs/legacy-scheduler.md, doesn't clearly map to any current directory — the code might have been moved rather than deleted, I'm not sure.",
+      "expected_output": "The ambiguous document is left in place rather than deleted, and is reported as an ambiguous/retained domain in the summary rather than silently skipped or silently removed.",
+      "assertions": [
+        "specs/legacy-scheduler.md is not deleted",
+        "The closing summary explicitly lists it as ambiguous/retained, not just absent from the deleted-orphans list"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Regenerate the specs — there are some uncommitted edits in the working tree from earlier today that I haven't committed yet.",
+      "expected_output": "The skill fails fast with 'spec requires a clean working tree. Commit or stash first.' before generating, deleting, or writing any specification document.",
+      "assertions": [
+        "No spec document is generated, deleted, or written before the clean-tree check fails",
+        "The exact required error message is used, not a paraphrase"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "skill_name": "review-fix",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Apply the review findings in memory-bank/working/reviews/2026-08-01-auth/ — standard manual mode, no build context.",
+      "expected_output": "Automated pass applies only Label: auto-fix findings under per-finding git stash isolation, verified by the project's tests before Disposition: fix is recorded. Every remaining finding is walked in a human triage pass with an explicit disposition (fix/dismiss/action-item/blank). If any finding was applied and left uncommitted changes, a simplify pass runs afterward scoped only to that diff; if nothing was applied, this step is skipped silently with no mention of running it.",
+      "assertions": [
+        "No finding is marked Disposition: fix without a preceding passing verification run",
+        "Stashes are applied and dropped/popped per finding, never batched across findings",
+        "The simplify pass is invoked only when at least one finding has Disposition: fix and left uncommitted changes",
+        "The simplify pass, when it runs, is scoped to the fix-pass diff only — not a general repo-wide cleanup"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Run review-fix mode=manual on memory-bank/working/reviews/2026-08-03-perf/, but the repo currently has unrelated uncommitted edits to a config file the reviewer was mid-editing.",
+      "expected_output": "Because this is a standalone (non-build) invocation with a dirty working tree, the skill does not stash or commit the user's unrelated changes on their behalf. It offers to run the fix pass in a fresh isolated worktree instead, and only fails fast if the user declines.",
+      "assertions": [
+        "The skill does not silently stash or discard the pre-existing unrelated dirty state",
+        "The skill offers an isolated worktree as the resolution before failing",
+        "Failure only occurs after an explicit decline, not automatically on a dirty tree"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Run review-fix mode=build on a task worktree for memory-bank/working/reviews/2026-08-05-billing/, but plan_context was not provided.",
+      "expected_output": "Hard error reported immediately — mode=build without plan_context is rejected before any finding is read or applied.",
+      "assertions": [
+        "No git status, stash, or finding-application activity occurs before the error",
+        "The error names the missing plan_context requirement specifically, not a generic failure"
+      ]
+    }
+  ]
+}

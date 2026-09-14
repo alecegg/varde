@@ -1,0 +1,37 @@
+{
+  "skill_name": "explain",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Teach me the src/core/auth/ module as an HTML page I can open in a browser — I just inherited this codebase and need to understand how session validation flows.",
+      "expected_output": "Auto-detects section mode from the directory-path target. Explores src/core/auth/ via Grep/Glob/Read for symbols and references plus git log for history, then writes one self-contained HTML file to /tmp/YYYY-MM-DD-<slug>.html with inline CSS only. The file contains exactly the four fixed section-mode sections: Background, Intuition, How It Works, and a Quiz of 5 multiple-choice questions each with the correct answer and a one-line explanation. The exact output path is reported to the user.",
+      "assertions": [
+        "Resolves to section mode because the target is a directory path, not a git ref",
+        "Output is a single self-contained HTML file at /tmp/YYYY-MM-DD-<slug>.html with no external stylesheets, scripts, images, or fonts",
+        "Contains exactly the four section-mode sections Background, Intuition, How It Works, and Quiz — no sections added or removed per user preference",
+        "The Quiz has exactly 5 multiple-choice questions, each with its correct answer and a one-line explanation grounded in the preceding sections"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Explain payments as HTML for the team.",
+      "expected_output": "The target 'payments' is ambiguous — it could be a git branch name (diff mode) or a feature-area keyword (section mode). The skill confirms the resolved mode with the user before proceeding, asking inline in its message text as a numbered menu rather than via a harness-native question-prompt tool. It does not silently pick a mode and start exploring or writing the HTML file.",
+      "assertions": [
+        "The skill asks the user to confirm diff vs section mode before exploring the target or writing any HTML",
+        "The confirmation is posed inline in the message text as a numbered menu, not via a native question-prompt tool like AskUserQuestion",
+        "No HTML file is written until the mode is resolved"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Walk me through the changes on the feature/rate-limiter branch versus main and give me a markdown write-up.",
+      "expected_output": "The target is a git ref, so diff mode is auto-detected: the git ref is resolved to a concrete diff and the changed hunks are read, then a self-contained HTML explanation is written to /tmp with the diff-mode sections (Background, Intuition, Code, Quiz). The skill produces HTML only — it does not honor the request for a markdown/plain-text write-up, since HTML is its sole output format.",
+      "assertions": [
+        "Resolves to diff mode because the target is a git ref (branch comparison)",
+        "Output is an HTML file, not markdown or plain text, despite the user asking for markdown",
+        "The third section is titled Code (diff-mode walkthrough of the change hunks file by file), not How It Works",
+        "After writing the file, the skill invokes varde-reflect scoped source=varde-explain (or falls back to varde-friction)"
+      ]
+    }
+  ]
+}

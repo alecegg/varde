@@ -1,0 +1,46 @@
+{
+  "skill_name": "knowledge",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a knowledge note capturing our decision to use OCC (optimistic concurrency) for all bundle writes instead of file locks. We chose it because multiple agents edit the same checkout concurrently. Store it in the project knowledge folder.",
+      "expected_output": "A new decision note is created with Write at memory-bank/knowledge/decision/<slug>.md (type-first path, not nested under a domain). Frontmatter carries type: decision, a one-sentence description, and generated: { by: <producer>/<version>, at: <ISO 8601> }. The body follows the decision shape with ## What, ## Why, and ## Constraints headings. Content is compact and factual with no session narrative.",
+      "assertions": [
+        "The note is written to memory-bank/knowledge/decision/<slug>.md, with type as a top-level folder",
+        "Frontmatter includes a non-empty type field, a description, and a generated entry with by and at",
+        "The decision body uses the ## What / ## Why / ## Constraints structure",
+        "The filename is not index.md or log.md"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The user reviewed and signed off that our knowledge note memory-bank/knowledge/pattern/error-envelope.md is correct — please record their sign-off.",
+      "expected_output": "A verified entry (verified: { by: human:<id>, at: <ISO 8601> }) is added to the note via a targeted Edit, without overwriting or re-touching the existing generated entry — generated.by (who wrote it) and verified.by (who confirmed it) are kept separate per OKF §5.2.",
+      "assertions": [
+        "A verified: { by: human:<id>, at: ... } entry is added to the note",
+        "The existing generated entry is not modified or replaced",
+        "The change is applied with a targeted Edit rather than recreating the file"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "We're retiring the memory-bank/knowledge/pattern/legacy-polling.md note — the pattern is no longer how we do things, but old plans still link to it. Handle it.",
+      "expected_output": "Rather than deleting the file, the note is marked status: deprecated (OKF §5.4) via a targeted Edit, keeping it in place so existing links and history stay resolvable. git rm is reserved for content that was wrong or should never have existed, which is not the case here.",
+      "assertions": [
+        "The note is marked status: deprecated rather than removed with git rm",
+        "The file remains at memory-bank/knowledge/pattern/legacy-polling.md so existing links resolve",
+        "The retirement is done with a targeted Edit, not by recreating or deleting the note"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Find the knowledge note that explains how our plan bundles differ from findings — I think it's a concept somewhere in the knowledge folder.",
+      "expected_output": "Search is scoped to memory-bank/knowledge/ using Grep/Glob (or the varde-docs CLI search if detected) to identify candidate notes first; only the identified note's full body is then read. The project knowledge store is checked before falling back to user knowledge. Notes are not opened one-by-one to browse the folder.",
+      "assertions": [
+        "Search is scoped to the memory-bank/knowledge/ folder before any note is read in full",
+        "Project knowledge is consulted before falling back to user knowledge",
+        "A candidate note is identified via grep/glob (or CLI search) before its full body is read, not by opening every note"
+      ]
+    }
+  ]
+}

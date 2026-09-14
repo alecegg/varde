@@ -1,0 +1,58 @@
+{
+  "skill_name": "worktree",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Isolate the upcoming edits for task auth-42 in its own worktree so it won't collide with the other agent working in this checkout. Base it on main.",
+      "expected_output": "scripts/create.sh auth-42 main is run. It resolves main to a fixed commit SHA and adds a worktree branched from that pinned SHA (not the moving branch head) at ../<repo>-worktrees/auth-42 on branch worktree/auth-42. The lines path=<worktree-path>, branch=worktree/auth-42, and created=true are reported back to the caller. No file edits are performed here — the caller does its edits inside that path.",
+      "assertions": [
+        "scripts/create.sh is invoked with id=auth-42 and base=main",
+        "The worktree is created from a resolved base SHA rather than the moving branch head",
+        "The printed path=, branch=, and created=true lines are relayed back to the caller",
+        "No file editing happens in this step beyond creating the worktree"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The work in worktree build-7 is done — merge it back into develop and then clean it up.",
+      "expected_output": "scripts/merge.sh build-7 develop runs first: it commits any uncommitted changes left in the worktree, verifies worktree/build-7 has commits ahead of its base (exit 2 and no merge if it is empty), then attempts git merge --no-ff. Only after the merge exits 0 (or a RESOLVE.md resolution reaches a terminal outcome) is scripts/cleanup.sh build-7 run to remove the worktree and delete branch worktree/build-7.",
+      "assertions": [
+        "scripts/merge.sh runs before scripts/cleanup.sh",
+        "merge.sh commits uncommitted worktree changes and refuses to merge a branch with no commits ahead of its base (exit 2)",
+        "cleanup.sh is only run after merge.sh succeeds (exit 0)",
+        "cleanup.sh removes the worktree and deletes the worktree/build-7 branch"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "scripts/merge.sh for worktree ui-9 just exited 3 on a merge into main. Resolve it — the worktree change was adding a dark-mode toggle to the settings panel.",
+      "expected_output": "references/RESOLVE.md is followed against the in-progress conflicted merge, using the provided intent (adding a dark-mode toggle). Conflicting files are listed via git diff --name-only --diff-filter=U, both sides read (git show :2: / :3:), and non-overlapping changes from both sides are preserved. The project's verification command is run before the merge commit; on failure or an unresolvable conflict the merge is aborted (git merge --abort) and reported. cleanup.sh is NOT run until the merge reaches a terminal outcome. The conflicted worktree stays alive throughout.",
+      "assertions": [
+        "Resolution proceeds using the caller-supplied intent rather than resolving blindly",
+        "The project's verification command is run and passes before the merge commit is made",
+        "On verification failure or an unresolvable conflict, git merge --abort is run and the specific hunks are reported",
+        "cleanup.sh is not run while the merge is still conflicted/in-progress"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Create a worktree with id refactor-3 — I think I already spun one up under that id earlier.",
+      "expected_output": "scripts/create.sh refactor-3 is run and refuses to clobber the existing isolation: if a worktree at ../<repo>-worktrees/refactor-3 or a branch worktree/refactor-3 already exists it exits 3 with an error naming the existing worktree/branch, without adding a new worktree or overwriting the branch. No merge or cleanup is attempted.",
+      "assertions": [
+        "create.sh exits 3 when a worktree or branch for refactor-3 already exists",
+        "No existing worktree or branch is overwritten or force-created",
+        "The error identifies the already-existing worktree path or branch"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Isolate this fix in a worktree with id simplify-2. Note: we're already running inside the build-7 worktree.",
+      "expected_output": "scripts/create.sh simplify-2 detects it is already inside a linked worktree (git --git-dir differs from --git-common-dir), so it does NOT nest a second worktree. It exits 0 printing created=false along with the current worktree's path= and branch=. The caller reuses the existing worktree for its edits and does NOT merge or cleanup afterward — the outer owner (build-7) handles that.",
+      "assertions": [
+        "create.sh no-ops instead of nesting when already inside a linked worktree",
+        "It prints created=false and the current worktree path/branch, exit 0",
+        "The caller does not run merge.sh or cleanup.sh for simplify-2"
+      ]
+    }
+  ]
+}

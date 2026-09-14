@@ -1,0 +1,36 @@
+{
+  "skill_name": "simplify",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Clean up the diff on this branch — I just finished a first pass on the auth refactor and there's some sloppy naming and a couple of redundant helpers in what I changed.",
+      "expected_output": "Diff scope is computed as uncommitted working-tree + staged changes against HEAD. The resolved diff source and the changed-file list with per-file line ranges are reported before any edit. Edits are applied one file at a time, confined to each file's changed line ranges (surrounding code read for context only), tightening naming and removing the redundant helpers without altering behavior. After each file's edits the project's existing test command runs; a failing run reverts that file's edits before moving on. A short summary reports files touched and why, plus any out-of-scope improvement named-not-applied. No persisted findings file or review folder is created.",
+      "assertions": [
+        "No line outside a changed file's computed diff range is edited; an out-of-scope improvement is named in the summary rather than applied",
+        "The resolved diff source (working tree/staged/--ref) and per-file line ranges are stated before any edit is made",
+        "The project's test command is run after a file's edits, and a failing run reverts that file's edits (git checkout / discard) before the next file",
+        "No findings file or review folder is created — the result is an inline edit plus a summary reported to the caller"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Simplify what I just changed. While you're in there, that ugly nested conditional in the same file two functions above my changes has bugged me for ages — swap it to guard clauses too.",
+      "expected_output": "The pass stays strictly scoped to the computed changed-line ranges. The pre-existing nested conditional above the user's changes falls outside those ranges, so it is NOT edited; instead it is named in the closing summary as a worthwhile out-of-scope improvement that was not applied. All edits remain clarity/consistency only with no behavior change, and existing tests continue to pass.",
+      "assertions": [
+        "The out-of-scope nested conditional is not edited, even though the user asked, because it lies outside the computed changed-line ranges",
+        "The nested conditional is named in the summary as an out-of-scope improvement rather than applied",
+        "No behavior-changing edit is made; the pass is clarity/consistency only"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Tidy up my staged changes with `--staged`. Note a few of the files in that changeset are deletions-only.",
+      "expected_output": "Diff scope resolves to staged changes only. Deletions-only files have nothing to simplify and are skipped. Newly added files in the staged set are eligible to be edited in full; other files are edited only within their changed line ranges. Scope is reported before editing, tests run per file after edits, and a summary is reported with no findings store created.",
+      "assertions": [
+        "Diff scope is staged changes only (--staged), not the full working tree",
+        "Files whose staged hunks are deletions-only are skipped as having nothing to simplify",
+        "Any newly added file in scope may be edited in full, while modified files are edited only within their changed line ranges"
+      ]
+    }
+  ]
+}

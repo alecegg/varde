@@ -1,0 +1,20 @@
+[
+  { "query": "I want to add multi-tenant support to the billing service — can we think through what that actually involves before I touch anything?", "should_trigger": true },
+  { "query": "help me figure out the scope and acceptance criteria for a new webhook retry system", "should_trigger": true },
+  { "query": "are we ready to build the CSV import feature or is there stuff still unresolved?", "should_trigger": true },
+  { "query": "lets plan out the migration from the old auth flow to OAuth, im not sure how to break it down yet", "should_trigger": true },
+  { "query": "i have a rough idea for a notifications inbox but its half-baked, want to spar on the scope with me?", "should_trigger": true },
+  { "query": "draft a plan for reworking how we cache search results in ~/src/search", "should_trigger": true },
+  { "query": "what are the open questions we still need to answer before we can implement the export pipeline?", "should_trigger": true },
+  { "query": "need to nail down the design and edge cases for rate limiting before we commit to an approach", "should_trigger": true },
+
+  { "query": "just add a --json flag to the export command", "should_trigger": false, "note": "ad-hoc change with clear scope -> varde-build" },
+  { "query": "run plan 2025-08-20-webhook-retry", "should_trigger": false, "note": "execute an existing plan -> varde-build" },
+  { "query": "build the whole feature, its already split into like 4 plans", "should_trigger": false, "note": "multi-plan feature -> varde-orchestrate" },
+  { "query": "refactor the payments module to be behavior-preserving", "should_trigger": false, "note": "refactor pass -> varde-build" },
+  { "query": "review this diff for bugs", "should_trigger": false, "note": "structured review -> varde-review" },
+  { "query": "what should the settings page actually look like?", "should_trigger": false, "note": "visual design question -> varde-prototype" },
+  { "query": "clarify what we mean by 'workspace' vs 'project' in this codebase", "should_trigger": false, "note": "domain terminology -> varde-define" },
+  { "query": "the acceptance criteria are already written and approved — go implement it", "should_trigger": false, "note": "shares 'acceptance criteria' but wants execution -> varde-build" },
+  { "query": "fix the review findings from yesterday's pass", "should_trigger": false, "note": "apply review findings -> varde-review-fix" }
+]
