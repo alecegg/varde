@@ -1,8 +1,8 @@
 ---
 type: task
 parent: expand-root-readme
-status: backlog
-verified: pending
+status: done
+verified: passed
 depends_on: []
 modifies:
   - README.md
@@ -31,3 +31,4 @@ Use module README files as the source of truth.
 
 #### Progress
 
+- Expanded the root README with module selection, installation, development, and documentation guidance.
