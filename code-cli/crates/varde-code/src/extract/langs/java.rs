@@ -241,7 +241,7 @@ pub fn visit(
             // `@GetMapping`, ...) -> `name` is the bare annotation type name,
             // `enclosing_function` is the annotated class/interface/method's
             // own name (nearest declaration ancestor).
-            if let Some(owner) = annotation_owner_name(node) {
+            if let Some((owner, declaration_span)) = annotation_owner(node) {
                 let ann_name = field_name(node).unwrap_or_default();
                 let (method, path) = java_route_meta(node, &ann_name);
                 ctx.out.push(Entity {
@@ -257,7 +257,7 @@ pub fn visit(
                     body_minhash: None,
                     is_async: None,
                     is_test: false,
-                    owner_type: None,
+                    owner_type: Some(declaration_span),
                 });
             }
         }
@@ -408,7 +408,9 @@ fn type_list_names(wrapper: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Ve
 /// `marker_annotation` node: the class/interface/enum/method/constructor
 /// this annotation is attached to (climbing ancestors past the intervening
 /// `modifiers` wrapper).
-fn annotation_owner_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+fn annotation_owner(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<(String, String)> {
     const OWNER_KINDS: &[&str] = &[
         "class_declaration",
         "interface_declaration",
@@ -418,7 +420,11 @@ fn annotation_owner_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) ->
     ];
     node.ancestors()
         .find(|a| OWNER_KINDS.contains(&a.kind().as_ref()))
-        .and_then(|a| field_name(&a))
+        .and_then(|owner| {
+            let name = field_name(&owner)?;
+            let span = crate::extract::span_of(&owner);
+            Some((name, format!("{}:{}", span.start_byte, span.end_byte)))
+        })
 }
 
 /// Stable name for a Java callable scope.

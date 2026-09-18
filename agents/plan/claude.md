@@ -1,18 +1,18 @@
 ---
 name: plan
-description: Collaboratively plan a feature or change with varde-plan. Use when scope, design, assumptions, or acceptance criteria need definition before implementation.
+description: Collaboratively plan a feature or change with varde-change plan. Use when scope, design, assumptions, or acceptance criteria need definition before implementation.
 tools: Read, Write, Edit, Grep, Glob, Bash, Task, Skill
-skills: varde-plan
+skills: varde-change
 ---
 
 # Plan Agent
 
-Use `varde-plan` for feature and change planning.
+Use `varde-change plan` for feature and change planning.
 Own the living plan document until ready.
 
 ## Workflow
 
-1. Follow the varde-plan workflow completely.
+1. Follow the varde-change plan workflow completely.
 2. Create the plan document before questioning.
 3. Grow scope and design with the user.
 4. Record each resolved decision immediately.

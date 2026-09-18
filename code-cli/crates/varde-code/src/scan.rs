@@ -7,7 +7,7 @@
 
 use crate::extract;
 use crate::model::{Diagnostic, ExtractOutput, FileMeta};
-use crate::parse::{language_for_path, parse_source};
+use crate::parse::{language_for_path, parse_source_for_path};
 use anyhow::Result;
 use rayon::prelude::*;
 use std::path::Path;
@@ -24,6 +24,18 @@ pub struct SourceFile {
     pub content_hash: Option<String>,
 }
 
+/// Results from source discovery: the files the walk reached, plus the
+/// traversal failures it survived.
+///
+/// `diagnostics` holds file-less [`Diagnostic`]s (`file_id: None`) — an
+/// unreadable directory yields no source file to key them to, and the walk
+/// continues so valid siblings still index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceListing {
+    pub files: Vec<SourceFile>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// List files and collect metadata without reading file contents.
 ///
 /// The directory walk runs in parallel (`WalkBuilder::build_parallel`) and each
@@ -31,29 +43,55 @@ pub struct SourceFile {
 /// with `entry.metadata()` supplying mtime/size — one stat per file instead of
 /// the previous `path().is_file()` + `fs::metadata` double-stat.
 pub fn list_source_files(path: &str) -> Result<Vec<SourceFile>> {
+    Ok(list_source_listing(path)?.files)
+}
+
+/// List source files and preserve non-fatal traversal failures.
+pub fn list_source_listing(path: &str) -> Result<SourceListing> {
     let root = Path::new(path);
     if !root.exists() {
         return Err(anyhow::anyhow!("path does not exist: {path}"));
     }
 
     if root.is_file() {
-        return Ok(vec![source_file(root)]);
+        return Ok(SourceListing {
+            files: vec![source_file(root)],
+            diagnostics: Vec::new(),
+        });
     }
 
     let collected = std::sync::Mutex::new(Vec::<SourceFile>::new());
+    let diagnostics = std::sync::Mutex::new(Vec::<Diagnostic>::new());
     ignore::WalkBuilder::new(root)
         .hidden(false)
         .filter_entry(|entry| !is_vcs_internal(entry))
         .build_parallel()
         .run(|| {
             Box::new(|result| {
-                if let Ok(entry) = result
-                    && entry.file_type().is_some_and(|ft| ft.is_file())
-                {
-                    collected
-                        .lock()
-                        .expect("walk collector lock poisoned")
-                        .push(source_file_from_entry(&entry));
+                match result {
+                    Ok(entry) if entry.file_type().is_some_and(|ft| ft.is_file()) => {
+                        collected
+                            .lock()
+                            .expect("walk collector lock poisoned")
+                            .push(source_file_from_entry(&entry));
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        let path = walk_error_path(&error)
+                            .unwrap_or(root)
+                            .display()
+                            .to_string();
+                        tracing::warn!(path = %path, "directory traversal failed — skipped");
+                        diagnostics
+                            .lock()
+                            .expect("walk diagnostics lock poisoned")
+                            .push(Diagnostic {
+                                file_id: None,
+                                path,
+                                message: format!("directory traversal failed — skipped: {error}"),
+                                severity: "error".to_string(),
+                            });
+                    }
                 }
                 ignore::WalkState::Continue
             })
@@ -63,7 +101,35 @@ pub fn list_source_files(path: &str) -> Result<Vec<SourceFile>> {
         .into_inner()
         .expect("walk collector lock poisoned");
     files.sort_unstable_by(|a, b| a.path.cmp(&b.path));
-    Ok(files)
+    let mut diagnostics = diagnostics
+        .into_inner()
+        .expect("walk diagnostics lock poisoned");
+    diagnostics.sort_unstable_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.message.cmp(&right.message))
+    });
+    diagnostics.dedup();
+    Ok(SourceListing { files, diagnostics })
+}
+
+/// The path an `ignore::Error` refers to, when it carries one.
+///
+/// `ignore` has no accessor for this: the path lives in the `WithPath`
+/// variant, which the walker wraps in `WithDepth` (and, for ignore-file parse
+/// failures, `WithLineNumber`), so unwrap those layers to reach it. `Loop`
+/// reports the symlink child that closed the cycle. Everything else — a bare
+/// `Io` error, a bad glob — has no path and falls back to the walk root.
+fn walk_error_path(error: &ignore::Error) -> Option<&Path> {
+    match error {
+        ignore::Error::WithPath { path, .. } => Some(path),
+        ignore::Error::WithDepth { err, .. } | ignore::Error::WithLineNumber { err, .. } => {
+            walk_error_path(err)
+        }
+        ignore::Error::Loop { child, .. } => Some(child),
+        ignore::Error::Partial(errors) => errors.iter().find_map(walk_error_path),
+        _ => None,
+    }
 }
 
 /// Prune VCS-internal directories from the walk. `.hidden(false)` (set on the
@@ -160,19 +226,25 @@ pub fn run(path: &str) -> Result<ExtractOutput> {
     tracing::info!(file = path, "extracting");
     let profile = std::env::var_os("VARDE_PROFILE").is_some();
     let t = std::time::Instant::now();
-    let files = list_source_files(path)?;
+    let SourceListing {
+        files,
+        diagnostics: traversal,
+    } = list_source_listing(path)?;
     if profile {
         eprintln!(
-            "VARDE_PROFILE scan: list_source_files done at {:?} ({} files)",
+            "VARDE_PROFILE scan: list_source_listing done at {:?} ({} files, {} traversal errors)",
             t.elapsed(),
-            files.len()
+            files.len(),
+            traversal.len()
         );
     }
 
     let mut output = ExtractOutput {
         entities: Vec::new(),
         symbols: Vec::new(),
-        diagnostics: Vec::new(),
+        // Traversal failures lead: they describe gaps in the file list that
+        // the per-file diagnostics below can say nothing about.
+        diagnostics: traversal,
         files: Vec::with_capacity(files.len()),
         file_meta: Vec::with_capacity(files.len()),
     };
@@ -348,7 +420,8 @@ fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
         return ProcessedFile {
             content_hash: content_hash(&[]),
             result: FileResult::Diagnostic(Diagnostic {
-                file_id,
+                file_id: Some(file_id),
+                path: path.display().to_string(),
                 message: msg.to_string(),
                 severity: "info".to_string(),
             }),
@@ -365,7 +438,8 @@ fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
             return ProcessedFile {
                 content_hash: content_hash(&[]),
                 result: FileResult::Diagnostic(Diagnostic {
-                    file_id,
+                    file_id: Some(file_id),
+                    path: path.display().to_string(),
                     message: msg.to_string(),
                     severity: "error".to_string(),
                 }),
@@ -382,7 +456,8 @@ fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
             return ProcessedFile {
                 content_hash,
                 result: FileResult::Diagnostic(Diagnostic {
-                    file_id,
+                    file_id: Some(file_id),
+                    path: path.display().to_string(),
                     message: msg.to_string(),
                     severity: "error".to_string(),
                 }),
@@ -403,14 +478,15 @@ fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
                 entities: Vec::new(),
                 symbols: Vec::new(),
                 diagnostic: Some(Diagnostic {
-                    file_id,
+                    file_id: Some(file_id),
+                    path: path.display().to_string(),
                     message: "minified/generated source — skipped".to_string(),
                     severity: "warning".to_string(),
                 }),
             },
         };
     }
-    let parsed = parse_source(&lang, source);
+    let parsed = parse_source_for_path(&lang, path, source);
     let result = extract::extract(&parsed, file_id);
     // A syntax error is localized: tree-sitter's error recovery still parses
     // the rest of the file, so `result.entities`/`result.symbols` hold the
@@ -426,7 +502,8 @@ fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
             "{msg}"
         );
         Diagnostic {
-            file_id,
+            file_id: Some(file_id),
+            path: path.display().to_string(),
             message: msg.to_string(),
             severity: "warning".to_string(),
         }
@@ -451,7 +528,8 @@ fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
 #[cfg(test)]
 mod tests {
     use super::{
-        FileResult, UNKNOWN_METADATA, list_source_files, process_file, source_file_with_metadata,
+        FileResult, UNKNOWN_METADATA, list_source_files, list_source_listing, process_file,
+        source_file_with_metadata,
     };
     use std::path::Path;
 
@@ -566,6 +644,92 @@ mod tests {
         assert!(
             paths.iter().any(|p| p.ends_with(".github/ci.yml")),
             "non-.git dotfiles must still be indexed: {paths:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An unreadable nested directory must not silently shrink the file list:
+    /// siblings still index, and the failure is reported against the exact
+    /// path that failed — not the walk root.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_directory_yields_path_based_diagnostic_and_keeps_siblings() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("varde-scan-denied-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let locked = dir.join("locked");
+        std::fs::create_dir_all(&locked).expect("locked dir");
+        std::fs::write(locked.join("hidden.rs"), "fn hidden() {}\n").expect("hidden src");
+        std::fs::write(dir.join("sibling.rs"), "fn sibling() {}\n").expect("sibling src");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+            .expect("chmod 000");
+
+        let listing = list_source_listing(dir.to_str().unwrap()).expect("walk survives");
+
+        // Restore before asserting so a failure still leaves a removable dir.
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod restore");
+
+        let paths: Vec<&str> = listing.files.iter().map(|f| f.path.as_str()).collect();
+        assert!(
+            paths.iter().any(|p| p.ends_with("sibling.rs")),
+            "valid siblings must still index: {paths:?}"
+        );
+        assert_eq!(
+            listing.diagnostics.len(),
+            1,
+            "one traversal failure expected, got {:?}",
+            listing.diagnostics
+        );
+        let diagnostic = &listing.diagnostics[0];
+        assert_eq!(
+            diagnostic.file_id, None,
+            "traversal errors have no file row"
+        );
+        assert_eq!(diagnostic.severity, "error");
+        assert!(
+            diagnostic.path.ends_with("locked"),
+            "diagnostic must name the failing directory, not the walk root: {}",
+            diagnostic.path
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `run` surfaces walk failures in the same `diagnostics` list as per-file
+    /// ones, so every downstream consumer sees them without a second channel.
+    #[cfg(unix)]
+    #[test]
+    fn run_carries_traversal_diagnostics_into_extract_output() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("varde-scan-runwalk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let locked = dir.join("locked");
+        std::fs::create_dir_all(&locked).expect("locked dir");
+        std::fs::write(dir.join("sibling.rs"), "fn sibling() {}\n").expect("sibling src");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+            .expect("chmod 000");
+
+        let output = super::run(dir.to_str().unwrap()).expect("scan survives");
+
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod restore");
+
+        assert!(
+            output
+                .diagnostics
+                .iter()
+                .any(|d| d.file_id.is_none() && d.path.ends_with("locked")),
+            "traversal diagnostic missing from ExtractOutput: {:?}",
+            output.diagnostics
+        );
+        assert!(
+            output.files.iter().any(|f| f.ends_with("sibling.rs")),
+            "valid siblings must still index: {:?}",
+            output.files
         );
 
         let _ = std::fs::remove_dir_all(&dir);

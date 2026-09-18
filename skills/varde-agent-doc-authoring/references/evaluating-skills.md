@@ -1,6 +1,6 @@
-# Evaluating skill output quality (agentskills.io)
+# Test skill output
 
-Eval-driven iteration: does the skill produce reliably good output, across varied prompts and edge cases, better than no skill?
+Use tests to check whether a skill improves output across normal and edge-case prompts.
 
 ## Test cases: `evals/evals.json`
 
@@ -77,7 +77,7 @@ Grade each assertion PASS/FAIL with concrete evidence (quote/reference the outpu
 
 While grading, watch for bad assertions themselves: always-pass (tests nothing), always-fail (broken or too-hard test), or unverifiable from the output alone — fix these before the next iteration.
 
-For comparing two versions, try blind comparison: show both outputs to an LLM judge without revealing which is which, let it score holistic quality on its own rubric.
+For comparing two versions, try blind comparison: show both outputs to an LLM judge without revealing which is which, let it score overall quality on its own rubric.
 
 ## Aggregating: `benchmark.json`
 
@@ -102,7 +102,7 @@ For comparing two versions, try blind comparison: show both outputs to an LLM ju
 
 ## Human review
 
-Assertions only check what you thought to write. Have a human review outputs alongside grades, recording specific actionable feedback per test case ("chart is missing axis labels and months aren't in chronological order" — not "looks bad"). Empty feedback = passed review.
+Assertions only check what you thought to write. Have a human review outputs alongside grades, recording specific feedback per test case ("chart is missing axis labels and months aren't in chronological order" — not "looks bad"). Empty feedback = passed review.
 
 ## Iteration loop
 

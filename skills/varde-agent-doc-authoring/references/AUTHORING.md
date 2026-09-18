@@ -1,6 +1,6 @@
-# Authoring agent documents
+# Write agent documents
 
-## Ground the document
+## Use project evidence
 
 Write from real project evidence. Use completed tasks, runbooks, schemas,
 incidents, review comments, or code history. Capture corrections that a capable
@@ -11,7 +11,7 @@ For a project-specific workflow, prefer procedures over broad declarations.
 State the default action, its rationale when judgment matters, and exact
 commands only where the operation is fragile.
 
-## Control loading cost
+## Keep reading focused
 
 Skill metadata always loads. The `SKILL.md` body loads when the skill fires.
 Scripts and references load only when the body asks for them.
@@ -60,6 +60,13 @@ and rigid rules that current models can apply through judgment.
 
 Phrase the desired action positively when possible. Keep prohibitions only for
 hard safety boundaries, paired with the correct alternative.
+
+Punctuate a bold lead term by what it is. A noun-phrase label takes a colon
+(`**When relevant:**`, `**Keep vs. drop:**`) because the gloss completes the
+label. A numbered step's imperative is a whole sentence and takes a period
+(`**Run the scan.** Do not pass --apply at this stage.`). The period-on-a-label
+form is a machine-writing tell, and it reads as a sentence the next clause
+interrupts.
 
 ## Specialized references
 

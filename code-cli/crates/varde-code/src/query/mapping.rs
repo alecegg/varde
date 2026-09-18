@@ -387,12 +387,12 @@ fn extract_symbol_signatures(path: &std::path::Path) -> Vec<(String, String, i64
     let Ok(source) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
-    let parsed = crate::parse::parse_source(&lang, &source);
+    let parsed = crate::parse::parse_source_for_path(&lang, path, &source);
     // Symbol-only walk (skips the entity walk) — file_id is irrelevant here,
     // only name/kind/span are read below.
     let mut symbols = Vec::new();
     let has_error =
-        crate::extract::symbol::extract_symbols(&parsed.root.root(), lang, 0, &mut symbols);
+        crate::extract::symbol::extract_symbols(&parsed.root.root(), parsed.lang, 0, &mut symbols);
     if has_error {
         return Vec::new();
     }

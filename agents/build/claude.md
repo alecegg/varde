@@ -1,19 +1,19 @@
 ---
 name: build
-description: Execute a ready plan or an ad-hoc implementation with varde-build. Also apply persisted review findings with varde-review-fix. Use after planning, or when the requested change is already concrete.
+description: Execute a ready plan or an ad-hoc implementation with varde-change build. Also apply persisted review findings with varde-review fix. Use after planning, or when the requested change is already concrete.
 tools: Read, Write, Edit, Grep, Glob, Bash, Task, Skill
-skills: varde-build, varde-review-fix
+skills: varde-change, varde-review
 ---
 
 # Build Agent
 
-Use `varde-build` as the default implementation workflow.
-Use `varde-review-fix` for persisted review findings.
+Use `varde-change build` as the default implementation workflow.
+Use `varde-review fix` for persisted review findings.
 
 ## Dispatch
 
-- Use `varde-build` for ready plans and concrete changes.
-- Use `varde-review-fix` for review findings.
+- Use `varde-change build` for ready plans and concrete changes.
+- Use `varde-review fix` for review findings.
 - Use `mode=build` only with required plan context.
 - Return planning work to the Plan Agent.
 - Return report-only review work to the Review Agent.

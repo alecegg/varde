@@ -8,6 +8,9 @@ This repository is a monorepo for convenience, not a unified application.
 Every top-level folder is a self-contained module with its own dependencies,
 build commands, and documentation. There is no root build or test command.
 
+Use `varde init` to wire supported agent harnesses. It delegates to the
+existing skills and agents installers. It does not build or test modules.
+
 See [AGENTS.md](AGENTS.md) for the repository conventions used by contributors
 and coding agents.
 
@@ -30,6 +33,46 @@ fall back to ordinary file operations.
 Install the module that matches your needs. Each module README is the
 authoritative installation and usage guide.
 
+### Wire supported harnesses
+
+Run the root entry point from this checkout:
+
+```sh
+./varde init --dry-run
+./varde init --yes
+```
+
+It detects Claude, Codex, and opencode configurations. Use `--agents` to
+choose harnesses explicitly, or `--list-agents` to print their identifiers:
+
+```sh
+./varde init --agents codex
+./varde init --list-agents
+```
+
+The command only delegates installation. Module READMEs remain authoritative
+for installer options and module development.
+
+Varde installs seven user-facing skills by default:
+
+| Skill | Primary intent |
+|---|---|
+| `varde-explore` | Exploration and rich code explanation |
+| `varde-change` | Planning, building, verification, and conclusion |
+| `varde-review` | Review reports and explicit improvement modes |
+| `varde-docs` | User documentation and generated specifications |
+| `varde-knowledge` | Durable knowledge, friction, and handoffs |
+| `varde-prototype` | Throwaway visual and logic prototypes |
+| `varde-agent-doc-authoring` | Instructions and references for agents |
+
+Natural language selects each skill and internal mode.
+Ask for exploration before choosing implementation direction.
+Request explanation when learning how a module works.
+Use planning before uncertain or multi-part changes.
+Use building after scope and acceptance criteria settle.
+Request review for report-only findings across changed code.
+Record knowledge when decisions must outlive one session.
+
 ### Workflow skills
 
 Install all skills for Claude, or select a different skills directory:
@@ -38,7 +81,7 @@ Install all skills for Claude, or select a different skills directory:
 cd skills
 ./install.sh
 ./install.sh -d ~/.config/opencode/skills
-./install.sh -s varde-plan,varde-review
+./install.sh -s varde-change,varde-review
 ```
 
 Run `./install.sh -h` for every installer option. The skills cover the full

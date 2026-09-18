@@ -1230,12 +1230,16 @@ const STREAM_CHUNK_FILES: usize = 512;
 /// unchanged: the caller writes to a sibling temp file and renames on success.
 pub(crate) fn persist_full_streaming(
     db_path: &Path,
-    files: Vec<crate::scan::SourceFile>,
+    listing: crate::scan::SourceListing,
     repo_root: &Path,
 ) -> Result<FullBuildStats> {
     ensure_default_subscriber();
     let profile = std::env::var_os("VARDE_PROFILE").is_some();
     let t = std::time::Instant::now();
+    let crate::scan::SourceListing {
+        files,
+        diagnostics: traversal,
+    } = listing;
     let n_files = files.len();
 
     // Churn's `git log` walk only needs the file paths, all known up front, so
@@ -1322,6 +1326,12 @@ pub(crate) fn persist_full_streaming(
             t.elapsed()
         );
     }
+
+    // Traversal failures belong to the walk, not to any chunk, so they are
+    // written once here rather than through `ingest_chunk`. They also join
+    // `merged.diagnostics` so the reported diagnostic count covers them.
+    replace_traversal_diagnostics(&tx, &traversal)?;
+    merged.diagnostics.extend(traversal);
 
     let graph = crate::resolve::resolve(&merged.entities, &merged.symbols, &merged.files)?;
     if profile {
@@ -2167,7 +2177,8 @@ fn write_edges(
     Ok(())
 }
 
-/// Insert `diagnostics` rows, each keyed to its file's `files.id`.
+/// Insert `diagnostics` rows: per-file ones keyed to their file's `files.id`,
+/// traversal failures with a NULL `file_id` and their path alone.
 ///
 /// Persists whatever `parsing-extraction` produced — no severity taxonomy
 /// re-validation.
@@ -2176,13 +2187,14 @@ fn write_diagnostics(
     output: &[ExtractOutput],
     file_ids: &FileIds,
 ) -> Result<()> {
-    let rows: Vec<(i64, &str, &str)> = output
+    let rows: Vec<(Option<i64>, &str, &str, &str)> = output
         .iter()
         .enumerate()
         .flat_map(|(out_idx, out)| {
             out.diagnostics.iter().map(move |d| {
                 (
-                    file_ids.get(out_idx, d.file_id),
+                    d.file_id.map(|file_id| file_ids.get(out_idx, file_id)),
+                    d.path.as_str(),
                     d.message.as_str(),
                     d.severity.as_str(),
                 )
@@ -2192,7 +2204,50 @@ fn write_diagnostics(
 
     batch_insert(
         conn,
-        |n| multi_insert_sql("diagnostics (file_id, message, severity)", "(?, ?, ?)", n),
+        |n| {
+            multi_insert_sql(
+                "diagnostics (file_id, path, message, severity)",
+                "(?, ?, ?, ?)",
+                n,
+            )
+        },
+        4,
+        &rows,
+        |params, row| {
+            params.push(&row.0);
+            params.push(&row.1);
+            params.push(&row.2);
+            params.push(&row.3);
+        },
+    )?;
+    Ok(())
+}
+
+/// Replace every persisted traversal diagnostic with the current walk's.
+///
+/// Traversal diagnostics have no `file_id`, so the per-file `DELETE ... WHERE
+/// file_id IN (...)` that incremental builds run never reaches them. Without
+/// this an unreadable directory, once fixed, would keep reporting forever.
+/// The delete runs even when `diagnostics` is empty — that empty case *is* the
+/// "failure resolved" signal.
+pub(crate) fn replace_traversal_diagnostics(
+    conn: &rusqlite::Connection,
+    diagnostics: &[crate::model::Diagnostic],
+) -> Result<()> {
+    conn.execute("DELETE FROM diagnostics WHERE file_id IS NULL", [])?;
+    let rows: Vec<(&str, &str, &str)> = diagnostics
+        .iter()
+        .map(|d| (d.path.as_str(), d.message.as_str(), d.severity.as_str()))
+        .collect();
+    batch_insert(
+        conn,
+        |n| {
+            multi_insert_sql(
+                "diagnostics (file_id, path, message, severity)",
+                "(NULL, ?, ?, ?)",
+                n,
+            )
+        },
         3,
         &rows,
         |params, row| {
@@ -2476,7 +2531,8 @@ mod tests {
     #[allow(dead_code)]
     pub fn diagnostic(file_id: u32, message: &str) -> Diagnostic {
         Diagnostic {
-            file_id,
+            file_id: Some(file_id),
+            path: format!("file{file_id}.rs"),
             message: message.to_string(),
             severity: "error".to_string(),
         }
@@ -2600,8 +2656,8 @@ mod tests {
         persist(&batch_db, std::slice::from_ref(&output), &graph, &root).expect("batch persist");
 
         // Streaming build over the same files.
-        let files = crate::scan::list_source_files(root_str).expect("list files");
-        persist_full_streaming(&stream_db, files, &root).expect("streaming persist");
+        let listing = crate::scan::list_source_listing(root_str).expect("list files");
+        persist_full_streaming(&stream_db, listing, &root).expect("streaming persist");
 
         let batch = rusqlite::Connection::open(&batch_db).expect("batch db opens");
         let stream = rusqlite::Connection::open(&stream_db).expect("stream db opens");

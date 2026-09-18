@@ -30,7 +30,6 @@ subcommands read back.
 | `git` | `src/git.rs` | Git history/status/tree-state integration |
 | `watch` | `src/watch.rs` | Background watcher: per-repo `notify::Watcher`, debounced incremental rebuilds, single-instance lock; a latency optimization only — see [CLI.md](CLI.md#background-watcher) |
 | `test_cli` | `src/test_cli.rs` | Orchestrates the `test` command: discovers every rule carrying `[[test]]` entries and runs them through the pattern/SQL test runners, merged into the same `{ok, data}` envelope `scan_cli.rs` uses. Self-contained (no DB, no `build`) |
-| `skills` | `src/skills.rs` | Claude Code skill packs compiled into the binary via `include_str!`; backs `skills_list`/`skills_install`/`skills_remove`, writing each pack as a `varde-code-<name>/` directory |
 | `hooks` | `src/hooks.rs` | Session-start hook install targets for supported agent harnesses (claude, codex, opencode, pi); shared whole-file-write and merge-into-shared-config scaffold backing the `hooks` subcommands |
 
 ## Write path (`build`)

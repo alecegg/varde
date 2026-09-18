@@ -50,7 +50,8 @@ fn symbol(file_id: u32) -> Symbol {
 
 fn diagnostic(file_id: u32) -> Diagnostic {
     Diagnostic {
-        file_id,
+        file_id: Some(file_id),
+        path: format!("file{file_id}.rs"),
         message: "skipped".to_string(),
         severity: "error".to_string(),
     }

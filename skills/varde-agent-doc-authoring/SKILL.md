@@ -1,6 +1,6 @@
 ---
 name: varde-agent-doc-authoring
-description: Write or review documents that agents read, including SKILL.md, AGENTS.md, CLAUDE.md, and skill references. Use when creating, auditing, or tightening skill instructions, descriptions, triggering, references, or agent guidance.
+description: "Write or review a document an agent reads — SKILL.md, AGENTS.md, CLAUDE.md, or a skill reference — including its description, triggering, reference layout, or a full evaluation. Not for production code or user-facing docs."
 ---
 
 # Agent document authoring
@@ -8,7 +8,7 @@ description: Write or review documents that agents read, including SKILL.md, AGE
 Keep agent-facing documents grounded, procedural, and lean.
 Load detail only for the active document and task shape.
 
-## Dispatch
+## Choose the task
 
 | Task | Read first | Then read only when needed |
 |---|---|---|
@@ -17,20 +17,24 @@ Load detail only for the active document and task shape.
 | Improve triggering | `references/AUTHORING.md` | `references/optimizing-descriptions.md` for systematic trigger evaluation |
 | Evaluate a mature skill | `references/evaluating-skills.md` | `references/REVIEWING.md` for the final pass |
 
+Read `references/vocabulary.md` when the problem is conceptual rather than
+editorial — why a skill misfires, how much detail to inline, or which lever to
+pull. It defines the terms the other references use.
+
 ## Workflow
 
-1. **Classify the task.** Use the dispatch table. Read only its required references.
-2. **Ground the change.** Read the target and its local references. Prefer project evidence over generic advice.
-3. **Keep loading deliberate.** Put always-needed instructions in `SKILL.md`. Put conditional detail in a local reference with an explicit load condition.
-4. **Write the procedure.** Use imperative steps, a clear default, and project-specific gotchas. Keep literal output templates exact.
-5. **Validate the artifact.** After frontmatter changes, run `uv run scripts/validate-frontmatter.py <skill-dir>` from this skill directory.
-6. **Review the result.** Apply `references/REVIEWING.md` to the changed document. Check every changed local pointer.
+1. **Choose the task.** Use the table. Read its required references.
+2. **Read the target.** Read local references too. Prefer project evidence.
+3. **Place details carefully.** Keep required rules in `SKILL.md`. Put conditional detail in a local reference and say when to read it.
+4. **Write the procedure.** Use direct steps, a clear default, and project-specific gotchas. Keep literal templates exact.
+5. **Validate frontmatter.** Run `uv run scripts/validate-frontmatter.py <skill-dir>` from this skill directory.
+6. **Review the result.** Use `references/REVIEWING.md`. Check every changed pointer.
 
 ## Gotchas
 
-- Keep each skill independently usable. Do not create cross-skill reference dependencies.
+- Keep each skill independently usable: every reference it loads is its own.
 - A shared source file reduces maintenance, not activated context. Prefer local generated copies when standalone packaging requires them.
 - A reference pointer must name a real local file. Illustrative paths belong in prose, not instruction links.
 - Put rare edge cases in references. Keep the decision to load them in `SKILL.md`.
-- Preserve literal templates. Do not replace them with summaries.
+- Carry literal templates through verbatim, summarising nothing.
 - After writing, check for stray literal `</content>` lines.

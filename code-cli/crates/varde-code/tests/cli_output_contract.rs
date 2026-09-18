@@ -56,9 +56,6 @@ fn non_query_machine_commands_emit_the_complete_envelope() {
         vec!["rules_list", "--json", "not-json"],
         vec!["rules_seed", "--json", "not-json"],
         vec!["rules_remove", "--json", "not-json"],
-        vec!["skills_list"],
-        vec!["skills_install", "--agent", "unknown"],
-        vec!["skills_remove", "--agent", "unknown"],
         vec!["hooks", "list"],
         vec!["hooks", "install", "--agent", "unknown"],
         vec!["hooks", "remove", "--agent", "unknown"],
@@ -181,15 +178,26 @@ invalid = ["console.log(\"bad\");"]
         );
     }
 
-    let skills = run(&home, &["skills_list"]);
-    assert_eq!(
-        output_value(&skills, &["skills_list"])["meta"]["compact"],
-        false
-    );
-
     let _ = std::fs::remove_dir_all(&home);
     let _ = std::fs::remove_dir_all(&repo);
     let _ = std::fs::remove_dir_all(&missing);
+}
+
+#[test]
+fn help_excludes_skill_packaging_and_keeps_core_tools() {
+    let home = tempdir("help-home");
+    let output = run(&home, &["--help"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    for retired in ["skills_list", "skills_install", "skills_remove"] {
+        assert!(!stdout.contains(retired), "help still lists {retired}");
+    }
+    for retained in ["explore", "scan", "rules_list", "hooks"] {
+        assert!(stdout.contains(retained), "help omitted {retained}");
+    }
+
+    let _ = std::fs::remove_dir_all(&home);
 }
 
 #[test]

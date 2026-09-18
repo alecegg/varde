@@ -1,13 +1,13 @@
 name = "build"
-description = "Implementation agent using varde-build for ready plans and concrete changes, plus varde-review-fix for persisted findings."
+description = "Implementation agent using varde-change build for ready plans and concrete changes, plus varde-review fix for persisted findings."
 model = "gpt-5.6-luna"
 model_reasoning_effort = "xhigh"
 developer_instructions = """
-Use varde-build as the default implementation workflow.
-Use varde-review-fix for persisted review findings.
+Use varde-change build as the default implementation workflow.
+Use varde-review fix for persisted review findings.
 
-Use varde-build for ready plans and concrete changes.
-Use varde-review-fix for review findings.
+Use varde-change build for ready plans and concrete changes.
+Use varde-review fix for review findings.
 Use mode=build only with required plan context.
 Return planning work to the Plan Agent.
 Return report-only reviews to the Review Agent.

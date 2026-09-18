@@ -13,88 +13,81 @@ use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
 use std::path::Path;
 
-/// Map a file extension to its ast-grep language. `None` for unsupported
-/// extensions (binary, unknown, etc.).
+/// The single registry of indexable file extensions and the ast-grep language
+/// each one parses as. Lowercase, matched case-insensitively.
+///
+/// Every downstream classifier — parsing, entrypoint role-tag rules,
+/// call-based route detection, process-`main` naming — resolves through this
+/// table via [`language_for_path`] instead of re-listing extensions. Those
+/// switches had drifted from it: `.mts`/`.cts` parsed as TypeScript but were
+/// invisible to route detection, and `.c++`/`.hxx`/`.h++` parsed as C++ but
+/// could never surface a `main`. Adding an extension here is the only edit a
+/// new file type needs.
+pub const EXTENSION_LANGUAGES: &[(&str, SupportLang)] = &[
+    ("ts", SupportLang::TypeScript),
+    ("mts", SupportLang::TypeScript),
+    ("cts", SupportLang::TypeScript),
+    ("tsx", SupportLang::Tsx),
+    ("js", SupportLang::JavaScript),
+    ("jsx", SupportLang::JavaScript),
+    ("mjs", SupportLang::JavaScript),
+    ("cjs", SupportLang::JavaScript),
+    // `.h` starts as C. `parse_source_for_path` retries cleanly parseable
+    // C++ headers after a C syntax error.
+    ("c", SupportLang::C),
+    ("h", SupportLang::C),
+    ("cpp", SupportLang::Cpp),
+    ("cc", SupportLang::Cpp),
+    ("cxx", SupportLang::Cpp),
+    ("c++", SupportLang::Cpp),
+    ("hpp", SupportLang::Cpp),
+    ("hh", SupportLang::Cpp),
+    ("hxx", SupportLang::Cpp),
+    ("h++", SupportLang::Cpp),
+    ("go", SupportLang::Go),
+    ("java", SupportLang::Java),
+    ("cs", SupportLang::CSharp),
+    ("kt", SupportLang::Kotlin),
+    ("kts", SupportLang::Kotlin),
+    ("swift", SupportLang::Swift),
+    ("py", SupportLang::Python),
+    ("rb", SupportLang::Ruby),
+    ("php", SupportLang::Php),
+    ("lua", SupportLang::Lua),
+    ("scala", SupportLang::Scala),
+    ("sc", SupportLang::Scala),
+    ("sbt", SupportLang::Scala),
+    ("dart", SupportLang::Dart),
+    ("ex", SupportLang::Elixir),
+    ("exs", SupportLang::Elixir),
+    ("sol", SupportLang::Solidity),
+    ("hs", SupportLang::Haskell),
+    // Shell scripts (bash/sh/zsh/ksh/bats) all parse against the
+    // tree-sitter-bash grammar; ast-grep's own extension list groups them
+    // the same way.
+    ("sh", SupportLang::Bash),
+    ("bash", SupportLang::Bash),
+    ("zsh", SupportLang::Bash),
+    ("ksh", SupportLang::Bash),
+    ("bats", SupportLang::Bash),
+    ("rs", SupportLang::Rust),
+];
+
+/// Map a file extension to its ast-grep language via [`EXTENSION_LANGUAGES`].
+/// `None` for unsupported extensions (binary, unknown, etc.).
 pub fn language_for_path(path: &Path) -> Option<SupportLang> {
     // Match the raw extension bytes case-insensitively (no lowercase String
     // allocation per file).
     let ext = path.extension()?.to_str()?;
-    let lang = if ext.eq_ignore_ascii_case("ts")
-        || ext.eq_ignore_ascii_case("mts")
-        || ext.eq_ignore_ascii_case("cts")
-    {
-        SupportLang::TypeScript
-    } else if ext.eq_ignore_ascii_case("tsx") {
-        SupportLang::Tsx
-    } else if ext.eq_ignore_ascii_case("js")
-        || ext.eq_ignore_ascii_case("jsx")
-        || ext.eq_ignore_ascii_case("mjs")
-        || ext.eq_ignore_ascii_case("cjs")
-    {
-        SupportLang::JavaScript
-    } else if ext.eq_ignore_ascii_case("c") || ext.eq_ignore_ascii_case("h") {
-        // `.h` is treated as C by convention. C++ projects that use `.h` for
-        // headers still parse — the C++ grammar is a near-superset, so a C
-        // parse of a C++ header degrades gracefully rather than failing; the
-        // dedicated C++ extensions below cover the unambiguous cases.
-        SupportLang::C
-    } else if ext.eq_ignore_ascii_case("cpp")
-        || ext.eq_ignore_ascii_case("cc")
-        || ext.eq_ignore_ascii_case("cxx")
-        || ext.eq_ignore_ascii_case("c++")
-        || ext.eq_ignore_ascii_case("hpp")
-        || ext.eq_ignore_ascii_case("hh")
-        || ext.eq_ignore_ascii_case("hxx")
-        || ext.eq_ignore_ascii_case("h++")
-    {
-        SupportLang::Cpp
-    } else if ext.eq_ignore_ascii_case("go") {
-        SupportLang::Go
-    } else if ext.eq_ignore_ascii_case("java") {
-        SupportLang::Java
-    } else if ext.eq_ignore_ascii_case("cs") {
-        SupportLang::CSharp
-    } else if ext.eq_ignore_ascii_case("kt") || ext.eq_ignore_ascii_case("kts") {
-        SupportLang::Kotlin
-    } else if ext.eq_ignore_ascii_case("swift") {
-        SupportLang::Swift
-    } else if ext.eq_ignore_ascii_case("py") {
-        SupportLang::Python
-    } else if ext.eq_ignore_ascii_case("rb") {
-        SupportLang::Ruby
-    } else if ext.eq_ignore_ascii_case("php") {
-        SupportLang::Php
-    } else if ext.eq_ignore_ascii_case("lua") {
-        SupportLang::Lua
-    } else if ext.eq_ignore_ascii_case("scala")
-        || ext.eq_ignore_ascii_case("sc")
-        || ext.eq_ignore_ascii_case("sbt")
-    {
-        SupportLang::Scala
-    } else if ext.eq_ignore_ascii_case("dart") {
-        SupportLang::Dart
-    } else if ext.eq_ignore_ascii_case("ex") || ext.eq_ignore_ascii_case("exs") {
-        SupportLang::Elixir
-    } else if ext.eq_ignore_ascii_case("sol") {
-        SupportLang::Solidity
-    } else if ext.eq_ignore_ascii_case("hs") {
-        SupportLang::Haskell
-    } else if ext.eq_ignore_ascii_case("sh")
-        || ext.eq_ignore_ascii_case("bash")
-        || ext.eq_ignore_ascii_case("zsh")
-        || ext.eq_ignore_ascii_case("ksh")
-        || ext.eq_ignore_ascii_case("bats")
-    {
-        // Shell scripts (bash/sh/zsh/ksh/bats) all parse against the
-        // tree-sitter-bash grammar; ast-grep's own extension list groups them
-        // the same way.
-        SupportLang::Bash
-    } else if ext.eq_ignore_ascii_case("rs") {
-        SupportLang::Rust
-    } else {
-        return None;
-    };
-    Some(lang)
+    language_for_extension(ext)
+}
+
+/// [`language_for_path`] for a bare extension (no leading dot).
+pub fn language_for_extension(ext: &str) -> Option<SupportLang> {
+    EXTENSION_LANGUAGES
+        .iter()
+        .find(|(candidate, _)| ext.eq_ignore_ascii_case(candidate))
+        .map(|(_, lang)| *lang)
 }
 
 /// Map a path to a language across the *full* `ast-grep` grammar set, not just
@@ -234,6 +227,25 @@ pub fn parse_source(lang: &SupportLang, source: &str) -> ParsedFile {
     ParsedFile { lang: *lang, root }
 }
 
+/// Parse source using its selected language.
+///
+/// Ambiguous `.h` headers start as C. If that parse has errors, retry C++ and
+/// retain the C++ tree only when it parses cleanly. Malformed C headers retain
+/// their original partial C tree for error recovery.
+pub fn parse_source_for_path(lang: &SupportLang, path: &Path, source: &str) -> ParsedFile {
+    let parsed = parse_source(lang, source);
+    let is_ambiguous_header = *lang == SupportLang::C
+        && path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("h"));
+    if !is_ambiguous_header || !parsed.has_error() {
+        return parsed;
+    }
+
+    let cpp = parse_source(&SupportLang::Cpp, source);
+    if cpp.has_error() { parsed } else { cpp }
+}
+
 /// Parse a file on disk. Returns `Ok(None)` for unsupported extensions.
 pub fn parse_file(path: &Path) -> Result<Option<ParsedFile>> {
     let Some(lang) = language_for_path(path) else {
@@ -241,5 +253,70 @@ pub fn parse_file(path: &Path) -> Result<Option<ParsedFile>> {
     };
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {}", path.display()))?;
-    Ok(Some(parse_source(&lang, &source)))
+    Ok(Some(parse_source_for_path(&lang, path, &source)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{language_for_path, parse_source_for_path};
+    use crate::extract;
+    use crate::model::EntityKind;
+    use ast_grep_language::SupportLang;
+    use std::path::Path;
+
+    #[test]
+    fn cpp_header_retries_after_c_syntax_error() {
+        let path = Path::new("include/repository.h");
+        let source = "template <typename T> class Repository { public: void find() {} };";
+        let parsed = parse_source_for_path(
+            &language_for_path(path).expect(".h is supported"),
+            path,
+            source,
+        );
+
+        assert_eq!(parsed.lang, SupportLang::Cpp);
+        assert!(!parsed.has_error(), "C++ header must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        assert!(
+            entities
+                .iter()
+                .any(|entity| entity.kind == EntityKind::Class && entity.name == "Repository"),
+            "class missing: {entities:?}"
+        );
+        assert!(
+            entities
+                .iter()
+                .any(|entity| entity.kind == EntityKind::Function && entity.name == "find"),
+            "method missing: {entities:?}"
+        );
+    }
+
+    #[test]
+    fn plain_c_header_keeps_c_grammar() {
+        let path = Path::new("include/api.h");
+        let parsed = parse_source_for_path(
+            &language_for_path(path).expect(".h is supported"),
+            path,
+            "int add(int left, int right);",
+        );
+
+        assert_eq!(parsed.lang, SupportLang::C);
+        assert!(!parsed.has_error(), "C header must parse cleanly");
+    }
+
+    #[test]
+    fn malformed_header_keeps_partial_c_tree() {
+        let path = Path::new("include/broken.h");
+        let parsed = parse_source_for_path(
+            &language_for_path(path).expect(".h is supported"),
+            path,
+            "template <typename T> class Repository {",
+        );
+
+        assert_eq!(parsed.lang, SupportLang::C);
+        assert!(
+            parsed.has_error(),
+            "malformed header must remain diagnostic"
+        );
+    }
 }

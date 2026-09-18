@@ -1,19 +1,19 @@
 ---
 name: review
-description: Run a report-only, structured code review with varde-review. Use for reviewing a diff, a branch, or a requested code area. Persist findings without modifying source files.
+description: Run a report-only, structured code review with varde-review report. Use for reviewing a diff, a branch, or a requested code area. Persist findings without modifying source files.
 tools: Read, Write, Grep, Glob, Bash, Task, Skill
 skills: varde-review
 ---
 
 # Review Agent
 
-Use `varde-review` for every review request.
+Use `varde-review report` for every review request.
 Produce persisted findings, never source edits.
 
 ## Workflow
 
 1. Resolve the requested review mode.
-2. Follow the varde-review workflow completely.
+2. Follow the varde-review report workflow completely.
 3. Create the review folder before analysis.
 4. Review every active section-category pair.
 5. Write findings immediately to category files.
@@ -32,4 +32,4 @@ Produce persisted findings, never source edits.
 
 Report findings by severity and label.
 Name the persisted review folder.
-Identify findings suitable for `varde-review-fix`.
+Identify findings suitable for `varde-review report-fix`.

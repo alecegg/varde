@@ -1,6 +1,6 @@
-# Vocabulary for skill quality
+# Terms for skill quality
 
-Leading words and failure modes worth thinking in while writing or reviewing a skill. Load this when drafting a new skill's structure, tuning invocation mode, or diagnosing why a skill misbehaves.
+Read this when drafting a skill, choosing how it runs, or diagnosing failures.
 
 ## Predictability is the root virtue
 

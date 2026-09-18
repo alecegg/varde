@@ -14,10 +14,13 @@ HARNESS="claude"
 TARGET=""
 AGENTS=""
 FORCE=0
+MANAGED=0
+DRY_RUN=0
+OWNERSHIP_MARKER="varde-managed-agent"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-t harness] [-d target_dir] [-a agent1,agent2,...] [-f]
+Usage: $(basename "$0") [-t harness] [-d target_dir] [-a agent1,agent2,...] [-f] [-m] [-n]
 
   -t harness      Harness to install for: claude | codex | opencode (default: claude)
   -d target_dir   Directory to install into (default depends on harness):
@@ -26,6 +29,8 @@ Usage: $(basename "$0") [-t harness] [-d target_dir] [-a agent1,agent2,...] [-f]
                     opencode -> \$HOME/.config/opencode/agent
   -a agents       Comma-separated agent names to install (default: all)
   -f              Overwrite existing agent files without prompting
+  -m              Overwrite only varde-managed files; preserve other files
+  -n              Show planned writes without changing files
   -h              Show this help
 
 Examples:
@@ -36,16 +41,23 @@ Examples:
 EOF
 }
 
-while getopts "t:d:a:fh" opt; do
+while getopts "t:d:a:fmnh" opt; do
   case "$opt" in
     t) HARNESS="$OPTARG" ;;
     d) TARGET="$OPTARG" ;;
     a) AGENTS="$OPTARG" ;;
     f) FORCE=1 ;;
+    m) MANAGED=1 ;;
+    n) DRY_RUN=1 ;;
     h) usage; exit 0 ;;
     *) usage; exit 1 ;;
   esac
 done
+
+if [ "$FORCE" -eq 1 ] && [ "$MANAGED" -eq 1 ]; then
+  echo "-f and -m cannot be combined" >&2
+  exit 1
+fi
 
 case "$HARNESS" in
   claude)   VARIANT="claude.md";   EXT="md";   DEFAULT_TARGET="$HOME/.claude/agents" ;;
@@ -75,7 +87,20 @@ for agent in "${SELECTED[@]}"; do
   fi
 done
 
-mkdir -p "$TARGET"
+if [ "$DRY_RUN" -ne 1 ]; then
+  mkdir -p "$TARGET"
+fi
+
+is_varde_managed() {
+  grep -Fq "$OWNERSHIP_MARKER" "$1"
+}
+
+mark_varde_managed() {
+  case "$EXT" in
+    md) printf '\n<!-- %s -->\n' "$OWNERSHIP_MARKER" >>"$1" ;;
+    toml) printf '\n# %s\n' "$OWNERSHIP_MARKER" >>"$1" ;;
+  esac
+}
 
 for agent in "${SELECTED[@]}"; do
   src="$SCRIPT_DIR/$agent/$VARIANT"
@@ -84,7 +109,15 @@ for agent in "${SELECTED[@]}"; do
     echo "No $HARNESS variant for $agent (missing $src)" >&2
     exit 1
   fi
-  if [ -e "$dest" ] && [ "$FORCE" -ne 1 ]; then
+  if [ -e "$dest" ] && [ "$MANAGED" -eq 1 ] && ! is_varde_managed "$dest"; then
+    echo "Preserved unowned $dest"
+    continue
+  fi
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf 'Would install %s -> %s\n' "$src" "$dest"
+    continue
+  fi
+  if [ -e "$dest" ] && [ "$FORCE" -ne 1 ] && [ "$MANAGED" -ne 1 ]; then
     read -r -p "Overwrite existing $dest? [y/N] " reply
     case "$reply" in
       [yY]*) ;;
@@ -92,7 +125,14 @@ for agent in "${SELECTED[@]}"; do
     esac
   fi
   cp "$src" "$dest"
+  if [ "$MANAGED" -eq 1 ]; then
+    mark_varde_managed "$dest"
+  fi
   echo "Installed $agent -> $dest"
 done
 
-echo "Done. Installed $HARNESS agents to: $TARGET"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "Dry run. No $HARNESS agents installed to: $TARGET"
+else
+  echo "Done. Installed $HARNESS agents to: $TARGET"
+fi

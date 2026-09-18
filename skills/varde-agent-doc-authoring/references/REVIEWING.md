@@ -1,9 +1,9 @@
-# Reviewing agent documents
+# Review agent documents
 
 Report findings before edits unless the user asked for changes. Apply this list
 to `SKILL.md`, agent guidance, and references.
 
-## Triggering and scope
+## When it applies
 
 - Is the description concrete, user-worded, and specific about when it applies?
 - Is model invocation worth its permanent description cost?

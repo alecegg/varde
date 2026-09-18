@@ -1,14 +1,6 @@
 ---
 name: benchmark
-description: >
-  TRIGGER: Re-run the varde-code vs ast-grep benchmark suite and update
-  BENCHMARK.md with fresh numbers. Use when the user asks to rerun/refresh
-  benchmarks, re-benchmark a mode after a perf change, or check whether the
-  10%-of-ast-grep goal is closer.
-  SKIP: Skip for one-off ad hoc timing checks unrelated to BENCHMARK.md's
-  tracked rows — just run the command directly instead.
-  Example phrases: "rerun all the benchmarks" or "re-benchmark find_pattern
-  on hermes-agent".
+description: "TRIGGER: Re-run the varde-code vs ast-grep benchmark suite and update BENCHMARK.md with fresh numbers. Use when the user asks to rerun/refresh benchmarks, re-benchmark a mode after a perf change, or check whether the 10%-of-ast-grep goal is closer. SKIP: Skip for one-off ad hoc timing checks unrelated to BENCHMARK.md's tracked rows — just run the command directly instead. Example phrases: \"rerun all the benchmarks\" or \"re-benchmark find_pattern on hermes-agent\"."
 allowed-tools: Bash Read Edit
 compatibility: "Requires a release build (cargo build --release -p varde-code), ast-grep on PATH, and ~/source/reference-repos + ~/source/varde checked out for the scale-repo rows."
 ---

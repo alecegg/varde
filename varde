@@ -1,0 +1,153 @@
+#!/bin/sh
+
+set -eu
+
+ROOT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+SUPPORTED_AGENTS="claude codex opencode"
+RETIRED_SKILLS="varde-build varde-code-codebase-navigation varde-code-rule-authoring varde-code-rule-scan-triage varde-dashboard varde-explain varde-friction varde-friction-distillation varde-handoff varde-orchestrate varde-plan varde-reflect varde-review-fix varde-simplify varde-spec varde-worktree"
+
+usage() {
+  cat <<'EOF'
+Usage: varde init [--agents ids] [--yes] [--dry-run] [--list-agents] [-h]
+
+Wire varde skills and agents into supported agent harnesses.
+
+  --agents ids  Comma-separated harness ids: claude, codex, opencode
+  --yes         Install every detected harness without prompting
+  --dry-run     Show files that would be installed without writing
+  --list-agents List supported harness ids
+  -h            Show this help
+EOF
+}
+
+list_agents() {
+  printf '%s\n' $SUPPORTED_AGENTS
+}
+
+is_known_agent() {
+  for supported_agent in $SUPPORTED_AGENTS; do
+    [ "$1" = "$supported_agent" ] && return 0
+  done
+  return 1
+}
+
+skills_dir() {
+  case "$1" in
+    claude) printf '%s\n' "$HOME/.claude/skills" ;;
+    codex) printf '%s\n' "$HOME/.codex/skills" ;;
+    opencode) printf '%s\n' "$HOME/.config/opencode/skills" ;;
+  esac
+}
+
+detected_agents() {
+  [ -d "$HOME/.claude" ] && printf '%s\n' claude
+  [ -d "$HOME/.codex" ] && printf '%s\n' codex
+  [ -d "$HOME/.config/opencode" ] && printf '%s\n' opencode
+}
+
+unmarked_legacy_count() {
+  count=0
+  for selected_agent in $SELECTED; do
+    selected_target=$(skills_dir "$selected_agent")
+    for retired_skill in $RETIRED_SKILLS; do
+      retired_dir="$selected_target/$retired_skill"
+      [ -d "$retired_dir" ] || continue
+      if [ -f "$retired_dir/.varde-managed-skill" ] &&
+        grep -Fxq 'varde-managed-skill' "$retired_dir/.varde-managed-skill"; then
+        continue
+      fi
+      count=$((count + 1))
+    done
+  done
+  printf '%s\n' "$count"
+}
+
+COMMAND=${1:-}
+[ "$COMMAND" = init ] || {
+  usage >&2
+  exit 1
+}
+shift
+
+AGENTS=""
+ASSUME_YES=0
+DRY_RUN=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --agents)
+      [ "$#" -ge 2 ] || { echo "--agents requires a value" >&2; exit 1; }
+      AGENTS=$2
+      shift 2
+      ;;
+    --yes) ASSUME_YES=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --list-agents) list_agents; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+if [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ] && [ "$DRY_RUN" -eq 0 ] && [ ! -t 0 ]; then
+  echo "No terminal is available. Run: varde init --yes"
+  exit 0
+fi
+
+if [ -n "$AGENTS" ]; then
+  SELECTED=$(printf '%s' "$AGENTS" | tr ',' '\n')
+else
+  SELECTED=$(detected_agents || true)
+fi
+
+if [ -z "$SELECTED" ]; then
+  echo "No supported harness configuration was detected."
+  exit 0
+fi
+
+for agent in $SELECTED; do
+  is_known_agent "$agent" || {
+    echo "Unknown harness: $agent (expected $(printf '%s|' $SUPPORTED_AGENTS | sed 's/|$//'))" >&2
+    exit 1
+  }
+done
+
+if [ "$DRY_RUN" -eq 0 ] && [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ]; then
+  printf 'Install varde for detected harnesses (%s)? [y/N] ' "$(printf '%s ' $SELECTED)"
+  read reply
+  case "$reply" in
+    [yY]|[yY][eE][sS]) ;;
+    *) echo "No changes made."; exit 0 ;;
+  esac
+fi
+
+LEGACY_APPROVED=0
+if [ "$DRY_RUN" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ]; then
+  LEGACY_COUNT=$(unmarked_legacy_count)
+  if [ "$LEGACY_COUNT" -gt 0 ]; then
+    printf 'Remove %s unmarked legacy skill directories? [y/N] ' "$LEGACY_COUNT"
+    legacy_reply=""
+    read -r legacy_reply || true
+    case "$legacy_reply" in
+      [yY]|[yY][eE][sS]) LEGACY_APPROVED=1 ;;
+    esac
+  fi
+fi
+
+for agent in $SELECTED; do
+  skill_target=$(skills_dir "$agent")
+  if [ "$DRY_RUN" -eq 1 ]; then
+    if [ "$ASSUME_YES" -eq 1 ]; then
+      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f -n --yes
+    else
+      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f -n
+    fi
+    "$ROOT_DIR/agents/install.sh" -t "$agent" -m -n
+  else
+    if [ "$ASSUME_YES" -eq 1 ] || [ "$LEGACY_APPROVED" -eq 1 ]; then
+      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f --yes
+    else
+      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f --preserve-legacy
+    fi
+    "$ROOT_DIR/agents/install.sh" -t "$agent" -m
+  fi
+done

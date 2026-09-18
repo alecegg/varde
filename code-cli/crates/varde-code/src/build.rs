@@ -153,7 +153,7 @@ pub(crate) fn run_full_while_locked(repo_root: &str, db_path: &Path) -> Result<B
     // build, which pipelines parsing against persistence (see
     // `persist::persist_full_streaming`). Parsing and the raw-row inserts run
     // concurrently instead of as two sequential phases.
-    let files = crate::scan::list_source_files(repo_root)?;
+    let listing = crate::scan::list_source_listing(repo_root)?;
 
     // Write to a sibling temp file and rename it into place only after a full
     // successful commit — an interruption mid-write leaves the prior good
@@ -162,17 +162,17 @@ pub(crate) fn run_full_while_locked(repo_root: &str, db_path: &Path) -> Result<B
     let tmp_path = db_path.with_extension("db.tmp");
     let _ = std::fs::remove_file(&tmp_path);
 
-    let stats = match crate::persist::persist_full_streaming(&tmp_path, files, Path::new(repo_root))
-    {
-        Ok(stats) => {
-            std::fs::rename(&tmp_path, db_path)?;
-            stats
-        }
-        Err(e) => {
-            let _ = std::fs::remove_file(&tmp_path);
-            return Err(e);
-        }
-    };
+    let stats =
+        match crate::persist::persist_full_streaming(&tmp_path, listing, Path::new(repo_root)) {
+            Ok(stats) => {
+                std::fs::rename(&tmp_path, db_path)?;
+                stats
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(e);
+            }
+        };
 
     // The built-at git HEAD and the eager `graph_cache` warm now happen inside
     // `persist_full_streaming`'s transaction (from the warm, just-written rows),
@@ -217,7 +217,10 @@ fn run_incremental(repo_root: &str, db_path: &Path) -> Result<BuildSummary> {
     // this lock itself).
     let _lock = crate::repo_lock::acquire(db_path, std::time::Duration::from_secs(30))?;
 
-    let current = crate::scan::list_source_files(repo_root)?;
+    let crate::scan::SourceListing {
+        files: current,
+        diagnostics: traversal,
+    } = crate::scan::list_source_listing(repo_root)?;
     // `open_incremental` (MEMORY journal) so a mid-build error rolls back
     // cleanly instead of leaving the live index spliced (see `db::open`).
     let conn = crate::db::open_incremental(db_path)?;
@@ -265,6 +268,16 @@ fn run_incremental(repo_root: &str, db_path: &Path) -> Result<BuildSummary> {
     if stored.is_empty() {
         drop(conn);
         return run_full_while_locked(repo_root, db_path);
+    }
+
+    // Traversal diagnostics describe the walk, not any one file, so they are
+    // refreshed before the per-file delta — and before the "nothing changed"
+    // early return below, which would otherwise strand a traversal failure in
+    // the index long after the directory became readable again.
+    {
+        let tx = conn.unchecked_transaction()?;
+        crate::persist::replace_traversal_diagnostics(&tx, &traversal)?;
+        tx.commit()?;
     }
 
     let classifications = classify_files(&stored, &current);
@@ -482,9 +495,11 @@ mod tests {
     use rusqlite::OptionalExtension;
 
     use super::{
-        FileClassification, StoredFileState, classify_files, run_incremental, run_with_force,
+        FileClassification, StoredFileState, classify_files, run_full_while_locked,
+        run_incremental, run_with_force,
     };
     use crate::scan::SourceFile;
+    use std::path::Path;
 
     fn temp_fixture_root(label: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -747,6 +762,111 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Read back every persisted traversal diagnostic (`file_id IS NULL`) as
+    /// `(path, message)`.
+    fn traversal_diagnostics(db_path: &Path) -> Vec<(String, String)> {
+        let conn = crate::db::open(db_path).expect("db opens");
+        let mut stmt = conn
+            .prepare("SELECT path, message FROM diagnostics WHERE file_id IS NULL ORDER BY path")
+            .expect("query prepares");
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .expect("query runs")
+            .collect::<rusqlite::Result<Vec<(String, String)>>>()
+            .expect("rows read")
+    }
+
+    /// CORRECTNESS-005: a full build over a tree with an unreadable nested
+    /// directory indexes the valid siblings AND leaves durable evidence that
+    /// discovery was incomplete.
+    #[cfg(unix)]
+    #[test]
+    fn full_build_persists_path_based_traversal_diagnostic() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_fixture_root("traversal-full");
+        let db_path = root.with_extension("traversal-full.db");
+        std::fs::write(root.join("sibling.rs"), "fn sibling() {}").expect("sibling writes");
+        let locked = root.join("locked");
+        std::fs::create_dir_all(&locked).expect("locked dir creates");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+            .expect("chmod 000");
+
+        let summary = run_full_while_locked(root.to_str().expect("root is utf-8"), &db_path)
+            .expect("full build survives the unreadable directory");
+
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod restore");
+
+        assert!(
+            summary
+                .changed_files
+                .iter()
+                .any(|f| f.ends_with("sibling.rs")),
+            "valid siblings must still be indexed: {:?}",
+            summary.changed_files
+        );
+        let persisted = traversal_diagnostics(&db_path);
+        assert_eq!(
+            persisted.len(),
+            1,
+            "exactly one traversal diagnostic expected, got {persisted:?}"
+        );
+        assert!(
+            persisted[0].0.ends_with("locked"),
+            "diagnostic must carry the failing path: {persisted:?}"
+        );
+        assert!(
+            persisted[0].1.contains("directory traversal failed"),
+            "diagnostic message must name the failure: {persisted:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    /// CORRECTNESS-005: the traversal diagnostic is walk state, not file
+    /// state. Once the directory is readable again the next incremental build
+    /// must drop it — including when no source file changed, which is the
+    /// path that takes `run_incremental`'s "nothing changed" early return.
+    #[cfg(unix)]
+    #[test]
+    fn incremental_build_clears_resolved_traversal_diagnostic() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_fixture_root("traversal-incremental");
+        let db_path = root.with_extension("traversal-incremental.db");
+        std::fs::write(root.join("sibling.rs"), "fn sibling() {}").expect("sibling writes");
+        let locked = root.join("locked");
+        std::fs::create_dir_all(&locked).expect("locked dir creates");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+            .expect("chmod 000");
+
+        run_full_while_locked(root.to_str().expect("root is utf-8"), &db_path)
+            .expect("initial build succeeds");
+        assert_eq!(
+            traversal_diagnostics(&db_path).len(),
+            1,
+            "precondition: the failure is persisted"
+        );
+
+        // Directory readable again; no source file touched, so the file-set
+        // delta is empty.
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod restore");
+
+        run_incremental(root.to_str().expect("root is utf-8"), &db_path)
+            .expect("incremental build succeeds");
+
+        assert_eq!(
+            traversal_diagnostics(&db_path),
+            Vec::new(),
+            "a resolved traversal failure must not linger in the index"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&db_path);
     }
 
     #[test]

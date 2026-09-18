@@ -349,7 +349,7 @@ fn route_of(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<(Stri
         return None;
     }
     let path = first_arg_text(node)?;
-    if !path.starts_with('"') && !path.starts_with('`') {
+    if !path.starts_with('"') && !path.starts_with('\'') && !path.starts_with('`') {
         return None;
     }
     Some((method, super::unquote(&path, true)))
@@ -414,11 +414,11 @@ mod tests {
     }
 
     #[test]
-    fn express_route_captures_named_handler_on_owner_type() {
+    fn express_routes_accept_all_string_literal_quotes() {
         // `app.get("/users", listUsers)` -> the Route entity carries the
         // handler name so `detect_routes` can resolve it. An inline arrow
         // handler leaves it absent.
-        let src = "app.get(\"/users\", listUsers);\napp.post(\"/x\", (req, res) => res.end());\n";
+        let src = "app.get('/users', listUsers);\napp.post(\"/x\", (req, res) => res.end());\napp.put(`/settings`, saveSettings);\n";
         let parsed = parse_source(&SupportLang::JavaScript, src);
         assert!(!parsed.has_error(), "fixture must parse cleanly");
         let entities = extract::extract(&parsed, 0).entities;
@@ -439,6 +439,12 @@ mod tests {
         assert_eq!(
             inline.owner_type, None,
             "inline arrow handler names no resolvable function"
+        );
+        assert!(
+            routes
+                .iter()
+                .any(|r| r.path.as_deref() == Some("/settings")),
+            "template-literal route missing: {routes:?}"
         );
     }
 

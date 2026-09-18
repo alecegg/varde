@@ -6,10 +6,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: Shared references in sync
-        run: ./sync-shared-refs.sh --check
-      - name: No _shared/ pointers in installed files
+      - name: Reference pointers resolve
         run: ./check-refs.sh
+      - name: Skill structure and mode manifest
+        run: bash tests/consolidated-workflows.sh
+      - name: Catalogue documentation
+        run: bash tests/catalogue-docs.sh
+      - name: Install catalogue
+        run: bash tests/install-catalogue.sh
       - name: Frontmatter valid
         run: |
           for d in varde-*/; do

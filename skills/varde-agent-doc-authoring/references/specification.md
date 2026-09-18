@@ -1,4 +1,4 @@
-# Agent Skills specification (agentskills.io)
+# Skill file requirements
 
 ## Directory structure
 
@@ -51,3 +51,8 @@ uv run scripts/validate-frontmatter.py ./my-skill              # one skill
 uv run scripts/validate-frontmatter.py ~/.pi/agent/skills       # a whole installed skills root
 uv run scripts/validate-frontmatter.py --json ./my-skill        # machine-readable
 ```
+
+Under a sandbox, `uv` may fail reading its managed Python under
+`~/.local/share/uv/python`. Prefix with `UV_PYTHON_PREFERENCE=only-system` to use
+the interpreter already on `PATH` instead of escalating. `UV_CACHE_DIR` does not
+help — the cache is not what is blocked.

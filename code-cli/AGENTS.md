@@ -34,3 +34,12 @@ wall-clock time of the equivalent `ast-grep` invocation on the same input.
   budget (~10-40x slower) but judged not a blocking regression due to a
   genuine scope mismatch (full indexing pipeline vs. single-shot parse); see
   `BENCHMARK.md` for the full reasoning.
+
+## Agent guidance
+
+Each consuming skill owns its own `references/varde-code.md`, written for that
+skill's use of the CLI. There is no canonical copy here to sync from, and no
+sync script — when the CLI's surface changes, update the skills that mention
+the affected commands.
+
+Repository-only benchmarking guidance remains under `.claude/skills/`.

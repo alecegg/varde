@@ -20,7 +20,6 @@ pub mod resolve;
 pub mod rules;
 pub mod scan;
 pub mod scan_cli;
-pub mod skills;
 pub mod slice;
 pub mod test_cli;
 pub mod watch;

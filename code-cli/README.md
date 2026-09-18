@@ -57,6 +57,10 @@ stored at `~/.config/varde-code/repos/<name>-<hash>/index.db`.
 - [BENCHMARK.md](BENCHMARK.md) — speed/quality tracking against `ast-grep` for overlapping modes
 - [CHANGELOG.md](CHANGELOG.md) — notable changes per release
 
+Agent workflows treat this CLI as internal tooling.
+Canonical agent guidance lives under `guidance/varde-code/`.
+The skills module vendors focused copies for each consumer.
+
 ## Status
 
 Beta. Core parsing/extraction/query/scan surfaces are covered by an extensive test suite and

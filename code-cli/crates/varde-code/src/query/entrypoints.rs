@@ -20,10 +20,12 @@
 
 use std::collections::HashMap;
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::Connection;
 
 use crate::extract::langs::role_tags::{self, RoleTag, RoleTagRule};
 use crate::model::EntityKind;
+use crate::parse::language_for_path;
+use ast_grep_language::SupportLang;
 
 use super::noise_filter::{
     is_frontend_asset_path, is_generated_or_vendored_path, is_scaffold_template_path,
@@ -33,7 +35,11 @@ use super::{ApiError, db_err};
 /// Route metadata (`method`, `path`) stamped on `Decorator` entities, keyed by
 /// the decorated declaration `(file_id, enclosing_function)` — an action
 /// method's own name, or a controller class's name for a base-path prefix.
-type RouteMetaByOwner = HashMap<(i64, String), (Option<String>, Option<String>)>;
+/// Role-tag signal names (`Decorator`, `Extends`/`Implements`) grouped by
+/// their owning declaration `(file_id, enclosing_function, declaration span)`.
+type SignalsByOwner = HashMap<(i64, String, Option<String>), Vec<String>>;
+
+type RouteMetaByOwner = HashMap<(i64, String, Option<String>), (Option<String>, Option<String>)>;
 
 /// One detected semantic entrypoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,21 +120,33 @@ fn is_bootstrap_filename(path: &str) -> bool {
     BOOTSTRAP_FILENAMES.contains(&base)
 }
 
-/// Rule table selection per language, keyed the same way the extractors key
-/// their own tree-sitter grammar choice: by file extension.
+/// Rule table selection per language, resolved through the parser's
+/// [`EXTENSION_LANGUAGES`] registry rather than a second extension list.
+///
+/// Keying on the extension directly is what let this switch drift out of sync
+/// with the parser: `.mts`/`.cts` indexed as TypeScript but matched no rule
+/// table here (ARCHITECTURE-001). Dispatching on the parsed language means a
+/// new extension only has to be declared once, in the registry.
 fn rules_for_path(path: &str) -> Option<&'static [RoleTagRule]> {
-    let ext = path.rsplit('.').next()?;
-    Some(match ext {
-        "py" => role_tags::PYTHON_RULES,
-        "java" => role_tags::JAVA_RULES,
-        "cs" => role_tags::CS_RULES,
-        "ts" => role_tags::TS_RULES,
-        "tsx" => role_tags::TSX_RULES,
-        "js" | "jsx" | "mjs" | "cjs" => role_tags::JS_RULES,
-        "rb" => role_tags::RUBY_RULES,
-        "kt" | "kts" => role_tags::KOTLIN_RULES,
-        "scala" | "sc" => role_tags::SCALA_RULES,
-        "php" => role_tags::PHP_RULES,
+    rules_for_language(language_for_path(std::path::Path::new(path))?)
+}
+
+/// The role-tag rule table for `lang`, or `None` for a language with no
+/// web-framework role tags (Rust, Go, C/C++, Swift, shell, ...) — those reach
+/// the entrypoint list through [`detect_process_mains`] or
+/// [`detect_routes`] instead.
+fn rules_for_language(lang: SupportLang) -> Option<&'static [RoleTagRule]> {
+    Some(match lang {
+        SupportLang::Python => role_tags::PYTHON_RULES,
+        SupportLang::Java => role_tags::JAVA_RULES,
+        SupportLang::CSharp => role_tags::CS_RULES,
+        SupportLang::TypeScript => role_tags::TS_RULES,
+        SupportLang::Tsx => role_tags::TSX_RULES,
+        SupportLang::JavaScript => role_tags::JS_RULES,
+        SupportLang::Ruby => role_tags::RUBY_RULES,
+        SupportLang::Kotlin => role_tags::KOTLIN_RULES,
+        SupportLang::Scala => role_tags::SCALA_RULES,
+        SupportLang::Php => role_tags::PHP_RULES,
         _ => return None,
     })
 }
@@ -143,6 +161,8 @@ struct Candidate {
     /// Entity kind (`EntityKind::as_i64`): `Function` or `Class`. Used to gate
     /// a class candidate on actually owning methods (see [`detect`]).
     kind: i64,
+    start_byte: i64,
+    end_byte: i64,
     /// The owning type's name for a method entity, else NULL/empty. A
     /// constructor is a method whose name equals its `owner_type` — used to
     /// drop constructors from candidacy so they don't inherit their class's
@@ -180,7 +200,7 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
             // also neutralizes decorator collisions with test tooling — e.g.
             // `@patch` / `@mock.patch` (unittest.mock) shares its final
             // segment with the HTTP verb `patch`, but lives in test files.
-            "SELECT e.id, e.file_id, f.path, e.name, e.kind, e.owner_type
+            "SELECT e.id, e.file_id, f.path, e.name, e.kind, e.start_byte, e.end_byte, e.owner_type
              FROM entities e
              JOIN files f ON f.id = e.file_id
              WHERE e.kind IN (?1, ?2) AND f.is_test_path = 0",
@@ -196,7 +216,9 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
                     r.get::<_, String>(2)?,
                     r.get::<_, String>(3)?,
                     r.get::<_, i64>(4)?,
-                    r.get::<_, Option<String>>(5)?,
+                    r.get::<_, i64>(5)?,
+                    r.get::<_, i64>(6)?,
+                    r.get::<_, Option<String>>(7)?,
                 ))
             },
         )
@@ -205,17 +227,32 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
         .map_err(db_err)?
         .into_iter()
         .map(
-            |(entity_id, file_id, path, name, kind, owner_type)| Candidate {
+            |(entity_id, file_id, path, name, kind, start_byte, end_byte, owner_type)| Candidate {
                 entity_id,
                 file_id,
                 path,
                 name,
                 kind,
+                start_byte,
+                end_byte,
                 owner_type,
                 decorators: Vec::new(),
                 base_classes: Vec::new(),
             },
         )
+        .collect();
+
+    let mut export_stmt = conn
+        .prepare("SELECT file_id, name FROM entities WHERE kind = ?1")
+        .map_err(db_err)?;
+    let exported: std::collections::HashSet<(i64, String)> = export_stmt
+        .query_map([EntityKind::Export.as_i64()], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?
+        .into_iter()
         .collect();
 
     // A class becomes an entrypoint via a type-level signal (`extends
@@ -257,6 +294,7 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
     // prefix (`@RequestMapping("/api")`). Lets a decorator/annotation handler
     // be surfaced as `"<VERB> <path>"` like the call-based routes are.
     let route_meta_by_owner = route_meta_by_owner(conn)?;
+    let fan_signal = BootstrapFanSignal::load(conn)?;
 
     let mut results = Vec::new();
     for mut candidate in candidates {
@@ -297,11 +335,23 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
         };
 
         candidate.decorators = decorators_by_owner
-            .get(&(candidate.file_id, candidate.name.clone()))
+            .get(&(
+                candidate.file_id,
+                candidate.name.clone(),
+                declaration_span(&candidate),
+            ))
+            .or_else(|| decorators_by_owner.get(&(candidate.file_id, candidate.name.clone(), None)))
             .cloned()
             .unwrap_or_default();
         candidate.base_classes = base_classes_by_owner
-            .get(&(candidate.file_id, candidate.name.clone()))
+            .get(&(
+                candidate.file_id,
+                candidate.name.clone(),
+                declaration_span(&candidate),
+            ))
+            .or_else(|| {
+                base_classes_by_owner.get(&(candidate.file_id, candidate.name.clone(), None))
+            })
             .cloned()
             .unwrap_or_default();
         // Try every (decorator, base_class) combination the candidate
@@ -336,13 +386,18 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
         let Some(role) = role else {
             continue;
         };
+        if role == RoleTag::PageComponent
+            && !exported.contains(&(candidate.file_id, candidate.name.clone()))
+        {
+            continue;
+        }
 
         // Primary bootstrap signal: filename convention.
         if is_bootstrap_filename(&candidate.path) {
             continue;
         }
         // Supplementary bootstrap signal: strong fan-out/fan-in asymmetry.
-        if is_bootstrap_by_fan_asymmetry(conn, candidate.entity_id)? {
+        if fan_signal.is_bootstrap(candidate.entity_id) {
             continue;
         }
 
@@ -378,14 +433,26 @@ fn route_fields(
     if candidate.kind != EntityKind::Function.as_i64() {
         return (None, None);
     }
-    let Some((method, sub_path)) = meta.get(&(candidate.file_id, candidate.name.clone())) else {
+    let key = (
+        candidate.file_id,
+        candidate.name.clone(),
+        declaration_span(candidate),
+    );
+    let Some((method, sub_path)) = meta
+        .get(&key)
+        .or_else(|| meta.get(&(candidate.file_id, candidate.name.clone(), None)))
+    else {
         return (None, None);
     };
     let prefix = candidate
         .owner_type
         .as_deref()
         .filter(|c| !c.is_empty())
-        .and_then(|c| meta.get(&(candidate.file_id, c.to_string())))
+        .and_then(|c| {
+            meta.iter().find_map(|((file_id, name, _), value)| {
+                (*file_id == candidate.file_id && name == c).then_some(value)
+            })
+        })
         .and_then(|(_, p)| p.as_deref());
     let full = join_route_path(prefix, sub_path.as_deref());
     match full {
@@ -416,7 +483,7 @@ fn join_route_path(prefix: Option<&str>, sub: Option<&str>) -> Option<String> {
 fn route_meta_by_owner(conn: &Connection) -> Result<RouteMetaByOwner, ApiError> {
     let mut stmt = conn
         .prepare(
-            "SELECT file_id, enclosing_function, method, path FROM entities
+            "SELECT file_id, enclosing_function, owner_type, method, path FROM entities
              WHERE kind = ?1 AND enclosing_function IS NOT NULL
                AND (method IS NOT NULL OR path IS NOT NULL)",
         )
@@ -428,19 +495,21 @@ fn route_meta_by_owner(conn: &Connection) -> Result<RouteMetaByOwner, ApiError> 
                 r.get::<_, String>(1)?,
                 r.get::<_, Option<String>>(2)?,
                 r.get::<_, Option<String>>(3)?,
+                r.get::<_, Option<String>>(4)?,
             ))
         })
         .map_err(db_err)?;
     let mut map: RouteMetaByOwner = HashMap::new();
     for row in rows {
-        let (file_id, owner, method, path) = row.map_err(db_err)?;
-        map.entry((file_id, owner)).or_insert((method, path));
+        let (file_id, owner, declaration_span, method, path) = row.map_err(db_err)?;
+        map.entry((file_id, owner, declaration_span))
+            .or_insert((method, path));
     }
     Ok(map)
 }
 
-/// File extensions whose HTTP routes are registered through *calls* rather
-/// than decorators/annotations — so the extractor's `Route` entity is the only
+/// Languages whose HTTP routes are registered through *calls* rather than
+/// decorators/annotations — so the extractor's `Route` entity is the only
 /// entrypoint signal and it does not duplicate a role-tagged handler.
 ///
 /// Python and Java are deliberately absent: their `Route` entities are emitted
@@ -449,28 +518,29 @@ fn route_meta_by_owner(conn: &Connection) -> Result<RouteMetaByOwner, ApiError> 
 /// would double-count. (Kotlin's `Route` comes from the Ktor DSL and C#'s from
 /// `app.MapGet` minimal APIs — neither of which is decorator-role-tagged — so
 /// both are included.)
+///
+/// Resolved via [`EXTENSION_LANGUAGES`], so an Express app in a `.mts` file is
+/// classified the same as one in `.ts` — a divergence the old
+/// extension-keyed list had (ARCHITECTURE-001).
 fn route_is_call_based(path: &str) -> bool {
-    let Some(ext) = path.rsplit('.').next() else {
-        return false;
-    };
+    language_for_path(std::path::Path::new(path)).is_some_and(language_route_is_call_based)
+}
+
+fn language_route_is_call_based(lang: SupportLang) -> bool {
     matches!(
-        ext,
-        "go" | "js"
-            | "jsx"
-            | "mjs"
-            | "cjs"
-            | "ts"
-            | "tsx"
-            | "php"
-            | "rb"
-            | "cs"
-            | "kt"
-            | "kts"
+        lang,
+        SupportLang::Go
+            | SupportLang::JavaScript
+            | SupportLang::TypeScript
+            | SupportLang::Tsx
+            | SupportLang::Php
+            | SupportLang::Ruby
+            | SupportLang::CSharp
+            | SupportLang::Kotlin
             // Elixir/Phoenix: routes are `get "/path", Ctrl, :action` macro
             // calls in the router module — call-based, not annotations. The
             // extractor already emits `Route` entities for them (audit F10).
-            | "ex"
-            | "exs"
+            | SupportLang::Elixir
     )
 }
 
@@ -516,6 +586,18 @@ pub fn detect_routes(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(db_err)?;
 
+    // Every handler name the route rows mention, resolved in one batch below
+    // rather than one lookup per route.
+    let handler_names: Vec<String> = rows
+        .iter()
+        .filter_map(|(_, _, _, _, _, handler)| handler.as_deref())
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let handlers = HandlerIndex::load(conn, &handler_names)?;
+
     let mut seen = std::collections::HashSet::new();
     let mut results = Vec::new();
     for (route_id, file_id, file, method, route_path, handler) in rows {
@@ -540,10 +622,10 @@ pub fn detect_routes(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
         };
         // Root the route at its handler function when we can name and resolve
         // it, so the entrypoint carries a real call graph.
-        let handler_id = match handler.as_deref().filter(|h| !h.is_empty()) {
-            Some(name) => resolve_handler(conn, name, file_id)?,
-            None => None,
-        };
+        let handler_id = handler
+            .as_deref()
+            .filter(|h| !h.is_empty())
+            .and_then(|name| handlers.resolve(name, file_id));
         let (entity_id, flow_root) = match handler_id {
             Some(id) => (id, true),
             None => (route_id, false),
@@ -565,20 +647,30 @@ pub fn detect_routes(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
     Ok(results)
 }
 
-/// The `main`/`Main` function name that marks a language's process entrypoint,
-/// keyed by file extension. Deliberately narrow: only languages with a genuine
-/// named-function program entry are listed, so a helper coincidentally named
-/// `main` in an unrelated language (a Ruby method, a Python function) is not
-/// mistaken for one. C# capitalizes `Main`; the rest use `main`. Python's
+/// The `main`/`Main` function name that marks a language's process entrypoint.
+/// Deliberately narrow: only languages with a genuine named-function program
+/// entry are listed, so a helper coincidentally named `main` in an unrelated
+/// language (a Ruby method, a Python function) is not mistaken for one. C#
+/// capitalizes `Main`; the rest use `main`. Python's
 /// `if __name__ == "__main__"` guard and Node bin scripts have no named entry
 /// function, so they are out of scope here.
+///
+/// Resolved via [`EXTENSION_LANGUAGES`]: the old extension-keyed list had
+/// drifted, omitting the parser-supported C++ `.c++`/`.hxx`/`.h++`
+/// (ARCHITECTURE-001).
 fn process_main_name_for_path(path: &str) -> Option<&'static str> {
-    let ext = path.rsplit('.').next()?;
-    Some(match ext {
-        "rs" | "go" | "c" | "cc" | "cpp" | "cxx" | "h" | "hh" | "hpp" | "java" | "kt" | "kts" => {
-            "main"
-        }
-        "cs" => "Main",
+    process_main_name_for_language(language_for_path(std::path::Path::new(path))?)
+}
+
+fn process_main_name_for_language(lang: SupportLang) -> Option<&'static str> {
+    Some(match lang {
+        SupportLang::Rust
+        | SupportLang::Go
+        | SupportLang::C
+        | SupportLang::Cpp
+        | SupportLang::Java
+        | SupportLang::Kotlin => "main",
+        SupportLang::CSharp => "Main",
         _ => return None,
     })
 }
@@ -644,35 +736,90 @@ pub fn detect_process_mains(conn: &Connection) -> Result<Vec<Entrypoint>, ApiErr
     Ok(results)
 }
 
-/// Resolve a route handler's bare name to its `Function` entity id: prefer a
-/// declaration in the same file as the registration, else a repo-wide unique
-/// match. Returns `None` when the name is absent, unknown, or ambiguous
-/// (matched by more than one function), so an unresolvable handler falls back
-/// to a path-only route rather than pointing at the wrong function.
-fn resolve_handler(conn: &Connection, name: &str, file_id: i64) -> Result<Option<i64>, ApiError> {
-    let func = EntityKind::Function.as_i64();
-    let same_file: Option<i64> = conn
-        .prepare_cached(
-            "SELECT id FROM entities
-             WHERE kind = ?1 AND name = ?2 AND file_id = ?3
-             ORDER BY id LIMIT 1",
-        )
-        .map_err(db_err)?
-        .query_row(rusqlite::params![func, name, file_id], |r| r.get(0))
-        .optional()
-        .map_err(db_err)?;
-    if same_file.is_some() {
-        return Ok(same_file);
+/// Maximum names per `IN (...)` chunk when loading the handler index.
+/// SQLite's default `SQLITE_MAX_VARIABLE_NUMBER` is 999; stay well under it
+/// (the kind parameter shares the budget) so a route-heavy repo chunks rather
+/// than erroring.
+const HANDLER_NAME_CHUNK: usize = 500;
+
+/// Route-handler name → `Function` entity id, for every handler name the
+/// call-based route rows mention.
+///
+/// Resolution prefers a declaration in the same file as the registration, else
+/// a repo-wide unique match; an unknown or ambiguous name resolves to `None`
+/// so the route falls back to path-only rather than pointing at the wrong
+/// function.
+///
+/// Built with one query per chunk of handler names instead of the previous one
+/// or two queries *per route*: `prepare_cached` skipped recompilation but not
+/// execution, so a repo with thousands of registered routes paid thousands of
+/// round-trips here.
+struct HandlerIndex {
+    /// Lowest `Function` id for a `(file_id, name)` pair — the same row the
+    /// per-route `ORDER BY id LIMIT 1` returned.
+    same_file: HashMap<(i64, String), i64>,
+    /// Repo-wide `name` → id, present only when exactly one `Function`
+    /// carries that name (ambiguous names are dropped, as before).
+    unique_global: HashMap<String, i64>,
+}
+
+impl HandlerIndex {
+    fn load(conn: &Connection, names: &[String]) -> Result<Self, ApiError> {
+        let func = EntityKind::Function.as_i64();
+        let mut same_file: HashMap<(i64, String), i64> = HashMap::new();
+        // Count alongside the first id so a second declaration of the same
+        // name demotes it out of `unique_global` instead of silently winning.
+        let mut global: HashMap<String, (i64, usize)> = HashMap::new();
+
+        for chunk in names.chunks(HANDLER_NAME_CHUNK) {
+            let placeholders = vec!["?"; chunk.len()].join(", ");
+            let sql = format!(
+                "SELECT id, file_id, name FROM entities
+                 WHERE kind = ? AND name IN ({placeholders})
+                 ORDER BY id"
+            );
+            let mut stmt = conn.prepare(&sql).map_err(db_err)?;
+            let params = std::iter::once(func.to_string())
+                .chain(chunk.iter().cloned())
+                .collect::<Vec<_>>();
+            let rows = stmt
+                .query_map(rusqlite::params_from_iter(params.iter()), |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(db_err)?;
+            for row in rows {
+                let (id, file_id, name) = row.map_err(db_err)?;
+                // `ORDER BY id` means the first insert wins, matching
+                // `LIMIT 1`.
+                same_file.entry((file_id, name.clone())).or_insert(id);
+                global
+                    .entry(name)
+                    .and_modify(|entry| entry.1 += 1)
+                    .or_insert((id, 1));
+            }
+        }
+
+        let unique_global = global
+            .into_iter()
+            .filter(|(_, (_, count))| *count == 1)
+            .map(|(name, (id, _))| (name, id))
+            .collect();
+        Ok(Self {
+            same_file,
+            unique_global,
+        })
     }
-    // Repo-wide: accept only a unique match (LIMIT 2 tells unique from ambiguous).
-    let ids: Vec<i64> = conn
-        .prepare_cached("SELECT id FROM entities WHERE kind = ?1 AND name = ?2 LIMIT 2")
-        .map_err(db_err)?
-        .query_map(rusqlite::params![func, name], |r| r.get(0))
-        .map_err(db_err)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(db_err)?;
-    Ok((ids.len() == 1).then(|| ids[0]))
+
+    fn resolve(&self, name: &str, file_id: i64) -> Option<i64> {
+        self.same_file
+            .get(&(file_id, name.to_string()))
+            .or_else(|| self.unique_global.get(name))
+            .copied()
+    }
 }
 
 /// Load role-tag signal entities (`Decorator`, or `Extends`/`Implements`) of
@@ -684,13 +831,10 @@ fn resolve_handler(conn: &Connection, name: &str, file_id: i64) -> Result<Option
 /// decorator or multi-interface class keeps every signal in declaration
 /// order (matching the old per-candidate `ORDER BY id`); rows with a NULL
 /// `enclosing_function` are skipped since they can't name an owner.
-fn signals_by_owner(
-    conn: &Connection,
-    kinds: &[i64],
-) -> Result<HashMap<(i64, String), Vec<String>>, ApiError> {
+fn signals_by_owner(conn: &Connection, kinds: &[i64]) -> Result<SignalsByOwner, ApiError> {
     let placeholders = vec!["?"; kinds.len()].join(", ");
     let sql = format!(
-        "SELECT file_id, enclosing_function, name FROM entities
+        "SELECT file_id, enclosing_function, owner_type, name FROM entities
          WHERE kind IN ({placeholders}) AND enclosing_function IS NOT NULL
          ORDER BY id"
     );
@@ -700,17 +844,25 @@ fn signals_by_owner(
             Ok((
                 r.get::<_, i64>(0)?,
                 r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, String>(3)?,
             ))
         })
         .map_err(db_err)?;
 
-    let mut by_owner: HashMap<(i64, String), Vec<String>> = HashMap::new();
+    let mut by_owner: HashMap<(i64, String, Option<String>), Vec<String>> = HashMap::new();
     for row in rows {
-        let (file_id, owner, name) = row.map_err(db_err)?;
-        by_owner.entry((file_id, owner)).or_default().push(name);
+        let (file_id, owner, declaration_span, name) = row.map_err(db_err)?;
+        by_owner
+            .entry((file_id, owner, declaration_span))
+            .or_default()
+            .push(name);
     }
     Ok(by_owner)
+}
+
+fn declaration_span(candidate: &Candidate) -> Option<String> {
+    Some(format!("{}:{}", candidate.start_byte, candidate.end_byte))
 }
 
 /// Minimum resolved fan-out (calls made) required before the fan-out/fan-in
@@ -726,25 +878,57 @@ const FAN_OUT_MIN: i64 = 2;
 /// Deliberately narrow (fan-in must be exactly zero) so this never overrides
 /// a legitimate, already-role-tagged, frequently-called route
 /// handler/component/etc.
-fn is_bootstrap_by_fan_asymmetry(conn: &Connection, entity_id: i64) -> Result<bool, ApiError> {
-    let call_kind = crate::resolve::EdgeKind::Call.as_i64();
-    let fan_out: i64 = conn
-        .prepare_cached(
-            "SELECT COUNT(*) FROM resolved_edges
-             WHERE kind = ?1 AND resolved = 1 AND from_entity_id = ?2",
-        )
-        .map_err(db_err)?
-        .query_row(rusqlite::params![call_kind, entity_id], |r| r.get(0))
-        .map_err(db_err)?;
-    let fan_in: i64 = conn
-        .prepare_cached(
-            "SELECT COUNT(*) FROM resolved_edges
-             WHERE kind = ?1 AND resolved = 1 AND to_entity_id = ?2",
-        )
-        .map_err(db_err)?
-        .query_row(rusqlite::params![call_kind, entity_id], |r| r.get(0))
-        .map_err(db_err)?;
-    Ok(fan_out >= FAN_OUT_MIN && fan_in == 0)
+///
+/// Loaded once per `detect` as two repo-wide scans rather than two `COUNT(*)`
+/// queries per candidate: statement caching only skips recompilation, so the
+/// per-candidate shape still executed O(candidates) queries — the same N+1 the
+/// decorator/base-class joins above were already folded away.
+struct BootstrapFanSignal {
+    /// Entities with at least [`FAN_OUT_MIN`] resolved outgoing call edges.
+    high_fan_out: std::collections::HashSet<i64>,
+    /// Entities targeted by at least one resolved call edge.
+    called: std::collections::HashSet<i64>,
+}
+
+impl BootstrapFanSignal {
+    fn load(conn: &Connection) -> Result<Self, ApiError> {
+        let call_kind = crate::resolve::EdgeKind::Call.as_i64();
+        // `HAVING` applies the threshold in SQL, so only the handful of
+        // entities that can possibly qualify cross into memory.
+        let mut fan_out_stmt = conn
+            .prepare(
+                "SELECT from_entity_id FROM resolved_edges
+                 WHERE kind = ?1 AND resolved = 1 AND from_entity_id IS NOT NULL
+                 GROUP BY from_entity_id HAVING COUNT(*) >= ?2",
+            )
+            .map_err(db_err)?;
+        let high_fan_out = fan_out_stmt
+            .query_map(rusqlite::params![call_kind, FAN_OUT_MIN], |row| row.get(0))
+            .map_err(db_err)?
+            .collect::<Result<std::collections::HashSet<i64>, _>>()
+            .map_err(db_err)?;
+
+        let mut called_stmt = conn
+            .prepare(
+                "SELECT DISTINCT to_entity_id FROM resolved_edges
+                 WHERE kind = ?1 AND resolved = 1 AND to_entity_id IS NOT NULL",
+            )
+            .map_err(db_err)?;
+        let called = called_stmt
+            .query_map(rusqlite::params![call_kind], |row| row.get(0))
+            .map_err(db_err)?
+            .collect::<Result<std::collections::HashSet<i64>, _>>()
+            .map_err(db_err)?;
+
+        Ok(Self {
+            high_fan_out,
+            called,
+        })
+    }
+
+    fn is_bootstrap(&self, entity_id: i64) -> bool {
+        self.high_fan_out.contains(&entity_id) && !self.called.contains(&entity_id)
+    }
 }
 
 #[cfg(test)]
@@ -767,6 +951,57 @@ mod semantic_entrypoint_tests {
         }
         for p in ["src/main.rs", "app/views.py"] {
             assert!(!route_is_call_based(p), "{p} should NOT be call-based");
+        }
+    }
+
+    /// ARCHITECTURE-001 regression: every extension the parser indexes must
+    /// classify identically to every other extension of the same language.
+    /// The old per-switch extension lists drifted — `.mts`/`.cts` parsed as
+    /// TypeScript but matched no rule table and no call-based route, and
+    /// `.c++`/`.hxx`/`.h++` parsed as C++ but could never surface a `main`.
+    #[test]
+    fn every_parser_extension_classifies_as_its_language() {
+        for (ext, lang) in crate::parse::EXTENSION_LANGUAGES {
+            let path = format!("src/sample.{ext}");
+            assert_eq!(
+                rules_for_path(&path).map(<[RoleTagRule]>::len),
+                rules_for_language(*lang).map(<[RoleTagRule]>::len),
+                ".{ext} must select its language's ({lang:?}) role-tag rules"
+            );
+            assert_eq!(
+                route_is_call_based(&path),
+                language_route_is_call_based(*lang),
+                ".{ext} must agree with {lang:?} on call-based routes"
+            );
+            assert_eq!(
+                process_main_name_for_path(&path),
+                process_main_name_for_language(*lang),
+                ".{ext} must agree with {lang:?} on the process-main name"
+            );
+        }
+    }
+
+    /// The specific drifts ARCHITECTURE-001 reproduced, pinned by name so a
+    /// future registry edit that reintroduces them fails loudly.
+    #[test]
+    fn previously_drifted_extensions_are_classified() {
+        for ext in ["mts", "cts"] {
+            let path = format!("src/app.{ext}");
+            assert!(
+                route_is_call_based(&path),
+                ".{ext} is TypeScript — Express routes must be call-based"
+            );
+            assert!(
+                rules_for_path(&path).is_some(),
+                ".{ext} is TypeScript — it must select the TS rule table"
+            );
+        }
+        for ext in ["c++", "hxx", "h++"] {
+            assert_eq!(
+                process_main_name_for_path(&format!("src/main.{ext}")),
+                Some("main"),
+                ".{ext} is C++ — it must be able to carry a process main"
+            );
         }
     }
 
@@ -1064,6 +1299,80 @@ mod semantic_entrypoint_tests {
         });
     }
 
+    #[test]
+    fn semantic_entrypoint_does_not_share_route_metadata_between_owners() {
+        with_isolated_home("entrypoints", "java-route-owner", || {
+            let root = temp_root("java-route-owner");
+            std::fs::write(
+                root.join("Controllers.java"),
+                "class UsersController { @GetMapping(\"/users\") void show() {} }\n\
+                 class UserService { void show() {} }\n",
+            )
+            .expect("write Java controller");
+
+            crate::build::run_with_force(root.to_str().unwrap(), true).expect("full build");
+            let db = crate::db::path::repo_db_path(&root);
+            let conn = Connection::open(&db).expect("open db");
+            let entrypoints = detect(&conn).expect("detect computes");
+
+            assert!(
+                entrypoints.iter().any(|entrypoint| {
+                    entrypoint.symbol == "show"
+                        && entrypoint.method.as_deref() == Some("GET")
+                        && entrypoint.path.as_deref() == Some("/users")
+                }),
+                "controller route missing: {entrypoints:?}"
+            );
+            assert_eq!(
+                entrypoints
+                    .iter()
+                    .filter(|entrypoint| entrypoint.symbol == "show")
+                    .count(),
+                1,
+                "unrelated show must not inherit route metadata: {entrypoints:?}"
+            );
+
+            let _ = std::fs::remove_file(&db);
+            let _ = std::fs::remove_dir_all(&root);
+        });
+    }
+
+    #[test]
+    fn semantic_entrypoint_next_page_excludes_private_helpers() {
+        with_isolated_home("entrypoints", "next-page-exports", || {
+            let root = temp_root("next-page-exports");
+            let page = root.join("app").join("dashboard");
+            std::fs::create_dir_all(&page).expect("create page directory");
+            std::fs::write(
+                page.join("page.tsx"),
+                "export default function DashboardPage() { return <main />; }\n\
+                 function formatTitle() { return 'Dashboard'; }\n",
+            )
+            .expect("write page");
+
+            crate::build::run_with_force(root.to_str().unwrap(), true).expect("full build");
+            let db = crate::db::path::repo_db_path(&root);
+            let conn = Connection::open(&db).expect("open db");
+            let entrypoints = detect(&conn).expect("detect computes");
+
+            assert!(
+                entrypoints
+                    .iter()
+                    .any(|entrypoint| entrypoint.symbol == "DashboardPage"),
+                "exported page missing: {entrypoints:?}"
+            );
+            assert!(
+                !entrypoints
+                    .iter()
+                    .any(|entrypoint| entrypoint.symbol == "formatTitle"),
+                "private helper became page entrypoint: {entrypoints:?}"
+            );
+
+            let _ = std::fs::remove_file(&db);
+            let _ = std::fs::remove_dir_all(&root);
+        });
+    }
+
     /// An empty controller class — the `[ApiController]`/`ControllerBase`
     /// signals are present but the body has no action methods — is not a real
     /// entrypoint (it serves no routes) and must be dropped, while a sibling
@@ -1290,6 +1599,89 @@ mod semantic_entrypoint_tests {
             let _ = std::fs::remove_file(&db);
             let _ = std::fs::remove_dir_all(&root);
         });
+    }
+
+    /// Statements executed while the counting profile hook is installed.
+    /// A `fn` pointer (rusqlite's `profile` takes no closure), so the counter
+    /// has to be a static.
+    static PROFILED_STATEMENTS: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(0);
+
+    fn count_statement(_sql: &str, _duration: std::time::Duration) {
+        PROFILED_STATEMENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Run `f` against `conn` and return how many SQL statements it executed.
+    fn statements_executed(
+        conn: &mut Connection,
+        f: impl FnOnce(&Connection) -> Result<Vec<Entrypoint>, ApiError>,
+    ) -> usize {
+        PROFILED_STATEMENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+        conn.profile(Some(count_statement));
+        f(conn).expect("detection succeeds");
+        conn.profile(None);
+        PROFILED_STATEMENTS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// A Go router file registering `count` routes, each with its own handler.
+    fn router_source(count: usize) -> String {
+        let mut source = String::from("package main\nfunc helper() {}\n");
+        for i in 0..count {
+            source.push_str(&format!("func handler{i}() {{ helper() }}\n"));
+        }
+        source.push_str("func setup(r Router) {\n");
+        for i in 0..count {
+            source.push_str(&format!("\tr.GET(\"/res{i}\", handler{i})\n"));
+        }
+        source.push_str("}\n");
+        source
+    }
+
+    /// CODE-001 regression: entrypoint detection must run a constant number of
+    /// SQL statements regardless of how many routes/candidates a repo has.
+    /// `prepare_cached` only skipped recompilation — the per-candidate fan
+    /// `COUNT(*)`s and per-route handler lookups still executed once each, so
+    /// the statement count grew linearly with the repo.
+    #[test]
+    fn entrypoint_detection_statement_count_is_constant_in_route_count() {
+        fn statements_for(label: &str, routes: usize) -> (usize, usize) {
+            let mut counts = (0, 0);
+            with_isolated_home("entrypoints", label, || {
+                let root = temp_root(label);
+                std::fs::write(root.join("server.go"), router_source(routes))
+                    .expect("write server.go");
+                crate::build::run_with_force(root.to_str().unwrap(), true).expect("full build");
+                let db = crate::db::path::repo_db_path(&root);
+                let mut conn = Connection::open(&db).expect("open db");
+
+                let routes_found = detect_routes(&conn).expect("detect_routes computes").len();
+                assert_eq!(routes_found, routes, "fixture must register every route");
+
+                counts = (
+                    statements_executed(&mut conn, detect_routes),
+                    statements_executed(&mut conn, detect),
+                );
+
+                drop(conn);
+                let _ = std::fs::remove_file(&db);
+                let _ = std::fs::remove_dir_all(&root);
+            });
+            counts
+        }
+
+        let (small_routes, small_detect) = statements_for("stmt-count-small", 2);
+        let (large_routes, large_detect) = statements_for("stmt-count-large", 40);
+
+        assert_eq!(
+            small_routes, large_routes,
+            "detect_routes statement count must not grow with route count \
+             ({small_routes} for 2 routes vs {large_routes} for 40)"
+        );
+        assert_eq!(
+            small_detect, large_detect,
+            "detect statement count must not grow with candidate count \
+             ({small_detect} for 2 routes vs {large_detect} for 40)"
+        );
     }
 
     /// Kotlin Spring: the extractor now emits `Decorator` entities for Kotlin

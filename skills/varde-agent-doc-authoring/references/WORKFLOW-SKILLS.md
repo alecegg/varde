@@ -1,13 +1,13 @@
-# Workflow skill layout
+# Ordered skill layout
 
-Use this reference for multi-step, ordered work.
+Read this for work with ordered steps.
 
 ## Entry point dispatch
 
 Add an entry-point table when a skill has multiple invocation shapes. Each
-action cell must name the actual discovery method, operation, or reference.
-Do not describe only an outcome. An eager agent may act from the table before
-reading the workflow.
+action cell names the actual discovery method, operation, or reference — an
+eager agent may act from the table before reading the workflow, so the cell has
+to be actionable on its own rather than describing an outcome.
 
 ## Workflow
 

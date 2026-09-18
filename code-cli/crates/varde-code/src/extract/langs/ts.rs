@@ -463,7 +463,7 @@ fn route_of(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<(Stri
         return None;
     }
     let path = first_arg_text(node)?;
-    if !path.starts_with('"') && !path.starts_with('`') {
+    if !path.starts_with('"') && !path.starts_with('\'') && !path.starts_with('`') {
         return None;
     }
     Some((method, super::unquote(&path, true)))
@@ -644,6 +644,24 @@ mod tests {
         assert_eq!(decorators.len(), 1, "entities: {entities:?}");
         assert_eq!(decorators[0].name, "Component");
         assert_eq!(decorators[0].enclosing_function.as_deref(), Some("Foo"));
+    }
+
+    #[test]
+    fn express_routes_accept_single_quoted_paths() {
+        let src = "app.get('/users', listUsers);";
+        let parsed = parse_source(&SupportLang::TypeScript, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+
+        assert!(
+            entities.iter().any(|entity| {
+                entity.kind == EntityKind::Route
+                    && entity.method.as_deref() == Some("get")
+                    && entity.path.as_deref() == Some("/users")
+                    && entity.owner_type.as_deref() == Some("listUsers")
+            }),
+            "single-quoted route missing: {entities:?}"
+        );
     }
 
     /// Class fields (`public_field_definition`) and interface properties

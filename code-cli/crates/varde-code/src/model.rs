@@ -306,10 +306,18 @@ pub struct Symbol {
     pub span: Span,
 }
 
-/// Per-file diagnostic emitted when a file is skipped or partially processed.
-#[derive(Debug, Clone, Serialize)]
+/// Diagnostic emitted when a file is skipped, partially processed, or when
+/// directory traversal itself failed.
+///
+/// `file_id` is `None` for traversal failures: the walk never produced a
+/// source file for that path, so inventing a `files` row to hang the
+/// diagnostic off would fabricate an entry the index never scanned. `path` is
+/// always present and carries the origin either way — for a traversal failure
+/// it is the only locator there is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Diagnostic {
-    pub file_id: u32,
+    pub file_id: Option<u32>,
+    pub path: String,
     pub message: String,
     pub severity: String,
 }

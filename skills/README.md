@@ -1,52 +1,68 @@
 # varde-skills
 
-The `skills/` module of the [`varde`](../) monorepo: a collection of `varde-*` Claude/opencode skills covering the full feature lifecycle — plan, build, review, document, and clean up.
+This module contains Varde's seven user-facing workflow skills.
+Each installed package remains independently usable.
 
 ## Related modules
 
-The skills are the agent-facing layer of the `varde` family. They work standalone, but light up additional capability when the two sibling CLIs are built and on `PATH` — each is an **optional tool with graceful fallback** to plain file operations when absent.
+The sibling CLIs provide optional local tooling.
+Skills fall back to ordinary file operations.
 
-| Module | What it is | Folder |
-|---|---|---|
-| **skills** | This module — the `varde-*` skills that drive the plan → build → review → document lifecycle. | — |
-| **agents** | Installable subagent definitions (plan / build / review / explore) that wrap these skills, one variant per harness. | [`../agents/`](../agents/) |
-| **code-cli** | A native Rust code-intelligence engine (tree-sitter parsing, entity/symbol extraction, SQLite-backed query/scan), exposed as a single `varde-code` CLI. Skills use it for code queries and scans; without it they fall back to grep/glob. | [`../code-cli/`](../code-cli/) |
-| **docs-cli** | A standalone Rust CLI (`varde-docs`) for a generic markdown-with-frontmatter knowledge store (ranked search, uniform CRUD, optimistic-concurrency writes, lint). Skills use it for knowledge notes, specs, plans, and docs; without it they fall back to Read/Write/Edit. | [`../docs-cli/`](../docs-cli/) |
+| Module | Purpose |
+|---|---|
+| `agents` | Installable plan, build, review, explore roles |
+| `code-cli` | Structural code queries and scan rules |
+| `docs-cli` | Markdown knowledge storage and document watching |
 
 ## Install
 
-Run the installer and point it at the skills directory for your agent runtime:
+Install every skill into Claude's default directory:
 
 ```bash
-./install.sh                                  # installs all skills to ~/.claude/skills
-./install.sh -d ~/.config/opencode/skills      # install to a different location
-./install.sh -s varde-plan,varde-review        # install specific skills only
-./install.sh -f                                # overwrite existing skills without prompting
+./install.sh
 ```
 
-Run `./install.sh -h` for full usage.
+Choose another runtime directory or explicit subset:
+
+```bash
+./install.sh -d ~/.config/opencode/skills
+./install.sh -s varde-change,varde-review
+./install.sh -f
+```
+
+Run `./install.sh -h` for every available option.
+Existing legacy directories receive one migration prompt.
+Passing `--yes` approves their removal without prompting.
 
 ## Skills
 
 | Skill | Purpose |
 |---|---|
-| `varde-plan` | Start planning a new feature or change: confirm terminology, draft spec/tasks/AC, resolve open questions. |
-| `varde-build` | Execute a single plan (tasks sequential, in dependency order) or run a behavior-preserving refactor pass with TDD. |
-| `varde-orchestrate` | Build a whole feature that spans multiple plans (a group plan and its children) end to end and unattended, then merge once. |
-| `varde-review` | Review code changes by section and category, writing report-only findings. |
-| `varde-review-fix` | Apply findings from a `/varde-review` run, verifying each change. |
-| `varde-simplify` | Lightweight, diff-scoped clarity pass on recently changed code. |
-| `varde-prototype` | Build a throwaway prototype to answer a visual or logic design question. |
-| `varde-explain` | Create a self-contained HTML explanation of a code change or code area. |
-| `varde-spec` | Regenerate domain-first specification documents from current source. |
-| `varde-docs` | Refresh user-facing README.md and docs/*.md files. |
-| `varde-knowledge` | Read or write knowledge notes (concepts) in the project or user knowledge folder. |
-| `varde-dashboard` | Quick read-only status snapshot of in-flight plans and open handoffs. |
-| `varde-handoff` | Compact the current conversation into a handoff document that carries context to a later session. |
-| `varde-reflect` | Consolidate what a chunk of work produced — route friction, durable knowledge, and (at a session boundary) a handoff to the right store. Thin triage over the three leaves. |
-| `varde-friction` | Capture concrete agent friction (obstacles, workarounds, missing guidance) for later improvement. |
-| `varde-friction-distillation` | Distill similar open friction items into a human-approved improvement proposal. |
-| `varde-worktree` | Isolate a file-producing/editing operation in its own git worktree; merge back and resolve conflicts. |
-| `varde-agent-doc-authoring` | Write or review any document an agent reads (SKILL.md, AGENTS.md/CLAUDE.md, reference docs). |
+| `varde-explore` | Explore problems, designs, code, and explanations |
+| `varde-change` | Manage status, planning, building, verification, conclusion |
+| `varde-review` | Report findings or explicitly improve reviewed code |
+| `varde-docs` | Refresh user documentation or regenerate specifications |
+| `varde-knowledge` | Maintain notes, reflection, friction, and handoffs |
+| `varde-prototype` | Build throwaway visual or logic prototypes |
+| `varde-agent-doc-authoring` | Author and audit agent-readable documents |
 
-Each skill's `SKILL.md` frontmatter has the full trigger/skip criteria for when it applies.
+Natural language selects the correct mode automatically.
+Explicit mode names remain useful in agent definitions.
+
+## Internal techniques
+
+Worktree isolation and `varde-code` navigation are techniques, not skills.
+Each consuming skill carries its own copy — `references/worktree.md`,
+`references/varde-code.md` — plus `scripts/worktree-*.sh` where it needs them.
+
+Edit the copy inside the skill that uses it. There is no shared source and no
+sync step: a skill that cannot be copied on its own is the bug being avoided.
+
+Most of each copy is meant to differ — every skill lists the operations it
+actually uses. The shared contract is not, and a fix landing in one copy while
+its siblings keep the old text is the failure mode this model invites.
+`tests/vendored-copies.sh` pins the sections that must stay in step; add a
+section to its manifest when a new one becomes contract.
+
+Run `./check-refs.sh` after editing references. It installs into a temp dir and
+fails on any pointer that would not resolve on a user's machine.

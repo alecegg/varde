@@ -7,6 +7,8 @@ When the user seems satisfied, present the closing confirmation question:
 
 Wait for an explicit affirmative answer before ending the session.
 
-On affirmative: record the final file path (the winning `v<N>.html`, or `logic.html`) and any key decisions in the session output — do not write to the Decisions Store or modify plan files, that is `/varde-plan`'s responsibility. For the Logic track, call out the validated module (reducer/machine/function set) as the part that should lift into the real codebase, distinct from the throwaway page shell around it.
+On yes: record the final file path and key decisions in the session output. For
+the Logic track, name the validated module that should move into production code
+— the page shell is disposable.
 
-On negative: return to the Propose, Show, Ask, Revise loop (`references/VISUAL-TRACK.md` or `references/LOGIC-TRACK.md`).
+On no: return to the Propose, Show, Ask, Revise loop.

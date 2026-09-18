@@ -894,17 +894,27 @@ mod nav_map_tests {
             .map(|v| v.as_str().unwrap())
             .collect();
         // `src/app.rs` is deduped to one entry despite two nodes using it.
-        assert_eq!(files, ["src/app.rs", "src/util.rs"], "deduped table: {files:?}");
+        assert_eq!(
+            files,
+            ["src/app.rs", "src/util.rs"],
+            "deduped table: {files:?}"
+        );
 
         // Nodes carry `f` indices, not `file` strings, that resolve back to the
         // right path through the table.
         let root = &summary["root"];
-        assert!(root.get("file").is_none(), "node uses `f` index, not `file`");
+        assert!(
+            root.get("file").is_none(),
+            "node uses `f` index, not `file`"
+        );
         let root_idx = root["f"].as_u64().unwrap() as usize;
         assert_eq!(files[root_idx], "src/app.rs");
         let kids = root["children"].as_array().unwrap();
         assert_eq!(files[kids[0]["f"].as_u64().unwrap() as usize], "src/app.rs");
-        assert_eq!(files[kids[1]["f"].as_u64().unwrap() as usize], "src/util.rs");
+        assert_eq!(
+            files[kids[1]["f"].as_u64().unwrap() as usize],
+            "src/util.rs"
+        );
     }
 
     /// Repeated sibling backrefs to the same target collapse into one node

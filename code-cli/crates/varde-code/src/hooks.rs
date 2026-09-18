@@ -1,8 +1,7 @@
 //! Shared scaffold for session-start hook install targets.
 //!
-//! Mirrors `skills.rs`'s `SKILL_PACKS`/`InstallResult`/`RemoveResult` shape,
-//! generalized for two install kinds instead of one: whole-file writes
-//! (`HookKind::WriteFile`, same as `skills_install`) and merges into a
+//! Supports two installation kinds: whole-file writes
+//! (`HookKind::WriteFile`) and merges into a
 //! shared config file the user may already have unrelated content in
 //! (`HookKind::MergeInto`, new — JSON via `serde_json` or TOML via
 //! `toml-edit`, which preserves the user's comments/formatting unlike plain
@@ -43,7 +42,7 @@ pub enum HookKind {
     /// `rel_path`, using `merge` to combine with any unrelated content.
     MergeInto(RelPath, MergeStrategy),
     /// Write embedded `contents` verbatim to `rel_path`, overwriting only
-    /// this tool's own file (same shape as `skills_install`).
+    /// this tool's own file.
     WriteFile(RelPath, &'static str),
 }
 
@@ -106,7 +105,7 @@ pub const PI_EXTENSION_JS: &str = include_str!("../assets/hooks/pi-extension.js"
 /// Assumptions section). opencode writes a whole-file plugin JS (user-level
 /// default `~/.config/opencode/plugin/`), reusing the scaffold's generic
 /// `WriteFile` install/remove logic (same whole-file-diff protection as
-/// `skills_remove`) unchanged. Sibling task adds Pi.
+/// whole-file diff protection. Sibling task adds Pi.
 pub const HOOK_TARGETS: &[HookTarget] = &[
     HookTarget {
         agent: CLAUDE_AGENT,

@@ -4,10 +4,14 @@ For the Visual track, determine whether the prototype needs any interactive beha
 
 ## Round 1 — Variants
 
-Before the iterative Propose/Show/Ask/Revise loop, run one variants round so the user compares options side by side instead of negotiating one direction at a time. Skip this round only when the user has already stated a specific direction (e.g. "make it look like the settings page but with a sidebar") — in that case, go straight to Propose/Show/Ask/Revise below.
+Before the Propose/Show/Ask/Revise loop, make variants so the user can compare
+options side by side. Skip variants only when the user already gave a specific
+direction. Then start the loop below.
 
 1. **Pick N.** Default to 3 variants; cap at 5 (see Gotchas).
-2. **Generate N structurally different variants** — different layout, information hierarchy, and primary affordance, not just different colors or copy. If two drafts come out too similar, redo one with explicit "do not reuse that layout" guidance. Write each as a complete, standalone full-page mockup at `<storage>/variant-<a|b|c...>.html` (see `PROTOTYPE-FORMAT.md`).
+2. **Generate N different variants.** Change layout, information hierarchy, and
+   primary action, not just colors or copy. If two drafts are too similar,
+   redo one. Write each as a full-page mockup.
 3. **Bake an identical switcher bar into every variant file** — a small fixed-position link bar (e.g. bottom-center) listing all N variants, linking to each sibling file by real `<a href="variant-b.html">` navigation (no JavaScript needed — this is plain HTML, consistent with the static-mockup rule). Opening any variant is a true full-page view; clicking a link is a real navigation to the next full-page view, not an embedded/scaled preview.
 4. **Show the first variant's path** (e.g. `variant-a.html`) as the round's entry point, plus an Artifact/mcp__visualize preview of that file if detected — same delivery convention as every other round. Tell the user the in-page switcher bar lets them flip through the rest at full fidelity.
 5. **Ask the user to pick** a winner, or a hybrid (see Gotchas).

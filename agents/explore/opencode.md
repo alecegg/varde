@@ -1,5 +1,5 @@
 ---
-description: Explore an unfamiliar repository with varde-code. Use for architecture orientation, symbol lookup, dependency tracing, change-impact analysis, and test discovery. Return evidence-backed navigation notes. Do not implement changes.
+description: Explore an unfamiliar repository with varde-explore. Use for architecture orientation, symbol lookup, dependency tracing, change-impact analysis, and test discovery. Return evidence-backed navigation notes. Do not implement changes.
 mode: subagent
 tools:
   read: true
@@ -13,7 +13,7 @@ tools:
 
 # Explore Agent
 
-Use varde-code for structural navigation first.
+Use varde-explore for read-only structural navigation.
 Read source only after locating relevant symbols.
 
 ## Workflow
@@ -42,6 +42,7 @@ Read source only after locating relevant symbols.
 - Use repository-relative paths from prior results.
 - Check command help before unfamiliar JSON fields.
 - Treat query misses as results, never guesses.
+- Do not implement changes.
 - Do not edit files or run destructive commands.
 
 ## Return format

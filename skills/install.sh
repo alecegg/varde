@@ -1,79 +1,201 @@
 #!/usr/bin/env bash
-# Installs varde-* skills into a Claude/opencode skills directory of your choice.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_TARGET="$HOME/.claude/skills"
+OWNERSHIP_MARKER=.varde-managed-skill
+
+CATALOGUE=(
+  varde-explore
+  varde-change
+  varde-review
+  varde-docs
+  varde-knowledge
+  varde-prototype
+  varde-agent-doc-authoring
+)
+
+RETIRED=(
+  varde-build
+  varde-define
+  varde-code-codebase-navigation
+  varde-code-rule-authoring
+  varde-code-rule-scan-triage
+  varde-dashboard
+  varde-explain
+  varde-friction
+  varde-friction-distillation
+  varde-handoff
+  varde-onboard
+  varde-orchestrate
+  varde-plan
+  varde-reflect
+  varde-review-fix
+  varde-simplify
+  varde-spec
+  varde-worktree
+)
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-d target_dir] [-s skill1,skill2,...] [-f]
+Usage: $(basename "$0") [-d target_dir] [-s skill1,skill2,...] [-f] [-n] [--yes]
 
-  -d target_dir   Directory to install skills into (default: $DEFAULT_TARGET)
-  -s skills       Comma-separated list of skill names to install (default: all)
-  -f              Overwrite existing skill directories without prompting
+  -d target_dir   Install into this directory
+  -s skills       Install an explicit comma-separated subset
+  -f              Overwrite selected consolidated directories
+  -n              Show planned writes without changing files
+  --yes           Approve unmarked legacy-directory removal
   -h              Show this help
 
-Examples:
-  $(basename "$0")
-  $(basename "$0") -d ~/.config/opencode/skills
-  $(basename "$0") -s varde-plan,varde-review
+Default target: $DEFAULT_TARGET
 EOF
 }
 
 TARGET="$DEFAULT_TARGET"
 SKILLS=""
 FORCE=0
+DRY_RUN=0
+ASSUME_YES=0
+PRESERVE_LEGACY=0
 
-while getopts "d:s:fh" opt; do
-  case "$opt" in
-    d) TARGET="$OPTARG" ;;
-    s) SKILLS="$OPTARG" ;;
-    f) FORCE=1 ;;
-    h) usage; exit 0 ;;
-    *) usage; exit 1 ;;
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -d)
+      [ "$#" -ge 2 ] || { echo "-d requires a value" >&2; exit 1; }
+      TARGET="$2"
+      shift 2
+      ;;
+    -s)
+      [ "$#" -ge 2 ] || { echo "-s requires a value" >&2; exit 1; }
+      SKILLS="$2"
+      shift 2
+      ;;
+    -f) FORCE=1; shift ;;
+    -n) DRY_RUN=1; shift ;;
+    --yes) ASSUME_YES=1; shift ;;
+    --preserve-legacy) PRESERVE_LEGACY=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
 
-ALL_SKILLS=()
-while IFS= read -r line; do
-  ALL_SKILLS+=("$line")
-done < <(find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 -type d -name 'varde-*' -exec basename {} \; | sort)
-
 if [ -n "$SKILLS" ]; then
-  SELECTED=()
   IFS=',' read -ra SELECTED <<< "$SKILLS"
 else
-  SELECTED=("${ALL_SKILLS[@]}")
+  SELECTED=("${CATALOGUE[@]}")
 fi
 
 for skill in "${SELECTED[@]}"; do
-  if [[ ! " ${ALL_SKILLS[*]} " =~ " ${skill} " ]]; then
+  known=0
+  for candidate in "${CATALOGUE[@]}"; do
+    [ "$skill" = "$candidate" ] && known=1
+  done
+  if [ "$known" -ne 1 ]; then
     echo "Unknown skill: $skill" >&2
     exit 1
   fi
 done
 
-mkdir -p "$TARGET"
+marked_retired=("")
+unmarked_retired=("")
+for skill in "${RETIRED[@]}"; do
+  destination="$TARGET/$skill"
+  [ -d "$destination" ] || continue
+  if [ -f "$destination/$OWNERSHIP_MARKER" ] &&
+    grep -Fxq 'varde-managed-skill' "$destination/$OWNERSHIP_MARKER"; then
+    marked_retired+=("$destination")
+  else
+    unmarked_retired+=("$destination")
+  fi
+done
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  for destination in "${marked_retired[@]}"; do
+    [ -n "$destination" ] || continue
+    echo "Would remove managed legacy directory: $destination"
+  done
+  for destination in "${unmarked_retired[@]}"; do
+    [ -n "$destination" ] || continue
+    if [ "$ASSUME_YES" -eq 1 ]; then
+      echo "Would remove approved legacy directory: $destination"
+    else
+      echo "Would request removal approval: $destination"
+    fi
+  done
+else
+  for destination in "${marked_retired[@]}"; do
+    [ -n "$destination" ] || continue
+    rm -rf "$destination"
+    echo "Removed managed legacy directory: $destination"
+  done
+
+  remove_unmarked=0
+  unmarked_count=$((${#unmarked_retired[@]} - 1))
+  if [ "$unmarked_count" -gt 0 ]; then
+    if [ "$ASSUME_YES" -eq 1 ]; then
+      remove_unmarked=1
+    elif [ "$PRESERVE_LEGACY" -eq 1 ]; then
+      remove_unmarked=0
+    else
+      printf 'Remove %d unmarked legacy skill directories? [y/N] ' "$unmarked_count"
+      reply=""
+      read -r reply || true
+      case "$reply" in
+        [yY]|[yY][eE][sS]) remove_unmarked=1 ;;
+      esac
+    fi
+  fi
+
+  if [ "$remove_unmarked" -eq 1 ]; then
+    for destination in "${unmarked_retired[@]}"; do
+      [ -n "$destination" ] || continue
+      rm -rf "$destination"
+      echo "Removed legacy directory: $destination"
+    done
+  else
+    for destination in "${unmarked_retired[@]}"; do
+      [ -n "$destination" ] || continue
+      echo "Preserved unmarked legacy directory: $destination"
+    done
+  fi
+
+  mkdir -p "$TARGET"
+fi
 
 for skill in "${SELECTED[@]}"; do
-  src="$SCRIPT_DIR/$skill"
-  dest="$TARGET/$skill"
-  if [ -e "$dest" ] && [ "$FORCE" -ne 1 ]; then
-    read -r -p "Overwrite existing $dest? [y/N] " reply
+  source_dir="$SCRIPT_DIR/$skill"
+  destination="$TARGET/$skill"
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    find "$source_dir" -type f \
+      -not -path '*/evals/*' \
+      -not -path '*-workspace/*' \
+      -not -name '.DS_Store' | while IFS= read -r source_file; do
+      printf 'Would install %s -> %s/%s\n' "$source_file" "$destination" "${source_file#"$source_dir"/}"
+    done
+    printf 'Would install marker -> %s/%s\n' "$destination" "$OWNERSHIP_MARKER"
+    continue
+  fi
+
+  if [ -e "$destination" ] && [ "$FORCE" -ne 1 ]; then
+    read -r -p "Overwrite existing $destination? [y/N] " reply
     case "$reply" in
       [yY]*) ;;
       *) echo "Skipped $skill"; continue ;;
     esac
   fi
-  rm -rf "$dest"
-  cp -R "$src" "$dest"
-  # Strip author-only artifacts so end users never see them: eval test cases
-  # (evals/) and any generated eval-run workspace are for skill development and
-  # quality iteration, not needed at runtime.
-  rm -rf "$dest/evals" "$dest"/*-workspace
-  find "$dest" -name '.DS_Store' -delete
-  echo "Installed $skill -> $dest"
+
+  rm -rf "$destination"
+  cp -R "$source_dir" "$destination"
+  find "$destination" -type d \( -name evals -o -name '*-workspace' \) \
+    -prune -exec rm -rf {} +
+  find "$destination" -name '.DS_Store' -delete
+  printf 'varde-managed-skill\n' > "$destination/$OWNERSHIP_MARKER"
+  echo "Installed $skill -> $destination"
 done
 
-echo "Done. Installed to: $TARGET"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "Dry run. No skills installed to: $TARGET"
+else
+  echo "Done. Installed to: $TARGET"
+fi

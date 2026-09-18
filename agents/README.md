@@ -21,13 +21,25 @@ The four agents map onto the plan → build → review lifecycle:
 
 | Agent | Purpose | Backing skill(s) |
 |---|---|---|
-| `plan` | Collaboratively scope a change | `varde-plan` |
-| `build` | Implement a ready plan; apply review fixes | `varde-build`, `varde-review-fix` |
-| `review` | Report-only structured review | `varde-review` |
-| `explore` | Read-only repository navigation | `varde-code-codebase-navigation` |
+| `plan` | Collaboratively scope a change | `varde-change plan` |
+| `build` | Implement plans and apply review fixes | `varde-change build`, `varde-review fix` |
+| `review` | Report-only structured review | `varde-review report` |
+| `explore` | Read-only repository navigation | `varde-explore` |
 
 The agents reference the `varde-*` skills by name, so install the skills too
 (see [`../skills/install.sh`](../skills/install.sh)).
+
+The default installed catalogue contains seven packages:
+
+- `varde-explore`
+- `varde-change`
+- `varde-review`
+- `varde-docs`
+- `varde-knowledge`
+- `varde-prototype`
+- `varde-agent-doc-authoring`
+
+Agent instructions select modes within those installed packages.
 
 ## Install
 
@@ -38,6 +50,10 @@ The agents reference the `varde-*` skills by name, so install the skills too
 ./install.sh -t claude -a plan,review
 ./install.sh -t claude -d ./.claude/agents   # into a repo-local dir
 ```
+
+Use `-m` for managed upgrades. It replaces only files carrying varde's
+ownership marker and preserves same-named files created elsewhere. Use `-f`
+only when every selected destination may be replaced explicitly.
 
 On install each variant is renamed to the agent's canonical name for that
 harness — `build/claude.md` → `build.md`, `build/codex.toml` → `build.toml`,

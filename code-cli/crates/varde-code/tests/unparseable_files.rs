@@ -23,11 +23,7 @@ fn unparseable_files_skip_and_report_keep_valid_entities() {
     assert!(output.files[hello.file_id as usize].contains("valid.ts"));
 
     // A diagnostic entry must exist for each bad file.
-    let diag_files: Vec<&str> = output
-        .diagnostics
-        .iter()
-        .map(|d| output.files[d.file_id as usize].as_str())
-        .collect();
+    let diag_files: Vec<&str> = output.diagnostics.iter().map(|d| d.path.as_str()).collect();
     for bad in ["broken.ts", "binary.ts", "blob.bin"] {
         assert!(
             diag_files.iter().any(|f| f.contains(bad)),

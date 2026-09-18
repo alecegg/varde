@@ -3,8 +3,8 @@
 # CLI
 
 The `varde-code` binary is a library plus a single CLI: one subcommand per query
-mode, plus `extract`, `build`, `scan`, `test`, the `rules_*` / `skills_*` /
-`hooks` management commands, `slice_state`, and `watch`.
+mode, plus `extract`, `build`, `scan`, `test`, the `rules_*` and `hooks`
+management commands, `slice_state`, and `watch`.
 Global flag: `-v`/`--verbose` (only applies when `RUST_LOG` is unset).
 
 ## Conventions
@@ -130,30 +130,11 @@ customized directly (instead of only overridden by id). All three take
   removed; custom rule files are left alone. A seeded file edited since seeding
   is skipped unless `--force` (which discards those local edits).
 
-## Skills
-
-Install or remove the agent skills bundled in the binary (rule authoring,
-rule-scan triage, codebase navigation). These use flat flags, not `--json`, and
-never require a DB. Install targets match each harness's global discovery path:
-Claude (`~/.claude/skills`), Codex (`~/.agents/skills`), OpenCode
-(`~/.config/opencode/skills`), and Pi (`~/.pi/agent/skills`).
-
-- **`skills_list`** — List bundled packs, files, and harness destinations.
-  No filesystem writes.
-- **`skills_install [--agent A...] [--dir DIR] [--force]`** — Install every
-  pack for Claude, Codex, OpenCode, and Pi by default. Limit targets with
-  repeatable or comma-separated `--agent` values. `--dir` overrides every
-  selected target, for a project-local shared installation or testing.
-- **`skills_remove [--agent A...] [--dir DIR] [--force]`** — Undo
-  `skills_install` for the selected targets. Only shipped skill-pack files are
-  touched. Locally edited files are skipped unless `--force`.
-
 ## Hooks
 
 Install or remove session-start hooks for supported agent harnesses (`claude`,
 `codex`, `opencode`, `pi`) that shell out to `nav_map` at session start. Same
-idea as `skills`, but installs a hook instead of skill files. Flat flags, no
-`--json`.
+These commands use flat flags instead of `--json`.
 
 - **`hooks list`** — List the 4 supported agent hook targets and the
   directory/file each installs to. No filesystem writes.

@@ -270,7 +270,8 @@ mod symbols_in_file {
             entities: vec![],
             symbols: vec![],
             diagnostics: vec![varde_code::model::Diagnostic {
-                file_id: 0,
+                file_id: Some(0),
+                path: "lonely.txt".to_string(),
                 message: "unsupported".to_string(),
                 severity: "info".to_string(),
             }],

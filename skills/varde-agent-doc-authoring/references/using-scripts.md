@@ -1,4 +1,4 @@
-# Using scripts in skills (agentskills.io)
+# Use scripts in skills
 
 ## One-off commands (no `scripts/` needed)
 

@@ -45,7 +45,10 @@ pub mod path;
 /// - v16: `is_test_path` recognizes Rust file-based unit-test submodules
 ///   (`test.rs`/`tests.rs` beside the code, not under a `test/` dir); the
 ///   generated column is STORED, so old DBs must rebuild to recompute it.
-pub const SCHEMA_VERSION: i64 = 16;
+/// - v17: `diagnostics` gains a required `path` and a nullable `file_id`, so
+///   directory-traversal failures (which produce no `files` row) persist
+///   alongside per-file diagnostics; old DBs must rebuild to backfill `path`.
+pub const SCHEMA_VERSION: i64 = 17;
 
 /// All tables in the schema, in a deterministic drop order (junction tables
 /// before the tables they reference, so `DROP TABLE IF EXISTS` never trips a
@@ -210,7 +213,11 @@ CREATE TABLE symbols (
 
 CREATE TABLE diagnostics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    file_id INTEGER NOT NULL,
+    -- NULL for a directory-traversal failure: the walk never reached a file,
+    -- so there is no `files` row to key it to. `path` is the locator instead,
+    -- and is required for every diagnostic.
+    file_id INTEGER,
+    path TEXT NOT NULL,
     message TEXT NOT NULL,
     severity TEXT NOT NULL
 );
@@ -854,9 +861,36 @@ mod schema_scaffold {
             SCHEMA_VERSION
         );
         assert_eq!(
-            SCHEMA_VERSION, 16,
-            "schema version bumped for Rust file-module is_test_path recognition"
+            SCHEMA_VERSION, 17,
+            "schema version bumped for path-based traversal diagnostics"
         );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A traversal failure has no `files` row, so `diagnostics.file_id` must
+    /// accept NULL while `path` stays required.
+    #[test]
+    fn diagnostics_file_id_is_nullable_and_path_is_required() {
+        let dir = std::env::temp_dir().join(format!("varde-schema-{}-diag", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir creates");
+        let db_path = dir.join("diag.db");
+        let _ = std::fs::remove_file(&db_path);
+        let conn = open_or_rebuild(&db_path).expect("db opens");
+
+        conn.execute(
+            "INSERT INTO diagnostics (file_id, path, message, severity)
+             VALUES (NULL, 'src/locked', 'directory traversal failed — skipped', 'error')",
+            [],
+        )
+        .expect("file-less traversal diagnostic inserts");
+
+        conn.execute(
+            "INSERT INTO diagnostics (file_id, message, severity)
+             VALUES (NULL, 'no path', 'error')",
+            [],
+        )
+        .expect_err("path is required");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
