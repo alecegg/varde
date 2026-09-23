@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "routes": [
+    {
+      "id": "small-defined-change",
+      "eval_id": 3,
+      "required_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/build.md",
+        "varde-change/references/build-micro-change.md"
+      ],
+      "observed_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/build.md",
+        "varde-change/references/build-micro-change.md"
+      ]
+    },
+    {
+      "id": "plan-from-scratch",
+      "eval_id": 2,
+      "required_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/plan.md",
+        "varde-change/references/plan-start.md"
+      ],
+      "observed_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/plan.md",
+        "varde-change/references/plan-start.md"
+      ]
+    },
+    {
+      "id": "existing-plan-build",
+      "eval_id": 8,
+      "required_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/build.md",
+        "varde-change/references/build-existing-plan.md"
+      ],
+      "observed_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/build.md",
+        "varde-change/references/build-existing-plan.md"
+      ]
+    },
+    {
+      "id": "verify-finished-plan",
+      "eval_id": 4,
+      "required_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/verify.md"
+      ],
+      "observed_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/verify.md"
+      ]
+    },
+    {
+      "id": "status-discovery",
+      "eval_id": 1,
+      "required_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/status.md"
+      ],
+      "observed_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/status.md"
+      ]
+    },
+    {
+      "id": "debugging-entry",
+      "eval_id": 9,
+      "required_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/build.md",
+        "varde-change/references/debugging-entry.md",
+        "varde-change/references/build-posture-debug.md"
+      ],
+      "observed_documents": [
+        "varde-change/SKILL.md",
+        "varde-change/references/build.md",
+        "varde-change/references/debugging-entry.md",
+        "varde-change/references/build-posture-debug.md"
+      ]
+    }
+  ]
+}

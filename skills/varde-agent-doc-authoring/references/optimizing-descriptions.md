@@ -2,13 +2,13 @@
 
 Agents load every skill's `name` and `description` at startup. They read the
 full `SKILL.md` only when a task matches. A vague description misses tasks. A
-broad one runs too often. A one-step task may not need a skill at all.
+broad one runs too often. A one-step task may not need a skill.
 
 ## Writing principles
 
 - **Imperative phrasing**: "Use this skill when..." not "This skill does...". The agent is deciding whether to act.
 - **User intent, not implementation**: describe what the user is trying to achieve, since that's what gets matched against.
-- **Be pushy**: explicitly list contexts where it applies, including when the user doesn't name the domain directly ("even if they don't mention 'CSV'").
+- **Name every relevant context**: include cases where the user does not name the domain directly ("even if they don't mention 'CSV'").
 - **Concise**: a few sentences to a short paragraph. Hard limit is 1024 characters.
 
 Before/after:
@@ -41,7 +41,7 @@ Run the set with `scripts/run-evals.sh <skill-name> <queries.json> [--runs N]`
 from this skill's directory: it sends each query, records whether the skill
 fired, and reports accuracy against the labels. `--runs N` repeats each query so
 a flaky trigger is visible rather than averaged away. This is the triggering
-counterpart to `scripts/run-output-evals.sh`, which measures output quality
+The script measures triggering; `scripts/run-output-evals.sh` measures output quality
 (`references/evaluating-skills.md`).
 
 - **Should-trigger**: vary phrasing (formal/casual/typos), explicitness (naming the domain vs. describing the need), detail level, and task complexity. The most useful ones are where the skill would help but the connection isn't obvious — if the query already restates the skill, any description would pass.
@@ -72,7 +72,7 @@ Split queries ~60% train / ~40% validation, proportional mix of positive/negativ
 Loop:
 1. Evaluate current description on both sets.
 2. Identify train-set failures only (keep validation untouched during iteration).
-3. Revise: if should-trigger queries fail, broaden scope/context; if should-not-trigger queries false-fire, add specificity about what the skill does *not* do. Don't chase literal keywords from failed queries (overfitting) — find the general concept instead. If stuck after several passes, try a structurally different description rather than incremental tweaks. Recheck the 1024-char limit.
+3. Revise: if should-trigger queries fail, broaden scope/context; if should-not-trigger queries false-fire, add specificity about what the skill does *not* do. Generalize from failed queries instead of copying their keywords. If stuck after several passes, try a structurally different description rather than incremental tweaks. Recheck the 1024-char limit.
 4. Repeat until train queries pass or improvement plateaus (~5 iterations is usually enough).
 5. Pick the iteration with the best *validation* pass rate — not necessarily the last one.
 

@@ -1,43 +1,47 @@
 # Change status
 
-Derive status from existing artifacts. Status is a read of what is already on
-disk — the artifacts it inspects are the only record, and it leaves every one of
-them exactly as found.
+Read current artifacts from disk.
+Leave every plan, task, and handoff unchanged.
+Batch both inventories and readiness checks together.
 
-## Assumed layout
+## Plans
 
-Status reads plan and handoff files from disk. It uses the `varde-change plan`
-layout:
+1. Glob `<working>/plans/*/plan.md`.
+2. Read frontmatter from each file.
+3. Keep statuses except completed and archived.
+4. Sort date-prefixed identifiers newest first.
+   Put legacy numeric identifiers last.
+5. Keep five plans and count remaining matches.
+6. Count adjacent `tasks/*.md` files and done statuses.
+7. Show Status, Plan, Tasks, and Done columns.
 
-- Plans live at `memory-bank/working/plans/<plan-id>/plan.md`, with YAML
-  frontmatter carrying `status`. Task files and review folders sit beside their
-  owning plan.
-- Handoffs live at `memory-bank/working/handoffs/<handoff-id>/handoff.md`,
-  with frontmatter carrying `type: handoff`, `status` (`open`/`resumed`),
-  `description`, `timestamp`, `head_sha`, and `links` (entries with
-  `kind`/`target`).
+Report `No plans in a non-terminal status.` when empty.
+Read task facts only from each task file.
 
-If the repository uses another layout, adjust the globs but keep this result.
+## Handoffs
 
-## Workflow
+1. Glob `<working>/handoffs/*/handoff.md`.
+2. Keep handoffs whose status is open.
+3. Sort timestamps newest first and keep five.
+4. Resolve every `kind: plan` link's current status.
+5. Show Handoff, Description, Timestamp, and Linked plan status.
 
-Derive `REPO_ROOT` from the current working directory, then show both panels.
+Report `No open handoffs.` when empty.
+Show missing values plainly.
+Report additional match counts after each table.
 
-1. **List active plans.** Follow `references/status-list-plans.md` for the glob,
-   sort rule, top-5 cutoff, and table format.
-2. **List open handoffs.** Follow `references/status-open-handoffs.md` for the same.
-3. **Recommend one next mode.** Report active, blocked, and resumable work
-   first. Then name a single `varde-change` mode that matches it: `plan` when
-   the work has no plan yet, `build` when a plan is ready to execute,
-   `orchestrate` when a group plan has ready children, `verify` when a plan
-   needs aggregate evidence. Stop there.
+## Next mode
 
-## Gotchas
+For each listed plan, run
+`varde-workflow readiness <plan.md> --json` when available.
+Use its blockers and actions as authoritative.
 
-- Step 3 names the next mode; running it is the user's call. A modification
-  request that arrives here (update a task, create a plan, change status,
-  review, simplify) gets the name of the mode that owns it.
-- Task facts (status, counts, readiness) live only in each task file's own
-  frontmatter. There is no separate task index. Always read `tasks/*.md`
-  directly under the relevant plan directory when computing a plan's task
-  counts.
+Recommend exactly one next `varde-change` mode:
+
+- `plan` for unplanned work.
+- `build` for one ready plan.
+- `orchestrate` for ready group children.
+- `verify` for aggregate evidence.
+
+State `Recommended next mode: <mode>` and stop.
+Never run the recommendation.

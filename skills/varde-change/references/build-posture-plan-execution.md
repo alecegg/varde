@@ -1,12 +1,16 @@
 # Plan Execution Posture
 
-The default posture. No special discipline beyond `references/build-execution.md` applies — follow the step's `Context`, `Design notes`, `Execution notes`, and `Test approach` fields directly and implement with the standard TDD cycle.
+The default posture. Follow `references/build-execution.md` and the task's
+`Context`, `Design notes`, `Execution notes`, and `Test approach` fields. Use
+the standard TDD cycle.
 
 ## Cadence
 
 1. Read the task's `tasks/<task-id>.md` file.
 2. Follow `references/build-execution.md`: write a failing test per `#### Verification` check, implement, verify, commit.
-3. Signal completion by applying a targeted edit to the task file's own `status` (task-specific blockers also set this file's `status: blocked` — never `plan.md`), as defined in `references/build-execution.md`'s Completion and Blocker Handling sections.
+3. Mark completion by editing the task file's `status`. A task-specific blocker
+   also sets this file's `status: blocked`, never `plan.md`, as defined in
+   `references/build-execution.md`'s Completion and Blocker Handling sections.
 
 ## Verification
 

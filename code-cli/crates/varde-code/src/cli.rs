@@ -15,8 +15,8 @@ use clap::{Parser, Subcommand};
     long_about = "varde-code: native code-intelligence CLI (parse, index, query, scan).\n\
 \n\
 Typical flow:\n\
-  1. varde-code build --repo-root <path>        # index the repo (required before query/scan)\n\
-  2. varde-code <query-mode> --json '{...}'      # e.g. symbols_in_file, dependencies, hotspots\n\
+  1. varde-code <query-mode> --json '{...}'      # refreshes the index on demand\n\
+  2. varde-code build --repo-root <path>        # optionally precompute the index\n\
   3. varde-code scan --json '{\"repoRoot\":\"<path>\"}'  # run rule packs, exit non-zero above threshold\n\
 \n\
 Scan rules (built-in + user + repo scope):\n\
@@ -73,7 +73,7 @@ pub enum Command {
     /// (see `symbols_in_file` help for inputs)
     #[command(name = "symbols_in_file")]
     SymbolsInFile {
-        /// JSON object: { repoRoot|dbPath, filePath, includeBody? }
+        /// JSON object: { repoRoot|dbPath, filePath, includeBody?, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -81,7 +81,7 @@ pub enum Command {
     /// (see `symbols_in_files` help for inputs)
     #[command(name = "symbols_in_files")]
     SymbolsInFiles {
-        /// JSON object: { repoRoot|dbPath, filePaths, includeBody? }
+        /// JSON object: { repoRoot|dbPath, filePaths, includeBody?, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -97,7 +97,7 @@ pub enum Command {
     /// (see `dependencies` help for inputs)
     #[command(name = "dependencies")]
     Dependencies {
-        /// JSON object: { repoRoot|dbPath, filePath, direction?, maxDepth? }
+        /// JSON object: { repoRoot|dbPath, filePath, direction?, maxDepth?, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -105,7 +105,7 @@ pub enum Command {
     /// (see `dependents` help for inputs)
     #[command(name = "dependents")]
     Dependents {
-        /// JSON object: { repoRoot|dbPath, filePath, maxDepth? }
+        /// JSON object: { repoRoot|dbPath, filePath, maxDepth?, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -121,7 +121,7 @@ pub enum Command {
     /// (see `hotspots` help for inputs)
     #[command(name = "hotspots")]
     Hotspots {
-        /// JSON object: { repoRoot|dbPath }
+        /// JSON object: { repoRoot|dbPath, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -172,7 +172,7 @@ pub enum Command {
     /// (see `blast_radius` help for inputs)
     #[command(name = "blast_radius")]
     BlastRadius {
-        /// JSON object: { repoRoot|dbPath, filePath }
+        /// JSON object: { repoRoot|dbPath, filePath, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -180,7 +180,7 @@ pub enum Command {
     /// (see `symbol_blast_radius` help for inputs)
     #[command(name = "symbol_blast_radius")]
     SymbolBlastRadius {
-        /// JSON object: { repoRoot|dbPath, name, kind? }
+        /// JSON object: { repoRoot|dbPath, name, kind?, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -212,7 +212,7 @@ pub enum Command {
     /// (see `filter_symbols` help for inputs)
     #[command(name = "filter_symbols")]
     FilterSymbols {
-        /// JSON object: { repoRoot|dbPath, kind?, tags?, language?, file?, ... }
+        /// JSON object: { repoRoot|dbPath, kind?, tags?, language?, file?, maxSymbols?, resultsLimit?, resultsOffset?, fullResults?, ... }
         #[arg(long)]
         json: String,
     },
@@ -220,7 +220,7 @@ pub enum Command {
     /// (see `find_pattern` help for inputs)
     #[command(name = "find_pattern")]
     FindPattern {
-        /// JSON object: { repoRoot|dbPath, pattern, filePath? (or file?), language? }
+        /// JSON object: { repoRoot|dbPath, pattern, filePath? (or file?), language?, matchesLimit?, matchesOffset?, fullMatches? }
         #[arg(long)]
         json: String,
     },
@@ -231,7 +231,7 @@ pub enum Command {
     /// (see `context_pack` help for inputs)
     #[command(name = "context_pack")]
     ContextPack {
-        /// JSON object: { repoRoot|dbPath, query }
+        /// JSON object: { repoRoot|dbPath, query, resultsLimit?, resultsOffset?, fullResults? }
         #[arg(long)]
         json: String,
     },
@@ -251,17 +251,17 @@ pub enum Command {
         #[arg(long, default_value = "json")]
         format: String,
     },
-    /// Scan: run the repo's rule packs (user + repo scope) against the
-    /// persisted index and emit findings. Requires a fresh prior `build`;
-    /// exits non-zero when findings exist at/above the severity threshold.
-    /// (see `scan` help for inputs)
+    /// Scan built-in, user, and repository rules after refreshing the index.
+    /// Exit nonzero for incomplete analysis or policy-blocking findings.
+    /// Inspect data.analysis.status and data.gate.status independently.
     #[command(name = "scan")]
     Scan {
-        /// JSON object: { repoRoot, output?, severityThreshold? }
+        /// JSON object: { repoRoot, output?, severityThreshold?, gateRules?, fullFindings?, findingsLimit?, findingsOffset? }
+        /// Choose either severityThreshold or explicit gateRules.
         #[arg(long)]
         json: String,
-        /// Apply `rewrite` templates to matched files. Default (no flag) is
-        /// read-only: matches reported, nothing written.
+        /// Apply rewrite templates after a complete scan.
+        /// Without this flag, source files remain unchanged.
         #[arg(long)]
         apply: bool,
         /// With `--apply`: write to files with uncommitted git changes.
@@ -269,7 +269,7 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Test: run every rule's `[[test]]` entries and report pass/fail.
+    /// Test: run every rule's `[[rule.test]]` entries and report pass/fail.
     /// Self-contained — no DB, no prior `build`; exits non-zero when any
     /// test fails. (see `test` help for inputs)
     #[command(name = "test")]

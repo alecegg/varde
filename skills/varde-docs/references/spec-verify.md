@@ -2,18 +2,18 @@
 
 ## Verification
 
-After generation, read each generated spec document next to the source files
-it describes and check these conditions manually:
+After generation, compare each generated spec with the source files it
+describes. Check these conditions manually:
 
-- All generated files are under `memory-bank/knowledge/specs/`.
+- All generated files are under `<knowledge>/specs/`.
 - No leftover scratch/staging files exist from a prior run.
 - No standalone rule document exists.
-- Every generated section can be traced back to real source it describes
-  (spot-check operations, types, and invariants against the actual code).
+- Trace every generated section to real source it describes (spot-check
+  operations, types, and invariants against the actual code).
 - Every `sources` entry hash equals the current `git hash-object` result.
-  Recompute the sorted aggregate and require it to equal `source_hash`. A
-  mismatch means source changed during generation. Regenerate that dirty
-  document before completing the run.
+  Recompute the sorted aggregate. It must equal `source_hash`. A mismatch means
+  source changed during generation. Regenerate that dirty document before
+  completing the run.
 - Architecture has no flow sections.
 - Links between domain documents and to source files resolve.
 - Every domain document has exactly one `## Summary` inside its paired
@@ -31,8 +31,8 @@ it describes and check these conditions manually:
   domain document, flow name, cited source path, and crux text, then carry on
   through the remaining documents — `varde-docs spec` exits `0` when crux drift
   is its only finding.
-- Where you cannot fully confirm accuracy (large or unfamiliar domain), note
-  the check as degraded and explain what could not be verified.
+- If you cannot fully confirm accuracy for a large or unfamiliar domain, mark
+  the check as degraded and explain what you could not verify.
 
 ## Output
 

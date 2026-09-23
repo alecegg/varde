@@ -12,9 +12,9 @@ Shared rules for skills that ask the user questions.
   decision open.
 - **Name unresolved dependencies.** When an answer depends on an open question,
   defer it and say what is missing.
-- **Re-scan for gaps before ending.** An empty queue means the *known* frontier
-  is resolved, not that nothing was missed. Sweep for placeholders, conflicting
-  decisions, and unclear scope before closing the round.
+- **Check for gaps before ending.** An empty queue means all known questions
+  are resolved. It does not prove that nothing was missed. Check for
+  placeholders, conflicting decisions, and unclear scope before closing.
 - **Watch for context saturation.** Re-asking something already resolved, losing
   track of earlier decisions, or your own questions getting vaguer all mean the
   context window is degrading question quality — round count alone does not. Say

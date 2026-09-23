@@ -5,17 +5,20 @@ description: "Maintain project documentation: refresh README.md and docs/*.md ag
 
 # Maintain project documentation
 
-## What the request needs
+## Choose the reference
 
-| The document is | Read |
+| Document type | Read |
 |---|---|
 | User-facing — README.md, `docs/*.md`, anything a reader opens directly | `references/refresh.md` |
-| A generated domain specification under `memory-bank/knowledge/specs/` | `references/spec.md` |
+| A generated domain specification under `<knowledge>/specs/` | `references/spec.md` |
 
-Load only the reference the request needs.
-Then load its explicitly required supporting files.
+Read only the reference for the request.
+Then read its required supporting files.
 
-Refresh preserves hand-authored document sections.
-Spec generation derives generated content from current source.
+## Gotchas
 
-Load `references/worktree.md` before isolated edits.
+- Paths written `<working>/…` and `<knowledge>/…` resolve per
+  `references/memory-locations.md`. Read it before the first memory read or write.
+- Refresh preserves hand-authored document sections.
+- Generate spec content from current source.
+- Load `references/worktree.md` before isolated edits.

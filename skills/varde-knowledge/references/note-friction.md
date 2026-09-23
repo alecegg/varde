@@ -2,7 +2,7 @@
 
 ## Record a real problem
 
-Record useful observations in `memory-bank/friction/`. Each item is plain
+Record useful observations in `<working>/friction/`. Each item is plain
 Markdown in the repository. A monorepo whose modules each own a `memory-bank/`
 gets one store per module — write the item under the module whose work hit the
 friction, not the repo root.
@@ -14,9 +14,10 @@ Capture a real event, not a general impression. Good examples:
 - A tool behaved in a surprising way.
 - A documented technique worked especially well.
 
-This pass only captures. Grouping, promoting, and dismissing belong to
-`references/reflect-distill.md`; fixing the underlying problem belongs to the
-target skill. Source from the current conversation and working memory alone.
+Only capture items in this pass. Use
+`references/reflect-distill.md` to group, promote, or dismiss them. Fix the
+underlying problem in the target skill. Use only the current conversation and
+working memory as sources.
 
 ## Scope the review
 
@@ -39,11 +40,12 @@ If no concrete event exists, say so and write nothing.
 6. Set `session_label` to the session name, or a sanitized first prompt capped
    at 46 characters.
 7. Search every friction store for an open match with `Glob` and `Grep` —
-   `**/memory-bank/friction/*.md`, not just the root one. A repeat recorded
+   `<working>/friction/*.md` in every module's working memory, plus the
+   legacy `**/memory-bank/friction/*.md` location — not just the root one. A repeat recorded
    under another module is still a repeat.
 8. Read `references/note-friction-format.md` before writing or appending.
-9. Create an item, or append a new occurrence. A captured item keeps whatever
-   `status` it already had.
+9. Create an item or append a new occurrence. When appending, keep the item's
+   current `status`.
 
 Keep genuine repeats. They show how often a problem occurs.
 

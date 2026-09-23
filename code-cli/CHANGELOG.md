@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Trusted function complexity can now gate completion.** Function metrics
+  separate cyclomatic paths, cognitive nesting, and unit size. Returns,
+  wrappers, and nested callables no longer inflate their parents. Metrics
+  carry versioned confidence evidence. All twenty-one extraction languages
+  have certified profiles. Findings exceed Fallow-compatible limits at
+  cyclomatic 20, cognitive 15, or 60 lines. Those findings block default
+  scans. Unknown constructs and syntax errors lower affected confidence.
+  Partial measurements remain informational advisories. Language adapters now
+  normalize decision arms, boolean operators, and anonymous callables.
+- **Scan now reports unresolved repository-local imports.** The built-in
+  `unresolved-local-import` rule joins unresolved import edges to their source
+  entities, preserving exact locations and specifier evidence. It accepts only
+  explicit relative filesystem paths outside tests, avoiding fixture noise,
+  third-party packages, and incomplete Rust module-path resolution.
 - **`nav_map` entrypoints now carry the HTTP method and path for
   annotation/decorator frameworks.** Previously only call-based routes
   (Gin/Ktor/C# minimal-API) surfaced as `"GET /users"`; a FastAPI/Spring/ASP.NET
@@ -24,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `semantic_entrypoint_nestjs_controller_routes`.
 
 ### Fixed
+- **Scan output now prioritizes actionable clone and complexity candidates.**
+  Clone MinHash signatures now hash complete four-row LSH bands instead of
+  collapsing each band to one row minimum. Test-only helpers and branches are
+  excluded, identical clone memberships collapse together, and bodies through
+  eight lines no longer trigger clone findings. Standalone complexity findings
+  remain available as capped informational advisories. File advisories require
+  both high total complexity and high complexity per production function.
+  Churn-complexity remains a warning.
 - **The repo-wide call fallback no longer over-converges on test doubles or
   library receivers.** The single-definition fallback (namespace-import
   languages: C#/Java/Kotlin/Scala/Swift) bound production callers to the wrong

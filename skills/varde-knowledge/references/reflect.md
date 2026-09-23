@@ -1,7 +1,7 @@
 # Reflect on finished work
 
-Review the work just finished and route anything worth keeping. Reflection
-itself writes nothing — each record type has its own procedure file.
+Review finished work and decide what to keep. Reflection itself writes nothing;
+each record type has its own procedure file.
 
 Use this after a workflow and after direct investigation alike.
 
@@ -20,13 +20,13 @@ Use this after a workflow and after direct investigation alike.
 | A session is ending, or the user asks to wrap up | All three. Always consider a handoff. Recheck stored items if code changed. |
 | Another skill calls this at the end of its own run | Friction and knowledge only. Recheck stored items if that skill changed code. Write no handoff. |
 
-A handoff belongs only at the outermost stopping point. A child build inside an
-orchestrated run is not a stopping point, so it gets the second row.
+Create a handoff only at the outermost stopping point. A child build inside an
+orchestrated run is not a stopping point, so use the second row.
 
 ## Workflow
 
-Run these steps in order. Write knowledge before the handoff, and check old
-items before the handoff.
+Run these steps in order. Write knowledge before the handoff. Check old items
+before the handoff.
 
 1. **Friction:** If work revealed a real obstacle or useful technique, follow
    `references/note-friction.md`. When another skill called this, review only

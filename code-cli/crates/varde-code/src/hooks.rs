@@ -276,81 +276,85 @@ fn install_merge(
 ) -> io::Result<InstallResult> {
     let path = safe_join(target_dir, rel_path);
     match strategy {
-        MergeStrategy::Json => {
-            let mut doc = if path.exists() {
-                let text = std::fs::read_to_string(&path)?;
-                serde_json::from_str::<serde_json::Value>(&text)
-                    .unwrap_or(serde_json::Value::Object(Default::default()))
-            } else {
-                serde_json::Value::Object(Default::default())
-            };
-            let already_present = if agent == CLAUDE_AGENT {
-                claude_session_start_entry_index(&doc).is_some()
-            } else {
-                json_marker_present(&doc)
-            };
-            if already_present && !force {
-                return Ok(InstallResult {
-                    agent: agent.to_string(),
-                    path,
-                    written: false,
-                    skipped_existing: true,
-                });
-            }
-            if agent == CLAUDE_AGENT {
-                claude_install_session_start(&mut doc);
-            } else {
-                json_merge_marker(&mut doc);
-            }
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let text = serde_json::to_string_pretty(&doc).map_err(io::Error::from)?;
-            std::fs::write(&path, text)?;
-            Ok(InstallResult {
-                agent: agent.to_string(),
-                path,
-                written: true,
-                skipped_existing: false,
-            })
-        }
-        MergeStrategy::Toml => {
-            let mut doc = if path.exists() {
-                let text = std::fs::read_to_string(&path)?;
-                text.parse::<toml_edit::DocumentMut>()
-                    .unwrap_or_else(|_| toml_edit::DocumentMut::new())
-            } else {
-                toml_edit::DocumentMut::new()
-            };
-            let already_present = if agent == CODEX_AGENT {
-                codex_session_start_present(&doc)
-            } else {
-                toml_marker_present(&doc)
-            };
-            if already_present && !force {
-                return Ok(InstallResult {
-                    agent: agent.to_string(),
-                    path,
-                    written: false,
-                    skipped_existing: true,
-                });
-            }
-            if agent == CODEX_AGENT {
-                codex_install_session_start(&mut doc);
-            } else {
-                toml_merge_marker(&mut doc);
-            }
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(&path, doc.to_string())?;
-            Ok(InstallResult {
-                agent: agent.to_string(),
-                path,
-                written: true,
-                skipped_existing: false,
-            })
-        }
+        MergeStrategy::Json => install_json_merge(path, agent, force),
+        MergeStrategy::Toml => install_toml_merge(path, agent, force),
+    }
+}
+
+fn install_json_merge(path: PathBuf, agent: &str, force: bool) -> io::Result<InstallResult> {
+    let mut doc = if path.exists() {
+        let text = std::fs::read_to_string(&path)?;
+        serde_json::from_str::<serde_json::Value>(&text).map_err(io::Error::from)?
+    } else {
+        serde_json::Value::Object(Default::default())
+    };
+    let already_present = if agent == CLAUDE_AGENT {
+        claude_session_start_entry_index(&doc).is_some()
+    } else {
+        json_marker_present(&doc)
+    };
+    if already_present && !force {
+        return Ok(skipped_install(agent, path));
+    }
+    if agent == CLAUDE_AGENT {
+        claude_install_session_start(&mut doc);
+    } else {
+        json_merge_marker(&mut doc);
+    }
+    ensure_parent(&path)?;
+    let text = serde_json::to_string_pretty(&doc).map_err(io::Error::from)?;
+    std::fs::write(&path, text)?;
+    Ok(completed_install(agent, path))
+}
+
+fn install_toml_merge(path: PathBuf, agent: &str, force: bool) -> io::Result<InstallResult> {
+    let mut doc = if path.exists() {
+        let text = std::fs::read_to_string(&path)?;
+        text.parse::<toml_edit::DocumentMut>()
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+    } else {
+        toml_edit::DocumentMut::new()
+    };
+    let already_present = if agent == CODEX_AGENT {
+        codex_session_start_present(&doc)
+    } else {
+        toml_marker_present(&doc)
+    };
+    if already_present && !force {
+        return Ok(skipped_install(agent, path));
+    }
+    if agent == CODEX_AGENT {
+        codex_install_session_start(&mut doc);
+    } else {
+        toml_merge_marker(&mut doc);
+    }
+    ensure_parent(&path)?;
+    std::fs::write(&path, doc.to_string())?;
+    Ok(completed_install(agent, path))
+}
+
+fn ensure_parent(path: &Path) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
+fn skipped_install(agent: &str, path: PathBuf) -> InstallResult {
+    InstallResult {
+        agent: agent.to_string(),
+        path,
+        written: false,
+        skipped_existing: true,
+    }
+}
+
+fn completed_install(agent: &str, path: PathBuf) -> InstallResult {
+    InstallResult {
+        agent: agent.to_string(),
+        path,
+        written: true,
+        skipped_existing: false,
     }
 }
 
@@ -366,93 +370,85 @@ fn remove_merge(
         return Ok(None);
     }
     match strategy {
-        MergeStrategy::Json => {
-            let text = std::fs::read_to_string(&path)?;
-            let mut doc: serde_json::Value = match serde_json::from_str(&text) {
-                Ok(v) => v,
-                Err(_) => return Ok(None),
-            };
-            if agent == CLAUDE_AGENT {
-                if claude_session_start_entry_index(&doc).is_none() {
-                    return Ok(None);
-                }
-                let modified = claude_session_start_modified(&doc);
-                if modified && !force {
-                    return Ok(Some(RemoveResult {
-                        agent: agent.to_string(),
-                        path,
-                        removed: false,
-                        skipped_modified: true,
-                    }));
-                }
-                claude_remove_session_start(&mut doc);
-            } else {
-                if !json_marker_present(&doc) {
-                    return Ok(None);
-                }
-                let modified = json_marker_modified(&doc);
-                if modified && !force {
-                    return Ok(Some(RemoveResult {
-                        agent: agent.to_string(),
-                        path,
-                        removed: false,
-                        skipped_modified: true,
-                    }));
-                }
-                json_remove_marker(&mut doc);
-            }
-            let text = serde_json::to_string_pretty(&doc).map_err(io::Error::from)?;
-            std::fs::write(&path, text)?;
-            Ok(Some(RemoveResult {
-                agent: agent.to_string(),
-                path,
-                removed: true,
-                skipped_modified: false,
-            }))
-        }
-        MergeStrategy::Toml => {
-            let text = std::fs::read_to_string(&path)?;
-            let mut doc = match text.parse::<toml_edit::DocumentMut>() {
-                Ok(d) => d,
-                Err(_) => return Ok(None),
-            };
-            if agent == CODEX_AGENT {
-                if !codex_session_start_present(&doc) {
-                    return Ok(None);
-                }
-                let modified = codex_session_start_modified(&doc);
-                if modified && !force {
-                    return Ok(Some(RemoveResult {
-                        agent: agent.to_string(),
-                        path,
-                        removed: false,
-                        skipped_modified: true,
-                    }));
-                }
-                codex_remove_session_start(&mut doc);
-            } else {
-                if !toml_marker_present(&doc) {
-                    return Ok(None);
-                }
-                let modified = toml_marker_modified(&doc);
-                if modified && !force {
-                    return Ok(Some(RemoveResult {
-                        agent: agent.to_string(),
-                        path,
-                        removed: false,
-                        skipped_modified: true,
-                    }));
-                }
-                toml_remove_marker(&mut doc);
-            }
-            std::fs::write(&path, doc.to_string())?;
-            Ok(Some(RemoveResult {
-                agent: agent.to_string(),
-                path,
-                removed: true,
-                skipped_modified: false,
-            }))
-        }
+        MergeStrategy::Json => remove_json_merge(path, agent, force),
+        MergeStrategy::Toml => remove_toml_merge(path, agent, force),
+    }
+}
+
+fn remove_json_merge(path: PathBuf, agent: &str, force: bool) -> io::Result<Option<RemoveResult>> {
+    let text = std::fs::read_to_string(&path)?;
+    let mut doc: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+    let (present, modified) = if agent == CLAUDE_AGENT {
+        (
+            claude_session_start_entry_index(&doc).is_some(),
+            claude_session_start_modified(&doc),
+        )
+    } else {
+        (json_marker_present(&doc), json_marker_modified(&doc))
+    };
+    if !present {
+        return Ok(None);
+    }
+    if modified && !force {
+        return Ok(Some(skipped_remove(agent, path)));
+    }
+    if agent == CLAUDE_AGENT {
+        claude_remove_session_start(&mut doc);
+    } else {
+        json_remove_marker(&mut doc);
+    }
+    let text = serde_json::to_string_pretty(&doc).map_err(io::Error::from)?;
+    std::fs::write(&path, text)?;
+    Ok(Some(completed_remove(agent, path)))
+}
+
+fn remove_toml_merge(path: PathBuf, agent: &str, force: bool) -> io::Result<Option<RemoveResult>> {
+    let text = std::fs::read_to_string(&path)?;
+    let mut doc = match text.parse::<toml_edit::DocumentMut>() {
+        Ok(doc) => doc,
+        Err(_) => return Ok(None),
+    };
+    let (present, modified) = if agent == CODEX_AGENT {
+        (
+            codex_session_start_present(&doc),
+            codex_session_start_modified(&doc),
+        )
+    } else {
+        (toml_marker_present(&doc), toml_marker_modified(&doc))
+    };
+    if !present {
+        return Ok(None);
+    }
+    if modified && !force {
+        return Ok(Some(skipped_remove(agent, path)));
+    }
+    if agent == CODEX_AGENT {
+        codex_remove_session_start(&mut doc);
+    } else {
+        toml_remove_marker(&mut doc);
+    }
+    std::fs::write(&path, doc.to_string())?;
+    Ok(Some(completed_remove(agent, path)))
+}
+
+fn skipped_remove(agent: &str, path: PathBuf) -> RemoveResult {
+    RemoveResult {
+        agent: agent.to_string(),
+        path,
+        removed: false,
+        skipped_modified: true,
+    }
+}
+
+fn completed_remove(agent: &str, path: PathBuf) -> RemoveResult {
+    RemoveResult {
+        agent: agent.to_string(),
+        path,
+        removed: true,
+        skipped_modified: false,
     }
 }
 

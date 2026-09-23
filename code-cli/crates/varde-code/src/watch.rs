@@ -15,7 +15,8 @@ use anyhow::{Context, Result, bail};
 use notify::{Event, RecursiveMode, Watcher};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{RecvTimeoutError, channel};
+use std::sync::mpsc::{RecvTimeoutError, SyncSender, TrySendError, sync_channel};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::slice::{Scope, Slice, ensure_fresh};
@@ -31,6 +32,107 @@ const ALL_SLICES: [Slice; 5] = [
     Slice::Edges,
     Slice::Global,
 ];
+
+/// Keep filesystem ingestion bounded while preserving a dirty-repository bit.
+/// The reconciler refreshes the whole repository, so diagnostic paths can be
+/// sampled without losing correctness when a producer outruns the consumer.
+const EVENT_SIGNAL_CAPACITY: usize = 1;
+const MAX_DIAGNOSTIC_PATHS: usize = 256;
+const MAX_RECONCILE_DELAY: Duration = Duration::from_secs(30);
+
+#[derive(Debug)]
+struct PendingRepo {
+    first_event: Instant,
+    last_event: Instant,
+    changed_paths: HashSet<PathBuf>,
+}
+
+impl PendingRepo {
+    fn new(now: Instant) -> Self {
+        Self {
+            first_event: now,
+            last_event: now,
+            changed_paths: HashSet::new(),
+        }
+    }
+
+    fn record_path(&mut self, path: &Path) {
+        if self.changed_paths.len() < MAX_DIAGNOSTIC_PATHS {
+            self.changed_paths.insert(path.to_path_buf());
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        if other.first_event < self.first_event {
+            self.first_event = other.first_event;
+        }
+        if other.last_event > self.last_event {
+            self.last_event = other.last_event;
+        }
+        for path in other.changed_paths {
+            if self.changed_paths.len() >= MAX_DIAGNOSTIC_PATHS {
+                break;
+            }
+            self.changed_paths.insert(path);
+        }
+    }
+
+    fn is_due_at(&self, now: Instant, debounce: Duration) -> bool {
+        now.duration_since(self.last_event) >= debounce
+            || now.duration_since(self.first_event) >= MAX_RECONCILE_DELAY
+    }
+}
+
+/// Filesystem callbacks only enqueue one dirty bit per repository. The
+/// channel is a wakeup hint; the mutex owns the durable pending state when
+/// that bounded channel is already full.
+struct PendingEvents {
+    repos: Mutex<HashMap<PathBuf, PendingRepo>>,
+    wake: SyncSender<()>,
+}
+
+impl PendingEvents {
+    fn new(wake: SyncSender<()>) -> Self {
+        Self {
+            repos: Mutex::new(HashMap::new()),
+            wake,
+        }
+    }
+
+    fn push(&self, repo: &Path, path: &Path) -> bool {
+        let now = Instant::now();
+        let Ok(mut repos) = self.repos.lock() else {
+            return false;
+        };
+        let pending = repos
+            .entry(repo.to_path_buf())
+            .or_insert_with(|| PendingRepo::new(now));
+        pending.last_event = now;
+        pending.record_path(path);
+        drop(repos);
+
+        match self.wake.try_send(()) {
+            Ok(()) | Err(TrySendError::Full(())) => true,
+            Err(TrySendError::Disconnected(())) => false,
+        }
+    }
+
+    fn drain_into(&self, pending: &mut HashMap<PathBuf, PendingRepo>) {
+        let Ok(mut repos) = self.repos.lock() else {
+            return;
+        };
+        for (repo, state) in repos.drain() {
+            match pending.entry(repo) {
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().merge(state);
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(state);
+                }
+            }
+        }
+    }
+}
 
 /// Watch-list config: `~/.config/varde-code/watch.toml` by convention.
 /// Discovery (`parent_dirs` → `.git` dirs) happens once at watcher startup,
@@ -105,78 +207,80 @@ pub fn resolve_repos(explicit: &[String], config: Option<&WatchConfig>) -> Resul
 /// Run the watcher: one process-lifetime single-instance lock, one `notify`
 /// watcher per repo, one shared debounce loop that reconciles whichever
 /// repos have pending events once `debounce` has elapsed with no further
-/// events for that repo.
+/// events for that repo. Continuous activity still reconciles after the
+/// maximum batch age, so pending diagnostics cannot grow forever.
 pub fn run(repos: &[PathBuf], debounce: Duration) -> Result<()> {
     let _instance_lock = acquire_instance_lock(repos)?;
 
-    let (tx, rx) = channel::<(PathBuf, PathBuf)>();
+    let (wake_tx, wake_rx) = sync_channel(EVENT_SIGNAL_CAPACITY);
+    let pending_events = Arc::new(PendingEvents::new(wake_tx));
     // Keep each repo's `notify::Watcher` alive for the process lifetime —
     // dropping it stops that repo's events.
     let mut watchers = Vec::with_capacity(repos.len());
     for repo in repos {
-        let repo_for_events = repo.clone();
-        let ignore_matcher = build_ignore_matcher(repo)?;
-        let tx = tx.clone();
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-            let Ok(event) = res else { return };
-            // Same exclusions as the existing fallback walk
-            // (`ignore::WalkBuilder` — `.gitignore`, `.git/` itself) so
-            // watching a repo doesn't generate a reconcile for every commit
-            // (`.git/index`, `.git/index.lock`, etc.) or for `target/`,
-            // `node_modules/`, and the like.
-            for path in event.paths.iter().filter(|path| !is_ignored(&ignore_matcher, path)) {
-                if let Err(err) = tx.send((repo_for_events.clone(), path.clone())) {
-                    eprintln!(
-                        "varde-code watch: dropped change event for {} (reconcile loop gone): {err}",
-                        path.display()
-                    );
-                }
-            }
-        })
-        .context("creating fs watcher")?;
-        watcher
-            .watch(repo, RecursiveMode::Recursive)
-            .with_context(|| format!("watching {}", repo.display()))?;
-        watchers.push(watcher);
+        watchers.push(create_watcher(repo, Arc::clone(&pending_events))?);
         eprintln!("varde-code watch: watching {}", repo.display());
     }
 
-    // Per-repo "last event seen" timestamp plus the paths that changed since
-    // the last reconcile — a repo is due for reconcile once `debounce` has
-    // elapsed since its last event with no newer one arriving in between
-    // (collapses a burst — e.g. `git checkout` touching hundreds of files —
-    // into a single rebuild). The accumulated paths are the drill-down
-    // handle `watch --list` surfaces so an agent doesn't have to guess what
-    // the watcher last reconciled.
-    let mut pending: HashMap<PathBuf, (Instant, HashSet<PathBuf>)> = HashMap::new();
+    // Per-repo event timestamps plus bounded diagnostic paths. The full
+    // repository is reconciled, even when the path sample reaches its cap.
+    let mut pending: HashMap<PathBuf, PendingRepo> = HashMap::new();
 
     loop {
         let wait = next_wait(&pending, debounce);
-        match rx.recv_timeout(wait) {
-            Ok((repo, path)) => {
-                let entry = pending
-                    .entry(repo)
-                    .or_insert_with(|| (Instant::now(), HashSet::new()));
-                entry.0 = Instant::now();
-                entry.1.insert(path);
-            }
+        match wake_rx.recv_timeout(wait) {
+            Ok(()) => pending_events.drain_into(&mut pending),
             Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
-        }
-
-        let now = Instant::now();
-        let due: Vec<PathBuf> = pending
-            .iter()
-            .filter(|&(_, &(last, _))| now.duration_since(last) >= debounce)
-            .map(|(repo, _)| repo.clone())
-            .collect();
-        for repo in due {
-            if let Some((_, changed_paths)) = pending.remove(&repo) {
-                run_guarded(&repo, || reconcile(&repo, &changed_paths));
+            Err(RecvTimeoutError::Disconnected) => {
+                pending_events.drain_into(&mut pending);
+                break;
             }
         }
+        // Pick up events that raced with the wakeup before checking due work.
+        pending_events.drain_into(&mut pending);
+
+        reconcile_due(&mut pending, debounce);
     }
     Ok(())
+}
+
+fn create_watcher(repo: &Path, pending: Arc<PendingEvents>) -> Result<notify::RecommendedWatcher> {
+    let repo_for_events = repo.to_path_buf();
+    let ignore_matcher = build_ignore_matcher(repo)?;
+    let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
+        let Ok(event) = result else { return };
+        for path in event
+            .paths
+            .iter()
+            .filter(|path| !is_ignored(&ignore_matcher, path))
+        {
+            if !pending.push(&repo_for_events, path) {
+                eprintln!(
+                    "varde-code watch: dropped change event for {} (reconcile loop gone)",
+                    path.display()
+                );
+            }
+        }
+    })
+    .context("creating fs watcher")?;
+    watcher
+        .watch(repo, RecursiveMode::Recursive)
+        .with_context(|| format!("watching {}", repo.display()))?;
+    Ok(watcher)
+}
+
+fn reconcile_due(pending: &mut HashMap<PathBuf, PendingRepo>, debounce: Duration) {
+    let now = Instant::now();
+    let due: Vec<PathBuf> = pending
+        .iter()
+        .filter(|(_, state)| state.is_due_at(now, debounce))
+        .map(|(repo, _)| repo.clone())
+        .collect();
+    for repo in due {
+        if let Some(state) = pending.remove(&repo) {
+            run_guarded(&repo, || reconcile(&repo, &state.changed_paths));
+        }
+    }
 }
 
 /// How long to block on the next event before re-checking which pending
@@ -184,13 +288,23 @@ pub fn run(repos: &[PathBuf], debounce: Duration) -> Result<()> {
 /// indefinitely (any duration works since `recv_timeout` only needs a
 /// value); otherwise wake up right when the earliest pending repo becomes
 /// due.
-fn next_wait(
-    pending: &HashMap<PathBuf, (Instant, HashSet<PathBuf>)>,
+fn next_wait(pending: &HashMap<PathBuf, PendingRepo>, debounce: Duration) -> Duration {
+    next_wait_at(pending, debounce, Instant::now())
+}
+
+fn next_wait_at(
+    pending: &HashMap<PathBuf, PendingRepo>,
     debounce: Duration,
+    now: Instant,
 ) -> Duration {
     pending
         .values()
-        .map(|&(last, _)| debounce.saturating_sub(last.elapsed()))
+        .map(|state| {
+            let quiet_wait = debounce.saturating_sub(now.duration_since(state.last_event));
+            let age_wait =
+                MAX_RECONCILE_DELAY.saturating_sub(now.duration_since(state.first_event));
+            quiet_wait.min(age_wait)
+        })
         .min()
         .unwrap_or(Duration::from_secs(3600))
         .max(Duration::from_millis(1))
@@ -277,6 +391,7 @@ fn write_last_changed(repo: &Path, changed_paths: &HashSet<PathBuf>) {
     let path = last_changed_path_for(repo, &dir);
     let mut paths: Vec<String> = changed_paths
         .iter()
+        .take(MAX_DIAGNOSTIC_PATHS)
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
     paths.sort();
@@ -609,6 +724,57 @@ mod tests {
     fn resolve_repos_errors_when_nothing_configured() {
         let result = resolve_repos(&[], None);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn pending_events_coalesce_wakeups_and_bound_diagnostic_paths() {
+        let (wake, wake_rx) = sync_channel(EVENT_SIGNAL_CAPACITY);
+        let events = PendingEvents::new(wake);
+        let repo = PathBuf::from("/repo");
+
+        for index in 0..(MAX_DIAGNOSTIC_PATHS + 100) {
+            let path = PathBuf::from(format!("/repo/file-{index}.rs"));
+            assert!(events.push(&repo, &path));
+        }
+
+        let repos = events.repos.lock().unwrap();
+        let state = repos.get(&repo).expect("repo remains dirty");
+        assert_eq!(repos.len(), 1, "events coalesce by repository");
+        assert_eq!(
+            state.changed_paths.len(),
+            MAX_DIAGNOSTIC_PATHS,
+            "diagnostic paths stay bounded"
+        );
+        drop(repos);
+
+        assert!(wake_rx.try_recv().is_ok(), "one wakeup is retained");
+        assert!(
+            wake_rx.try_recv().is_err(),
+            "duplicate wakeups are coalesced"
+        );
+    }
+
+    #[test]
+    fn pending_repo_reconciles_after_maximum_batch_age() {
+        let now = Instant::now();
+        let state = PendingRepo {
+            first_event: now - MAX_RECONCILE_DELAY,
+            last_event: now,
+            changed_paths: HashSet::new(),
+        };
+
+        assert!(
+            state.is_due_at(now, Duration::from_secs(60)),
+            "continuous activity cannot postpone reconciliation forever"
+        );
+
+        let mut pending = HashMap::new();
+        pending.insert(PathBuf::from("/repo"), state);
+        assert_eq!(
+            next_wait_at(&pending, Duration::from_secs(60), now),
+            Duration::from_millis(1),
+            "the loop wakes at the maximum batch age"
+        );
     }
 
     #[test]

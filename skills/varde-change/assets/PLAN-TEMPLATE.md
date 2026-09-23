@@ -2,7 +2,7 @@ Frontmatter:
 
 ```
 ---
-status: draft
+status: backlog
 title: "<user's initial prompt>"
 type: plan
 ---

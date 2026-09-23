@@ -264,12 +264,18 @@ fn classify_jsts<'r>(
     };
 
     // Bindings introduced by imports.
-    if parent.kind() == "import_specifier"
-        && parent
-            .field("name")
+    if parent.kind() == "import_specifier" {
+        let alias = parent.field("alias");
+        if alias
+            .as_ref()
             .is_some_and(|n| n.node_id() == node.node_id())
-    {
-        return Some((SymbolKind::Binding, name));
+            || alias.is_none()
+                && parent
+                    .field("name")
+                    .is_some_and(|n| n.node_id() == node.node_id())
+        {
+            return Some((SymbolKind::Binding, name));
+        }
     }
     // Default import: `import express from ...` — the identifier is an
     // unnamed child of import_clause.
@@ -277,11 +283,7 @@ fn classify_jsts<'r>(
         return Some((SymbolKind::Binding, name));
     }
     // Namespace import: `import * as ns from ...` — alias field.
-    if parent.kind() == "namespace_import"
-        && parent
-            .field("alias")
-            .is_some_and(|n| n.node_id() == node.node_id())
-    {
+    if parent.kind() == "namespace_import" {
         return Some((SymbolKind::Binding, name));
     }
 

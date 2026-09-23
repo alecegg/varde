@@ -18,7 +18,7 @@
 //! `nav-map-dispatch-cli` task; flow-tree walking is a separate later task
 //! (`flows-reachable-tree`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::Connection;
 
@@ -193,6 +193,38 @@ struct Candidate {
 ///    never overrides a role-tag match on its own when the filename doesn't
 ///    already flag it and the asymmetry isn't strong.
 pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
+    let candidates = load_candidates(conn)?;
+    let exported = load_exported(conn)?;
+    let classes_with_methods = classes_with_methods(&candidates);
+    let decorators = signals_by_owner(conn, &[EntityKind::Decorator.as_i64()])?;
+    let bases = signals_by_owner(
+        conn,
+        &[
+            EntityKind::Extends.as_i64(),
+            EntityKind::Implements.as_i64(),
+        ],
+    )?;
+    let route_meta = route_meta_by_owner(conn)?;
+    let fan_signal = BootstrapFanSignal::load(conn)?;
+    let mut results = candidates
+        .into_iter()
+        .filter_map(|candidate| {
+            candidate_entrypoint(
+                candidate,
+                &exported,
+                &classes_with_methods,
+                &decorators,
+                &bases,
+                &route_meta,
+                &fan_signal,
+            )
+        })
+        .collect::<Vec<_>>();
+    results.sort_by(|a, b| a.file.cmp(&b.file).then(a.symbol.cmp(&b.symbol)));
+    Ok(results)
+}
+
+fn load_candidates(conn: &Connection) -> Result<Vec<Candidate>, ApiError> {
     let mut stmt = conn
         .prepare(
             // Test files are excluded: a route handler / job defined in a
@@ -206,7 +238,7 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
              WHERE e.kind IN (?1, ?2) AND f.is_test_path = 0",
         )
         .map_err(db_err)?;
-    let candidates: Vec<Candidate> = stmt
+    let rows = stmt
         .query_map(
             [EntityKind::Function.as_i64(), EntityKind::Class.as_i64()],
             |r| {
@@ -224,7 +256,8 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
         )
         .map_err(db_err)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(db_err)?
+        .map_err(db_err)?;
+    Ok(rows
         .into_iter()
         .map(
             |(entity_id, file_id, path, name, kind, start_byte, end_byte, owner_type)| Candidate {
@@ -240,30 +273,25 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
                 base_classes: Vec::new(),
             },
         )
-        .collect();
+        .collect())
+}
 
+fn load_exported(conn: &Connection) -> Result<HashSet<(i64, String)>, ApiError> {
     let mut export_stmt = conn
         .prepare("SELECT file_id, name FROM entities WHERE kind = ?1")
         .map_err(db_err)?;
-    let exported: std::collections::HashSet<(i64, String)> = export_stmt
+    let rows = export_stmt
         .query_map([EntityKind::Export.as_i64()], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(db_err)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(db_err)?
-        .into_iter()
-        .collect();
+        .map_err(db_err)?;
+    Ok(rows.into_iter().collect::<HashSet<_>>())
+}
 
-    // A class becomes an entrypoint via a type-level signal (`extends
-    // ControllerBase`, `[ApiController]`, ...) — but a controller/handler class
-    // with *no methods of its own* has no routes to serve and is not a real
-    // entrypoint. eShopOnWeb's `BaseApiController` (an empty `{ }` body,
-    // commented "No longer used") was surfaced purely on its base class. Gate
-    // class candidates on owning at least one method: a method carries its
-    // class name in `owner_type` (same file), so a class with no matching
-    // method row is empty. Keyed by (file_id, class name).
-    let classes_with_methods: std::collections::HashSet<(i64, String)> = candidates
+fn classes_with_methods(candidates: &[Candidate]) -> HashSet<(i64, String)> {
+    candidates
         .iter()
         .filter(|c| c.kind == EntityKind::Function.as_i64())
         .filter_map(|c| {
@@ -272,152 +300,92 @@ pub fn detect(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
                 .filter(|o| !o.is_empty())
                 .map(|o| (c.file_id, o.to_string()))
         })
-        .collect();
+        .collect()
+}
 
-    // Batch the per-candidate decorator/base-class joins into two repo-wide
-    // scans keyed by (file_id, enclosing_function). The previous shape ran
-    // two indexed lookups per candidate (`decorators_for` + `base_classes_for`),
-    // an N+1 that dominated `detect` on large repos; folding them into two
-    // grouped reads makes the cost O(rows) instead of O(candidates × lookups).
-    let decorators_by_owner = signals_by_owner(conn, &[EntityKind::Decorator.as_i64()])?;
-    let base_classes_by_owner = signals_by_owner(
-        conn,
-        &[
-            EntityKind::Extends.as_i64(),
-            EntityKind::Implements.as_i64(),
-        ],
-    )?;
-    // HTTP method+path stamped onto route `Decorator` entities by the
-    // extractors (`@app.get("/x")`, `[HttpGet("{id}")]`, `@GetMapping(...)`,
-    // ...), keyed by the decorated declaration `(file_id, name)` — a method's
-    // own name for an action decorator, the class's name for a class-level
-    // prefix (`@RequestMapping("/api")`). Lets a decorator/annotation handler
-    // be surfaced as `"<VERB> <path>"` like the call-based routes are.
-    let route_meta_by_owner = route_meta_by_owner(conn)?;
-    let fan_signal = BootstrapFanSignal::load(conn)?;
+fn candidate_entrypoint(
+    mut candidate: Candidate,
+    exported: &HashSet<(i64, String)>,
+    classes_with_methods: &HashSet<(i64, String)>,
+    decorators: &SignalsByOwner,
+    bases: &SignalsByOwner,
+    route_meta: &RouteMetaByOwner,
+    fan_signal: &BootstrapFanSignal,
+) -> Option<Entrypoint> {
+    if candidate_is_excluded(&candidate, classes_with_methods, fan_signal) {
+        return None;
+    }
+    let rules = rules_for_path(&candidate.path)?;
+    candidate.decorators = signals_for(&candidate, decorators);
+    candidate.base_classes = signals_for(&candidate, bases);
+    let role = candidate_role(&candidate, rules)?;
+    if role == RoleTag::PageComponent
+        && !exported.contains(&(candidate.file_id, candidate.name.clone()))
+    {
+        return None;
+    }
+    let (method, path) = route_fields(&candidate, route_meta);
+    Some(Entrypoint {
+        entity_id: candidate.entity_id,
+        file: candidate.path,
+        symbol: candidate.name,
+        role,
+        flow_root: true,
+        method,
+        path,
+    })
+}
 
-    let mut results = Vec::new();
-    for mut candidate in candidates {
-        if is_generated_or_vendored_path(&candidate.path)
-            || is_scaffold_template_path(&candidate.path)
-            || is_frontend_asset_path(&candidate.path)
-        {
-            continue;
-        }
-
-        // A constructor (a method whose name equals its owning type) shares
-        // the class's name, so the name-keyed decorator/base-class join below
-        // would attach the *class's* type-level attributes (`[ApiController]`,
-        // `extends ControllerBase`) to it — emitting the controller a second
-        // time as a phantom entrypoint (and a duplicate flow tree). The class
-        // entity itself carries no `owner_type`, so it is unaffected. This is
-        // a no-op for languages whose constructors don't share the class name
-        // (Python `__init__`, TS `constructor`).
-        if candidate
+fn candidate_is_excluded(
+    candidate: &Candidate,
+    classes_with_methods: &HashSet<(i64, String)>,
+    fan_signal: &BootstrapFanSignal,
+) -> bool {
+    is_generated_or_vendored_path(&candidate.path)
+        || is_scaffold_template_path(&candidate.path)
+        || is_frontend_asset_path(&candidate.path)
+        || candidate
             .owner_type
             .as_deref()
             .is_some_and(|owner| !owner.is_empty() && owner == candidate.name)
-        {
-            continue;
-        }
+        || (candidate.kind == EntityKind::Class.as_i64()
+            && !classes_with_methods.contains(&(candidate.file_id, candidate.name.clone())))
+        || is_bootstrap_filename(&candidate.path)
+        || fan_signal.is_bootstrap(candidate.entity_id)
+}
 
-        // Drop class candidates that own no methods: an empty controller/
-        // handler class serves no routes and only bloats the (highest-priority)
-        // entrypoints section. Method candidates are unaffected.
-        if candidate.kind == EntityKind::Class.as_i64()
-            && !classes_with_methods.contains(&(candidate.file_id, candidate.name.clone()))
-        {
-            continue;
-        }
+fn signals_for(candidate: &Candidate, signals: &SignalsByOwner) -> Vec<String> {
+    let exact = (
+        candidate.file_id,
+        candidate.name.clone(),
+        declaration_span(candidate),
+    );
+    let fallback = (candidate.file_id, candidate.name.clone(), None);
+    signals
+        .get(&exact)
+        .or_else(|| signals.get(&fallback))
+        .cloned()
+        .unwrap_or_default()
+}
 
-        let Some(rules) = rules_for_path(&candidate.path) else {
-            continue;
-        };
-
-        candidate.decorators = decorators_by_owner
-            .get(&(
-                candidate.file_id,
-                candidate.name.clone(),
-                declaration_span(&candidate),
-            ))
-            .or_else(|| decorators_by_owner.get(&(candidate.file_id, candidate.name.clone(), None)))
-            .cloned()
-            .unwrap_or_default();
-        candidate.base_classes = base_classes_by_owner
-            .get(&(
-                candidate.file_id,
-                candidate.name.clone(),
-                declaration_span(&candidate),
-            ))
-            .or_else(|| {
-                base_classes_by_owner.get(&(candidate.file_id, candidate.name.clone(), None))
-            })
-            .cloned()
-            .unwrap_or_default();
-        // Try every (decorator, base_class) combination the candidate
-        // carries — a stacked decorator or a class implementing more than
-        // one interface must not lose a role-tag match just because it
-        // isn't the first row returned. `None` stands in for "this signal
-        // absent" so a candidate with, say, only a base class (no
-        // decorators) still matches base-class-only rules.
-        let decorator_candidates: Vec<Option<&str>> = if candidate.decorators.is_empty() {
-            vec![None]
-        } else {
-            candidate
-                .decorators
-                .iter()
-                .map(|d| Some(d.as_str()))
-                .collect()
-        };
-        let base_class_candidates: Vec<Option<&str>> = if candidate.base_classes.is_empty() {
-            vec![None]
-        } else {
-            candidate
-                .base_classes
-                .iter()
-                .map(|b| Some(b.as_str()))
-                .collect()
-        };
-        let role = decorator_candidates.iter().find_map(|&d| {
-            base_class_candidates.iter().find_map(|&b| {
-                role_tags::match_role_tag(rules, d, b, Some(candidate.path.as_str()))
-            })
-        });
-        let Some(role) = role else {
-            continue;
-        };
-        if role == RoleTag::PageComponent
-            && !exported.contains(&(candidate.file_id, candidate.name.clone()))
-        {
-            continue;
-        }
-
-        // Primary bootstrap signal: filename convention.
-        if is_bootstrap_filename(&candidate.path) {
-            continue;
-        }
-        // Supplementary bootstrap signal: strong fan-out/fan-in asymmetry.
-        if fan_signal.is_bootstrap(candidate.entity_id) {
-            continue;
-        }
-
-        // Attach the HTTP verb+path when this is a decorator/annotation route
-        // handler (combining any class-level base path). The symbol stays the
-        // handler name so it remains a valid `explore` target and flow root.
-        let (method, path) = route_fields(&candidate, &route_meta_by_owner);
-        results.push(Entrypoint {
-            entity_id: candidate.entity_id,
-            file: candidate.path,
-            symbol: candidate.name,
-            role,
-            flow_root: true,
-            method,
-            path,
-        });
-    }
-
-    results.sort_by(|a, b| a.file.cmp(&b.file).then(a.symbol.cmp(&b.symbol)));
-    Ok(results)
+fn candidate_role(candidate: &Candidate, rules: &[RoleTagRule]) -> Option<RoleTag> {
+    let decorators: Vec<_> = candidate.decorators.iter().map(String::as_str).collect();
+    let bases: Vec<_> = candidate.base_classes.iter().map(String::as_str).collect();
+    let decorators = if decorators.is_empty() {
+        vec![None]
+    } else {
+        decorators.into_iter().map(Some).collect()
+    };
+    let bases = if bases.is_empty() {
+        vec![None]
+    } else {
+        bases.into_iter().map(Some).collect()
+    };
+    decorators.iter().find_map(|decorator| {
+        bases.iter().find_map(|base| {
+            role_tags::match_role_tag(rules, *decorator, *base, Some(&candidate.path))
+        })
+    })
 }
 
 /// The `(method, path)` route fields for a decorator/annotation handler
@@ -537,6 +505,9 @@ fn language_route_is_call_based(lang: SupportLang) -> bool {
             | SupportLang::Ruby
             | SupportLang::CSharp
             | SupportLang::Kotlin
+            // Swift/Vapor: routes are registered with `app.get(...)` style
+            // calls and emitted as Route entities by the Swift extractor.
+            | SupportLang::Swift
             // Elixir/Phoenix: routes are `get "/path", Ctrl, :action` macro
             // calls in the router module — call-based, not annotations. The
             // extractor already emits `Route` entities for them (audit F10).
@@ -563,6 +534,35 @@ fn language_route_is_call_based(lang: SupportLang) -> bool {
 /// rooted at the `Route` entity itself (`flow_root = false`), since a bare
 /// registration site has no outgoing call edges.
 pub fn detect_routes(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
+    let rows = load_route_rows(conn)?;
+    let handler_names = rows
+        .iter()
+        .filter_map(|row| row.handler.as_deref())
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let handlers = HandlerIndex::load(conn, &handler_names)?;
+    let mut seen = HashSet::new();
+    let mut results = rows
+        .into_iter()
+        .filter_map(|row| route_entrypoint(row, &handlers, &mut seen))
+        .collect::<Vec<_>>();
+    results.sort_by(|a, b| a.file.cmp(&b.file).then(a.symbol.cmp(&b.symbol)));
+    Ok(results)
+}
+
+struct RouteRow {
+    route_id: i64,
+    file_id: i64,
+    file: String,
+    method: Option<String>,
+    path: Option<String>,
+    handler: Option<String>,
+}
+
+fn load_route_rows(conn: &Connection) -> Result<Vec<RouteRow>, ApiError> {
     let mut stmt = conn
         .prepare(
             "SELECT e.id, e.file_id, f.path, e.method, e.path, e.owner_type
@@ -571,80 +571,71 @@ pub fn detect_routes(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
              WHERE e.kind = ?1 AND f.is_test_path = 0",
         )
         .map_err(db_err)?;
-    let rows = stmt
-        .query_map([EntityKind::Route.as_i64()], |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, i64>(1)?,
-                r.get::<_, String>(2)?,
-                r.get::<_, Option<String>>(3)?,
-                r.get::<_, Option<String>>(4)?,
-                r.get::<_, Option<String>>(5)?,
-            ))
-        })
-        .map_err(db_err)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(db_err)?;
-
-    // Every handler name the route rows mention, resolved in one batch below
-    // rather than one lookup per route.
-    let handler_names: Vec<String> = rows
-        .iter()
-        .filter_map(|(_, _, _, _, _, handler)| handler.as_deref())
-        .filter(|name| !name.is_empty())
-        .map(str::to_string)
-        .collect::<std::collections::BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    let handlers = HandlerIndex::load(conn, &handler_names)?;
-
-    let mut seen = std::collections::HashSet::new();
-    let mut results = Vec::new();
-    for (route_id, file_id, file, method, route_path, handler) in rows {
-        if !route_is_call_based(&file)
-            || is_generated_or_vendored_path(&file)
-            || is_scaffold_template_path(&file)
-            || is_frontend_asset_path(&file)
-        {
-            continue;
-        }
-        // A route with no path carries nothing worth surfacing.
-        let Some(path) = route_path.filter(|p| !p.is_empty()) else {
-            continue;
-        };
-        let verb = match method.as_deref() {
-            Some(m) if !m.is_empty() && m != "*" => Some(m.to_uppercase()),
-            _ => None,
-        };
-        let symbol = match &verb {
-            Some(m) => format!("{m} {path}"),
-            None => path.clone(),
-        };
-        // Root the route at its handler function when we can name and resolve
-        // it, so the entrypoint carries a real call graph.
-        let handler_id = handler
-            .as_deref()
-            .filter(|h| !h.is_empty())
-            .and_then(|name| handlers.resolve(name, file_id));
-        let (entity_id, flow_root) = match handler_id {
-            Some(id) => (id, true),
-            None => (route_id, false),
-        };
-        if seen.insert((file.clone(), symbol.clone())) {
-            results.push(Entrypoint {
-                entity_id,
+    stmt.query_map([EntityKind::Route.as_i64()], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<String>>(4)?,
+            r.get::<_, Option<String>>(5)?,
+        ))
+    })
+    .map_err(db_err)?
+    .map(|row| {
+        row.map(
+            |(route_id, file_id, file, method, path, handler)| RouteRow {
+                route_id,
+                file_id,
                 file,
-                symbol,
-                role: RoleTag::RouteHandler,
-                flow_root,
-                method: verb,
-                path: Some(path),
-            });
-        }
-    }
+                method,
+                path,
+                handler,
+            },
+        )
+    })
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(db_err)
+}
 
-    results.sort_by(|a, b| a.file.cmp(&b.file).then(a.symbol.cmp(&b.symbol)));
-    Ok(results)
+fn route_entrypoint(
+    row: RouteRow,
+    handlers: &HandlerIndex,
+    seen: &mut HashSet<(String, String)>,
+) -> Option<Entrypoint> {
+    if !route_is_call_based(&row.file)
+        || is_generated_or_vendored_path(&row.file)
+        || is_scaffold_template_path(&row.file)
+        || is_frontend_asset_path(&row.file)
+    {
+        return None;
+    }
+    let path = row.path.filter(|path| !path.is_empty())?;
+    let method = row
+        .method
+        .filter(|method| !method.is_empty() && method != "*")
+        .map(|method| method.to_uppercase());
+    let symbol = method
+        .as_ref()
+        .map_or_else(|| path.clone(), |method| format!("{method} {path}"));
+    if !seen.insert((row.file.clone(), symbol.clone())) {
+        return None;
+    }
+    let handler = row
+        .handler
+        .as_deref()
+        .filter(|handler| !handler.is_empty())
+        .and_then(|handler| handlers.resolve(handler, row.file_id));
+    let (entity_id, flow_root) = handler.map_or((row.route_id, false), |id| (id, true));
+    Some(Entrypoint {
+        entity_id,
+        file: row.file,
+        symbol,
+        role: RoleTag::RouteHandler,
+        flow_root,
+        method,
+        path: Some(path),
+    })
 }
 
 /// The `main`/`Main` function name that marks a language's process entrypoint.
@@ -940,12 +931,14 @@ mod semantic_entrypoint_tests {
         // Frameworks whose routes are call/macro registrations, not
         // annotations (audit F10): Phoenix (`.ex`), Slim (`.php`), Express
         // (`.js`/`.ts`). Rust/Python are decorator/attribute-driven and must
-        // stay out of the call-based route path.
+        // stay out of the call-based route path. Swift/Vapor uses the
+        // extractor's narrow `app.get(...)` call shape.
         for p in [
             "lib/router.ex",
             "config/routes.exs",
             "src/routes.php",
             "app.ts",
+            "Sources/App/routes.swift",
         ] {
             assert!(route_is_call_based(p), "{p} should be call-based");
         }
@@ -1515,6 +1508,11 @@ mod semantic_entrypoint_tests {
                 "from flask import Flask\napp = Flask(__name__)\n\n@app.route(\"/hello\")\ndef hello():\n    return \"hi\"\n",
             )
             .expect("write views.py");
+            std::fs::write(
+                root.join("routes.swift"),
+                "import Vapor\nfunc routes(_ app: Application) throws {\n    app.get(\"/users\") { req async throws -> String in \"ok\" }\n    app.post(\"/users\") { req in \"created\" }\n}\n",
+            )
+            .expect("write routes.swift");
 
             crate::build::run_with_force(root.to_str().unwrap(), true).expect("full build");
             let db = crate::db::path::repo_db_path(&root);
@@ -1532,6 +1530,14 @@ mod semantic_entrypoint_tests {
                 routes.iter().any(|e| e.symbol.ends_with("/legacy")),
                 "Go net/http route must surface (verb unknown): {routes:?}"
             );
+            for (method, symbol) in [("GET", "GET /users"), ("POST", "POST /users")] {
+                let route = routes
+                    .iter()
+                    .find(|e| e.file.ends_with("routes.swift") && e.symbol == symbol)
+                    .unwrap_or_else(|| panic!("Swift Vapor route missing: {symbol}: {routes:?}"));
+                assert_eq!(route.method.as_deref(), Some(method));
+                assert_eq!(route.path.as_deref(), Some("/users"));
+            }
             assert!(
                 !routes.iter().any(|e| e.file.ends_with(".py")),
                 "Python decorator routes must not surface via detect_routes: {routes:?}"

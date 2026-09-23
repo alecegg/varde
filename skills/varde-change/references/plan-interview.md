@@ -12,20 +12,19 @@ Shared rules for skills that ask the user questions.
   decision open.
 - **Name unresolved dependencies.** When an answer depends on an open question,
   defer it and say what is missing.
-- **Re-scan for gaps before ending.** An empty queue means the *known* frontier
-  is resolved, not that nothing was missed. Sweep for placeholders, conflicting
-  decisions, and unclear scope before closing the round.
-- **Watch for context saturation.** Re-asking something already resolved, losing
-  track of earlier decisions, or your own questions getting vaguer all mean the
-  context window is degrading question quality — round count alone does not. Say
-  so directly and suggest `varde-knowledge reflect` to compact progress into a
-  resumable handoff, then continue in a fresh session.
+- **Re-scan for gaps before ending.** An empty queue only resolves the known
+  questions. Before closing the round, scan for placeholders, conflicting
+  decisions, and unclear scope.
+- **Detect context saturation.** If you re-ask resolved questions, lose earlier
+  decisions, or ask vaguer questions, context quality is declining. Round count
+  alone is not evidence. Say so directly, suggest `varde-knowledge reflect` to
+  compact progress into a resumable handoff, then continue in a fresh session.
 
 ## Question format
 
-Ask inline, in your message text, using a numbered menu. Your own text keeps the
-question and its answer together in one readable record, which a harness question
-tool renders outside.
+Write the question inline in your message text, using a numbered menu. Keep the
+question and answer together in one record; a harness question tool renders that
+text outside.
 
 ```
 <Question>
@@ -39,7 +38,7 @@ Recommendation: <n> (<label>) — <one-sentence reason>.
 
 ## Resolve questions in the document
 
-These rules govern the chat channel. Where a workflow also lets the user resolve
-open items by editing a document — as `references/plan-grow-doc.md` does — a doc
-edit that answers or corrects something is a resolved decision exactly like a
-chat reply.
+Apply these rules in chat. If a workflow also lets the user resolve open items
+by editing a document, as `references/plan-grow-doc.md` does, treat a doc edit
+that answers or corrects something as a resolved decision, just like a chat
+reply.

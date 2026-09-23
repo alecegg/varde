@@ -1,0 +1,60 @@
+{
+  "skill_name": "varde-explore",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Teach me the src/core/auth/ module as an HTML page I can open in a browser \u2014 I just inherited this codebase and need to understand how session validation flows.",
+      "expected_output": "Auto-detects section mode from the directory-path target. Explores src/core/auth/ via Grep/Glob/Read for symbols and references plus git log for history, then writes one self-contained HTML file to /tmp/YYYY-MM-DD-<slug>.html with inline CSS only. The file contains exactly the four fixed section-mode sections: Background, Intuition, How It Works, and a Quiz of 5 multiple-choice questions each with the correct answer and a one-line explanation. The exact output path is reported to the user.",
+      "assertions": [
+        "Resolves to section mode because the target is a directory path, not a git ref",
+        "Output is a single self-contained HTML file at /tmp/YYYY-MM-DD-<slug>.html with no external stylesheets, scripts, images, or fonts",
+        "Contains exactly the four section-mode sections Background, Intuition, How It Works, and Quiz \u2014 no sections added or removed per user preference",
+        "The Quiz has exactly 5 multiple-choice questions, each with its correct answer and a one-line explanation grounded in the preceding sections"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Explain payments as HTML for the team.",
+      "expected_output": "The target 'payments' is ambiguous \u2014 it could be a git branch name (diff mode) or a feature-area keyword (section mode). The skill confirms the resolved mode with the user before proceeding, asking inline in its message text as a numbered menu rather than via a harness-native question-prompt tool. It does not silently pick a mode and start exploring or writing the HTML file.",
+      "assertions": [
+        "The skill asks the user to confirm diff vs section mode before exploring the target or writing any HTML",
+        "The confirmation is posed inline in the message text as a numbered menu, not via a native question-prompt tool like AskUserQuestion",
+        "No HTML file is written until the mode is resolved"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Walk me through the changes on the feature/rate-limiter branch versus main and give me a markdown write-up.",
+      "expected_output": "The target is a git ref, so diff mode is auto-detected: the git ref is resolved to a concrete diff and the changed hunks are read, then a self-contained HTML explanation is written to /tmp with the diff-mode sections (Background, Intuition, Code, Quiz). The skill produces HTML only \u2014 it does not honor the request for a markdown/plain-text write-up, since HTML is its sole output format.",
+      "assertions": [
+        "Resolves to diff mode because the target is a git ref (branch comparison)",
+        "Output is an HTML file, not markdown or plain text, despite the user asking for markdown",
+        "The third section is titled Code (diff-mode walkthrough of the change hunks file by file), not How It Works",
+        "After writing the file, the skill invokes varde-reflect scoped source=varde-explain (or falls back to varde-friction)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Should we move session validation into middleware, or keep it in each route handler? Not asking you to build anything yet.",
+      "expected_output": "Resolves to explore mode: an open design question with no artifact requested. Reads the actual route handlers and any existing middleware before comparing options, states the tradeoffs against project constraints, and ends with a recommendation and what remains uncertain. Writes no HTML file, no plan, and no production code. May offer varde-change plan as a next step, but does not transition without the user confirming.",
+      "assertions": [
+        "Resolves to explore mode, not explain mode \u2014 no HTML artifact is written",
+        "Reads the relevant source files before stating any conclusion or recommendation",
+        "Compares at least two credible alternatives against shared project constraints",
+        "Creates no plan file, task file, or production code change",
+        "Any offer to move to varde-change plan waits for explicit user confirmation"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "How does the retry logic in the job queue actually work?",
+      "expected_output": "Resolves to explore mode and answers in the conversation. 'How does X work' is an open question about code, not a request for a document to keep \u2014 the dispatch table's second row requires a direct ask for an explanation artifact. Reads the queue source (loading references/varde-code.md if that CLI is on PATH, since the question is structural) and summarizes the mechanism with evidence from the files read.",
+      "assertions": [
+        "Resolves to explore mode and answers in conversation \u2014 no HTML file is written",
+        "Reads the job queue source directly rather than answering from inference",
+        "Cites specific files or symbols as evidence for the mechanism described",
+        "Does not treat 'how does it work' as a request for the explain-mode artifact"
+      ]
+    }
+  ]
+}

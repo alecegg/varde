@@ -184,6 +184,7 @@ mod tests {
         Rule {
             id: "no-console".to_string(),
             kind: RuleKind::Pattern,
+            verification: None,
             severity: Severity::Warning,
             message: "console call detected".to_string(),
             name: None,

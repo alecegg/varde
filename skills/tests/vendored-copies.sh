@@ -12,8 +12,9 @@ set -euo pipefail
 # actually uses. What must not differ is the shared contract. This test names
 # those sections explicitly rather than comparing every same-named heading,
 # because some headings are legitimately tailored: varde-change's OCC section
-# in varde-docs-cli.md covers `update` for plans while the docs/knowledge copies
-# cover `update`/`set-field` over a bundle.
+# in varde-workflow-cli.md covers `update` for plans while other copies
+# cover `update`/`set-field` over a bundle. Workflow states belong only to
+# varde-change, whose plans and tasks use them.
 #
 # Adding a section here is the way to say "this part is the contract, keep the
 # copies in step."
@@ -26,7 +27,7 @@ SKILLS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST=(
   "worktree.md:*"
   "varde-code.md:__preamble__,Fallback rule"
-  "varde-docs-cli.md:The OCC read-then-write contract,Output and exit codes,Fallback rule"
+  "varde-workflow-cli.md:Decision rule,The OCC read-then-write contract,Output and exit codes,Fallback rule"
 )
 
 cd "$SKILLS_DIR"

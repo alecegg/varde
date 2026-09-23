@@ -75,7 +75,31 @@ pub const REQUIRED_KINDS: [EntityKind; 10] = [
     EntityKind::ControlFlow,
 ];
 
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_6(node, kind, ctx);
+}
+
+fn visit_part_1(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    visit_part_1_a(node, kind, ctx) || visit_part_1_b(node, kind, ctx)
+}
+
+fn visit_part_1_a(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
     match kind {
         // ---- structural ----
         "function_definition" => {
@@ -87,6 +111,13 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Function, name, node);
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_1_b(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         "lambda_expression" => ctx.push_callable_boundary(node),
         "class_specifier" | "struct_specifier" | "union_specifier" | "enum_specifier" => {
             if let Some(name) = node
@@ -114,6 +145,13 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         "type_definition" => {
             if let Some(name) = node
                 .field("declarator")
@@ -123,7 +161,6 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Class, name, node);
             }
         }
-
         // ---- imports ----
         "preproc_include" => {
             if let Some(path) = node.field("path") {
@@ -140,7 +177,17 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Import, spec, node);
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_3(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    visit_part_3_a(node, kind, ctx) || visit_part_3_b(node, kind, ctx)
+}
+
+fn visit_part_3_a(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         // ---- variables ----
         "declaration" | "field_declaration" => {
             for decl in node.field_children("declarator") {
@@ -161,7 +208,13 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Variable, fid.text().into_owned(), node);
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_3_b(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         // ---- parameters ----
         "parameter_declaration" => {
             if let Some(name) = node
@@ -171,7 +224,6 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
-
         // ---- expression-level ----
         "call_expression" => {
             let name = node
@@ -182,6 +234,13 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Call, name, node);
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_4(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         "new_expression" => {
             // `new Foo(...)` — a constructor invocation; map to Call named
             // after the constructed type.
@@ -196,12 +255,10 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::MemberAccess, field.text().into_owned(), node);
             }
         }
-
         // ---- literals ----
         "number_literal" | "string_literal" | "char_literal" | "true" | "false" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
-
         // ---- exceptions ----
         "catch_clause" => {
             // Name after the caught parameter (`catch (const E& e)` -> "e").
@@ -215,6 +272,13 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 .unwrap_or_default();
             ctx.push(EntityKind::Catch, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_5(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         "throw_statement" | "throw_expression" => {
             // Name after the thrown expression (the first named child).
             let name = node
@@ -224,13 +288,23 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 .unwrap_or_default();
             ctx.push(EntityKind::Throw, name, node);
         }
-
         // ---- control flow ----
-        "if_statement"
-        | "for_statement"
+        "if_statement" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "for_statement"
         | "for_range_loop"
         | "while_statement"
-        | "do_statement"
         | "switch_statement"
         | "case_statement"
         | "return_statement"
@@ -241,9 +315,49 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
         | "conditional_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
+}
+
+fn visit_part_6(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
+        "do_statement" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "do_while_statement".to_string(),
+                node,
+            );
+        }
+        "seh_try_statement" | "seh_except_clause" | "seh_finally_clause" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "unknown_seh_region".to_string(),
+                node,
+            );
+        }
+        _ => return false,
+    }
+    true
+}
+
+/// Stable complexity name for C++ short-circuit operators.
+fn boolean_operator_name(node: &Node<'_>) -> Option<&'static str> {
+    match node.field("operator")?.text().as_ref() {
+        "&&" | "and" => Some("logical_and"),
+        "||" | "or" => Some("logical_or"),
+        _ => None,
+    }
+}
+
+/// Whether this `if` is the direct branch of an `else` clause.
+fn is_else_if(node: &Node<'_>) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent.kind() == "else_clause"
+            && parent
+                .parent()
+                .is_some_and(|outer| outer.kind() == "if_statement")
+    })
 }
 
 /// True when this declarator (after peeling pointer/array wrappers) is a
@@ -424,6 +538,58 @@ mod tests {
                 .count(),
             1,
             "entities: {e:?}"
+        );
+    }
+
+    #[test]
+    fn complexity_events_cover_boolean_switch_else_if_catch_and_lambda() {
+        let src = "int f(int x, bool a, bool b, bool c) {\n\
+                     if (a and b || c) {} else if (b) {}\n\
+                     do { x++; } while (a);\n\
+                     switch (x) { case 0: break; case 1: break; default: break; }\n\
+                     try { throw 1; } catch (...) { x--; }\n\
+                     auto callback = [] { remote(); };\n\
+                     return x;\n\
+                   }\n";
+        let e = extract(src);
+        let cf = names(&e, EntityKind::ControlFlow);
+
+        assert_eq!(cf.iter().filter(|name| *name == "if_statement").count(), 1);
+        assert_eq!(
+            cf.iter().filter(|name| *name == "elseif_statement").count(),
+            1
+        );
+        assert!(cf.contains(&"logical_and".to_string()), "events: {cf:?}");
+        assert!(cf.contains(&"logical_or".to_string()), "events: {cf:?}");
+        assert!(
+            cf.contains(&"do_while_statement".to_string()),
+            "events: {cf:?}"
+        );
+        assert_eq!(
+            cf.iter().filter(|name| *name == "case_statement").count(),
+            3
+        );
+        assert_eq!(names(&e, EntityKind::Catch).len(), 1, "entities: {e:?}");
+        assert_eq!(
+            e.iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            1,
+            "entities: {e:?}"
+        );
+    }
+
+    #[test]
+    fn unsupported_seh_regions_lower_complexity_confidence() {
+        let e = extract("int f() { __try { return 1; } __except (1) { return 0; } }\n");
+        assert!(
+            names(&e, EntityKind::ControlFlow).contains(&"unknown_seh_region".to_string()),
+            "entities: {e:?}"
+        );
+        let metrics = crate::complexity::function_complexities(&e);
+        assert_eq!(
+            metrics[0].confidence,
+            crate::complexity::ComplexityConfidence::Low
         );
     }
 }

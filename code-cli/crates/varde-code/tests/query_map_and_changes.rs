@@ -18,6 +18,127 @@ fn temp_dir(tag: &str) -> PathBuf {
     dir
 }
 
+mod context_pack_mode {
+    use super::*;
+
+    fn context_db(entities: Vec<Entity>, files: Vec<String>) -> PathBuf {
+        let db = temp_db("context-pack");
+        let output = ExtractOutput {
+            entities,
+            symbols: vec![],
+            diagnostics: vec![],
+            file_meta: vec![
+                FileMeta {
+                    mtime: 0,
+                    size: 0,
+                    content_hash: "0000000000000000".to_string(),
+                };
+                files.len()
+            ],
+            files,
+        };
+        let graph =
+            resolve::resolve(&output.entities, &output.symbols, &output.files).expect("resolve");
+        persist::persist(
+            &db,
+            std::slice::from_ref(&output),
+            &graph,
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
+        )
+        .expect("persist");
+        db
+    }
+
+    #[test]
+    fn unions_exact_and_fuzzy_tokens_and_ranks_declarations_first() {
+        let mut declaration = fn_entity(0, "router_handler");
+        declaration.kind = EntityKind::Function;
+        let mut exact_call = fn_entity(1, "router");
+        exact_call.kind = EntityKind::Call;
+        let mut incidental_var = fn_entity(2, "handler");
+        incidental_var.kind = EntityKind::Variable;
+        let db = context_db(
+            vec![declaration, exact_call, incidental_var],
+            vec![
+                "src/handler.rs".into(),
+                "src/router.rs".into(),
+                "src/other.rs".into(),
+            ],
+        );
+
+        let env = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"router handler"}}"#,
+                db.display()
+            ),
+        );
+        assert_eq!(env["ok"], true, "{env}");
+        let symbols = env["data"]["symbols"].as_array().expect("symbols array");
+        let names: Vec<_> = symbols
+            .iter()
+            .map(|symbol| symbol["name"].as_str().unwrap())
+            .collect();
+        assert!(names.contains(&"router_handler"), "{env}");
+        assert!(names.contains(&"router"), "{env}");
+        assert!(names.contains(&"handler"), "{env}");
+        assert_eq!(symbols[0]["name"], "router_handler", "{env}");
+    }
+
+    #[test]
+    fn ranks_files_matching_more_query_tokens_before_complexity() {
+        let topical = fn_entity(0, "route_handler");
+        let mut incidental = fn_entity(1, "route");
+        incidental.kind = EntityKind::ControlFlow;
+        let mut entities = vec![topical];
+        entities.extend((0..8).map(|_| incidental.clone()));
+        let db = context_db(
+            entities,
+            vec!["src/topical.rs".into(), "src/incidental.rs".into()],
+        );
+
+        let env = envelope(
+            "context_pack",
+            &format!(r#"{{"dbPath":"{}","query":"route handler"}}"#, db.display()),
+        );
+        assert_eq!(env["ok"], true, "{env}");
+        let files = env["data"]["files"].as_array().expect("files array");
+        assert_eq!(files[0]["path"], "src/topical.rs", "{env}");
+    }
+
+    #[test]
+    fn treats_like_wildcards_as_literal_query_text() {
+        let literal = fn_entity(0, "literal%_route");
+        let wildcard_lookalike = fn_entity(1, "literalXXroute");
+        let db = context_db(
+            vec![literal, wildcard_lookalike],
+            vec![
+                "src/literal%_route.rs".into(),
+                "src/literalXXroute.rs".into(),
+            ],
+        );
+
+        let env = envelope(
+            "context_pack",
+            &format!(r#"{{"dbPath":"{}","query":"%_"}}"#, db.display()),
+        );
+        assert_eq!(env["ok"], true, "{env}");
+        let files = env["data"]["files"].as_array().expect("files array");
+        assert!(
+            files
+                .iter()
+                .any(|file| file["path"] == "src/literal%_route.rs"),
+            "{env}"
+        );
+        assert!(
+            !files
+                .iter()
+                .any(|file| file["path"] == "src/literalXXroute.rs"),
+            "{env}"
+        );
+    }
+}
+
 fn temp_db(tag: &str) -> PathBuf {
     let dir = temp_dir(tag);
     let db = dir.join("index.db");

@@ -116,12 +116,11 @@ impl Graph {
         self.out.remove(&from).unwrap_or_default()
     }
 
-    /// Remove every occurrence of `from` from `to`'s incoming backlink list
-    /// (the counterpart of [`Graph::take_out`] on the reverse map), dropping
-    /// the entry entirely once empty so a stale key doesn't linger.
-    pub(crate) fn remove_inc(&mut self, to: i64, from: i64) {
+    /// Remove every listed source from `to`'s incoming backlink list in one
+    /// scan, dropping the entry entirely once empty.
+    pub(crate) fn remove_incoming(&mut self, to: i64, sources: &HashSet<i64>) {
         if let Some(list) = self.inc.get_mut(&to) {
-            list.retain(|&x| x != from);
+            list.retain(|source| !sources.contains(source));
             if list.is_empty() {
                 self.inc.remove(&to);
             }
@@ -699,6 +698,19 @@ mod serialization_tests {
         let decoded: Graph = postcard::from_bytes(&encoded).expect("graph decodes");
 
         assert_eq!(decoded, graph, "round-tripped graph matches original");
+    }
+
+    #[test]
+    fn remove_incoming_scans_one_target_for_all_sources() {
+        let mut graph = Graph {
+            paths: HashMap::new(),
+            out: HashMap::new(),
+            inc: HashMap::from([(9, vec![1, 1, 2, 3])]),
+        };
+
+        graph.remove_incoming(9, &HashSet::from([1, 2]));
+
+        assert_eq!(graph.inc.get(&9), Some(&vec![3]));
     }
 }
 

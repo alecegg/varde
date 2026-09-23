@@ -1,6 +1,6 @@
 # Find domains needing updates
 
-Compare existing spec documents in `memory-bank/knowledge/specs/` against the
+Compare existing spec documents in `<knowledge>/specs/` against the
 current code structure. For each domain, determine whether:
 
 - The domain has no existing spec document (**missing** — needs a fresh
@@ -13,7 +13,7 @@ current code structure. For each domain, determine whether:
 
 ## When `varde-code` is available (see `references/varde-code.md`)
 
-Read `source_commit` from `memory-bank/knowledge/specs/index.md`
+Read `source_commit` from `<knowledge>/specs/index.md`
 frontmatter. If present, scope the whole plan to the diff since that commit
 instead of scanning the repo:
 
@@ -35,13 +35,13 @@ instead of scanning the repo:
    existing domain's convention is a candidate **missing** domain; add it as
    `dirty` with a note.
 
-No `source_commit` (first run, or index.md predates this scheme) → fall
-through to the full scan below.
+If `source_commit` is absent because this is the first run or `index.md`
+predates this scheme, run the full scan below.
 
 ## Full scan (no watermark, or `varde-code` unavailable)
 
-Build this by reading directory/module structure, diffing it against the
-domains already documented in `memory-bank/knowledge/specs/index.md`, and
+For a full scan, read directory/module structure and diff it against the
+domains already documented in `<knowledge>/specs/index.md`, and
 skimming source files for the sections that source-cite regenerable content
 (scope boundary, key operations, invariants, acceptance criteria, flows).
 
@@ -50,8 +50,7 @@ For every existing domain document, recompute its local provenance from
 `source_hash`, and compare it with the stored value. Missing or mismatched
 provenance makes the domain `dirty`.
 
-Produce, as reasoning output (not a generated artifact), a plan consisting
-of:
+Return this plan as reasoning output, not as a generated artifact:
 
 - `dirty`: the list of domains requiring work (missing or stale), with a
   short note on what changed or why the document is missing.
@@ -62,9 +61,9 @@ of:
   (e.g. the code may have moved rather than been deleted) — leave these in
   place.
 
-Architecture-relevant paths (UI, middleware, domain, and model layers) get
-classified by directory convention and import structure. Unmatched paths use
-the majority convention already present in the repo when available.
+Classify architecture-relevant paths (UI, middleware, domain, and model layers)
+by directory convention and import structure. For unmatched paths, use the
+majority convention already present in the repo when available.
 
 If `dirty` is empty, report unchanged domains and stop — there is nothing to
 generate.

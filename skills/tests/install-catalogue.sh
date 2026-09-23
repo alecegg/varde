@@ -4,7 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TEST_ROOT="$(mktemp -d)"
-trap 'rm -rf "$TEST_ROOT"' EXIT
+cleanup() {
+  chmod -R u+rwx "$TEST_ROOT" 2>/dev/null || true
+  rm -rf "$TEST_ROOT"
+}
+trap cleanup EXIT
 
 EXPECTED=(
   varde-agent-doc-authoring
@@ -30,6 +34,15 @@ expected_set() {
   printf '%s\n' "${EXPECTED[@]}" | sort
 }
 
+portable_mode() {
+  local source_path="$1" mode
+  if mode=$(stat -f '%Lp' "$source_path" 2>/dev/null); then
+    printf '%s\n' "$mode"
+  else
+    stat -c '%a' "$source_path"
+  fi
+}
+
 clean_target="$TEST_ROOT/clean"
 "$SKILLS_DIR/install.sh" -f -d "$clean_target" >/dev/null
 [ "$(directory_set "$clean_target")" = "$(expected_set)" ] ||
@@ -49,6 +62,29 @@ if "$SKILLS_DIR/install.sh" -f -d "$subset_target" \
   -s 'varde-change varde-review' >/dev/null 2>&1; then
   fail "combined invalid selection was accepted"
 fi
+
+if [ -d "$SKILLS_DIR/varde-browser" ]; then
+  browser_target="$TEST_ROOT/browser-pack"
+  "$SKILLS_DIR/install.sh" -f -d "$browser_target" --pack browser >/dev/null
+  [ "$(directory_set "$browser_target")" = "varde-browser" ] ||
+    fail "browser pack installed unexpected skills"
+  test ! -e "$browser_target/varde-release" ||
+    fail "browser pack installed release capability"
+
+  direct_optional_target="$TEST_ROOT/direct-optional"
+  "$SKILLS_DIR/install.sh" -f -d "$direct_optional_target" -s varde-browser >/dev/null
+  [ "$(directory_set "$direct_optional_target")" = "varde-browser" ] ||
+    fail "direct optional selection installed unexpected skills"
+fi
+
+shipping_target="$TEST_ROOT/shipping-pack"
+"$SKILLS_DIR/install.sh" -f -d "$shipping_target" --pack shipping >/dev/null
+[ "$(directory_set "$shipping_target")" = "varde-release" ] ||
+  fail "shipping pack installed unexpected skills"
+test -f "$shipping_target/varde-release/.varde-managed-skill" ||
+  fail "shipping skill lacks ownership marker"
+test ! -e "$shipping_target/varde-browser" ||
+  fail "shipping pack depends on browser capability"
 
 marked_target="$TEST_ROOT/marked"
 mkdir -p "$marked_target/varde-plan"
@@ -79,6 +115,32 @@ test ! -e "$yes_target/varde-plan" || fail "--yes preserved legacy directory"
 grep -F keep "$yes_target/unrelated/local.txt" >/dev/null ||
   fail "unrelated directory changed"
 
-dry_output="$($SKILLS_DIR/install.sh -n -f -d "$TEST_ROOT/dry")"
+dry_output="$("$SKILLS_DIR"/install.sh -n -f -d "$TEST_ROOT/dry")"
 dry_skills="$(printf '%s\n' "$dry_output" | sed -n "s#.* -> $TEST_ROOT/dry/\(varde-[^/]*\)/.*#\1#p" | sort -u)"
 [ "$dry_skills" = "$(expected_set)" ] || fail "dry-run destinations differ"
+
+fixture_root="$TEST_ROOT/installer-fixture"
+fixture_target="$TEST_ROOT/filtered-target"
+mkdir -p "$fixture_root/varde-change/scripts" \
+  "$fixture_root/varde-change/evals" \
+  "$fixture_root/varde-change/generated-workspace"
+cp "$SKILLS_DIR/install.sh" "$fixture_root/install.sh"
+printf '%s\n' '# Fixture skill' > "$fixture_root/varde-change/SKILL.md"
+printf '%s\n' '#!/usr/bin/env bash' > "$fixture_root/varde-change/scripts/tool.sh"
+printf '%s\n' excluded > "$fixture_root/varde-change/evals/unreadable"
+printf '%s\n' excluded > "$fixture_root/varde-change/generated-workspace/unreadable"
+chmod 751 "$fixture_root/varde-change/scripts"
+chmod 750 "$fixture_root/varde-change/scripts/tool.sh"
+chmod 000 "$fixture_root/varde-change/evals" \
+  "$fixture_root/varde-change/generated-workspace"
+"$fixture_root/install.sh" -f -d "$fixture_target" -s varde-change >/dev/null
+[ -x "$fixture_target/varde-change/scripts/tool.sh" ] ||
+  fail "filtered installation lost executable permissions"
+[ "$(portable_mode "$fixture_target/varde-change/scripts")" = 751 ] ||
+  fail "filtered installation lost directory permissions"
+[ ! -e "$fixture_target/varde-change/evals" ] ||
+  fail "filtered installation copied evals"
+[ ! -e "$fixture_target/varde-change/generated-workspace" ] ||
+  fail "filtered installation copied workspace artifacts"
+test -f "$fixture_target/varde-change/$MARKER" ||
+  fail "filtered installation omitted ownership marker"

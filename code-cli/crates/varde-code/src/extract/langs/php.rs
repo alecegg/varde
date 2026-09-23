@@ -35,8 +35,9 @@
 //! - Catch/Throw: `catch_clause` (named after the caught variable) and
 //!   `throw_expression` / `throw_statement` (named after the thrown expression,
 //!   e.g. the `new X(...)`).
-//! - ControlFlow: if/else/switch/case/default/for/foreach/while/do/try/return/
-//!   break/continue/match + the ternary (`conditional_expression`).
+//! - ControlFlow: decisions, boolean sequences, switch cases, match arms,
+//!   transfers, and non-decision structural regions. Switch defaults remain
+//!   neutral because they add no decision path.
 //! - Route/Response: narrow Laravel shape — a static call `Route::<verb>` with
 //!   a string first arg (`Route::get('/x', ...)`) -> Route with method=VERB,
 //!   path=string; and Laravel response helpers (`response()->json(...)`,
@@ -98,11 +99,35 @@ const REQUIRE_KINDS: &[&str] = &[
 ];
 
 /// Emit entities for one node (called for every node in the tree).
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_6(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- structural ----
         "function_definition" | "method_declaration" => {
@@ -147,12 +172,22 @@ pub fn visit(
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Interface, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // A trait carries implementation (horizontal reuse / mixin) -> Class.
         "trait_declaration" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Class, name, node);
         }
-
         // ---- imports ----
         "namespace_use_declaration" => {
             for spec in namespace_use_specs(node) {
@@ -164,7 +199,6 @@ pub fn visit(
                 ctx.push(EntityKind::Import, normalize_ns(&spec), node);
             }
         }
-
         // ---- variables ----
         "assignment_expression" | "augmented_assignment_expression" => {
             if let Some(left) = node.field("left")
@@ -173,20 +207,29 @@ pub fn visit(
                 ctx.push(EntityKind::Variable, var_name(&left), node);
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // Typed/untyped property declarations: `private int $count = 0;`.
         "property_element" => {
             if let Some(v) = node.children().find(|c| c.kind() == "variable_name") {
                 ctx.push(EntityKind::Variable, var_name(&v), node);
             }
         }
-
         // ---- parameters ----
         "simple_parameter" | "variadic_parameter" | "property_promotion_parameter" => {
             if let Some(v) = node.children().find(|c| c.kind() == "variable_name") {
                 ctx.push(EntityKind::Parameter, var_name(&v), node);
             }
         }
-
         // ---- calls ----
         "function_call_expression" => visit_function_call(node, ctx),
         "member_call_expression" | "nullsafe_member_call_expression" => {
@@ -215,6 +258,17 @@ pub fn visit(
             }
             ctx.push(EntityKind::Call, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "scoped_call_expression" => visit_scoped_call(node, ctx),
         "member_access_expression" | "nullsafe_member_access_expression" => {
             let name = field_name(node).unwrap_or_default();
@@ -229,12 +283,21 @@ pub fn visit(
                 ctx.push(EntityKind::Call, cls.text().into_owned(), node);
             }
         }
-
         // ---- literals ----
         "integer" | "float" | "string" | "encapsed_string" | "boolean" | "null" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- control-flow / error ----
         "catch_clause" => {
             ctx.push(EntityKind::Catch, catch_var(node), node);
@@ -247,16 +310,39 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Throw, name, node);
         }
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "else_if_clause" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "elseif_statement".to_string(),
+                node,
+            );
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_6(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "match_conditional_expression" | "match_default_expression" => {
+            ctx.push(EntityKind::ControlFlow, "match_arm".to_string(), node);
+        }
         "if_statement"
         | "else_clause"
-        | "else_if_clause"
         | "switch_statement"
         | "case_statement"
-        | "default_statement"
         | "for_statement"
         | "foreach_statement"
         | "while_statement"
-        | "do_statement"
         | "try_statement"
         | "return_statement"
         | "break_statement"
@@ -265,7 +351,13 @@ pub fn visit(
         | "conditional_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
+        "do_statement" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "do_while_statement".to_string(),
+                node,
+            );
+        }
         // ---- attributes (PHP 8) ----
         // `#[Route("/x")]` / `#[Get]` on a class or method -> a Decorator
         // entity named for the attribute, owned by the annotated declaration.
@@ -285,8 +377,18 @@ pub fn visit(
                 );
             }
         }
+        _ => return false,
+    }
+    true
+}
 
-        _ => {}
+fn boolean_operator_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<&'static str> {
+    match node.field("operator")?.text().as_ref() {
+        "&&" | "and" => Some("logical_and"),
+        "||" | "or" => Some("logical_or"),
+        _ => None,
     }
 }
 
@@ -663,5 +765,31 @@ mod tests {
             2,
             "{es:?}"
         );
+    }
+
+    #[test]
+    fn complexity_events_cover_php_decisions_without_default_inflation() {
+        let es = entities(
+            "<?php\nfunction f($a, $b, $value) {\n  if ($a && $b || $a) {} elseif ($b) {}\n  switch ($value) { case 1: break; default: break; }\n  do {} while ($a);\n  return match ($value) { 1, 2 => 1, default => 0 };\n}\n",
+        );
+        let flows: Vec<&str> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(flows.contains(&"logical_and"), "entities: {es:?}");
+        assert!(flows.contains(&"logical_or"), "entities: {es:?}");
+        assert!(flows.contains(&"elseif_statement"), "entities: {es:?}");
+        assert!(flows.contains(&"do_while_statement"), "entities: {es:?}");
+        assert_eq!(flows.iter().filter(|name| **name == "match_arm").count(), 2);
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| **name == "case_statement")
+                .count(),
+            1
+        );
+        assert!(!flows.contains(&"default_statement"), "entities: {es:?}");
     }
 }

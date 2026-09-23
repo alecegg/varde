@@ -8,6 +8,7 @@
 //! integration tests) up to the CLI.
 
 use anyhow::{Context, Result};
+use rayon::prelude::*;
 use std::path::Path;
 
 use crate::model::ExtractOutput;
@@ -203,156 +204,174 @@ pub(crate) fn run_full_while_locked(repo_root: &str, db_path: &Path) -> Result<B
 
 fn run_incremental(repo_root: &str, db_path: &Path) -> Result<BuildSummary> {
     let profile = std::env::var_os("VARDE_PROFILE").is_some();
-    let t0 = std::time::Instant::now();
-
-    // Hold the repo lock for the whole in-place incremental write. Unlike
-    // `run_full` takes this same lock while it owns its temp-file lifecycle.
-    // The incremental path mutates the live index
-    // through a sequence of transactions — a concurrent CLI `build` or a
-    // query-triggered `slice::ensure_fresh` writing the same DB could otherwise
-    // interleave partial writes. This is the same lock `ensure_fresh` takes.
-    // Deadlock-free: `run_incremental` is reached only via
-    // `run_with_force(force=false)`, which no lock holder ever calls
-    // (`ensure_fresh`'s fallback is `force=true` → `run_full`, which takes
-    // this lock itself).
+    let started = std::time::Instant::now();
     let _lock = crate::repo_lock::acquire(db_path, std::time::Duration::from_secs(30))?;
-
-    let crate::scan::SourceListing {
-        files: current,
-        diagnostics: traversal,
-    } = crate::scan::list_source_listing(repo_root)?;
-    // `open_incremental` (MEMORY journal) so a mid-build error rolls back
-    // cleanly instead of leaving the live index spliced (see `db::open`).
-    let conn = crate::db::open_incremental(db_path)?;
-
-    // A schema change (new/removed/retyped column, e.g. resolved_edges'
-    // from_entity_id) makes the existing database's shape incompatible with
-    // what this build of the code expects to read/write incrementally.
-    // Delta writes against a stale shape either error outright or silently
-    // leave new columns unpopulated for previously-persisted rows — neither
-    // is acceptable, so any mismatch (including a never-versioned database,
-    // which reads back 0) forces a full rebuild instead.
-    match crate::db::schema_version(&conn) {
-        Ok(v) if v == crate::db::SCHEMA_VERSION => {}
-        Ok(_) | Err(_) => {
-            drop(conn);
-            return run_full_while_locked(repo_root, db_path);
-        }
-    }
-
-    // A schema-compatible index built by a *different* varde-code binary can
-    // still hold rows the current extractor/resolver would produce differently
-    // (extractor changes that don't touch the schema — the exact gap
-    // `SCHEMA_VERSION` alone misses). Rebuild in full rather than layering delta
-    // rows onto stale ones. Covers an index built before this fingerprint
-    // existed (no `build_version` row), so it self-heals once on upgrade.
-    if !crate::persist::index_build_version_matches(&conn) {
-        drop(conn);
+    let Some(start) = prepare_incremental(repo_root, db_path)? else {
         return run_full_while_locked(repo_root, db_path);
-    }
-
-    let stored = match crate::persist::load_file_states(&conn) {
-        Ok(stored)
-            if stored
-                .iter()
-                .all(|file| valid_content_hash(&file.content_hash)) =>
-        {
-            stored
-        }
-        Ok(_) | Err(_) => {
-            drop(conn);
-            return run_full_while_locked(repo_root, db_path);
-        }
     };
-
-    if stored.is_empty() {
-        drop(conn);
-        return run_full_while_locked(repo_root, db_path);
-    }
-
-    // Traversal diagnostics describe the walk, not any one file, so they are
-    // refreshed before the per-file delta — and before the "nothing changed"
-    // early return below, which would otherwise strand a traversal failure in
-    // the index long after the directory became readable again.
-    {
-        let tx = conn.unchecked_transaction()?;
-        crate::persist::replace_traversal_diagnostics(&tx, &traversal)?;
-        tx.commit()?;
-    }
-
-    let classifications = classify_files(&stored, &current);
+    replace_traversal_diagnostics(&start.conn, &start.traversal)?;
+    let classifications = classify_files(&start.stored, &start.current);
     let unchanged = classifications
         .iter()
-        .filter(|classification| matches!(classification, FileClassification::Unchanged { .. }))
+        .filter(|item| matches!(item, FileClassification::Unchanged { .. }))
         .count();
-
-    // Nothing changed: the persisted derived layer (edges, communities, clone
-    // bands, fan metrics) is already correct on disk, so skip the full
-    // `query_persisted_state` read-back + global re-resolve + rewrite that
-    // otherwise dominates every incremental build regardless of delta size
-    // (see BUILD_PERSISTENCE_INVESTIGATION.md §2). Report counts straight from
-    // the existing index via cheap COUNT(*)s.
-    let stale = classifications
+    if classifications
         .iter()
-        .any(|classification| !matches!(classification, FileClassification::Unchanged { .. }));
-    if !stale {
-        let counts = crate::persist::index_counts(&conn)?;
-        if profile {
-            eprintln!(
-                "VARDE_PROFILE build: no changes — skipped global re-resolve, total={:?}",
-                t0.elapsed()
-            );
-        }
-        return Ok(BuildSummary {
-            db_path: db_path.display().to_string(),
-            entities: counts.entities,
-            symbols: counts.symbols,
-            diagnostics: counts.diagnostics,
-            unchanged,
-            reparsed: 0,
-            changed_files: Vec::new(),
-        });
+        .all(|item| matches!(item, FileClassification::Unchanged { .. }))
+    {
+        return unchanged_summary(&start.conn, db_path, unchanged, profile, started);
+    }
+    let changes = IncrementalChanges::load(&start.conn, &classifications)?;
+    let (changed_file_ids, delta_time) = persist_changed_files(&start.conn, repo_root, &changes)?;
+    let resolved = resolve_incremental(&start.conn, repo_root, &changes, &changed_file_ids)?;
+    report_incremental_profile(profile, started, delta_time, &resolved);
+    Ok(BuildSummary {
+        db_path: db_path.display().to_string(),
+        entities: resolved.state.entities.len(),
+        symbols: resolved.symbols,
+        diagnostics: resolved.state.diagnostics,
+        unchanged,
+        reparsed: changes.changed_paths.len(),
+        changed_files: changes.changed_paths,
+    })
+}
+
+struct IncrementalStart {
+    conn: rusqlite::Connection,
+    current: Vec<crate::scan::SourceFile>,
+    traversal: Vec<crate::model::Diagnostic>,
+    stored: Vec<StoredFileState>,
+}
+
+fn prepare_incremental(repo_root: &str, db_path: &Path) -> Result<Option<IncrementalStart>> {
+    let listing = crate::scan::list_source_listing(repo_root)?;
+    if listing
+        .diagnostics
+        .iter()
+        .any(|diagnostic| Path::new(&diagnostic.path) == Path::new(repo_root))
+    {
+        return Err(anyhow::anyhow!(
+            "cannot traverse repository root: {repo_root}"
+        ));
+    }
+    let conn = crate::db::open_incremental(db_path)?;
+    let schema_matches =
+        crate::db::schema_version(&conn).is_ok_and(|version| version == crate::db::SCHEMA_VERSION);
+    if !schema_matches || !crate::persist::index_build_version_matches(&conn) {
+        return Ok(None);
+    }
+    let Ok(stored) = crate::persist::load_file_states(&conn) else {
+        return Ok(None);
+    };
+    if stored.is_empty()
+        || stored
+            .iter()
+            .any(|file| !valid_content_hash(&file.content_hash))
+    {
+        return Ok(None);
+    }
+    Ok(Some(IncrementalStart {
+        conn,
+        current: listing.files,
+        traversal: listing.diagnostics,
+        stored,
+    }))
+}
+
+fn replace_traversal_diagnostics(
+    conn: &rusqlite::Connection,
+    diagnostics: &[crate::model::Diagnostic],
+) -> Result<()> {
+    let transaction = conn.unchecked_transaction()?;
+    crate::persist::replace_traversal_diagnostics(&transaction, diagnostics)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn unchanged_summary(
+    conn: &rusqlite::Connection,
+    db_path: &Path,
+    unchanged: usize,
+    profile: bool,
+    started: std::time::Instant,
+) -> Result<BuildSummary> {
+    let counts = crate::persist::index_counts(conn)?;
+    if profile {
+        eprintln!(
+            "VARDE_PROFILE build: no changes — skipped global re-resolve, total={:?}",
+            started.elapsed()
+        );
+    }
+    Ok(BuildSummary {
+        db_path: db_path.display().to_string(),
+        entities: counts.entities,
+        symbols: counts.symbols,
+        diagnostics: counts.diagnostics,
+        unchanged,
+        reparsed: 0,
+        changed_files: Vec::new(),
+    })
+}
+
+struct IncrementalChanges {
+    changed_paths: Vec<String>,
+    new_paths: Vec<String>,
+    deleted_ids: Vec<i64>,
+}
+
+impl IncrementalChanges {
+    fn load(conn: &rusqlite::Connection, items: &[FileClassification]) -> Result<Self> {
+        let file_ids = crate::persist::load_file_ids(conn)?;
+        let changed_paths = items
+            .iter()
+            .filter_map(|item| match item {
+                FileClassification::Changed { path } | FileClassification::New { path } => {
+                    Some(path.clone())
+                }
+                _ => None,
+            })
+            .collect();
+        let new_paths = items
+            .iter()
+            .filter_map(|item| match item {
+                FileClassification::New { path } => Some(path.clone()),
+                _ => None,
+            })
+            .collect();
+        let deleted_ids = items
+            .iter()
+            .filter_map(|item| match item {
+                FileClassification::Deleted { path } => file_ids.get(path).copied(),
+                _ => None,
+            })
+            .collect();
+        Ok(Self {
+            changed_paths,
+            new_paths,
+            deleted_ids,
+        })
     }
 
-    let file_ids = crate::persist::load_file_ids(&conn)?;
+    fn changes_file_set(&self) -> bool {
+        !self.new_paths.is_empty() || !self.deleted_ids.is_empty()
+    }
+}
 
-    let changed_paths: Vec<String> = classifications
-        .iter()
-        .filter_map(|classification| match classification {
-            FileClassification::Changed { path } | FileClassification::New { path } => {
-                Some(path.clone())
-            }
-            FileClassification::Unchanged { .. } | FileClassification::Deleted { .. } => None,
-        })
-        .collect();
-    let deleted_ids: Vec<i64> = classifications
-        .iter()
-        .filter_map(|classification| match classification {
-            FileClassification::Deleted { path } => file_ids.get(path).copied(),
-            FileClassification::Unchanged { .. }
-            | FileClassification::Changed { .. }
-            | FileClassification::New { .. } => None,
-        })
-        .collect();
-
-    let new_paths: Vec<String> = classifications
-        .iter()
-        .filter_map(|classification| match classification {
-            FileClassification::New { path } => Some(path.clone()),
-            FileClassification::Unchanged { .. }
-            | FileClassification::Changed { .. }
-            | FileClassification::Deleted { .. } => None,
-        })
-        .collect();
-    crate::persist::insert_new_files(&conn, &new_paths)?;
-    let file_ids = crate::persist::load_file_ids(&conn)?;
-    crate::persist::delete_deleted_files(&conn, &deleted_ids)?;
-
-    let changed_outputs: Vec<ExtractOutput> = changed_paths
-        .iter()
+fn persist_changed_files(
+    conn: &rusqlite::Connection,
+    repo_root: &str,
+    changes: &IncrementalChanges,
+) -> Result<(Vec<i64>, std::time::Duration)> {
+    crate::persist::insert_new_files(conn, &changes.new_paths)?;
+    let file_ids = crate::persist::load_file_ids(conn)?;
+    crate::persist::delete_deleted_files(conn, &changes.deleted_ids)?;
+    let outputs = changes
+        .changed_paths
+        .par_iter()
         .map(|path| crate::scan::run(path))
-        .collect::<Result<_>>()?;
-    let changed_file_ids: Vec<i64> = changed_paths
+        .collect::<Result<Vec<_>>>()?;
+    let changed_file_ids = changes
+        .changed_paths
         .iter()
         .map(|path| {
             file_ids
@@ -360,104 +379,89 @@ fn run_incremental(repo_root: &str, db_path: &Path) -> Result<BuildSummary> {
                 .copied()
                 .with_context(|| format!("missing file id for changed file {path}"))
         })
-        .collect::<Result<_>>()?;
-    let delta_graph = empty_delta_graph(&changed_outputs);
-
-    let persist_started = std::time::Instant::now();
+        .collect::<Result<Vec<_>>>()?;
+    let started = std::time::Instant::now();
     crate::persist::persist_delta(
-        &conn,
+        conn,
         &changed_file_ids,
-        &changed_outputs,
-        &delta_graph,
+        &outputs,
+        &empty_delta_graph(&outputs),
         Path::new(repo_root),
     )?;
-    let t_delta = persist_started.elapsed();
+    Ok((changed_file_ids, started.elapsed()))
+}
 
-    // A new/deleted file can newly-resolve or invalidate arbitrary imports
-    // and calls repo-wide, so the reverse-dependency scope below is not
-    // sufficient — this mirrors `slice::freshen_edges`'s `file_set_changed`
-    // rule (slice.rs:271-275). A changed-only delta, by contrast, can only
-    // affect the changed files' own edges and their direct reverse
-    // dependents (a caller's edge resolution depends only on its target's
-    // export set, never anything transitive), so it's scoped instead of
-    // triggering a full re-derivation of the whole derived layer.
-    let file_set_changed = !new_paths.is_empty() || !deleted_ids.is_empty();
+struct IncrementalResolved {
+    state: crate::persist::PersistedState,
+    symbols: usize,
+    elapsed: std::time::Duration,
+}
 
-    // Scope computation (reverse-dependent expansion + the CORRECTNESS-104
-    // cap) is shared with `slice::freshen_edges` via
-    // `slice::reverse_dependent_scope` (CODE-002) so the query and the cap
-    // stay in one place.
-    let scope_ids = if file_set_changed {
-        Some(std::collections::BTreeSet::new())
+fn resolve_incremental(
+    conn: &rusqlite::Connection,
+    repo_root: &str,
+    changes: &IncrementalChanges,
+    changed_file_ids: &[i64],
+) -> Result<IncrementalResolved> {
+    let started = std::time::Instant::now();
+    let scope = if changes.changes_file_set() {
+        None
     } else {
-        crate::slice::reverse_dependent_scope(&conn, &changed_file_ids)?
+        crate::slice::reverse_dependent_scope(conn, changed_file_ids)?
     };
-    let take_scoped_path = !file_set_changed && scope_ids.is_some();
-    let scope_ids = scope_ids.unwrap_or_default();
-
-    let resolve_started = std::time::Instant::now();
-    let (state, symbols) = if take_scoped_path {
-        // Scoped path: refresh only the scoped files' edges via the shared
-        // engine extracted from `slice::freshen_edges`
-        // (CORE-GRAPH-CACHE-001), then still do a full community/clone-band
-        // recompute (Louvain/MinHash are whole-graph, not scopable) without
-        // touching `resolved_edges` again — mirrors `slice::freshen_global`'s
-        // "edges slice fresh first, then a full recompute that leaves
-        // `resolved_edges` alone" split (`persist::rewrite_global`).
-        let state = crate::persist::query_persisted_state(&conn, false)?;
-        let max = crate::persist::max_rev(&conn)?;
-        crate::slice::run_scoped_edge_refresh(&conn, &state, &scope_ids, max)?;
-        let graph = crate::resolve::resolve(&state.entities, &[], &state.files)?;
-        crate::persist::rewrite_global(&conn, &state, &graph)?;
-        let symbols = crate::persist::index_counts(&conn)?.symbols;
-        (state, symbols)
-    } else {
-        // Full path: file-set changed (new/deleted file), or the scoped set
-        // blew past the cap — re-derive the whole edges/communities/clone-
-        // bands/fan-metrics layer, as before.
-        //
-        // Delta persistence owns changed raw rows. Derived rows are global
-        // and must be rebuilt from the complete raw state below.
-        crate::persist::delete_global_rows(&conn)?;
-        // Skip the symbols read-back: neither `resolve` nor `persist_global_graph`
-        // reads them, so deserializing every symbol row here was pure overhead on
-        // the incremental path. The reported count comes from a cheap `COUNT(*)`.
-        let state = crate::persist::query_persisted_state(&conn, false)?;
-        let graph = crate::resolve::resolve(&state.entities, &state.symbols, &state.files)?;
-        crate::persist::persist_global_graph(&conn, &state, &graph)?;
-        // File-set changes are the exact case `MAX(files.rev)` can't be
-        // trusted to detect on its own: deleting a non-max-rev file leaves
-        // `MAX(files.rev)` unchanged, so the cache's rev-equality freshness
-        // check would report a stale cache as fresh. Eagerly rebuild here
-        // (matching `run_full` and `slice::freshen_edges`'s full path)
-        // rather than relying on the rev check to catch it.
-        crate::persist::rebuild_graph_cache_full(&conn)?;
-        let symbols = crate::persist::index_counts(&conn)?.symbols;
-        (state, symbols)
+    let (state, symbols) = match scope {
+        Some(scope_ids) => resolve_scoped(conn, &scope_ids)?,
+        None => resolve_global(conn)?,
     };
-    let t_resolve = resolve_started.elapsed();
-    crate::slice::record_git_head(&conn, repo_root)?;
+    crate::slice::record_git_head(conn, repo_root)?;
+    Ok(IncrementalResolved {
+        state,
+        symbols,
+        elapsed: started.elapsed(),
+    })
+}
 
+fn resolve_scoped(
+    conn: &rusqlite::Connection,
+    scope_ids: &std::collections::BTreeSet<i64>,
+) -> Result<(crate::persist::PersistedState, usize)> {
+    let state = crate::persist::query_persisted_state(conn, false)?;
+    let max = crate::persist::max_rev(conn)?;
+    crate::slice::run_scoped_edge_refresh(conn, &state, scope_ids, max)?;
+    let edges = crate::persist::load_resolved_edges(conn, &state)?;
+    let graph = crate::resolve::resolve_global_from_edges(&state.entities, &state.files, edges);
+    crate::persist::rewrite_global(conn, &state, &graph)?;
+    Ok((state, crate::persist::index_counts(conn)?.symbols))
+}
+
+fn resolve_global(conn: &rusqlite::Connection) -> Result<(crate::persist::PersistedState, usize)> {
+    crate::persist::delete_global_rows(conn)?;
+    let state = crate::persist::query_persisted_state(conn, false)?;
+    let graph = crate::resolve::resolve(&state.entities, &state.symbols, &state.files)?;
+    crate::persist::persist_global_graph(conn, &state, &graph)?;
+    crate::persist::rebuild_graph_cache_full(conn)?;
+    Ok((state, crate::persist::index_counts(conn)?.symbols))
+}
+
+fn report_incremental_profile(
+    profile: bool,
+    started: std::time::Instant,
+    delta_time: std::time::Duration,
+    resolved: &IncrementalResolved,
+) {
     if profile {
         eprintln!(
-            "VARDE_PROFILE build: scan={:?} resolve={t_resolve:?} persist={t_delta:?} total={:?} entities={} symbols={} diagnostics={}",
-            t0.elapsed().saturating_sub(t_delta + t_resolve),
-            t0.elapsed(),
-            state.entities.len(),
-            symbols,
-            state.diagnostics,
+            "VARDE_PROFILE build: scan={:?} resolve={:?} persist={delta_time:?} total={:?} entities={} symbols={} diagnostics={}",
+            started
+                .elapsed()
+                .saturating_sub(delta_time + resolved.elapsed),
+            resolved.elapsed,
+            started.elapsed(),
+            resolved.state.entities.len(),
+            resolved.symbols,
+            resolved.state.diagnostics,
         );
     }
-
-    Ok(BuildSummary {
-        db_path: db_path.display().to_string(),
-        entities: state.entities.len(),
-        symbols,
-        diagnostics: state.diagnostics,
-        unchanged,
-        reparsed: changed_paths.len(),
-        changed_files: changed_paths.clone(),
-    })
 }
 
 fn valid_content_hash(hash: &str) -> bool {

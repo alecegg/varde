@@ -1,5 +1,5 @@
 {
-  "skill_name": "agent-doc-authoring",
+  "skill_name": "varde-agent-doc-authoring",
   "evals": [
     {
       "id": 1,
@@ -15,7 +15,7 @@
     {
       "id": 2,
       "prompt": "Write me a skill for deploying microservices to Kubernetes with best practices for rollbacks and health checks.",
-      "expected_output": "The request has no real source material — no completed task in the conversation, no project docs, runbooks, or version history to draw from. The skill declines to draft from generic LLM knowledge and instead says so and asks for grounding (a completed task, an existing runbook/style guide/incident history, or an interview of the user's own expertise) before producing a SKILL.md. It does not fabricate a plausible-looking Kubernetes deployment skill from general knowledge.",
+      "expected_output": "The request has no real source material \u2014 no completed task in the conversation, no project docs, runbooks, or version history to draw from. The skill declines to draft from generic LLM knowledge and instead says so and asks for grounding (a completed task, an existing runbook/style guide/incident history, or an interview of the user's own expertise) before producing a SKILL.md. It does not fabricate a plausible-looking Kubernetes deployment skill from general knowledge.",
       "assertions": [
         "No SKILL.md body is drafted from generic best-practice knowledge in this turn",
         "The skill explicitly states it lacks grounding and requests a real source (completed task, existing artifact, or an interview) before drafting",
@@ -24,7 +24,7 @@
     },
     {
       "id": 3,
-      "prompt": "I just finished wiring up our internal `deploy-cli` release flow with you this session — the part where we had to run `validate-manifest` before `push` or it silently mismatches env names. Turn that into a skill at ~/.claude/skills/deploy-release/, and make sure it actually triggers when someone says 'cut a release'.",
+      "prompt": "I just finished wiring up our internal `deploy-cli` release flow with you this session \u2014 the part where we had to run `validate-manifest` before `push` or it silently mismatches env names. Turn that into a skill at ~/.claude/skills/deploy-release/, and make sure it actually triggers when someone says 'cut a release'.",
       "expected_output": "There is real grounding (the just-completed task and its concrete correction). The skill is authored as a Workflow-type skill with a numbered ## Workflow checklist, captures the validate-before-push correction as a Gotcha / verification loop with its why, and phrases instructions as positive targets rather than prohibitions. The description is written for the model, front-loaded with the leading word the user actually says ('cut a release'/'release'), imperative phrasing, targeting the multi-step release task. Frontmatter name matches the directory (deploy-release) and is validated with validate-frontmatter.py.",
       "assertions": [
         "The validate-manifest-before-push correction is captured as a Gotcha or verification loop paired with its rationale, not dropped or stated generically",

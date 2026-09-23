@@ -30,9 +30,6 @@
 //! - Throw: `error(…)` / `assert(…)` calls — Lua's error-raising idiom (there
 //!   is no `throw` keyword). Named after the first argument's text. Branches
 //!   early like Ruby's `raise`/`fail`.
-//! - Catch: `pcall(…)` / `xpcall(…)` calls — Lua's protected-call idiom, the
-//!   closest structural analog to a `try`/`catch` boundary (there is no
-//!   `catch` construct). Named after the protected callee's text.
 //! - ControlFlow: `if_statement`, `elseif_statement`, `else_statement`,
 //!   `for_statement` (numeric + generic), `while_statement`,
 //!   `repeat_statement`, `do_statement`, `return_statement`,
@@ -47,6 +44,8 @@
 //! - Export: Lua has no export keyword. The module pattern is a bare
 //!   `return M` at end of file — a `return_statement` (already ControlFlow),
 //!   not a declaration — so Export is carved out.
+//! - Catch: protected calls return values instead of defining catch regions.
+//!   `pcall` and `xpcall` therefore remain ordinary calls.
 //! - Route / Response: Lua has no single idiomatic web DSL (OpenResty, Lapis,
 //!   and Kong all differ), so both are carved out rather than encode one
 //!   framework's shape.
@@ -67,16 +66,15 @@ pub const FUNCTION_SCOPES: &[&str] = &["function_declaration", "function_definit
 pub const TYPE_SCOPES: &[&str] = &[];
 
 /// Entity kinds the fixtures must produce. Class/Interface/Export/Route/
-/// Response are carved out (see module docs). Import and Throw/Catch are
+/// Response and Catch are carved out (see module docs). Import and Throw are
 /// emitted from the call arm.
-pub const REQUIRED_KINDS: [EntityKind; 9] = [
+pub const REQUIRED_KINDS: [EntityKind; 8] = [
     EntityKind::Function,
     EntityKind::Variable,
     EntityKind::Parameter,
     EntityKind::Call,
     EntityKind::Literal,
     EntityKind::MemberAccess,
-    EntityKind::Catch,
     EntityKind::Throw,
     EntityKind::ControlFlow,
 ];
@@ -87,15 +85,26 @@ const REQUIRE_FUNCTIONS: &[&str] = &["require"];
 /// Calls that raise an error (Lua's `throw` analog).
 const THROW_FUNCTIONS: &[&str] = &["error", "assert"];
 
-/// Protected-call functions (Lua's `try`/`catch` analog).
-const CATCH_FUNCTIONS: &[&str] = &["pcall", "xpcall"];
-
 /// Emit entities for one node (called for every node in the tree).
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_3(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- structural ----
         // `function f()`, `local function g()`, `function M.m()`, `function M:m()`.
@@ -116,7 +125,6 @@ pub fn visit(
                 ctx.push(EntityKind::Function, name, node);
             }
         }
-
         // ---- variables ----
         // `local x = …`, global `x = …`, and each target of a multiple
         // assignment. The declared targets live in the `variable_list` child.
@@ -125,48 +133,81 @@ pub fn visit(
                 ctx.push(EntityKind::Variable, name, node);
             }
         }
-
         // ---- parameters ----
         "parameters" => {
             for name in parameter_names(node) {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- calls (imports / throws / catches / member access) ----
         "function_call" => visit_call(node, ctx),
-
         // ---- member access outside a call (`local k = t.k`) ----
         "dot_index_expression" | "method_index_expression" => {
             // A member access that is the callee of a `function_call` is
             // handled by `visit_call` (so the callee-name isn't double-counted
             // when it also drives the Call/MemberAccess pair). Skip it here.
             if node.parent().is_some_and(|p| p.kind() == "function_call") {
-                return;
+                return true;
             }
             if let Some(name) = member_name(node) {
                 ctx.push(EntityKind::MemberAccess, name, node);
             }
         }
-
         // ---- literals ----
         "string" | "number" | "true" | "false" | "nil" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
-
         // ---- control-flow ----
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "if_statement" | "elseif_statement" | "else_statement" | "for_statement"
         | "while_statement" | "repeat_statement" | "do_statement" | "return_statement"
         | "break_statement" | "goto_statement" | "label_statement" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
 }
 
-/// Handle a `function_call`: imports (`require`), throws (`error`/`assert`),
-/// catches (`pcall`/`xpcall`), member access, and the plain call itself.
+fn boolean_operator_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<&'static str> {
+    node.children()
+        .find(|child| matches!(child.text().as_ref(), "and" | "or"))
+        .and_then(|operator| match operator.text().as_ref() {
+            "and" => Some("logical_and"),
+            "or" => Some("logical_or"),
+            _ => None,
+        })
+}
+
+/// Handle imports, throws, member access, and plain calls.
 fn visit_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
     let callee = call_name(node);
 
@@ -188,15 +229,6 @@ fn visit_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ext
             .map(|a| a.text().into_owned())
             .unwrap_or_default();
         ctx.push(EntityKind::Throw, name, node);
-        return;
-    }
-
-    // `pcall(fn, …)` / `xpcall(fn, handler)` -> Catch (not a plain Call).
-    if CATCH_FUNCTIONS.contains(&callee.as_str()) {
-        let name = first_arg(node)
-            .map(|a| a.text().into_owned())
-            .unwrap_or_else(|| callee.clone());
-        ctx.push(EntityKind::Catch, name, node);
         return;
     }
 
@@ -432,10 +464,11 @@ mod tests {
     }
 
     #[test]
-    fn pcall_becomes_catch() {
-        let es = entities("local ok = pcall(function() error(\"x\") end)\n");
-        assert!(es.iter().any(|e| e.kind == EntityKind::Catch));
-        assert!(find(&es, EntityKind::Call, "pcall").is_none());
+    fn protected_calls_remain_plain_calls() {
+        let es = entities("local ok = pcall(work)\nlocal safe = xpcall(work, recover)\n");
+        assert!(find(&es, EntityKind::Call, "pcall").is_some());
+        assert!(find(&es, EntityKind::Call, "xpcall").is_some());
+        assert!(es.iter().all(|e| e.kind != EntityKind::Catch));
     }
 
     #[test]
@@ -466,5 +499,18 @@ mod tests {
         assert!(find(&es, EntityKind::ControlFlow, "repeat_statement").is_some());
         assert!(find(&es, EntityKind::ControlFlow, "return_statement").is_some());
         assert!(find(&es, EntityKind::ControlFlow, "break_statement").is_some());
+    }
+
+    #[test]
+    fn boolean_sequences_are_complexity_events() {
+        let es = entities("function f(a, b)\n  if a and b or a then return 1 end\nend\n");
+        assert!(
+            find(&es, EntityKind::ControlFlow, "logical_and").is_some(),
+            "entities: {es:?}"
+        );
+        assert!(
+            find(&es, EntityKind::ControlFlow, "logical_or").is_some(),
+            "entities: {es:?}"
+        );
     }
 }

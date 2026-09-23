@@ -8,7 +8,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod clone_verification;
 pub mod correlate;
+pub mod dependency_facts;
 pub mod finding;
 pub mod pattern;
 pub mod rewrite;
@@ -26,6 +28,15 @@ pub enum RuleKind {
     Pattern,
     /// Queries the persisted intelligence DB via a read-only connection.
     Sql,
+}
+
+/// Optional source-aware verification applied after a rule query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Verification {
+    ExactClone,
+    DependencyFacts,
+    DependencyBoundary,
 }
 
 /// Rule severity, mirroring varde's TS severity convention. `Ord` ranks
@@ -93,6 +104,8 @@ where
 pub struct Rule {
     pub id: String,
     pub kind: RuleKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<Verification>,
     #[serde(deserialize_with = "deserialize_severity")]
     pub severity: Severity,
     pub message: String,
@@ -116,9 +129,10 @@ pub struct Rule {
     /// named parameter `:key` in the rule's SQL query.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strings: Option<HashMap<String, String>>,
-    /// Per-capture regex constraints (kind=pattern): capture name → regex.
+    /// Per-capture regex constraints (kind=pattern): capture name → regexes.
+    /// A string is one constraint; an array requires all regexes to match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub constraints: Option<HashMap<String, String>>,
+    pub constraints: Option<HashMap<String, ConstraintSpec>>,
     /// Suggested-fix rewrite template — informational only, never applied.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
@@ -155,6 +169,17 @@ pub struct Rule {
     /// loader's existing skip-and-report convention.
     #[serde(skip)]
     pub test: Option<Vec<TestCase>>,
+}
+
+/// One or more regex constraints for a pattern capture.
+///
+/// The string form is the original rule-pack format. Lists add AND semantics
+/// without requiring regex lookaheads, while retaining backwards compatibility.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ConstraintSpec {
+    Regex(String),
+    All(Vec<String>),
 }
 
 /// One `[[test]]` entry declared on a rule — a self-test fixture for the
@@ -235,23 +260,50 @@ pub fn user_rules_dir() -> PathBuf {
 /// step's "first-loaded wins" resolution is stable across runs and
 /// platforms.
 pub fn discover(repo_root: &Path, user_dir: Option<&Path>) -> Vec<DiscoveredFile> {
+    discover_with_diagnostics(repo_root, user_dir).0
+}
+
+/// Discover rule packs and report failures reading existing scope directories.
+/// Missing optional directories remain valid and produce no diagnostic.
+pub fn discover_with_diagnostics(
+    repo_root: &Path,
+    user_dir: Option<&Path>,
+) -> (Vec<DiscoveredFile>, Vec<Diagnostic>) {
     let mut files = Vec::new();
+    let mut diagnostics = Vec::new();
     if let Some(dir) = user_dir {
-        collect_toml_files(dir, RuleScope::User, &mut files);
+        collect_toml_files(dir, RuleScope::User, &mut files, &mut diagnostics);
     }
     collect_toml_files(
         &repo_root.join(".varde-code").join("rules"),
         RuleScope::Repo,
         &mut files,
+        &mut diagnostics,
     );
-    files
+    (files, diagnostics)
 }
 
-fn collect_toml_files(dir: &Path, scope: RuleScope, out: &mut Vec<DiscoveredFile>) {
+fn collect_toml_files(
+    dir: &Path,
+    scope: RuleScope,
+    out: &mut Vec<DiscoveredFile>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
-        // Missing/unreadable scope dir → zero files, not an error.
-        Err(_) => return,
+        // Missing optional scope dir → zero files, not an error. An existing
+        // but unreadable path must be surfaced so scans cannot pass while a
+        // rule pack is silently unavailable.
+        Err(error) => {
+            if dir.exists() {
+                diagnostics.push(Diagnostic {
+                    rule_id: None,
+                    file: dir.display().to_string(),
+                    reason: format!("unreadable rule directory: {error}"),
+                });
+            }
+            return;
+        }
     };
     let mut paths: Vec<PathBuf> = entries
         .filter_map(|entry| match entry {
@@ -263,6 +315,11 @@ fn collect_toml_files(dir: &Path, scope: RuleScope, out: &mut Vec<DiscoveredFile
                 // entry, so it's worth a diagnostic even though `discover`
                 // has no per-file `Diagnostic` channel to surface it through.
                 tracing::warn!(dir = %dir.display(), %err, "skipping unreadable rule-pack directory entry");
+                diagnostics.push(Diagnostic {
+                    rule_id: None,
+                    file: dir.display().to_string(),
+                    reason: format!("unreadable rule directory entry: {err}"),
+                });
                 None
             }
         })
@@ -281,12 +338,34 @@ pub struct LoadedRule {
     pub file: String,
 }
 
+/// Origin of an active rule after scope merging.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleOrigin {
+    Builtin,
+    Override,
+    Custom,
+}
+
 /// Validate the kind-specific required fields of a deserialized rule.
 ///
 /// `pattern` is required for `kind=pattern`, `query` for `kind=sql` — a rule
 /// missing its kind's payload field is a skip-and-report error, not a whole
 /// load failure.
 fn validate_kind_fields(rule: &Rule) -> Result<(), String> {
+    if let Some(verification) = rule.verification {
+        if rule.kind != RuleKind::Sql {
+            return Err("verification is only supported on kind=sql rules".into());
+        }
+        match verification {
+            Verification::ExactClone => {
+                clone_verification::thresholds(rule)?;
+            }
+            Verification::DependencyFacts => {}
+            Verification::DependencyBoundary => {
+                boundary_configured(rule)?;
+            }
+        }
+    }
     match rule.kind {
         RuleKind::Pattern if rule.pattern.is_none() => {
             Err("rule kind=pattern requires a `pattern` field".to_string())
@@ -312,6 +391,42 @@ fn validate_kind_fields(rule: &Rule) -> Result<(), String> {
         }
         _ => Ok(()),
     }
+}
+
+/// Whether a declared boundary has usable, literal directory prefixes.
+pub fn boundary_configured(rule: &Rule) -> Result<bool, String> {
+    if rule.verification != Some(Verification::DependencyBoundary) {
+        return Ok(true);
+    }
+    let prefix = |key| {
+        rule.strings
+            .as_ref()
+            .and_then(|s| s.get(key))
+            .map(String::as_str)
+            .unwrap_or("")
+    };
+    let source = prefix("source_prefix");
+    let target = prefix("target_prefix");
+    if source.is_empty() && target.is_empty() {
+        return Ok(false);
+    }
+    for (key, value) in [("source_prefix", source), ("target_prefix", target)] {
+        if value == "." {
+            continue;
+        }
+        if value.is_empty()
+            || value.trim() != value
+            || value.contains('\\')
+            || value
+                .split('/')
+                .any(|part| part.is_empty() || part == "." || part == "..")
+        {
+            return Err(format!(
+                "{key} must be a normalized relative directory or '.'; configure both prefixes"
+            ));
+        }
+    }
+    Ok(true)
 }
 
 /// Validate one already-deserialized `TestCase` against its rule's kind and
@@ -589,10 +704,18 @@ const BUILTIN_RULE_PACKS: &[(&str, &str)] = &[
         include_str!("builtin/circular_import.toml"),
     ),
     (
+        "<builtin>/unresolved_local_import.toml",
+        include_str!("builtin/unresolved_local_import.toml"),
+    ),
+    (
         "<builtin>/vertical_slice_sprawl.toml",
         include_str!("builtin/vertical_slice_sprawl.toml"),
     ),
     ("<builtin>/solid.toml", include_str!("builtin/solid.toml")),
+    (
+        "<builtin>/dependency_boundary.toml",
+        include_str!("builtin/dependency_boundary.toml"),
+    ),
 ];
 
 /// Parse every built-in rule pack. Diagnostics here would indicate a bug in
@@ -727,12 +850,19 @@ pub fn unseed_builtin_rules(target_dir: &Path, force: bool) -> std::io::Result<V
 /// same id silently overrides its built-in counterpart (no diagnostic — this
 /// is the expected way to disable/replace a default).
 pub fn load_rules(repo_root: &Path) -> (Vec<Rule>, Vec<Diagnostic>) {
+    let (rules, diagnostics, _) = load_rules_with_origins(repo_root);
+    (rules, diagnostics)
+}
+
+/// Load active rules and retain each rule's merged origin.
+pub(crate) fn load_rules_with_origins(
+    repo_root: &Path,
+) -> (Vec<Rule>, Vec<Diagnostic>, HashMap<String, RuleOrigin>) {
     let user_dir = user_rules_dir();
-    let files = discover(repo_root, Some(&user_dir));
+    let (files, mut diagnostics) = discover_with_diagnostics(repo_root, Some(&user_dir));
 
     let mut user_loaded = Vec::new();
     let mut repo_loaded = Vec::new();
-    let mut diagnostics = Vec::new();
     for file in files {
         let (loaded, file_diags) = parse_loaded(&file.path);
         diagnostics.extend(file_diags);
@@ -747,13 +877,29 @@ pub fn load_rules(repo_root: &Path) -> (Vec<Rule>, Vec<Diagnostic>) {
 
     let (builtin, builtin_diags) = builtin_loaded();
     diagnostics.extend(builtin_diags);
+    let builtin_ids: std::collections::HashSet<&str> = builtin
+        .iter()
+        .map(|loaded| loaded.rule.id.as_str())
+        .collect();
+    let mut origins: HashMap<String, RuleOrigin> = rules
+        .iter()
+        .map(|rule| {
+            let origin = if builtin_ids.contains(rule.id.as_str()) {
+                RuleOrigin::Override
+            } else {
+                RuleOrigin::Custom
+            };
+            (rule.id.clone(), origin)
+        })
+        .collect();
     let mut seen: std::collections::HashSet<String> = rules.iter().map(|r| r.id.clone()).collect();
     for LoadedRule { rule, .. } in builtin {
         if seen.insert(rule.id.clone()) {
+            origins.insert(rule.id.clone(), RuleOrigin::Builtin);
             rules.push(rule);
         }
     }
-    (rules, diagnostics)
+    (rules, diagnostics, origins)
 }
 
 #[cfg(test)]
@@ -786,6 +932,52 @@ severity = "warning"
 message = "console call detected"
 pattern = "console.log($MSG)"
 "#
+    }
+
+    #[test]
+    fn verification_contract_rejects_invalid_kinds_and_budgets() {
+        let valid = builtin_rules()
+            .into_iter()
+            .find(|r| r.id == "duplicate-code-clone")
+            .unwrap();
+        let mut invalid = valid.clone();
+        invalid.kind = RuleKind::Pattern;
+        invalid.pattern = Some("work()".into());
+        assert!(
+            validate_kind_fields(&invalid)
+                .unwrap_err()
+                .contains("kind=sql")
+        );
+        for (key, values) in [
+            ("min_members", vec![0.0, 1.0, 2.5, f64::NAN]),
+            ("min_tokens", vec![0.0, -1.0, f64::INFINITY]),
+            ("min_span_lines", vec![-1.0, 0.5]),
+        ] {
+            for value in values {
+                let mut invalid = valid.clone();
+                invalid
+                    .thresholds
+                    .as_mut()
+                    .unwrap()
+                    .insert(key.into(), value);
+                assert!(validate_kind_fields(&invalid).is_err(), "{key}={value}");
+            }
+        }
+        let (rules, diagnostics) = parse_pack_str(
+            r#"[[rule]]
+id = "unknown-verifier"
+kind = "sql"
+verification = "fuzzy-clone"
+severity = "error"
+name = "Invalid"
+description = "Invalid"
+message = "Invalid"
+query = "SELECT 'a.ts' AS file, 1 AS line"
+"#,
+            "invalid.toml",
+        );
+        assert!(rules.is_empty());
+        assert_eq!(diagnostics.len(), 1);
     }
 
     #[test]
@@ -1358,7 +1550,10 @@ fix = "refactor into smaller functions"
         assert_eq!(rule.strings, Some(expected_strings));
 
         let mut expected_constraints = HashMap::new();
-        expected_constraints.insert("VAR".to_string(), "^[A-Z]".to_string());
+        expected_constraints.insert(
+            "VAR".to_string(),
+            ConstraintSpec::Regex("^[A-Z]".to_string()),
+        );
         assert_eq!(rule.constraints, Some(expected_constraints));
 
         assert_eq!(rule.fix.as_deref(), Some("refactor into smaller functions"));
@@ -1434,6 +1629,24 @@ query = "SELECT file, line FROM entities WHERE kind = 8"
         let _ = fs::remove_dir_all(&repo);
         let _ = fs::remove_dir_all(&user);
     }
+
+    #[test]
+    fn existing_unreadable_scope_path_yields_diagnostic() {
+        let repo = tempdir("discover-unreadable");
+        let rules_path = repo.join(".varde-code").join("rules");
+        fs::create_dir_all(rules_path.parent().expect("rules parent"))
+            .expect("rules parent creates");
+        fs::write(&rules_path, "not a directory").expect("rules path writes");
+
+        let (files, diagnostics) = discover_with_diagnostics(&repo, None);
+        assert!(files.is_empty());
+        assert_eq!(diagnostics.len(), 1, "existing unreadable path is surfaced");
+        assert_eq!(diagnostics[0].file, rules_path.display().to_string());
+        assert!(diagnostics[0].reason.contains("unreadable rule directory"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
     #[test]
     fn parse_skips_rule_missing_required_field_and_keeps_valid_rule() {
         let dir = tempdir("parse-missing");
@@ -1560,6 +1773,7 @@ some_future_field = 42
             rule: Rule {
                 id: id.to_string(),
                 kind,
+                verification: None,
                 severity: Severity::Warning,
                 message: "m".to_string(),
                 name: None,
@@ -1815,6 +2029,7 @@ pattern = "x"
             "hardcoded-credential-literal",
             "hardcoded-credential-declaration",
             "low-fan-in-high-fan-out-file",
+            "unresolved-local-import",
         ] {
             assert!(
                 loaded.iter().any(|lr| lr.rule.id == id),
@@ -1831,7 +2046,7 @@ pattern = "x"
             .find(|r| r.id == "churn-complexity-hotspot")
             .expect("churn-complexity-hotspot shipped");
         assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Warning);
+        assert_eq!(rule.severity, Severity::Info);
         assert!(rule.query.as_deref().unwrap_or("").contains("complexity"));
         assert!(rule.query.as_deref().unwrap_or("").contains("churn"));
         let thresholds = rule.thresholds.as_ref().expect("thresholds present");
@@ -1847,7 +2062,7 @@ pattern = "x"
             .find(|r| r.id == "file-complexity-hotspot")
             .expect("file-complexity-hotspot shipped");
         assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Warning);
+        assert_eq!(rule.severity, Severity::Error);
         assert!(rule.query.as_deref().unwrap_or("").contains("complexity"));
         assert!(
             !rule.query.as_deref().unwrap_or("").contains("churn"),
@@ -1855,25 +2070,45 @@ pattern = "x"
         );
         let thresholds = rule.thresholds.as_ref().expect("thresholds present");
         assert_eq!(thresholds.get("max_complexity"), Some(&50.0));
+        assert_eq!(thresholds.get("min_complexity_per_function"), Some(&7.0));
+        assert!(!rule.query.as_deref().unwrap().contains("LIMIT"));
+        assert_eq!(thresholds.get("current_metric_version"), Some(&2.0));
     }
 
     #[test]
-    fn function_complexity_hotspot_shape_is_correct() {
+    fn function_complexity_rules_preserve_the_confidence_gate() {
         let rules = builtin_rules();
-        let rule = rules
+        let gate = rules
             .iter()
-            .find(|r| r.id == "function-complexity-hotspot")
-            .expect("function-complexity-hotspot shipped");
-        assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Warning);
-        let query = rule.query.as_deref().unwrap_or("");
-        assert!(query.contains("enclosing_function"));
-        assert!(
-            query.contains("GROUP BY"),
-            "aggregates per function: {query}"
+            .find(|r| r.id == "function-complexity-gate")
+            .expect("function-complexity-gate shipped");
+        assert_eq!(gate.kind, RuleKind::Sql);
+        assert_eq!(gate.severity, Severity::Error);
+        let query = gate.query.as_deref().unwrap_or("");
+        assert!(query.contains("function_metrics"));
+        assert!(query.contains("fm.confidence = 'high'"));
+        assert!(!query.contains("LIMIT"), "gate findings cannot be capped");
+        let thresholds = gate.thresholds.as_ref().expect("thresholds present");
+        assert_eq!(thresholds.get("max_cyclomatic"), Some(&20.0));
+        assert_eq!(thresholds.get("max_cognitive"), Some(&15.0));
+        assert_eq!(thresholds.get("max_function_lines"), Some(&60.0));
+
+        let advisory = rules
+            .iter()
+            .find(|r| r.id == "function-complexity-advisory")
+            .expect("function-complexity-advisory shipped");
+        assert_eq!(advisory.kind, RuleKind::Sql);
+        assert_eq!(advisory.severity, Severity::Info);
+        let query = advisory.query.as_deref().unwrap_or("");
+        assert!(query.contains("fm.confidence <> 'high'"));
+        assert!(query.contains("LIMIT"));
+        assert_eq!(
+            advisory
+                .thresholds
+                .as_ref()
+                .and_then(|thresholds| thresholds.get("max_findings")),
+            Some(&20.0)
         );
-        let thresholds = rule.thresholds.as_ref().expect("thresholds present");
-        assert_eq!(thresholds.get("max_function_complexity"), Some(&15.0));
     }
 
     #[test]
@@ -1884,16 +2119,10 @@ pattern = "x"
             .find(|r| r.id == "duplicate-code-clone")
             .expect("duplicate-code-clone shipped");
         assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Warning);
+        assert_eq!(rule.severity, Severity::Error);
         let query = rule.query.as_deref().unwrap_or("");
-        assert!(
-            query.contains("clone_band_members"),
-            "query joins the member table"
-        );
-        assert!(
-            query.contains("HAVING COUNT(*) >= :min_band_size"),
-            "size filter"
-        );
+        assert!(query.contains("e.kind = 0"), "selects function candidates");
+        assert!(query.contains("start_byte"), "returns source spans");
         assert!(
             !query.contains("cbm2"),
             "no N^2 self-join: the sketch's cbm2 join counted rows per pair and would flag pairs"
@@ -1903,9 +2132,9 @@ pattern = "x"
             "excludes test functions from both the member count and the emitted rows"
         );
         let thresholds = rule.thresholds.as_ref().expect("thresholds present");
-        assert_eq!(thresholds.len(), 2, "min_band_size + min_span_lines");
-        assert_eq!(thresholds.get("min_band_size"), Some(&3.0));
-        assert_eq!(thresholds.get("min_span_lines"), Some(&2.0));
+        assert_eq!(thresholds.len(), 3);
+        assert_eq!(thresholds.get("min_members"), Some(&3.0));
+        assert_eq!(thresholds.get("min_span_lines"), Some(&8.0));
     }
 
     #[test]
@@ -1920,7 +2149,7 @@ pattern = "x"
 
         let dbg = by_id("debug-macro-strict");
         assert_eq!(dbg.kind, RuleKind::Pattern);
-        assert_eq!(dbg.severity, Severity::Warning);
+        assert_eq!(dbg.severity, Severity::Error);
         assert_eq!(dbg.pattern.as_deref(), Some("dbg!($$$ARGS)"));
         assert_eq!(dbg.languages.as_deref(), Some(&["rust".to_string()][..]));
 
@@ -1960,46 +2189,49 @@ pattern = "x"
     }
 
     #[test]
-    fn low_fan_in_high_fan_out_shape_is_correct() {
-        let rules = builtin_rules();
-        let rule = rules
-            .iter()
-            .find(|r| r.id == "low-fan-in-high-fan-out-file")
-            .expect("low-fan-in-high-fan-out-file shipped");
-        assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(
-            rule.severity,
-            Severity::Info,
-            "info, not warning — entry points structurally match this shape"
-        );
-        let query = rule.query.as_deref().expect("sql rule has query");
-        assert!(query.contains("fan_in <= :max_fan_in"), "{query}");
-        assert!(query.contains("fan_out >= :min_fan_out"), "{query}");
-        let thresholds = rule.thresholds.as_ref().expect("thresholds present");
-        assert_eq!(thresholds.get("max_fan_in"), Some(&2.0));
-        assert_eq!(thresholds.get("min_fan_out"), Some(&15.0));
-        assert_eq!(thresholds.len(), 2, "only the two fan thresholds");
+    fn certified_dependency_rules_declare_native_verification() {
+        for id in [
+            "low-fan-in-high-fan-out-file",
+            "circular-import",
+            "unresolved-local-import",
+        ] {
+            let rule = builtin_rules().into_iter().find(|r| r.id == id).unwrap();
+            assert_eq!(rule.kind, RuleKind::Sql);
+            assert_eq!(rule.severity, Severity::Error);
+            assert_eq!(rule.verification, Some(Verification::DependencyFacts));
+        }
     }
 
     #[test]
-    fn circular_import_shape_is_correct() {
-        let rules = builtin_rules();
-        let rule = rules
-            .iter()
-            .find(|r| r.id == "circular-import")
-            .expect("circular-import shipped");
-        assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Warning);
-        let query = rule.query.as_deref().expect("sql rule has query");
-        assert!(query.contains("resolved_edges"), "{query}");
-        assert!(
-            query.contains("e1.from_file_id < e1.to_file_id"),
-            "dedupes the symmetric pair to one finding per cycle: {query}"
-        );
-        assert!(
-            rule.thresholds.is_none(),
-            "no tunable threshold — a direct cycle exists or it doesn't"
-        );
+    fn boundary_configuration_validates_literal_paths() {
+        let mut rule = builtin_rules()
+            .into_iter()
+            .find(|r| r.id == "dependency-boundary")
+            .unwrap();
+        assert_eq!(boundary_configured(&rule), Ok(false));
+        for (source, target, valid) in [
+            ("src/core", "src/data", true),
+            (".", "src/data", true),
+            ("src/co%", "src/data", true),
+            ("src/core", "", false),
+            ("../core", "data", false),
+            ("src//core", "data", false),
+            ("/core", "data", false),
+        ] {
+            rule.strings
+                .as_mut()
+                .unwrap()
+                .insert("source_prefix".into(), source.into());
+            rule.strings
+                .as_mut()
+                .unwrap()
+                .insert("target_prefix".into(), target.into());
+            assert_eq!(
+                boundary_configured(&rule).is_ok(),
+                valid,
+                "{source} -> {target}"
+            );
+        }
     }
 
     #[test]
@@ -2010,7 +2242,7 @@ pattern = "x"
             .find(|r| r.id == "vertical-slice-sprawl")
             .expect("vertical-slice-sprawl shipped");
         assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Warning);
+        assert_eq!(rule.severity, Severity::Info);
         let query = rule.query.as_deref().expect("sql rule has query");
         assert!(query.contains("from_entity_id"), "{query}");
         assert!(
@@ -2024,6 +2256,12 @@ pattern = "x"
         assert!(
             query.contains("tf.community_id != f.community_id"),
             "same-slice calls don't count as sprawl: {query}"
+        );
+        assert!(
+            query.contains("fn.is_test = 0")
+                && query.contains("f.is_test_path = 0")
+                && query.contains("f.is_tooling_path = 0"),
+            "test and tooling functions must not become architecture findings: {query}"
         );
         assert_eq!(
             rule.thresholds,
@@ -2051,10 +2289,16 @@ pattern = "x"
         ] {
             let rule = by_id(id);
             assert_eq!(rule.kind, RuleKind::Pattern);
-            assert_eq!(rule.severity, Severity::Warning);
+            assert_eq!(rule.severity, Severity::Error);
             let constraints = rule.constraints.as_ref().expect("constraints present");
-            let key_re = &constraints["KEY"];
-            let val_re = &constraints["VAL"];
+            let key_re = match &constraints["KEY"] {
+                ConstraintSpec::Regex(pattern) => pattern.as_str(),
+                ConstraintSpec::All(_) => panic!("KEY uses one regex"),
+            };
+            let val_re = match &constraints["VAL"] {
+                ConstraintSpec::All(patterns) => patterns.join(" "),
+                ConstraintSpec::Regex(pattern) => pattern.clone(),
+            };
             assert!(key_re.starts_with('^'), "KEY regex anchored: {key_re}");
             assert!(key_re.ends_with('$'), "KEY regex anchored: {key_re}");
             assert!(
@@ -2062,7 +2306,7 @@ pattern = "x"
                 "KEY regex case-insensitive: {key_re}"
             );
             assert!(
-                val_re.contains("15") && val_re.contains("[0-9]"),
+                val_re.contains("16") && val_re.contains("[0-9]"),
                 "VAL requires >=16 chars with a digit: {val_re}"
             );
             assert!(
@@ -2116,7 +2360,7 @@ pattern = "x"
 
         let catch = by_id("empty-catch-block");
         assert_eq!(catch.kind, RuleKind::Pattern);
-        assert_eq!(catch.severity, Severity::Warning);
+        assert_eq!(catch.severity, Severity::Error);
         assert_eq!(
             catch.pattern.as_deref(),
             Some("try { $$$A } catch ($ERR) { }")
@@ -2134,7 +2378,7 @@ pattern = "x"
 
         let except_ = by_id("empty-except-block");
         assert_eq!(except_.kind, RuleKind::Pattern);
-        assert_eq!(except_.severity, Severity::Warning);
+        assert_eq!(except_.severity, Severity::Error);
         assert_eq!(
             except_.pattern.as_deref(),
             Some("try:\n    $$$A\nexcept $ERR: pass")
@@ -2146,13 +2390,13 @@ pattern = "x"
 
         let swift = by_id("empty-catch-block-swift");
         assert_eq!(swift.kind, RuleKind::Pattern);
-        assert_eq!(swift.severity, Severity::Warning);
+        assert_eq!(swift.severity, Severity::Error);
         assert_eq!(swift.pattern.as_deref(), Some("do { $$$A } catch { }"));
         assert_eq!(swift.languages.as_deref(), Some(&["swift".to_string()][..]));
 
         let eval = by_id("eval-usage");
         assert_eq!(eval.kind, RuleKind::Pattern);
-        assert_eq!(eval.severity, Severity::Warning);
+        assert_eq!(eval.severity, Severity::Error);
         assert_eq!(eval.pattern.as_deref(), Some("eval($$$ARGS)"));
         assert_eq!(
             eval.languages.as_deref(),

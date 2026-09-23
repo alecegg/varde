@@ -16,8 +16,8 @@
 //! - Literal: integer/float/string/true/false/none, excluding type contexts.
 //! - Catch/Throw: `except_clause` (named after the exception variable) and
 //!   `raise_statement` (named after the raised expression).
-//! - ControlFlow: if/for/while/with/try/return/break/continue statements +
-//!   conditional_expression.
+//! - ControlFlow: decisions, boolean sequences, comprehensions, match arms,
+//!   transfers, and non-decision structural regions.
 //! - Route: narrow Flask shape — `@app.route("/path")` (or a blueprint
 //!   object) decorator; method from `methods=[...]` kwarg, default "GET".
 //! - Response: narrow Flask shape — calls to Flask's response-producing
@@ -59,11 +59,41 @@ pub const REQUIRED_KINDS: [EntityKind; 12] = [
 ];
 
 /// Emit entities for one node (called for every node in the tree).
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    if visit_part_6(node, kind, ctx) {
+        return;
+    }
+    if visit_part_7(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_8(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- imports ----
         // `import a.b, c as d` -> one Import entity per name in the `name`
@@ -88,50 +118,88 @@ pub fn visit(
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    visit_part_2_a(node, kind, ctx)
+}
+
+fn visit_part_2_a(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // `from a.b import c` / `from . import c` / `from ..pkg import c`.
         // `module_name` is either a plain dotted_name (absolute) or a
         // relative_import (leading dots + an optional dotted_name). Leading
         // dots are converted to `./`/`../` segments the same way resolve.rs
         // already resolves Rust's `super::`/`self::` prefixes, so a same-repo
         // relative import resolves via its existing relative-path matching.
-        "import_from_statement" => {
-            if let Some(module) = node.field("module_name") {
-                let mut spec = match module.kind().as_ref() {
-                    "relative_import" => python_relative_import_path(&module),
-                    _ => python_dotted_path(&module).unwrap_or_default(),
-                };
-                // `from . import util` / `from ..pkg import util` carry no
-                // module part beyond the dots — the imported name is the
-                // best guess at the target file (`util` is far more often a
-                // sibling module than a symbol re-export at package root).
-                if (spec.ends_with('/') || spec.is_empty())
-                    && let Some(first_name) = node
-                        .field_children("name")
-                        .next()
-                        .and_then(|n| python_dotted_path(&n))
-                {
-                    spec.push_str(&first_name);
-                }
-                if !spec.is_empty() {
-                    // Local binding names introduced by this `from PKG import a, b`
-                    // — the receiver used at call sites (`a.fn()`). Comma-joined
-                    // on `owner_type` (one edge per statement is preserved) so
-                    // resolve.rs can resolve `a.fn()` to the sibling module `a`
-                    // that defines `fn` (e.g. FastAPI `from app import crud`).
-                    let bindings: Vec<String> = node
-                        .field_children("name")
-                        .filter_map(|n| python_import_binding(&n))
-                        .collect();
-                    ctx.push(EntityKind::Import, spec, node);
-                    if !bindings.is_empty()
-                        && let Some(last) = ctx.out.last_mut()
-                    {
-                        last.owner_type = Some(bindings.join(","));
-                    }
-                    mark_if_type_checking_only(node, ctx);
-                }
-            }
-        }
+        "import_from_statement" => visit_import_from(node, ctx),
+        _ => return false,
+    }
+    true
+}
+
+fn visit_import_from(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    let Some(module) = node.field("module_name") else {
+        return;
+    };
+    let mut spec = python_import_module(&module);
+    append_relative_import_name(node, &mut spec);
+    if spec.is_empty() {
+        return;
+    }
+    let bindings: Vec<String> = node
+        .field_children("name")
+        .filter_map(|name| python_import_binding(&name))
+        .collect();
+    ctx.push(EntityKind::Import, spec, node);
+    if !bindings.is_empty()
+        && let Some(import) = ctx.out.last_mut()
+    {
+        import.owner_type = Some(bindings.join(","));
+    }
+    mark_if_type_checking_only(node, ctx);
+}
+
+fn python_import_module(module: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> String {
+    match module.kind().as_ref() {
+        "relative_import" => python_relative_import_path(module),
+        _ => python_dotted_path(module).unwrap_or_default(),
+    }
+}
+
+fn append_relative_import_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    spec: &mut String,
+) {
+    if !(spec.ends_with('/') || spec.is_empty()) {
+        return;
+    }
+    if let Some(name) = node
+        .field_children("name")
+        .next()
+        .and_then(|name| python_dotted_path(&name))
+    {
+        spec.push_str(&name);
+    }
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- structural ----
         "function_definition" => {
             let name = field_name(node).unwrap_or_default();
@@ -170,60 +238,94 @@ pub fn visit(
                 }
             }
         }
-        // Flask routes live in decorators, which wrap the definition.
-        "decorated_definition" => {
-            if let Some(route) = route_of(node) {
-                ctx.out.push(Entity {
-                    kind: EntityKind::Route,
-                    name: "app.route".to_string(),
-                    file_id: ctx.file_id,
-                    span: crate::extract::span_of(node),
-                    enclosing_function: ctx.enclosing.map(|s| s.to_owned()),
-                    method: Some(route.0),
-                    path: Some(route.1),
-                    status: None,
-                    body_shape: None,
-                    body_minhash: None,
-                    is_async: None,
-                    is_test: false,
-                    owner_type: None,
-                });
-            }
-            // Generic decorator entities: one per `@decorator` line wrapping
-            // the `definition` (function_definition or class_definition).
-            // `name` is the decorator expression text (e.g. "app.route" for
-            // `@app.route(...)`, "staticmethod" for `@staticmethod`);
-            // `enclosing_function` is the annotated def/class's own name.
-            if let Some(definition) = node.field("definition") {
-                let owner = field_name(&definition).unwrap_or_default();
-                for decorator in node.children().filter(|c| c.kind() == "decorator") {
-                    if let Some(dec_name) = python_decorator_name(&decorator) {
-                        // Stamp method+path onto route decorators (FastAPI
-                        // `@app.get("/x")`, Flask `@bp.route("/x", methods=...)`)
-                        // so `entrypoints::detect` can surface the handler as
-                        // `"<VERB> <path>"`; `enclosing_function` already names
-                        // the decorated function (`owner`).
-                        let (method, path) = python_route_meta(&decorator, &dec_name);
-                        ctx.out.push(Entity {
-                            kind: EntityKind::Decorator,
-                            name: dec_name,
-                            file_id: ctx.file_id,
-                            span: crate::extract::span_of(&decorator),
-                            enclosing_function: Some(owner.clone()),
-                            method,
-                            path,
-                            status: None,
-                            body_shape: None,
-                            body_minhash: None,
-                            is_async: None,
-                            is_test: false,
-                            owner_type: None,
-                        });
-                    }
-                }
-            }
-        }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    visit_part_4_a(node, kind, ctx)
+}
+
+fn visit_part_4_a(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        // Flask routes live in decorators, which wrap the definition.
+        "decorated_definition" => visit_decorated_definition(node, ctx),
+        _ => return false,
+    }
+    true
+}
+
+fn visit_decorated_definition(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+) {
+    if let Some((method, path)) = route_of(node) {
+        ctx.out.push(Entity {
+            kind: EntityKind::Route,
+            name: "app.route".to_string(),
+            file_id: ctx.file_id,
+            span: crate::extract::span_of(node),
+            enclosing_function: ctx.enclosing.map(str::to_owned),
+            method: Some(method),
+            path: Some(path),
+            status: None,
+            body_shape: None,
+            body_minhash: None,
+            is_async: None,
+            is_test: false,
+            owner_type: None,
+        });
+    }
+    let Some(definition) = node.field("definition") else {
+        return;
+    };
+    let owner = field_name(&definition).unwrap_or_default();
+    for decorator in node.children().filter(|child| child.kind() == "decorator") {
+        push_python_decorator(&decorator, ctx, &owner);
+    }
+}
+
+fn push_python_decorator(
+    decorator: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+    owner: &str,
+) {
+    let Some(name) = python_decorator_name(decorator) else {
+        return;
+    };
+    let (method, path) = python_route_meta(decorator, &name);
+    ctx.out.push(Entity {
+        kind: EntityKind::Decorator,
+        name,
+        file_id: ctx.file_id,
+        span: crate::extract::span_of(decorator),
+        enclosing_function: Some(owner.to_string()),
+        method,
+        path,
+        status: None,
+        body_shape: None,
+        body_minhash: None,
+        is_async: None,
+        is_test: false,
+        owner_type: None,
+    });
+}
+
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- variables ----
         // Narrow: assignment where `left` is an identifier or identifier list.
         "assignment" => {
@@ -233,14 +335,12 @@ pub fn visit(
                 }
             }
         }
-
         // ---- parameters ----
         "parameters" => {
             for name in parameter_names(node) {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
-
         // ---- expression-level ----
         "call" => {
             let name = node
@@ -267,6 +367,17 @@ pub fn visit(
                 });
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_6(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "attribute" => {
             let name = node
                 .field("attribute")
@@ -281,7 +392,6 @@ pub fn visit(
                 ctx.push(EntityKind::Literal, node.text().into_owned(), node);
             }
         }
-
         // ---- control-flow / error ----
         // `except ValueError as err` -> Catch, named after the exception var.
         "except_clause" => {
@@ -297,6 +407,56 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Throw, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_7(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "boolean_operator" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "elif_clause" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "elseif_statement".to_string(),
+                node,
+            );
+        }
+        "match_statement" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "match_expression".to_string(),
+                node,
+            );
+        }
+        "case_clause" => {
+            ctx.push(EntityKind::ControlFlow, "match_arm".to_string(), node);
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_8(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "for_in_clause" => {
+            ctx.push(EntityKind::ControlFlow, "for_statement".to_string(), node);
+        }
+        "if_clause" => {
+            ctx.push(EntityKind::ControlFlow, "if_statement".to_string(), node);
+        }
         "if_statement"
         | "for_statement"
         | "while_statement"
@@ -308,9 +468,21 @@ pub fn visit(
         | "conditional_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
+}
+
+fn boolean_operator_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<&'static str> {
+    node.children()
+        .find(|child| matches!(child.text().as_ref(), "and" | "or"))
+        .and_then(|operator| match operator.text().as_ref() {
+            "and" => Some("logical_and"),
+            "or" => Some("logical_or"),
+            _ => None,
+        })
 }
 
 /// Names assigned by an assignment statement's `left` (an identifier or a
@@ -656,6 +828,54 @@ mod tests {
                 .count(),
             1,
             "entities: {entities:?}"
+        );
+    }
+
+    #[test]
+    fn complexity_events_cover_python_decisions() {
+        let src = r#"
+def f(items, ready, fallback):
+    values = [item for item in items if item and ready or fallback]
+    if ready:
+        return values
+    elif fallback:
+        return []
+    match values:
+        case []:
+            return []
+        case [first, *_]:
+            return [first]
+"#;
+        let parsed = parse_source(&SupportLang::Python, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flows: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(flows.contains(&"logical_and"), "entities: {entities:?}");
+        assert!(flows.contains(&"logical_or"), "entities: {entities:?}");
+        assert!(
+            flows.contains(&"elseif_statement"),
+            "entities: {entities:?}"
+        );
+        assert!(
+            flows.contains(&"match_expression"),
+            "entities: {entities:?}"
+        );
+        assert_eq!(flows.iter().filter(|name| **name == "match_arm").count(), 2);
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| **name == "for_statement")
+                .count(),
+            1
+        );
+        assert_eq!(
+            flows.iter().filter(|name| **name == "if_statement").count(),
+            2
         );
     }
 }

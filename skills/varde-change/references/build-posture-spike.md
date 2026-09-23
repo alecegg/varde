@@ -6,7 +6,10 @@ Throwaway exploration. The agent writes experimental code to answer a design que
 
 1. State the single question the spike must answer. If there is more than one question, this is not a spike — use a different posture or split into multiple spikes.
 2. Write the minimal throwaway code needed to answer the question — skip tests, edge-case handling, and code conventions.
-3. Record the answer: apply a targeted edit to the task's own `tasks/<task-id>.md` `#### Progress` section to append it (question, approach tried, answer). Then edit that same task file's frontmatter `status` to mark it complete — the deliverable is the answer, not committed code. The task file is the only file this writes.
+3. Record the answer by editing the task's `tasks/<task-id>.md` `#### Progress`
+   section. Append the question, approach, and answer. Then set that task's
+   frontmatter `status` to complete. The deliverable is the answer, not code.
+   The task file is the only file this writes.
 4. Discard the spike code (`git checkout .` or equivalent). Do not commit spike code.
 
 ## Verification

@@ -7,10 +7,25 @@
 //! `run_pattern_rules` pipeline.
 
 use crate::query::ApiError;
-use crate::rules::Diagnostic;
 use crate::rules::correlate::EnclosingLookup;
 use crate::rules::finding::{Finding, Location, match_to_finding};
+use crate::rules::{ConstraintSpec, Diagnostic};
 use std::collections::HashMap;
+
+struct RuleWork<'a> {
+    rule: &'a crate::rules::Rule,
+    pattern: &'a str,
+    constraints: Vec<(String, bool, regex::Regex)>,
+    languages: Vec<ast_grep_language::SupportLang>,
+    matches: Vec<Vec<serde_json::Value>>,
+    parse_failures: usize,
+    diagnostics: Vec<Diagnostic>,
+}
+
+enum RuleState<'a> {
+    Ready(RuleWork<'a>),
+    Skipped(Vec<Diagnostic>),
+}
 
 /// Filter a find_pattern match array by a rule's per-capture regex
 /// constraints (ast-grep's per-metavariable `constraints` convention).
@@ -31,7 +46,7 @@ use std::collections::HashMap;
 /// ModuleNotFoundError:` while still flagging every other exception type).
 pub fn apply_constraints(
     matches: &[serde_json::Value],
-    constraints: &HashMap<String, String>,
+    constraints: &HashMap<String, ConstraintSpec>,
 ) -> Result<Vec<serde_json::Value>, ApiError> {
     let compiled = compile_constraints(constraints)?;
     Ok(filter_matches(matches, &compiled))
@@ -85,21 +100,35 @@ pub fn validate_rewrite_template(rewrite: &str, pattern: &str) -> Result<(), Str
 /// language) and — more importantly — never pays for a `find_pattern` scan
 /// across the repo tree before the regex is known to be broken.
 fn compile_constraints(
-    constraints: &HashMap<String, String>,
+    constraints: &HashMap<String, ConstraintSpec>,
 ) -> Result<Vec<(String, bool, regex::Regex)>, ApiError> {
-    let mut compiled = Vec::with_capacity(constraints.len());
-    for (name, pattern) in constraints {
-        let (negate, regex_src) = match pattern.strip_prefix('!') {
-            Some(rest) => (true, rest),
-            None => (false, pattern.as_str()),
+    let mut compiled = Vec::new();
+    for (name, spec) in constraints {
+        let patterns: Vec<&str> = match spec {
+            ConstraintSpec::Regex(pattern) => vec![pattern.as_str()],
+            ConstraintSpec::All(patterns) => {
+                if patterns.is_empty() {
+                    return Err(ApiError::new(
+                        "invalid_constraint",
+                        format!("constraint list for capture `{name}` must not be empty"),
+                    ));
+                }
+                patterns.iter().map(String::as_str).collect()
+            }
         };
-        let regex = regex::Regex::new(regex_src).map_err(|e| {
-            ApiError::new(
-                "invalid_constraint",
-                format!("constraint for capture `{name}` is not a valid regex: {e}"),
-            )
-        })?;
-        compiled.push((name.clone(), negate, regex));
+        for pattern in patterns {
+            let (negate, regex_src) = match pattern.strip_prefix('!') {
+                Some(rest) => (true, rest),
+                None => (false, pattern),
+            };
+            let regex = regex::Regex::new(regex_src).map_err(|e| {
+                ApiError::new(
+                    "invalid_constraint",
+                    format!("constraint for capture `{name}` is not a valid regex: {e}"),
+                )
+            })?;
+            compiled.push((name.clone(), negate, regex));
+        }
     }
     Ok(compiled)
 }
@@ -166,168 +195,264 @@ pub fn run_pattern_rules(
     repo_root: &std::path::Path,
     conn: &rusqlite::Connection,
 ) -> Result<(Vec<Finding>, Vec<Diagnostic>), ApiError> {
-    let mut findings = Vec::new();
-    let mut diagnostics = Vec::new();
-    for rule in rules
+    let mut states: Vec<_> = rules
         .iter()
         .filter(|r| r.kind == crate::rules::RuleKind::Pattern)
-    {
-        match run_pattern_rule(rule, repo_root, conn) {
-            Ok((mut rule_findings, rule_diags)) => {
+        .map(|rule| prepare_rule(rule, repo_root))
+        .collect();
+    run_language_batches(&mut states, repo_root)?;
+
+    let mut findings = Vec::new();
+    let mut diagnostics = Vec::new();
+    for state in states {
+        match state {
+            RuleState::Ready(work) => {
+                let (mut rule_findings, mut rule_diagnostics) =
+                    finish_rule_work(work, repo_root, conn)?;
                 findings.append(&mut rule_findings);
-                diagnostics.extend(rule_diags);
+                diagnostics.append(&mut rule_diagnostics);
             }
-            Err(e) => return Err(e),
+            RuleState::Skipped(mut rule_diagnostics) => {
+                diagnostics.append(&mut rule_diagnostics);
+            }
         }
     }
     Ok((findings, diagnostics))
 }
 
-fn run_pattern_rule(
-    rule: &crate::rules::Rule,
+fn finish_rule_work(
+    mut work: RuleWork<'_>,
     repo_root: &std::path::Path,
     conn: &rusqlite::Connection,
 ) -> Result<(Vec<Finding>, Vec<Diagnostic>), ApiError> {
-    let Some(pattern) = rule.pattern.as_deref() else {
-        return Ok((
-            Vec::new(),
-            vec![Diagnostic {
-                rule_id: Some(rule.id.clone()),
-                file: repo_root.display().to_string(),
-                reason: "rule kind=pattern is missing its `pattern` field".to_string(),
-            }],
-        ));
-    };
-
-    let mut diagnostics = Vec::new();
-
-    // Compile the rule's per-capture regex constraints once, before scanning
-    // any file — an invalid regex fails the whole rule with a single
-    // diagnostic instead of one per target language, and never pays for a
-    // find_pattern scan across the repo tree first.
-    let compiled_constraints =
-        match compile_constraints(rule.constraints.as_ref().unwrap_or(&HashMap::new())) {
-            Ok(compiled) => compiled,
-            Err(e) => {
-                return Ok((
-                    Vec::new(),
-                    vec![Diagnostic {
-                        rule_id: Some(rule.id.clone()),
-                        file: repo_root.display().to_string(),
-                        reason: e.message,
-                    }],
-                ));
-            }
-        };
-
-    let langs: Vec<ast_grep_language::SupportLang> = match &rule.languages {
-        Some(names) if !names.is_empty() => {
-            let mut resolved = Vec::new();
-            for name in names {
-                match crate::parse::language_from_name(name) {
-                    Some(lang) => resolved.push(lang),
-                    None => diagnostics.push(Diagnostic {
-                        rule_id: Some(rule.id.clone()),
-                        file: repo_root.display().to_string(),
-                        reason: format!("unsupported language `{name}` in rule.languages"),
-                    }),
-                }
-            }
-            resolved
-        }
-        None => crate::parse::SUPPORTED_LANGUAGES.to_vec(),
-        Some(_) => crate::parse::SUPPORTED_LANGUAGES.to_vec(),
-    };
-
-    let mut findings = Vec::new();
-    // Prepare the correlation statement once per rule — a scan with hundreds
-    // of matches pays one SQL compile, not one per match (perf budget).
-    let mut enclosing = EnclosingLookup::new(conn)?;
-    let mut test_paths = crate::rules::correlate::TestPathLookup::new(conn);
-    let exclude_test_paths = rule.exclude_test_paths.unwrap_or(false);
-    let exclude_tooling_paths = rule.exclude_tooling_paths.unwrap_or(false);
-    // A pattern that fails to parse in a language it was never written for is
-    // normal for language-agnostic rules (e.g. `console.log($MSG)` is not
-    // valid Go) — only a pattern that fails in EVERY tried language is a
-    // broken rule worth reporting.
-    let mut parse_failures = 0usize;
-    let mut lang_count = 0usize;
-    // Cache the match-time file stat per distinct resolved real path (many
-    // findings can share one file within a rule's evaluation, and different
-    // walk paths — symlinks, relative vs. absolute — can name the same
-    // physical file) — see `Finding::matched_file_state`. Keying by the
-    // resolved path, not the walk path, keeps this cache consistent with the
-    // staleness guard in `scan_cli::apply_rewrites`, which also resolves
-    // through `resolve_real_path` before comparing state.
-    let mut file_state_cache: HashMap<String, Option<crate::rules::finding::FileState>> =
-        HashMap::new();
-    for lang in langs {
-        lang_count += 1;
-        let input = serde_json::json!({
-            "pattern": pattern,
-            "path": repo_root.display().to_string(),
-            "language": crate::parse::language_name(&lang),
+    let explicitly_scoped = work
+        .rule
+        .languages
+        .as_ref()
+        .is_some_and(|names| !names.is_empty());
+    if explicitly_scoped && work.parse_failures > 0 {
+        work.diagnostics.push(Diagnostic {
+            rule_id: Some(work.rule.id.clone()),
+            file: repo_root.display().to_string(),
+            reason: format!(
+                "pattern failed to parse in {} explicitly targeted language(s)",
+                work.parse_failures
+            ),
         });
-        let matches = match crate::query::find_pattern::find_pattern_unbounded(&input) {
-            Ok(matches) => matches,
-            Err(e) if e.code == "invalid_pattern" => {
-                parse_failures += 1;
-                continue;
-            }
-            Err(e) => return Err(e),
-        };
-        let matches = matches["matches"].as_array().cloned().unwrap_or_default();
-        let kept = filter_matches(&matches, &compiled_constraints);
-        for m in kept {
-            let Some(file) = m.get("file").and_then(|f| f.as_str()) else {
-                continue;
-            };
-            if exclude_test_paths && test_paths.is_test_path(file)? {
-                continue;
-            }
-            if exclude_tooling_paths && test_paths.is_tooling_path(file)? {
-                continue;
-            }
-            let Some(span) = m.get("span") else { continue };
-            let start_byte = span.get("start_byte").and_then(|b| b.as_u64()).unwrap_or(0) as u32;
-            let end_byte = span.get("end_byte").and_then(|b| b.as_u64()).unwrap_or(0) as u32;
-            let location = Location {
-                file: file.to_string(),
-                span: crate::model::Span {
-                    start_byte,
-                    end_byte,
-                    start_line: span.get("start_line").and_then(|b| b.as_u64()).unwrap_or(0) as u32,
-                    start_col: span.get("start_col").and_then(|b| b.as_u64()).unwrap_or(0) as u32,
-                    end_line: span.get("end_line").and_then(|b| b.as_u64()).unwrap_or(0) as u32,
-                    end_col: span.get("end_col").and_then(|b| b.as_u64()).unwrap_or(0) as u32,
-                },
-            };
-            let mut finding = match_to_finding(rule, &m, location);
-            let real = crate::rules::finding::resolve_real_path(file);
-            finding.matched_file_state = *file_state_cache
-                .entry(real.to_string_lossy().into_owned())
-                .or_insert_with(|| crate::rules::finding::FileState::of(&real));
-            // Relational context: attach the enclosing entity's structural
-            // facts to the finding's evidence.
-            if let Some(fact) = enclosing.lookup(file, start_byte, end_byte)?
-                && let Some(evidence) = finding.evidence.as_object_mut()
-            {
-                evidence.insert(
-                    "enclosing_function".to_string(),
-                    serde_json::json!({ "name": fact.name, "is_async": fact.is_async }),
-                );
-            }
-            findings.push(finding);
-        }
-    }
-    if lang_count > 0 && parse_failures == lang_count {
-        diagnostics.push(Diagnostic {
-            rule_id: Some(rule.id.clone()),
+    } else if !explicitly_scoped
+        && !work.languages.is_empty()
+        && work.parse_failures == work.languages.len()
+    {
+        work.diagnostics.push(Diagnostic {
+            rule_id: Some(work.rule.id.clone()),
             file: repo_root.display().to_string(),
             reason: "pattern does not parse in any target language".to_string(),
         });
     }
-    Ok((findings, diagnostics))
+    let mut enclosing = EnclosingLookup::new(conn)?;
+    let mut test_paths = crate::rules::correlate::TestPathLookup::new(conn);
+    let mut file_states = HashMap::new();
+    let mut findings = Vec::new();
+    for matches in &work.matches {
+        for matched in filter_matches(matches, &work.constraints) {
+            if let Some(finding) = finding_from_match(
+                &work,
+                &matched,
+                &mut enclosing,
+                &mut test_paths,
+                &mut file_states,
+            )? {
+                findings.push(finding);
+            }
+        }
+    }
+    Ok((findings, work.diagnostics))
+}
+
+fn finding_from_match(
+    work: &RuleWork<'_>,
+    matched: &serde_json::Value,
+    enclosing: &mut EnclosingLookup<'_>,
+    test_paths: &mut crate::rules::correlate::TestPathLookup<'_>,
+    file_states: &mut HashMap<String, Option<crate::rules::finding::FileState>>,
+) -> Result<Option<Finding>, ApiError> {
+    let Some(file) = matched.get("file").and_then(serde_json::Value::as_str) else {
+        return Ok(None);
+    };
+    if excluded_path(work.rule, file, test_paths)? {
+        return Ok(None);
+    }
+    let Some(location) = match_location(file, matched) else {
+        return Ok(None);
+    };
+    let start_byte = location.span.start_byte;
+    let end_byte = location.span.end_byte;
+    let mut finding = match_to_finding(work.rule, matched, location);
+    let real = crate::rules::finding::resolve_real_path(file);
+    finding.matched_file_state = *file_states
+        .entry(real.to_string_lossy().into_owned())
+        .or_insert_with(|| crate::rules::finding::FileState::of(&real));
+    if let Some(fact) = enclosing.lookup(file, start_byte, end_byte)?
+        && let Some(evidence) = finding.evidence.as_object_mut()
+    {
+        evidence.insert(
+            "enclosing_function".to_string(),
+            serde_json::json!({ "name": fact.name, "is_async": fact.is_async }),
+        );
+    }
+    Ok(Some(finding))
+}
+
+fn excluded_path(
+    rule: &crate::rules::Rule,
+    file: &str,
+    test_paths: &mut crate::rules::correlate::TestPathLookup<'_>,
+) -> Result<bool, ApiError> {
+    if rule.exclude_test_paths.unwrap_or(false) && test_paths.is_test_path(file)? {
+        return Ok(true);
+    }
+    Ok(rule.exclude_tooling_paths.unwrap_or(false) && test_paths.is_tooling_path(file)?)
+}
+
+fn match_location(file: &str, matched: &serde_json::Value) -> Option<Location> {
+    let span = matched.get("span")?;
+    let number = |name| {
+        span.get(name)
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32
+    };
+    Some(Location {
+        file: file.to_string(),
+        span: crate::model::Span {
+            start_byte: number("start_byte"),
+            end_byte: number("end_byte"),
+            start_line: number("start_line"),
+            start_col: number("start_col"),
+            end_line: number("end_line"),
+            end_col: number("end_col"),
+        },
+    })
+}
+
+fn prepare_rule<'a>(rule: &'a crate::rules::Rule, repo_root: &std::path::Path) -> RuleState<'a> {
+    let Some(pattern) = rule.pattern.as_deref() else {
+        return RuleState::Skipped(vec![rule_diagnostic(
+            rule,
+            repo_root,
+            "rule kind=pattern is missing its `pattern` field".to_string(),
+        )]);
+    };
+    let constraints =
+        match compile_constraints(rule.constraints.as_ref().unwrap_or(&HashMap::new())) {
+            Ok(compiled) => compiled,
+            Err(error) => {
+                return RuleState::Skipped(vec![rule_diagnostic(rule, repo_root, error.message)]);
+            }
+        };
+    let (languages, diagnostics) = resolve_rule_languages(rule, repo_root);
+    RuleState::Ready(RuleWork {
+        rule,
+        pattern,
+        constraints,
+        matches: vec![Vec::new(); languages.len()],
+        languages,
+        parse_failures: 0,
+        diagnostics,
+    })
+}
+
+fn resolve_rule_languages(
+    rule: &crate::rules::Rule,
+    repo_root: &std::path::Path,
+) -> (Vec<ast_grep_language::SupportLang>, Vec<Diagnostic>) {
+    let Some(names) = rule.languages.as_ref().filter(|names| !names.is_empty()) else {
+        return (crate::parse::SUPPORTED_LANGUAGES.to_vec(), Vec::new());
+    };
+    let mut languages = Vec::new();
+    let mut diagnostics = Vec::new();
+    for name in names {
+        match crate::parse::language_from_name(name) {
+            Some(language) => languages.push(language),
+            None => diagnostics.push(rule_diagnostic(
+                rule,
+                repo_root,
+                format!("unsupported language `{name}` in rule.languages"),
+            )),
+        }
+    }
+    (languages, diagnostics)
+}
+
+fn rule_diagnostic(
+    rule: &crate::rules::Rule,
+    repo_root: &std::path::Path,
+    reason: String,
+) -> Diagnostic {
+    Diagnostic {
+        rule_id: Some(rule.id.clone()),
+        file: repo_root.display().to_string(),
+        reason,
+    }
+}
+
+fn run_language_batches(
+    states: &mut [RuleState<'_>],
+    repo_root: &std::path::Path,
+) -> Result<(), ApiError> {
+    for language in distinct_languages(states) {
+        run_language_batch(states, repo_root, language)?;
+    }
+    Ok(())
+}
+
+fn distinct_languages(states: &[RuleState<'_>]) -> Vec<ast_grep_language::SupportLang> {
+    let mut languages = Vec::new();
+    for work in states.iter().filter_map(|state| match state {
+        RuleState::Ready(work) => Some(work),
+        RuleState::Skipped(_) => None,
+    }) {
+        for language in &work.languages {
+            if !languages.contains(language) {
+                languages.push(*language);
+            }
+        }
+    }
+    languages
+}
+
+fn run_language_batch(
+    states: &mut [RuleState<'_>],
+    repo_root: &std::path::Path,
+    language: ast_grep_language::SupportLang,
+) -> Result<(), ApiError> {
+    let jobs: Vec<_> = states
+        .iter()
+        .enumerate()
+        .flat_map(|(state_index, state)| match state {
+            RuleState::Ready(work) => work
+                .languages
+                .iter()
+                .enumerate()
+                .filter(|(_, candidate)| **candidate == language)
+                .map(|(language_index, _)| (state_index, language_index, work.pattern))
+                .collect::<Vec<_>>(),
+            RuleState::Skipped(_) => Vec::new(),
+        })
+        .collect();
+    let patterns: Vec<_> = jobs.iter().map(|(_, _, pattern)| *pattern).collect();
+    let results =
+        crate::query::find_pattern::find_patterns_unbounded(repo_root, &language, &patterns);
+    for ((state_index, language_index, _), result) in jobs.into_iter().zip(results) {
+        let RuleState::Ready(work) = &mut states[state_index] else {
+            unreachable!("batch jobs only reference ready rules");
+        };
+        match result {
+            Ok(matches) => work.matches[language_index] = matches,
+            Err(error) if error.code == "invalid_pattern" => work.parse_failures += 1,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -391,10 +516,10 @@ mod tests {
         serde_json::json!({ "kind": "identifier", "text": text })
     }
 
-    fn constraints(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+    fn constraints(pairs: &[(&str, &str)]) -> HashMap<String, ConstraintSpec> {
         pairs
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| (k.to_string(), ConstraintSpec::Regex(v.to_string())))
             .collect()
     }
 
@@ -469,6 +594,65 @@ mod tests {
             .expect_err("invalid regex errors");
         assert_eq!(err.code, "invalid_constraint");
         assert!(err.message.contains("VAR"));
+    }
+
+    #[test]
+    fn constraint_lists_require_all_regexes() {
+        let mut caps = serde_json::Map::new();
+        caps.insert("VAR".to_string(), capture_node("Foo9"));
+        let matches = vec![match_with_captures(caps)];
+        let mut constraints = HashMap::new();
+        constraints.insert(
+            "VAR".to_string(),
+            ConstraintSpec::All(vec!["^[A-Z]".to_string(), "[0-9]$".to_string()]),
+        );
+        assert_eq!(apply_constraints(&matches, &constraints).unwrap().len(), 1);
+        constraints.insert(
+            "VAR".to_string(),
+            ConstraintSpec::All(vec!["^[a-z]".to_string(), "[0-9]$".to_string()]),
+        );
+        assert!(
+            apply_constraints(&matches, &constraints)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn empty_constraint_list_returns_api_error() {
+        let mut constraints = HashMap::new();
+        constraints.insert("VAR".to_string(), ConstraintSpec::All(Vec::new()));
+        let err = apply_constraints(&[], &constraints).expect_err("empty list errors");
+        assert_eq!(err.code, "invalid_constraint");
+        assert!(err.message.contains("VAR"));
+    }
+
+    #[test]
+    fn constraint_lists_preserve_negation_and_validate_every_member() {
+        let matches: Vec<_> = ["getValue", "getDeprecated", "setValue"]
+            .into_iter()
+            .map(|text| {
+                let mut captures = serde_json::Map::new();
+                captures.insert("NAME".to_string(), capture_node(text));
+                match_with_captures(captures)
+            })
+            .collect();
+        let constraints = HashMap::from([(
+            "NAME".to_string(),
+            ConstraintSpec::All(vec!["^get".to_string(), "!^getDeprecated$".to_string()]),
+        )]);
+        assert_eq!(
+            apply_constraints(&matches, &constraints).unwrap(),
+            vec![matches[0].clone()]
+        );
+
+        let malformed = HashMap::from([(
+            "NAME".to_string(),
+            ConstraintSpec::All(vec!["^get".to_string(), "![".to_string()]),
+        )]);
+        let error = apply_constraints(&[], &malformed).expect_err("validate even without matches");
+        assert_eq!(error.code, "invalid_constraint");
+        assert!(error.message.contains("NAME"));
     }
 
     #[test]
@@ -577,10 +761,15 @@ function render(): void {
             dir
         }
 
-        fn rule(id: &str, pattern: &str, constraints: Option<HashMap<String, String>>) -> Rule {
+        fn rule(
+            id: &str,
+            pattern: &str,
+            constraints: Option<HashMap<String, ConstraintSpec>>,
+        ) -> Rule {
             Rule {
                 id: id.to_string(),
                 kind: RuleKind::Pattern,
+                verification: None,
                 severity: crate::rules::Severity::Warning,
                 message: format!("{id} fired"),
                 name: None,
@@ -647,7 +836,10 @@ function render(): void {
             let conn = crate::db::open(&db_path).expect("db opens");
 
             let mut constraints = HashMap::new();
-            constraints.insert("MSG".to_string(), "^\"async".to_string());
+            constraints.insert(
+                "MSG".to_string(),
+                ConstraintSpec::Regex("^\"async".to_string()),
+            );
             let rules = vec![
                 rule("async-only", "console.log($MSG)", Some(constraints)),
                 rule("all-logs", "console.log($MSG)", None),
@@ -751,7 +943,10 @@ function render(): void {
             let conn = crate::db::open(&db_path).expect("db opens");
 
             let mut constraints = HashMap::new();
-            constraints.insert("MSG".to_string(), "([unclosed".to_string());
+            constraints.insert(
+                "MSG".to_string(),
+                ConstraintSpec::Regex("([unclosed".to_string()),
+            );
             // No `languages` scoping — the rule targets all 10 supported
             // languages. Before the fix, an invalid regex was rediscovered
             // once per language (up to 10 diagnostics + 10 wasted repo

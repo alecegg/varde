@@ -11,35 +11,83 @@ fn main() {
     install_panic_hook();
     let cli = Cli::parse();
     init_tracing(cli.verbose);
-    match cli.command {
+    dispatch_command(cli.command);
+}
+
+fn dispatch_command(command: Command) {
+    match command {
+        command @ (Command::Batch { .. }
+        | Command::SymbolsInFile { .. }
+        | Command::SymbolsInFiles { .. }
+        | Command::GetSymbol { .. }
+        | Command::Dependencies { .. }
+        | Command::Dependents { .. }
+        | Command::TestsForFile { .. }
+        | Command::FindImports { .. }
+        | Command::TypeHierarchy { .. }
+        | Command::FilterSymbols { .. }
+        | Command::SliceState { .. }) => run_core_query(command),
+        command @ (Command::Hotspots { .. }
+        | Command::Clusters { .. }
+        | Command::MapFile { .. }
+        | Command::MapSymbol { .. }
+        | Command::MapPath { .. }
+        | Command::Explore { .. }
+        | Command::BlastRadius { .. }
+        | Command::SymbolBlastRadius { .. }
+        | Command::DetectChanges { .. }
+        | Command::FindPattern { .. }
+        | Command::ContextPack { .. }
+        | Command::NavMap { .. }) => run_navigation_query(command),
+        command => run_control_command(command),
+    }
+}
+
+fn run_core_query(command: Command) {
+    let (mode, json) = match command {
+        Command::Batch { json } => ("batch", json),
+        Command::SymbolsInFile { json } => ("symbols_in_file", json),
+        Command::SymbolsInFiles { json } => ("symbols_in_files", json),
+        Command::GetSymbol { json } => ("get_symbol", json),
+        Command::Dependencies { json } => ("dependencies", json),
+        Command::Dependents { json } => ("dependents", json),
+        Command::TestsForFile { json } => ("tests_for_file", json),
+        Command::FindImports { json } => ("find_imports", json),
+        Command::TypeHierarchy { json } => ("type_hierarchy", json),
+        Command::FilterSymbols { json } => ("filter_symbols", json),
+        Command::SliceState { json } => ("slice_state", json),
+        _ => unreachable!("core query dispatcher received another command"),
+    };
+    run_query(mode, &json);
+}
+
+fn run_navigation_query(command: Command) {
+    let (mode, json) = match command {
+        Command::Hotspots { json } => ("hotspots", json),
+        Command::Clusters { json } => ("clusters", json),
+        Command::MapFile { json } => ("map_file", json),
+        Command::MapSymbol { json } => ("map_symbol", json),
+        Command::MapPath { json } => ("map_path", json),
+        Command::Explore { json } => ("explore", json),
+        Command::BlastRadius { json } => ("blast_radius", json),
+        Command::SymbolBlastRadius { json } => ("symbol_blast_radius", json),
+        Command::DetectChanges { json } => ("detect_changes", json),
+        Command::FindPattern { json } => ("find_pattern", json),
+        Command::ContextPack { json } => ("context_pack", json),
+        Command::NavMap { json, format } => return run_nav_map(&json, &format),
+        _ => unreachable!("navigation dispatcher received another command"),
+    };
+    run_query(mode, &json);
+}
+
+fn run_control_command(command: Command) {
+    match command {
         Command::Extract { path } => run_extract(&path),
         Command::Build {
             repo_root,
             force,
             changed_files,
         } => std::process::exit(run_build(&repo_root, force, changed_files)),
-        Command::Batch { json } => run_query("batch", &json),
-        Command::SymbolsInFile { json } => run_query("symbols_in_file", &json),
-        Command::SymbolsInFiles { json } => run_query("symbols_in_files", &json),
-        Command::GetSymbol { json } => run_query("get_symbol", &json),
-        Command::Dependencies { json } => run_query("dependencies", &json),
-        Command::Dependents { json } => run_query("dependents", &json),
-        Command::TestsForFile { json } => run_query("tests_for_file", &json),
-        Command::Hotspots { json } => run_query("hotspots", &json),
-        Command::Clusters { json } => run_query("clusters", &json),
-        Command::MapFile { json } => run_query("map_file", &json),
-        Command::MapSymbol { json } => run_query("map_symbol", &json),
-        Command::MapPath { json } => run_query("map_path", &json),
-        Command::Explore { json } => run_query("explore", &json),
-        Command::BlastRadius { json } => run_query("blast_radius", &json),
-        Command::SymbolBlastRadius { json } => run_query("symbol_blast_radius", &json),
-        Command::DetectChanges { json } => run_query("detect_changes", &json),
-        Command::FindImports { json } => run_query("find_imports", &json),
-        Command::TypeHierarchy { json } => run_query("type_hierarchy", &json),
-        Command::FilterSymbols { json } => run_query("filter_symbols", &json),
-        Command::FindPattern { json } => run_query("find_pattern", &json),
-        Command::ContextPack { json } => run_query("context_pack", &json),
-        Command::NavMap { json, format } => run_nav_map(&json, &format),
         // `scan` is a read-and-report operation like the query modes, but it
         // must be able to exit non-zero (findings at/above the severity
         // threshold → CI gate), so it gets its own dispatch arm instead of
@@ -59,7 +107,6 @@ fn main() {
         Command::Hooks(HooksCommand::Remove { agent, force, dir }) => {
             run_hooks_remove(&agent, force, dir.as_deref())
         }
-        Command::SliceState { json } => run_query("slice_state", &json),
         Command::Watch {
             repos,
             config,
@@ -76,6 +123,7 @@ fn main() {
         } else {
             run_watch(&repos, config.as_deref(), debounce_ms)
         }),
+        _ => unreachable!("control dispatcher received a query command"),
     }
 }
 
@@ -115,7 +163,7 @@ fn install_panic_hook() {
 /// Returns the process exit code: 0 when no finding meets/exceeds the
 /// severity threshold (default `error`), non-zero otherwise; any tool-level
 /// error (bad input, missing/stale DB, unwritable `output`) emits the
-/// `{ok:false,error}` envelope and returns non-zero. `output` present →
+/// `{ok:false,data.error}` envelope and returns non-zero. `output` present →
 /// envelope written to that file and nothing on stdout; absent → stdout.
 fn run_scan(json: &str, apply: bool, force: bool) -> i32 {
     let mut value: serde_json::Value = match serde_json::from_str(json) {
@@ -131,6 +179,16 @@ fn run_scan(json: &str, apply: bool, force: bool) -> i32 {
             return 1;
         }
     };
+    if !value.is_object() {
+        println!(
+            "{}",
+            varde_code::query::render(Err(varde_code::query::ApiError::new(
+                "invalid_input",
+                "scan input must be a JSON object",
+            )))
+        );
+        return 1;
+    }
     if apply {
         value["apply"] = serde_json::json!(true);
     }
@@ -139,7 +197,7 @@ fn run_scan(json: &str, apply: bool, force: bool) -> i32 {
     }
 
     let (envelope, payload) =
-        render_with_truncation_meta(varde_code::scan_cli::scan_repo(&value), &value);
+        render_preprocessed_envelope(varde_code::scan_cli::scan_repo(&value), &value);
 
     if let Some(path) = value.get("output").and_then(|o| o.as_str()) {
         if let Err(e) = std::fs::write(path, &envelope) {
@@ -157,15 +215,10 @@ fn run_scan(json: &str, apply: bool, force: bool) -> i32 {
     }
 
     if payload["ok"] == true {
-        let threshold = varde_code::scan_cli::severity_threshold(&value)
-            .unwrap_or(varde_code::rules::Severity::Error);
-        // Applied-aware: findings whose rewrite was applied (`rewrite_status`
-        // = "applied") are resolved and don't trip the gate; everything else
-        // gates exactly as before (identical for non-apply runs).
-        if varde_code::scan_cli::unresolved_findings_at_or_above(&payload["data"], threshold) {
-            1
-        } else {
+        if payload["data"]["gate"]["status"] == "pass" {
             0
+        } else {
+            1
         }
     } else {
         1
@@ -175,7 +228,7 @@ fn run_scan(json: &str, apply: bool, force: bool) -> i32 {
 /// Run one `test` invocation: flow + envelope + failure-gate exit code.
 ///
 /// Mirrors `run_scan`'s shape: parses `json`, runs the operation, prints the
-/// `{ok, data}`/`{ok:false, error}` envelope to stdout, and returns the
+/// `{ok, data}`/`{ok:false, data.error}` envelope to stdout, and returns the
 /// process exit code — `0` when `summary.failed == 0`, non-zero when any
 /// test failed or a tool-level error occurred (bad input JSON, invalid
 /// `rulesDir`, etc).
@@ -194,8 +247,7 @@ fn run_test(json: &str) -> i32 {
         }
     };
 
-    let (envelope, payload) =
-        render_with_truncation_meta(varde_code::test_cli::run_tests(&value), &value);
+    let (envelope, payload) = render_envelope(varde_code::test_cli::run_tests(&value), &value);
     println!("{envelope}");
     if payload["ok"] == true {
         let failed = payload["data"]["summary"]["failed"].as_u64().unwrap_or(0);
@@ -205,23 +257,27 @@ fn run_test(json: &str) -> i32 {
     }
 }
 
-/// Render a machine result and surface producer-reported list truncation in
-/// the common envelope metadata.
-fn render_with_truncation_meta(
+/// Render a machine result with input-derived metadata.
+fn render_envelope(
     result: Result<serde_json::Value, varde_code::query::ApiError>,
     input: &serde_json::Value,
 ) -> (String, serde_json::Value) {
-    let mut payload: serde_json::Value =
-        serde_json::from_str(&varde_code::query::output::render_with_input(result, input))
-            .expect("query renderer produces JSON");
-    if payload
-        .pointer("/data/guide/truncated")
-        .and_then(serde_json::Value::as_object)
-        .is_some_and(|sections| !sections.is_empty())
-    {
-        payload["meta"]["truncated"] = serde_json::json!(true);
-    }
-    (payload.to_string(), payload)
+    finish_envelope(varde_code::query::output::render_value_with_input(
+        result, input,
+    ))
+}
+
+/// Render a payload whose producer already applied output compaction.
+fn render_preprocessed_envelope(
+    result: Result<serde_json::Value, varde_code::query::ApiError>,
+    input: &serde_json::Value,
+) -> (String, serde_json::Value) {
+    finish_envelope(varde_code::query::output::render_value_with_preprocessed_input(result, input))
+}
+
+fn finish_envelope(payload: serde_json::Value) -> (String, serde_json::Value) {
+    let envelope = payload.to_string();
+    (envelope, payload)
 }
 
 /// Resolve the watch list (explicit `--repo`s + optional config file, or
@@ -682,69 +738,80 @@ fn render_nav_map_text(envelope: &str) -> String {
         "flows",
         "hotspots",
     ];
-    let value: serde_json::Value = match serde_json::from_str(envelope) {
-        Ok(v) => v,
-        Err(_) => return envelope.to_string(),
-    };
-    if value.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+    let Some(data) = nav_map_data(envelope) else {
         return envelope.to_string();
-    }
-    let data = value
-        .get("data")
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
+    };
     let truncated = data
         .pointer("/guide/truncated")
         .and_then(|value| value.as_object());
     let mut out = String::new();
     for section in SECTIONS {
-        out.push_str(&format!("## {section}\n"));
-        match data.get(section) {
-            Some(serde_json::Value::Array(items)) if items.is_empty() => {
-                if let Some(info) = truncated.and_then(|sections| sections.get(section)) {
-                    let total = info
-                        .get("total")
-                        .and_then(|value| value.as_u64())
-                        .unwrap_or(0);
-                    let more = info
-                        .get("more")
-                        .and_then(|value| value.as_str())
-                        .unwrap_or("");
-                    out.push_str(&format!("(truncated: 0/{total} shown; {more})\n\n"));
-                } else {
-                    out.push_str("(none)\n\n");
-                }
-            }
-            Some(serde_json::Value::Array(items)) => {
-                for item in items {
-                    out.push_str(&render_nav_map_item(section, item));
-                }
-                out.push('\n');
-            }
-            Some(serde_json::Value::Object(_)) if section == "module_layers" => {
-                out.push_str(&render_module_layers(&data[section]));
-            }
-            Some(other) => {
-                out.push_str(&format!("{other}\n\n"));
-            }
-            None => out.push_str("(missing)\n\n"),
-        }
+        render_nav_map_section(&mut out, &data, truncated, section);
     }
-    // Truncation guide (F1): tell the reader what the token budget cut and how
-    // to get the rest.
-    if let Some(truncated) = truncated
-        && !truncated.is_empty()
-    {
-        out.push_str("## truncated (token budget)\n");
-        for (section, info) in truncated {
-            let shown = info.get("shown").and_then(|v| v.as_u64()).unwrap_or(0);
-            let total = info.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
-            let more = info.get("more").and_then(|v| v.as_str()).unwrap_or("");
-            out.push_str(&format!("- {section}: {shown}/{total} shown — {more}\n"));
-        }
-        out.push('\n');
-    }
+    render_truncation_guide(&mut out, truncated);
     out
+}
+
+fn nav_map_data(envelope: &str) -> Option<serde_json::Value> {
+    let value: serde_json::Value = serde_json::from_str(envelope).ok()?;
+    (value.get("ok").and_then(|value| value.as_bool()) == Some(true)).then(|| {
+        value
+            .get("data")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null)
+    })
+}
+
+fn render_nav_map_section(
+    out: &mut String,
+    data: &serde_json::Value,
+    truncated: Option<&serde_json::Map<String, serde_json::Value>>,
+    section: &str,
+) {
+    out.push_str(&format!("## {section}\n"));
+    match data.get(section) {
+        Some(serde_json::Value::Array(items)) if items.is_empty() => {
+            render_empty_nav_map_section(out, truncated.and_then(|all| all.get(section)));
+        }
+        Some(serde_json::Value::Array(items)) => {
+            items
+                .iter()
+                .for_each(|item| out.push_str(&render_nav_map_item(section, item)));
+            out.push('\n');
+        }
+        Some(serde_json::Value::Object(_)) if section == "module_layers" => {
+            out.push_str(&render_module_layers(&data[section]));
+        }
+        Some(other) => out.push_str(&format!("{other}\n\n")),
+        None => out.push_str("(missing)\n\n"),
+    }
+}
+
+fn render_empty_nav_map_section(out: &mut String, info: Option<&serde_json::Value>) {
+    let Some(info) = info else {
+        out.push_str("(none)\n\n");
+        return;
+    };
+    let total = u64_field(info, "total");
+    let more = str_field(info, "more");
+    out.push_str(&format!("(truncated: 0/{total} shown; {more})\n\n"));
+}
+
+fn render_truncation_guide(
+    out: &mut String,
+    truncated: Option<&serde_json::Map<String, serde_json::Value>>,
+) {
+    let Some(truncated) = truncated.filter(|sections| !sections.is_empty()) else {
+        return;
+    };
+    out.push_str("## truncated (token budget)\n");
+    for (section, info) in truncated {
+        let shown = u64_field(info, "shown");
+        let total = u64_field(info, "total");
+        let more = str_field(info, "more");
+        out.push_str(&format!("- {section}: {shown}/{total} shown — {more}\n"));
+    }
+    out.push('\n');
 }
 
 /// String field lookup helper for the nav_map item renderers.
@@ -776,73 +843,15 @@ fn flow_node_file<'a>(node: &'a serde_json::Value, files: &'a [serde_json::Value
 /// fall back to compact JSON so nothing is silently dropped.
 fn render_nav_map_item(section: &str, item: &serde_json::Value) -> String {
     match section {
-        "entrypoints" => {
-            let role = str_field(item, "role");
-            let role = if role.is_empty() {
-                String::new()
-            } else {
-                format!("  [{role}]")
-            };
-            // Route verb+path (annotation/decorator handlers carry these while
-            // keeping the handler name as `symbol`); shown as `(GET /path)`
-            // unless the symbol already *is* the route string (call-based
-            // routes), to avoid `- GET /x  (GET /x)` duplication.
-            let symbol = str_field(item, "symbol");
-            let method = str_field(item, "method");
-            let path = str_field(item, "path");
-            let route = match (method.is_empty(), path.is_empty()) {
-                (false, false) => format!("{method} {path}"),
-                (true, false) => path.to_string(),
-                _ => String::new(),
-            };
-            let route = if route.is_empty() || route == symbol {
-                String::new()
-            } else {
-                format!("  ({route})")
-            };
-            format!(
-                "- {}{}  {}{}\n",
-                symbol,
-                route,
-                str_field(item, "file"),
-                role
-            )
-        }
+        "entrypoints" => render_entrypoint(item),
         "foundational_files" => format!(
             "- {}  ({} dependents, {} refs)\n",
             str_field(item, "file"),
             u64_field(item, "dependents"),
             u64_field(item, "count"),
         ),
-        "subsystems" => {
-            let name = str_field(item, "name");
-            let members: Vec<&str> = item
-                .get("members")
-                .and_then(|m| m.as_array())
-                .map(|a| a.iter().filter_map(|m| m.as_str()).collect())
-                .unwrap_or_default();
-            let omitted = u64_field(item, "membersOmitted");
-            let more = if omitted > 0 {
-                format!(" (+{omitted} more)")
-            } else {
-                String::new()
-            };
-            format!("- {name}: {}{more}\n", members.join(", "))
-        }
-        "symbols" => {
-            let owner = str_field(item, "owner");
-            let qualified = if owner.is_empty() {
-                str_field(item, "symbol").to_string()
-            } else {
-                format!("{owner}::{}", str_field(item, "symbol"))
-            };
-            format!(
-                "- {}  {}  ({} callers)\n",
-                qualified,
-                str_field(item, "file"),
-                u64_field(item, "callers"),
-            )
-        }
+        "subsystems" => render_subsystem(item),
+        "symbols" => render_symbol(item),
         "hotspots" => format!(
             "- {}  (score {}, complexity {}, churn {})\n",
             str_field(item, "file"),
@@ -850,37 +859,90 @@ fn render_nav_map_item(section: &str, item: &serde_json::Value) -> String {
             u64_field(item, "complexity"),
             u64_field(item, "churn"),
         ),
-        "flows" => {
-            // nav_map already ranks flows biggest-first and embeds a bounded
-            // summary per flow (`nodeCount` = full size, `root` = capped tree,
-            // `more` = the explore query for the whole tree). The renderer just
-            // pretty-prints that summary; it does no bounding of its own beyond
-            // a recursion-depth safety guard.
-            let node_count = u64_field(item, "nodeCount");
-            let mut out = format!(
-                "- {}  ({} nodes)\n",
-                str_field(item, "entrypoint"),
-                node_count
-            );
-            // Flow nodes reference the summary's `files` table by `f` index
-            // (nav_map interns paths per summary — see `FileInterner`), so the
-            // path table is resolved here and threaded through the walk.
-            let files = item
-                .get("files")
-                .and_then(|f| f.as_array())
-                .map(Vec::as_slice)
-                .unwrap_or(&[]);
-            if let Some(root) = item.get("root") {
-                render_flow_node(root, 1, files, &mut out);
-            }
-            let more = str_field(item, "more");
-            if !more.is_empty() {
-                out.push_str(&format!("  → full tree: {more}\n"));
-            }
-            out
-        }
+        "flows" => render_flow(item),
         _ => format!("- {item}\n"),
     }
+}
+
+fn render_entrypoint(item: &serde_json::Value) -> String {
+    let symbol = str_field(item, "symbol");
+    let role = optional_label(str_field(item, "role"), "[", "]");
+    let method = str_field(item, "method");
+    let path = str_field(item, "path");
+    let route = match (method.is_empty(), path.is_empty()) {
+        (false, false) => format!("{method} {path}"),
+        (true, false) => path.to_string(),
+        _ => String::new(),
+    };
+    let route = if route != symbol {
+        route
+    } else {
+        String::new()
+    };
+    let route = optional_label(&route, "(", ")");
+    format!("- {symbol}{route}  {}{role}\n", str_field(item, "file"))
+}
+
+fn optional_label(value: &str, prefix: &str, suffix: &str) -> String {
+    if value.is_empty() {
+        String::new()
+    } else {
+        format!("  {prefix}{value}{suffix}")
+    }
+}
+
+fn render_subsystem(item: &serde_json::Value) -> String {
+    let members = item
+        .get("members")
+        .and_then(|members| members.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|member| member.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let omitted = u64_field(item, "membersOmitted");
+    let more = if omitted > 0 {
+        format!(" (+{omitted} more)")
+    } else {
+        String::new()
+    };
+    format!("- {}: {members}{more}\n", str_field(item, "name"))
+}
+
+fn render_symbol(item: &serde_json::Value) -> String {
+    let owner = str_field(item, "owner");
+    let symbol = str_field(item, "symbol");
+    let qualified = if owner.is_empty() {
+        symbol.to_string()
+    } else {
+        format!("{owner}::{symbol}")
+    };
+    format!(
+        "- {qualified}  {}  ({} callers)\n",
+        str_field(item, "file"),
+        u64_field(item, "callers"),
+    )
+}
+
+fn render_flow(item: &serde_json::Value) -> String {
+    let mut out = format!(
+        "- {}  ({} nodes)\n",
+        str_field(item, "entrypoint"),
+        u64_field(item, "nodeCount")
+    );
+    let files = item
+        .get("files")
+        .and_then(|files| files.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    if let Some(root) = item.get("root") {
+        render_flow_node(root, 1, files, &mut out);
+    }
+    let more = str_field(item, "more");
+    if !more.is_empty() {
+        out.push_str(&format!("  → full tree: {more}\n"));
+    }
+    out
 }
 
 /// Hard recursion-depth guard for the flow renderer. The JSON it renders is

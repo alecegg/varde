@@ -1,8 +1,9 @@
 # Optional `varde-code` CLI
 
-An optional Rust CLI on PATH. If `command -v varde-code` finds nothing, ignore
-this file and use Read/Grep/Glob — not an error, and never build or install it
-yourself. Index once per session first:
+`varde-code` is an optional Rust CLI on PATH. If
+`command -v varde-code` finds nothing, use Read/Grep/Glob. Its absence is not
+an error. Never build or install it yourself. When the decision below selects
+the CLI, build its index once before other commands:
 
 ```bash
 varde-code build --repo-root "$(pwd)"   # full rebuild each time
@@ -10,10 +11,20 @@ varde-code build --repo-root "$(pwd)"   # full rebuild each time
 
 Every command prints `{"ok": true, "data": ...}` or `{"ok": false, "error": {...}}`.
 
+## Decision rule
+
+- **Discovery and relationships:** Use Varde Code for unknown scope,
+  dependencies, types, tests, and blast radius.
+- **Known content:** Read short, located files directly.
+- **Large known files:** Use `get_symbol` for one exact symbol.
+- **Batch related lookups:** Build once, then batch related queries.
+- **New or trivial targets:** Skip indexing.
+- **Confirmation:** Confirm important CLI results against focused source reads.
+
 ## Operations
 
-Treat every result as a focused reading list, then confirm the important
-relationships against the actual source.
+Use every result as a focused reading list. Confirm important relationships
+against the actual source.
 
 ```bash
 # Orient in an unfamiliar repository — start here
@@ -54,7 +65,7 @@ retry that call once with escalated filesystem access, keeping the command
 unchanged. If approval is unavailable, denied, or the retry fails, use Read/Grep
 for that lookup and name the degraded capability in your next message.
 
-On any other failure, fall back to Read/Grep for that one lookup and carry on
-using the CLI for the rest of the run. A call that *succeeds* but looks
-implausible — zero dependents for a symbol you know is exported — is not a
-failure; spot-check with a targeted grep before trusting it.
+On any other failure, use Read/Grep for that lookup and keep using the CLI for
+the rest of the run. If a successful result looks implausible, such as zero
+dependents for an exported symbol, spot-check it with targeted grep before
+trusting it.

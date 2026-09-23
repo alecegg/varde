@@ -145,6 +145,30 @@ fn data_class_file_ids(conn: &Connection) -> Result<HashSet<i64>, ApiError> {
 pub fn leaderboard(conn: &Connection, limit: Option<usize>) -> Result<serde_json::Value, ApiError> {
     let dependents_by_file = distinct_dependents_by_file(conn)?;
     let data_classes = data_class_file_ids(conn)?;
+    let mut ranked = foundational_candidates(conn, &dependents_by_file, &data_classes)?;
+    ranked.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then_with(|| b.1.cmp(&a.1))
+            .then_with(|| b.2.cmp(&a.2))
+            .then_with(|| a.3.cmp(&b.3))
+    });
+    if let Some(limit) = limit {
+        ranked.truncate(limit);
+    }
+
+    Ok(serde_json::json!(
+        ranked
+            .into_iter()
+            .map(|(_, dependents, fan_in, path)| foundational_entry(path, dependents, fan_in))
+            .collect::<Vec<_>>()
+    ))
+}
+
+fn foundational_candidates(
+    conn: &Connection,
+    dependents_by_file: &HashMap<i64, i64>,
+    data_classes: &HashSet<i64>,
+) -> Result<Vec<(bool, i64, i64, String)>, ApiError> {
     let mut stmt = conn
         .prepare(
             "SELECT id, path, fan_in FROM files
@@ -161,12 +185,6 @@ pub fn leaderboard(conn: &Connection, limit: Option<usize>) -> Result<serde_json
         })
         .map_err(db_err)?;
 
-    // (is_data_class, dependents, fan_in, path) — collected first so the
-    // leaderboard can be ranked by signals SQL doesn't have to hand: distinct
-    // dependents (the GROUP-BY map above) and the data-class flag (a per-file
-    // method-name heuristic). `is_data_class` is the *primary* discriminator so
-    // heavily-depended-on data holders (a JPA `@Entity`, a DTO) sink below real
-    // modules of comparable fan-in instead of topping the list (audit F9).
     let mut ranked: Vec<(bool, i64, i64, String)> = Vec::new();
     for row in rows {
         let (file_id, path, fan_in) = row.map_err(db_err)?;
@@ -176,47 +194,24 @@ pub fn leaderboard(conn: &Connection, limit: Option<usize>) -> Result<serde_json
         let dependents = dependents_by_file.get(&file_id).copied().unwrap_or(0);
         ranked.push((data_classes.contains(&file_id), dependents, fan_in, path));
     }
-    // Rank: non-data-class first, then distinct dependents desc, then fan_in
-    // desc, then path asc. `false < true`, so ascending on the flag puts real
-    // modules ahead of data classes.
-    ranked.sort_by(|a, b| {
-        a.0.cmp(&b.0)
-            .then_with(|| b.1.cmp(&a.1))
-            .then_with(|| b.2.cmp(&a.2))
-            .then_with(|| a.3.cmp(&b.3))
-    });
-    if let Some(limit) = limit {
-        ranked.truncate(limit);
-    }
+    Ok(ranked)
+}
 
-    let entries: Vec<serde_json::Value> = ranked
-        .into_iter()
-        .map(|(_is_data_class, dependents, fan_in, path)| {
-            // Describe the distinct dependent-file count (the real "how central
-            // is this file" signal), and only add the raw reference total when
-            // it differs — so a broadly-imported core module and a hot utility
-            // called many times from a few files read differently instead of
-            // sharing one boilerplate line.
-            let why = if dependents == fan_in {
-                format!(
-                    "depended on by {dependents} other file{p} in the repo",
-                    p = if dependents == 1 { "" } else { "s" }
-                )
-            } else {
-                format!(
-                    "depended on by {dependents} other file{p} ({fan_in} references total) in the repo",
-                    p = if dependents == 1 { "" } else { "s" }
-                )
-            };
-            serde_json::json!({
-                "file": path,
-                "count": fan_in,
-                "dependents": dependents,
-                "why": why,
-            })
-        })
-        .collect();
-    Ok(serde_json::json!(entries))
+fn foundational_entry(path: String, dependents: i64, fan_in: i64) -> serde_json::Value {
+    let plural = if dependents == 1 { "" } else { "s" };
+    let why = if dependents == fan_in {
+        format!("depended on by {dependents} other file{plural} in the repo")
+    } else {
+        format!(
+            "depended on by {dependents} other file{plural} ({fan_in} references total) in the repo"
+        )
+    };
+    serde_json::json!({
+        "file": path,
+        "count": fan_in,
+        "dependents": dependents,
+        "why": why,
+    })
 }
 
 #[cfg(test)]

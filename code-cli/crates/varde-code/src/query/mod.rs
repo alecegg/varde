@@ -4,9 +4,11 @@
 //! 20 query modes, one function per mode, all sharing one JSON envelope
 //! contract:
 //!
-//! - success: `{"ok": true, "data": <mode payload>, "meta": <output policy>}`
-//! - failure: `{"ok": false, "data": {"error": {"code": "<stable code>",
-//!   "message": "<human-readable message>"}}, "meta": <output policy>}`
+//! - success: `{"schema_version": 1, "ok": true, "outcome": "success",
+//!   "data": <mode payload>, "meta": <output policy>}`
+//! - failure: `{"schema_version": 1, "ok": false, "outcome": "tool-error",
+//!   "data": {"error": {"code": "<stable code>", "message": "<human-readable
+//!   message>"}}, "meta": <output policy>}`
 //!
 //! Every mode except `find_pattern` reads directly from the persisted schema;
 //! nothing re-derives in-memory structures. This module owns the envelope and
@@ -14,6 +16,10 @@
 
 use anyhow::Result;
 use rusqlite::Connection;
+use serde_json::Value;
+
+/// Version of the machine-readable envelope contract.
+pub const ENVELOPE_SCHEMA_VERSION: u64 = 1;
 
 /// A stable machine-readable error code paired with a human message.
 #[derive(Debug, Clone)]
@@ -51,19 +57,43 @@ pub fn render(result: Result<serde_json::Value, ApiError>) -> String {
     render_with_meta(result, crate::query::output::OutputMeta::default())
 }
 
-/// Render one machine-readable result as the shared `{ok, data, meta}` envelope.
+/// Render one machine-readable result as the shared versioned envelope.
 pub fn render_with_meta(
-    result: Result<serde_json::Value, ApiError>,
+    result: Result<Value, ApiError>,
     meta: crate::query::output::OutputMeta,
 ) -> String {
+    render_value_with_meta(result, meta).to_string()
+}
+
+/// Build one machine-readable result envelope as a typed JSON value.
+///
+/// Keeping construction typed lets callers add envelope metadata without
+/// serializing and parsing the payload again.
+pub fn render_value_with_meta(
+    result: Result<Value, ApiError>,
+    meta: crate::query::output::OutputMeta,
+) -> Value {
     match result {
-        Ok(data) => serde_json::json!({ "ok": true, "data": data, "meta": meta }).to_string(),
+        Ok(data) => {
+            let outcome = data
+                .get("outcome")
+                .and_then(Value::as_str)
+                .unwrap_or("success");
+            serde_json::json!({
+                "schema_version": ENVELOPE_SCHEMA_VERSION,
+                "ok": true,
+                "outcome": outcome,
+                "data": data,
+                "meta": meta,
+            })
+        }
         Err(err) => serde_json::json!({
+            "schema_version": ENVELOPE_SCHEMA_VERSION,
             "ok": false,
+            "outcome": "tool-error",
             "data": { "error": { "code": err.code, "message": err.message } },
             "meta": meta,
-        })
-        .to_string(),
+        }),
     }
 }
 
@@ -272,17 +302,29 @@ fn repo_scope(input: &serde_json::Value) -> Option<crate::slice::Scope> {
 
 /// `Scope::File(path)` when a `repoRoot` is present; `None` otherwise.
 fn raw_file_scope(input: &serde_json::Value) -> Option<crate::slice::Scope> {
-    opt_str(input, "repoRoot")?;
-    opt_str(input, "filePath").map(|p| crate::slice::Scope::File(p.to_string()))
+    let root = opt_str(input, "repoRoot")?;
+    opt_str(input, "filePath").map(|p| crate::slice::Scope::File(resolve_scope_path(root, p)))
 }
 
 /// `Scope::File(path)` when a path is given, else `Scope::Repo`, but only
 /// when a `repoRoot` is present (dbPath-only calls skip freshening).
 fn raw_file_or_repo_scope(input: &serde_json::Value) -> Option<crate::slice::Scope> {
-    opt_str(input, "repoRoot")?;
+    let root = opt_str(input, "repoRoot")?;
     match opt_str(input, "filePath").or_else(|| opt_str(input, "file")) {
-        Some(p) => Some(crate::slice::Scope::File(p.to_string())),
+        Some(p) => Some(crate::slice::Scope::File(resolve_scope_path(root, p))),
         None => Some(crate::slice::Scope::Repo),
+    }
+}
+
+fn resolve_scope_path(repo_root: &str, path: &str) -> String {
+    let path = std::path::Path::new(path);
+    if path.is_absolute() {
+        path.display().to_string()
+    } else {
+        std::path::Path::new(repo_root)
+            .join(path)
+            .display()
+            .to_string()
     }
 }
 
@@ -420,7 +462,10 @@ pub fn run_mode(mode: &str, input: &str) -> String {
         }
     };
     let result = dispatch_mode_with_meta(mode, &value);
-    let meta = result.as_ref().map(|(_, meta)| *meta).unwrap_or_default();
+    let meta = result
+        .as_ref()
+        .map(|(_, meta)| meta.clone())
+        .unwrap_or_default();
     render_with_meta(result.map(|(data, _)| data), meta)
 }
 
@@ -433,14 +478,19 @@ fn dispatch_mode_with_meta(
     mode: &str,
     value: &serde_json::Value,
 ) -> Result<(serde_json::Value, crate::query::output::OutputMeta), ApiError> {
-    dispatch_mode_inner(mode, value).map(|mut data| {
+    dispatch_mode_inner(mode, value).and_then(|mut data| {
+        let pagination = crate::query::output::paginate_query(mode, value, &mut data)?;
         // Single output boundary for every mode (and, via `batch`, each of its
         // sub-calls): repo-relative paths (F5) + line-only spans (F6). Both
         // transforms are idempotent, so a `batch` payload seeing this twice —
         // once per sub-call with that call's own `repoRoot`, once for the
         // aggregate — is harmless.
-        let meta = crate::query::output::postprocess(&mut data, value);
-        (data, meta)
+        let mut meta = crate::query::output::postprocess(&mut data, value);
+        if pagination.is_some() {
+            meta.truncated = true;
+            meta.pagination = pagination;
+        }
+        Ok((data, meta))
     })
 }
 
@@ -448,35 +498,41 @@ fn dispatch_mode_inner(
     mode: &str,
     value: &serde_json::Value,
 ) -> Result<serde_json::Value, ApiError> {
-    match mode {
-        "symbols_in_file" => crate::query::simple::symbols_in_file(value),
-        "symbols_in_files" => crate::query::simple::symbols_in_files(value),
-        "get_symbol" => crate::query::simple::get_symbol(value),
-        "tests_for_file" => crate::query::simple::tests_for_file(value),
-        "find_imports" => crate::query::simple::find_imports(value),
-        "filter_symbols" => crate::query::simple::filter_symbols(value),
-        "dependencies" => crate::query::graph::dependencies(value),
-        "dependents" => crate::query::graph::dependents(value),
-        "blast_radius" => crate::query::graph::blast_radius(value),
-        "symbol_blast_radius" => crate::query::graph::symbol_blast_radius(value),
-        "type_hierarchy" => crate::query::graph::type_hierarchy(value),
-        "explore" => crate::query::graph::explore(value),
-        "map_file" => crate::query::mapping::map_file(value),
-        "map_symbol" => crate::query::mapping::map_symbol(value),
-        "map_path" => crate::query::mapping::map_path(value),
-        "detect_changes" => crate::query::mapping::detect_changes(value),
-        "hotspots" => crate::query::mapping::hotspots(value),
-        "clusters" => crate::query::mapping::clusters(value),
-        "context_pack" => crate::query::mapping::context_pack(value),
-        "nav_map" => crate::query::nav_map::nav_map(value),
-        "find_pattern" => crate::query::find_pattern::find_pattern(value),
-        "slice_state" => slice_state(value),
-        "batch" => batch(value),
-        other => Err(ApiError::new(
-            "unknown_mode",
-            format!("unknown query mode {other:?}"),
-        )),
-    }
+    type Handler = fn(&serde_json::Value) -> Result<serde_json::Value, ApiError>;
+    const HANDLERS: &[(&str, Handler)] = &[
+        ("symbols_in_file", crate::query::simple::symbols_in_file),
+        ("symbols_in_files", crate::query::simple::symbols_in_files),
+        ("get_symbol", crate::query::simple::get_symbol),
+        ("tests_for_file", crate::query::simple::tests_for_file),
+        ("find_imports", crate::query::simple::find_imports),
+        ("filter_symbols", crate::query::simple::filter_symbols),
+        ("dependencies", crate::query::graph::dependencies),
+        ("dependents", crate::query::graph::dependents),
+        ("blast_radius", crate::query::graph::blast_radius),
+        (
+            "symbol_blast_radius",
+            crate::query::graph::symbol_blast_radius,
+        ),
+        ("type_hierarchy", crate::query::graph::type_hierarchy),
+        ("explore", crate::query::graph::explore),
+        ("map_file", crate::query::mapping::map_file),
+        ("map_symbol", crate::query::mapping::map_symbol),
+        ("map_path", crate::query::mapping::map_path),
+        ("detect_changes", crate::query::mapping::detect_changes),
+        ("hotspots", crate::query::mapping::hotspots),
+        ("clusters", crate::query::mapping::clusters),
+        ("context_pack", crate::query::mapping::context_pack),
+        ("nav_map", crate::query::nav_map::nav_map),
+        ("find_pattern", crate::query::find_pattern::find_pattern),
+        ("slice_state", slice_state),
+        ("batch", batch),
+    ];
+
+    let handler = HANDLERS
+        .iter()
+        .find_map(|(name, handler)| (*name == mode).then_some(*handler))
+        .ok_or_else(|| ApiError::new("unknown_mode", format!("unknown query mode {mode:?}")))?;
+    handler(value)
 }
 
 /// `--why` style slice freshness dump for a repo (see [`crate::slice::dump_state`]).
@@ -541,20 +597,13 @@ fn batch_result(
     mode: Option<&str>,
     result: Result<(serde_json::Value, crate::query::output::OutputMeta), ApiError>,
 ) -> serde_json::Value {
-    match result {
-        Ok((data, meta)) => serde_json::json!({
-            "mode": mode,
-            "ok": true,
-            "data": data,
-            "meta": meta,
-        }),
-        Err(error) => serde_json::json!({
-            "mode": mode,
-            "ok": false,
-            "data": { "error": { "code": error.code, "message": error.message } },
-            "meta": crate::query::output::OutputMeta::default(),
-        }),
-    }
+    let meta = result
+        .as_ref()
+        .map(|(_, meta)| meta.clone())
+        .unwrap_or_default();
+    let mut envelope = render_value_with_meta(result.map(|(data, _)| data), meta);
+    envelope["mode"] = mode.map_or(Value::Null, Value::from);
+    envelope
 }
 
 /// A batch call's own `repoRoot`/`dbPath` wins; otherwise it inherits the

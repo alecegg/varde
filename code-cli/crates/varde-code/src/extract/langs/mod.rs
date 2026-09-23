@@ -33,6 +33,34 @@ use crate::model::{Entity, EntityKind};
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
 
+/// Stable complexity name for symbolic short-circuit operators.
+pub(super) fn boolean_operator_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<&'static str> {
+    match node.field("operator")?.text().as_ref() {
+        "&&" => Some("logical_and"),
+        "||" => Some("logical_or"),
+        _ => None,
+    }
+}
+
+/// Emit the shared Java-family `do` statement representation.
+pub(super) fn visit_do_statement(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    if kind != "do_statement" {
+        return false;
+    }
+    ctx.push(
+        EntityKind::ControlFlow,
+        "do_while_statement".to_string(),
+        node,
+    );
+    true
+}
+
 /// Emit entities for `node` (called for every node in the tree). Languages
 /// without a visitor yet match nothing.
 pub fn visit(
@@ -40,6 +68,17 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_primary(node, kind, ctx) {
+        return;
+    }
+    visit_secondary(node, kind, ctx);
+}
+
+fn visit_primary(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match ctx.lang {
         SupportLang::TypeScript => ts::visit(node, kind, ctx),
         SupportLang::Tsx => tsx::visit(node, kind, ctx),
@@ -52,6 +91,17 @@ pub fn visit(
         SupportLang::Dart => dart::visit(node, kind, ctx),
         SupportLang::Elixir => elixir::visit(node, kind, ctx),
         SupportLang::Kotlin => kotlin::visit(node, kind, ctx),
+        _ => return false,
+    }
+    true
+}
+
+fn visit_secondary(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) {
+    match ctx.lang {
         SupportLang::Swift => swift::visit(node, kind, ctx),
         SupportLang::Python => python::visit(node, kind, ctx),
         SupportLang::Php => php::visit(node, kind, ctx),
@@ -131,16 +181,23 @@ fn modifier_wrapper_has_async(wrapper: &ast_grep_core::Node<'_, StrDoc<SupportLa
     })
 }
 
-/// Whether a function entity's node is a test function, based on a preceding
-/// attribute (Rust `#[test]`, `#[tokio::test]`, `#[rstest]`, etc.).
+/// Whether a node belongs to test-only code.
 ///
-/// Only Rust is handled today (this repo's own codebase is Rust-only); other
-/// languages always report `false`. Rust attributes are sibling
-/// `attribute_item` nodes preceding the function in the source, not children
-/// of the function node itself, so this walks backward over immediately
-/// preceding siblings (stopping at the first non-attribute, non-comment
-/// node) and checks each attribute's macro path.
+/// Rust test attributes precede functions as sibling nodes. Helper functions
+/// and control-flow nodes can instead inherit `#[cfg(test)]` from an enclosing
+/// module. Both forms must be excluded from production-oriented scan rules.
 pub fn node_is_test(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    preceding_attributes(node)
+        .into_iter()
+        .any(|text| attribute_is_test(&text))
+        || node.ancestors().skip(1).any(|ancestor| {
+            preceding_attributes(&ancestor)
+                .into_iter()
+                .any(|text| attribute_is_cfg_test(&text) || attribute_is_test(&text))
+        })
+}
+
+fn preceding_attributes(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Vec<String> {
     node.prev_all()
         .take_while(|sib| {
             matches!(
@@ -148,9 +205,16 @@ pub fn node_is_test(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool
                 "attribute_item" | "line_comment" | "block_comment"
             )
         })
-        .any(|sib| {
-            sib.kind().as_ref() == "attribute_item" && attribute_is_test(sib.text().as_ref())
-        })
+        .filter(|sib| sib.kind().as_ref() == "attribute_item")
+        .map(|sib| sib.text().into_owned())
+        .collect()
+}
+
+fn attribute_is_cfg_test(attr_text: &str) -> bool {
+    attr_text
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .eq("#[cfg(test)]".chars())
 }
 
 /// Whether a Rust attribute's macro path names a test attribute: bare
@@ -177,17 +241,27 @@ fn attribute_is_test(attr_text: &str) -> bool {
 /// Node kinds that introduce a named function scope (for `enclosing_function`
 /// linkage on control-flow/error entities).
 pub fn function_scopes(lang: SupportLang) -> &'static [&'static str] {
+    function_scopes_primary(lang).unwrap_or_else(|| function_scopes_secondary(lang))
+}
+
+fn function_scopes_primary(lang: SupportLang) -> Option<&'static [&'static str]> {
     match lang {
-        SupportLang::TypeScript | SupportLang::Tsx => ts::FUNCTION_SCOPES,
-        SupportLang::JavaScript => javascript::FUNCTION_SCOPES,
-        SupportLang::C => c::FUNCTION_SCOPES,
-        SupportLang::Cpp => cpp::FUNCTION_SCOPES,
-        SupportLang::Go => go::FUNCTION_SCOPES,
-        SupportLang::Java => java::FUNCTION_SCOPES,
-        SupportLang::CSharp => cs::FUNCTION_SCOPES,
-        SupportLang::Dart => dart::FUNCTION_SCOPES,
-        SupportLang::Kotlin => kotlin::FUNCTION_SCOPES,
-        SupportLang::Swift => swift::FUNCTION_SCOPES,
+        SupportLang::TypeScript | SupportLang::Tsx => Some(ts::FUNCTION_SCOPES),
+        SupportLang::JavaScript => Some(javascript::FUNCTION_SCOPES),
+        SupportLang::C => Some(c::FUNCTION_SCOPES),
+        SupportLang::Cpp => Some(cpp::FUNCTION_SCOPES),
+        SupportLang::Go => Some(go::FUNCTION_SCOPES),
+        SupportLang::Java => Some(java::FUNCTION_SCOPES),
+        SupportLang::CSharp => Some(cs::FUNCTION_SCOPES),
+        SupportLang::Dart => Some(dart::FUNCTION_SCOPES),
+        SupportLang::Kotlin => Some(kotlin::FUNCTION_SCOPES),
+        SupportLang::Swift => Some(swift::FUNCTION_SCOPES),
+        _ => None,
+    }
+}
+
+fn function_scopes_secondary(lang: SupportLang) -> &'static [&'static str] {
+    match lang {
         SupportLang::Python => python::FUNCTION_SCOPES,
         SupportLang::Php => php::FUNCTION_SCOPES,
         SupportLang::Lua => lua::FUNCTION_SCOPES,
@@ -303,28 +377,40 @@ pub fn required_kinds(lang: SupportLang) -> Vec<EntityKind> {
         Route,
         Response,
     ];
+    required_kinds_primary(lang)
+        .or_else(|| required_kinds_secondary(lang))
+        .unwrap_or(all)
+}
+
+fn required_kinds_primary(lang: SupportLang) -> Option<Vec<EntityKind>> {
     match lang {
-        SupportLang::TypeScript | SupportLang::Tsx => ts::REQUIRED_KINDS.to_vec(),
-        SupportLang::JavaScript => javascript::REQUIRED_KINDS.to_vec(),
-        SupportLang::C => c::REQUIRED_KINDS.to_vec(),
-        SupportLang::Cpp => cpp::REQUIRED_KINDS.to_vec(),
-        SupportLang::Go => go::REQUIRED_KINDS.to_vec(),
-        SupportLang::Java => java::REQUIRED_KINDS.to_vec(),
-        SupportLang::CSharp => cs::REQUIRED_KINDS.to_vec(),
-        SupportLang::Dart => dart::REQUIRED_KINDS.to_vec(),
-        SupportLang::Elixir => elixir::REQUIRED_KINDS.to_vec(),
-        SupportLang::Kotlin => kotlin::REQUIRED_KINDS.to_vec(),
-        SupportLang::Swift => swift::REQUIRED_KINDS.to_vec(),
-        SupportLang::Python => python::REQUIRED_KINDS.to_vec(),
-        SupportLang::Php => php::REQUIRED_KINDS.to_vec(),
-        SupportLang::Lua => lua::REQUIRED_KINDS.to_vec(),
-        SupportLang::Ruby => ruby::REQUIRED_KINDS.to_vec(),
-        SupportLang::Rust => rust::REQUIRED_KINDS.to_vec(),
-        SupportLang::Scala => scala::REQUIRED_KINDS.to_vec(),
-        SupportLang::Solidity => solidity::REQUIRED_KINDS.to_vec(),
-        SupportLang::Haskell => haskell::REQUIRED_KINDS.to_vec(),
-        SupportLang::Bash => bash::REQUIRED_KINDS.to_vec(),
-        _ => all,
+        SupportLang::TypeScript | SupportLang::Tsx => Some(ts::REQUIRED_KINDS.to_vec()),
+        SupportLang::JavaScript => Some(javascript::REQUIRED_KINDS.to_vec()),
+        SupportLang::C => Some(c::REQUIRED_KINDS.to_vec()),
+        SupportLang::Cpp => Some(cpp::REQUIRED_KINDS.to_vec()),
+        SupportLang::Go => Some(go::REQUIRED_KINDS.to_vec()),
+        SupportLang::Java => Some(java::REQUIRED_KINDS.to_vec()),
+        SupportLang::CSharp => Some(cs::REQUIRED_KINDS.to_vec()),
+        SupportLang::Dart => Some(dart::REQUIRED_KINDS.to_vec()),
+        SupportLang::Elixir => Some(elixir::REQUIRED_KINDS.to_vec()),
+        SupportLang::Kotlin => Some(kotlin::REQUIRED_KINDS.to_vec()),
+        SupportLang::Swift => Some(swift::REQUIRED_KINDS.to_vec()),
+        _ => None,
+    }
+}
+
+fn required_kinds_secondary(lang: SupportLang) -> Option<Vec<EntityKind>> {
+    match lang {
+        SupportLang::Python => Some(python::REQUIRED_KINDS.to_vec()),
+        SupportLang::Php => Some(php::REQUIRED_KINDS.to_vec()),
+        SupportLang::Lua => Some(lua::REQUIRED_KINDS.to_vec()),
+        SupportLang::Ruby => Some(ruby::REQUIRED_KINDS.to_vec()),
+        SupportLang::Rust => Some(rust::REQUIRED_KINDS.to_vec()),
+        SupportLang::Scala => Some(scala::REQUIRED_KINDS.to_vec()),
+        SupportLang::Solidity => Some(solidity::REQUIRED_KINDS.to_vec()),
+        SupportLang::Haskell => Some(haskell::REQUIRED_KINDS.to_vec()),
+        SupportLang::Bash => Some(bash::REQUIRED_KINDS.to_vec()),
+        _ => None,
     }
 }
 
@@ -515,5 +601,51 @@ mod node_is_test_tests {
     fn plain_function_is_not_a_test() {
         let flags = is_test_flags("fn a() {}\n");
         assert!(!flags["a"]);
+    }
+
+    #[test]
+    fn recognizes_helpers_inside_cfg_test_modules() {
+        let flags = is_test_flags(
+            "#[cfg(test)]\nmod tests {\n    fn helper() {}\n    #[test]\n    fn case() {}\n}\nfn production() {}\n",
+        );
+        assert!(flags["helper"]);
+        assert!(flags["case"]);
+        assert!(!flags["production"]);
+    }
+
+    #[test]
+    fn marks_control_flow_inside_tests_only() {
+        let parsed = crate::parse::parse_source(
+            &SupportLang::Rust,
+            "#[cfg(test)]\nmod tests { fn helper() { if true {} } }\nfn production() { if true {} }\n",
+        );
+        let result = crate::extract::extract(&parsed, 0);
+        let flags: Vec<bool> = result
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.is_test)
+            .collect();
+        assert_eq!(flags, vec![true, false]);
+        assert_eq!(
+            crate::complexity::cyclomatic_for_entities(&result.entities),
+            2
+        );
+    }
+
+    #[test]
+    fn marks_callable_boundaries_inside_test_functions() {
+        let parsed = crate::parse::parse_source(
+            &SupportLang::Rust,
+            "#[test]\nfn case() { run(|| { work(); }); }\nfn production() { run(|| work()); }\n",
+        );
+        let result = crate::extract::extract(&parsed, 0);
+        let flags = result
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+            .map(|entity| entity.is_test)
+            .collect::<Vec<_>>();
+        assert_eq!(flags, vec![true, false]);
     }
 }

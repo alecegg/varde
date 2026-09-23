@@ -2,7 +2,7 @@
 
 ## One-off commands (no `scripts/` needed)
 
-When an existing package already does the job, reference it directly in `SKILL.md` via an auto-resolving runner instead of bundling anything:
+When an existing package already does the job, reference it in `SKILL.md` through an auto-resolving runner instead of bundling it:
 
 - `uvx ruff@0.8.0 check .` (Python, via uv; not bundled, fast/cached)
 - `pipx run 'black==24.10.0' .` (Python; mature alternative to uvx)
@@ -28,7 +28,7 @@ Then give the bundle's exact invocation steps.
 
 ## Self-contained scripts (own dependencies, no separate install step)
 
-- **Python**: PEP 723 inline metadata block, run with `uv run scripts/extract.py` (or `pipx run`):
+- **Python**: PEP 723 inline metadata block, run with uv (or `pipx run`) — e.g. `uv run scripts/<name>.py`:
   ```python
   # /// script
   # dependencies = ["beautifulsoup4"]
@@ -42,7 +42,7 @@ Then give the bundle's exact invocation steps.
 ## Designing scripts for agentic use
 
 - **No interactive prompts** — agents run in non-interactive shells and cannot answer TTY prompts; a blocking prompt hangs forever. Accept everything via flags/env/stdin, and fail with a message telling the agent what flag to pass instead.
-- **`--help` output** is the primary interface doc an agent reads — keep it concise (it enters context): description, flags, 1-2 usage examples.
+- **`--help` output** is the script's interface documentation. Keep it concise because agents read it: description, flags, and 1-2 usage examples.
 - **Helpful error messages**: state what went wrong, what was expected, what to try — not "Error: invalid input."
 - **Structured output** (JSON/CSV/TSV) over whitespace-aligned text, so both the agent and `jq`/`awk` can consume it. Send data to stdout, diagnostics/progress/warnings to stderr, so the agent can capture clean parseable output while still seeing diagnostics.
 - **Idempotency**: agents may retry — "create if not exists" beats "create and fail on duplicate."

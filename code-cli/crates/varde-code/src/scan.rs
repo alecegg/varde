@@ -60,6 +60,10 @@ pub fn list_source_listing(path: &str) -> Result<SourceListing> {
         });
     }
 
+    list_directory(root)
+}
+
+fn list_directory(root: &Path) -> Result<SourceListing> {
     let collected = std::sync::Mutex::new(Vec::<SourceFile>::new());
     let diagnostics = std::sync::Mutex::new(Vec::<Diagnostic>::new());
     ignore::WalkBuilder::new(root)
@@ -70,10 +74,11 @@ pub fn list_source_listing(path: &str) -> Result<SourceListing> {
             Box::new(|result| {
                 match result {
                     Ok(entry) if entry.file_type().is_some_and(|ft| ft.is_file()) => {
+                        let file = source_file_from_entry(&entry);
                         collected
                             .lock()
                             .expect("walk collector lock poisoned")
-                            .push(source_file_from_entry(&entry));
+                            .push(file);
                     }
                     Ok(_) => {}
                     Err(error) => {
@@ -223,7 +228,7 @@ fn content_hash(contents: &[u8]) -> String {
 /// sequential and was the dominant cost in `build`'s scan phase — see
 /// `BENCHMARK.md`.
 pub fn run(path: &str) -> Result<ExtractOutput> {
-    tracing::info!(file = path, "extracting");
+    tracing::debug!(file = path, "extracting");
     let profile = std::env::var_os("VARDE_PROFILE").is_some();
     let t = std::time::Instant::now();
     let SourceListing {
@@ -263,33 +268,10 @@ pub fn run(path: &str) -> Result<ExtractOutput> {
         );
     }
 
-    // Reserve exact capacity up front from counts already computed by the
-    // parallel step above: without this, `extend` below regrows `entities`/
-    // `symbols` by doubling as files merge in, and at repo scale (millions
-    // of entities) the last few doublings each copy a multi-million-element
-    // Vec of non-trivial structs — real, measured cost (see BENCHMARK.md).
-    let (entity_total, symbol_total) = processed.iter().fold((0, 0), |(e, s), p| match &p.result {
-        FileResult::Extracted {
-            entities, symbols, ..
-        } => (e + entities.len(), s + symbols.len()),
-        FileResult::Diagnostic(_) => (e, s),
-    });
+    let (entity_total, symbol_total) = extracted_capacities(&processed);
     output.entities.reserve_exact(entity_total);
     output.symbols.reserve_exact(symbol_total);
-
-    for (file, processed) in files.into_iter().zip(processed) {
-        let ProcessedFile {
-            content_hash,
-            result,
-        } = processed;
-        output.file_meta.push(FileMeta {
-            mtime: file.mtime,
-            size: file.size,
-            content_hash,
-        });
-        output.files.push(file.path);
-        merge(&mut output, result);
-    }
+    merge_processed_files(&mut output, files, processed);
     if profile {
         eprintln!(
             "VARDE_PROFILE scan: sequential merge done at {:?}",
@@ -297,13 +279,45 @@ pub fn run(path: &str) -> Result<ExtractOutput> {
         );
     }
 
-    tracing::info!(
+    tracing::debug!(
         entities = output.entities.len(),
         symbols = output.symbols.len(),
         diagnostics = output.diagnostics.len(),
         "extract complete"
     );
     Ok(output)
+}
+
+fn merge_processed_files(
+    output: &mut ExtractOutput,
+    files: Vec<SourceFile>,
+    processed: Vec<ProcessedFile>,
+) {
+    for (file, processed) in files.into_iter().zip(processed) {
+        output.file_meta.push(FileMeta {
+            mtime: file.mtime,
+            size: file.size,
+            content_hash: processed.content_hash,
+        });
+        output.files.push(file.path);
+        merge(output, processed.result);
+    }
+}
+
+fn extracted_capacities(processed: &[ProcessedFile]) -> (usize, usize) {
+    processed
+        .iter()
+        .fold((0, 0), |(entities, symbols), file| match &file.result {
+            FileResult::Extracted {
+                entities: found_entities,
+                symbols: found_symbols,
+                ..
+            } => (
+                entities + found_entities.len(),
+                symbols + found_symbols.len(),
+            ),
+            FileResult::Diagnostic(_) => (entities, symbols),
+        })
 }
 
 enum FileResult {
@@ -375,10 +389,25 @@ pub(crate) fn parse_chunk(files: &[SourceFile], start_index: usize) -> ChunkPars
         .map(|(i, file)| process_file(Path::new(&file.path), (start_index + i) as u32))
         .collect();
 
+    let (entity_total, symbol_total, diagnostic_total) =
+        processed
+            .iter()
+            .fold((0, 0, 0), |(e, s, d), p| match &p.result {
+                FileResult::Extracted {
+                    entities,
+                    symbols,
+                    diagnostic,
+                } => (
+                    e + entities.len(),
+                    s + symbols.len(),
+                    d + usize::from(diagnostic.is_some()),
+                ),
+                FileResult::Diagnostic(_) => (e, s, d + 1),
+            });
     let mut parsed = ChunkParsed {
-        entities: Vec::new(),
-        symbols: Vec::new(),
-        diagnostics: Vec::new(),
+        entities: Vec::with_capacity(entity_total),
+        symbols: Vec::with_capacity(symbol_total),
+        diagnostics: Vec::with_capacity(diagnostic_total),
         content_hashes: Vec::with_capacity(files.len()),
     };
     for p in processed {
@@ -410,59 +439,18 @@ pub(crate) fn parse_chunk(files: &[SourceFile], start_index: usize) -> ChunkPars
 /// empty-content hash.
 fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
     let Some(lang) = language_for_path(path) else {
-        let msg = "unsupported file type — skipped";
-        // debug, not warn: fires once per non-source file walked (docs,
-        // assets, configs) — often the majority of files in a repo. The
-        // info-severity `Diagnostic` below is the persisted record; this is
-        // just a log echo, and at warn-level it dominated `build`'s log
-        // output on large repos.
-        tracing::debug!(file = %path.display(), "{msg}");
-        return ProcessedFile {
-            content_hash: content_hash(&[]),
-            result: FileResult::Diagnostic(Diagnostic {
-                file_id: Some(file_id),
-                path: path.display().to_string(),
-                message: msg.to_string(),
-                severity: "info".to_string(),
-            }),
-        };
+        return skipped_file(path, file_id, "unsupported file type — skipped", "info");
     };
 
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
-        Err(_) => {
-            // Unreadable source file (e.g. permission denied) — same skip
-            // diagnostic as a binary body, with a stable empty-content hash.
-            let msg = "binary or non-UTF-8 — skipped";
-            tracing::warn!(file = %path.display(), "{msg}");
-            return ProcessedFile {
-                content_hash: content_hash(&[]),
-                result: FileResult::Diagnostic(Diagnostic {
-                    file_id: Some(file_id),
-                    path: path.display().to_string(),
-                    message: msg.to_string(),
-                    severity: "error".to_string(),
-                }),
-            };
-        }
+        Err(_) => return skipped_file(path, file_id, "binary or non-UTF-8 — skipped", "error"),
     };
     let content_hash = content_hash(&bytes);
 
     let source = match std::str::from_utf8(&bytes) {
         Ok(source) => source,
-        Err(_) => {
-            let msg = "binary or non-UTF-8 — skipped";
-            tracing::warn!(file = %path.display(), "{msg}");
-            return ProcessedFile {
-                content_hash,
-                result: FileResult::Diagnostic(Diagnostic {
-                    file_id: Some(file_id),
-                    path: path.display().to_string(),
-                    message: msg.to_string(),
-                    severity: "error".to_string(),
-                }),
-            };
-        }
+        Err(_) => return invalid_utf8_file(path, file_id, content_hash),
     };
     // Minified/generated bundles (a checked-in webpack bundle, a protoc `.pb`
     // stub, ...) are machine output, not source an agent navigates. Indexing
@@ -486,6 +474,39 @@ fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
             },
         };
     }
+    extract_source_file(path, file_id, content_hash, lang, source)
+}
+
+fn skipped_file(path: &Path, file_id: u32, message: &str, severity: &str) -> ProcessedFile {
+    if severity == "info" {
+        tracing::debug!(file = %path.display(), "{message}");
+    } else {
+        tracing::warn!(file = %path.display(), "{message}");
+    }
+    ProcessedFile {
+        content_hash: content_hash(&[]),
+        result: FileResult::Diagnostic(Diagnostic {
+            file_id: Some(file_id),
+            path: path.display().to_string(),
+            message: message.to_string(),
+            severity: severity.to_string(),
+        }),
+    }
+}
+
+fn invalid_utf8_file(path: &Path, file_id: u32, content_hash: String) -> ProcessedFile {
+    let mut file = skipped_file(path, file_id, "binary or non-UTF-8 — skipped", "error");
+    file.content_hash = content_hash;
+    file
+}
+
+fn extract_source_file(
+    path: &Path,
+    file_id: u32,
+    content_hash: String,
+    lang: ast_grep_language::SupportLang,
+    source: &str,
+) -> ProcessedFile {
     let parsed = parse_source_for_path(&lang, path, source);
     let result = extract::extract(&parsed, file_id);
     // A syntax error is localized: tree-sitter's error recovery still parses

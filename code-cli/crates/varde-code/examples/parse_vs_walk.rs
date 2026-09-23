@@ -20,53 +20,12 @@ fn main() {
         .nth(1)
         .expect("usage: parse_vs_walk <repo_root>");
     let files = list_source_files(&root).expect("list files");
-
-    // Preload bytes so I/O is out of the timed sections.
-    let mut sources: Vec<(ast_grep_language::SupportLang, String)> = Vec::new();
-    let mut bytes_total = 0usize;
-    for f in &files {
-        let path = std::path::Path::new(&f.path);
-        let Some(lang) = language_for_path(path) else {
-            continue;
-        };
-        let Ok(src) = std::fs::read_to_string(path) else {
-            continue;
-        };
-        bytes_total += src.len();
-        sources.push((lang, src));
-    }
+    let (sources, bytes_total) = load_sources(&files);
     eprintln!("supported files: {}  bytes: {}", sources.len(), bytes_total);
-
-    // Warm once (grammar init, allocator).
-    for (lang, src) in &sources {
-        let p = parse_source(lang, src);
-        std::hint::black_box(extract::extract(&p, 0));
-    }
-
+    warm_sources(&sources);
     let reps = 5;
-
-    let t = Instant::now();
-    for _ in 0..reps {
-        for (lang, src) in &sources {
-            std::hint::black_box(parse_source(lang, src));
-        }
-    }
-    let parse_only = t.elapsed() / reps;
-
-    let t = Instant::now();
-    let mut ent = 0usize;
-    let mut sym = 0usize;
-    for _ in 0..reps {
-        for (lang, src) in &sources {
-            let p = parse_source(lang, src);
-            let r = extract::extract(&p, 0);
-            ent = r.entities.len();
-            sym = r.symbols.len();
-            std::hint::black_box((&r.entities, &r.symbols));
-        }
-    }
-    let parse_plus_walk = t.elapsed() / reps;
-
+    let parse_only = measure_parse(&sources, reps);
+    let (parse_plus_walk, ent, sym) = measure_extract(&sources, reps);
     let walk = parse_plus_walk.saturating_sub(parse_only);
     eprintln!("parse_only        = {parse_only:?}");
     eprintln!("parse+walk        = {parse_plus_walk:?}");
@@ -77,4 +36,56 @@ fn main() {
         walk.as_secs_f64() / parse_plus_walk.as_secs_f64(),
     );
     eprintln!("(last-file entities={ent} symbols={sym})");
+}
+
+type Source = (ast_grep_language::SupportLang, String);
+
+fn load_sources(files: &[varde_code::scan::SourceFile]) -> (Vec<Source>, usize) {
+    let mut sources = Vec::new();
+    let mut bytes_total = 0;
+    for file in files {
+        let path = std::path::Path::new(&file.path);
+        let Some(language) = language_for_path(path) else {
+            continue;
+        };
+        let Ok(source) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        bytes_total += source.len();
+        sources.push((language, source));
+    }
+    (sources, bytes_total)
+}
+
+fn warm_sources(sources: &[Source]) {
+    for (language, source) in sources {
+        let parsed = parse_source(language, source);
+        std::hint::black_box(extract::extract(&parsed, 0));
+    }
+}
+
+fn measure_parse(sources: &[Source], repetitions: u32) -> std::time::Duration {
+    let started = Instant::now();
+    for _ in 0..repetitions {
+        for (language, source) in sources {
+            std::hint::black_box(parse_source(language, source));
+        }
+    }
+    started.elapsed() / repetitions
+}
+
+fn measure_extract(sources: &[Source], repetitions: u32) -> (std::time::Duration, usize, usize) {
+    let started = Instant::now();
+    let mut entity_count = 0;
+    let mut symbol_count = 0;
+    for _ in 0..repetitions {
+        for (language, source) in sources {
+            let parsed = parse_source(language, source);
+            let extracted = extract::extract(&parsed, 0);
+            entity_count = extracted.entities.len();
+            symbol_count = extracted.symbols.len();
+            std::hint::black_box((&extracted.entities, &extracted.symbols));
+        }
+    }
+    (started.elapsed() / repetitions, entity_count, symbol_count)
 }

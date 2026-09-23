@@ -4,7 +4,8 @@
 use crate::extract::entity::{EntityMeta, ExtractCtx, entity};
 use crate::extract::field_name;
 use crate::extract::langs::{
-    chain_status, decorator_name, first_arg_text, push_type_ref, strip_generic_args,
+    boolean_operator_name, chain_status, decorator_name, first_arg_text, push_type_ref,
+    strip_generic_args, visit_do_statement,
 };
 use crate::model::{Entity, EntityKind};
 use ast_grep_core::tree_sitter::StrDoc;
@@ -44,6 +45,41 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    if visit_part_6(node, kind, ctx) {
+        return;
+    }
+    if visit_part_7(node, kind, ctx) {
+        return;
+    }
+    if visit_part_8(node, kind, ctx) {
+        return;
+    }
+    if visit_part_9(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_do_statement(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- structural kinds ----
         "function_declaration" | "generator_function_declaration" => {
@@ -52,6 +88,17 @@ pub fn visit(
         "function_expression" | "generator_function" | "arrow_function" => {
             ctx.push_callable_boundary(node)
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "class_declaration" => {
             let name = field_name(node).unwrap_or_default();
             push_named(node, EntityKind::Class, ctx);
@@ -99,6 +146,17 @@ pub fn visit(
                 ts_emit_decorators(&parent, &name, ctx);
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "interface_declaration" => push_named(node, EntityKind::Interface, ctx),
         // `type X = ...` — a first-class TS type declaration (alias, union,
         // mapped type). Mapped to Interface (the closest structural type kind)
@@ -128,6 +186,17 @@ pub fn visit(
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // Interface method member (`method_signature`, e.g. `foo(): void;`
         // inside `interface Foo { ... }`) — same class-membership need as
         // `method_definition`, just for the interface side of a
@@ -149,7 +218,17 @@ pub fn visit(
                 ctx.push(EntityKind::Variable, name, node);
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- imports ----
         // `import ... from "spec"` -> one Import entity named after the
         // (unquoted) module specifier.
@@ -176,7 +255,6 @@ pub fn visit(
             }
             ctx.out.push(imp);
         }
-
         // ---- statement-level kinds ----
         // const/let -> lexical_declaration, var -> variable_declaration; one
         // Entity per declarator (handles `const a = 1, b = 2;`).
@@ -188,6 +266,25 @@ pub fn visit(
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_6(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    visit_part_6_a(node, kind, ctx) || visit_part_6_b(node, kind, ctx)
+}
+
+fn visit_part_6_a(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // Function/method parameters carry their identifier in the `pattern`
         // field (required_parameter / optional_parameter).
         "required_parameter" | "optional_parameter" => {
@@ -197,33 +294,59 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Parameter, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_6_b(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // export statements: `export { a, b }` yields one Export per
         // specifier; `export function/const/class ...` yields one Export
         // named after the declared symbol.
-        "export_statement" => {
-            let mut names: Vec<String> = Vec::new();
-            // `export { a, b }`: specifiers live under an export_clause.
-            for child in node.children() {
-                if child.kind() == "export_clause" {
-                    for spec in child.children() {
-                        if spec.kind() == "export_specifier"
-                            && let Some(n) = field_name(&spec)
-                        {
-                            names.push(n);
-                        }
-                    }
-                }
-            }
-            if names.is_empty()
-                && let Some(n) = declaration_name(node)
-            {
-                names.push(n);
-            }
-            for name in names {
-                ctx.push(EntityKind::Export, name, node);
-            }
-        }
+        "export_statement" => visit_export_statement(node, ctx),
+        _ => return false,
+    }
+    true
+}
 
+fn export_clause_names(clause: ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Vec<String> {
+    clause
+        .children()
+        .filter(|spec| spec.kind() == "export_specifier")
+        .filter_map(|spec| field_name(&spec))
+        .collect()
+}
+
+fn visit_export_statement(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+) {
+    let mut names: Vec<String> = node
+        .children()
+        .filter(|child| child.kind() == "export_clause")
+        .flat_map(export_clause_names)
+        .collect();
+    if names.is_empty()
+        && let Some(name) = declaration_name(node)
+    {
+        names.push(name);
+    }
+    for name in names {
+        ctx.push(EntityKind::Export, name, node);
+    }
+}
+
+fn visit_part_7(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- expression-level kinds ----
         // Calls: callee text as name. Also the anchor for domain-specific
         // route/response detection.
@@ -270,6 +393,17 @@ pub fn visit(
                 });
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_8(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // Member accesses: property text as name (`a.b` -> "b").
         "member_expression" => {
             let name = node
@@ -290,7 +424,6 @@ pub fn visit(
                 ctx.push(EntityKind::Literal, node.text().into_owned(), node);
             }
         }
-
         // ---- control-flow/error kinds ----
         // catch (err) -> Catch, named after the exception variable.
         "catch_clause" => {
@@ -312,16 +445,53 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Throw, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_9(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // Control flow: name = tree-sitter node kind (superset-safe minimal
         // shape per the plan: kind + span + enclosing linkage).
-        "if_statement" | "for_statement" | "for_in_statement" | "for_of_statement"
-        | "while_statement" | "do_statement" | "switch_statement" | "try_statement"
-        | "ternary_expression" | "return_statement" | "break_statement" | "continue_statement" => {
+        "if_statement" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "switch_case" | "switch_default" => {
+            ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+        }
+        "for_statement" | "for_in_statement" | "for_of_statement" | "while_statement"
+        | "switch_statement" | "try_statement" | "ternary_expression" | "return_statement"
+        | "break_statement" | "continue_statement" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
+}
+
+fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent.kind() == "if_statement"
+            || (parent.kind() == "else_clause"
+                && parent
+                    .parent()
+                    .is_some_and(|outer| outer.kind() == "if_statement"))
+    })
 }
 
 fn push_named(
@@ -601,6 +771,46 @@ mod tests {
             .collect();
         assert_eq!(boundaries.len(), 3, "{entities:?}");
         assert!(boundaries.iter().all(|e| e.name.is_empty()));
+    }
+
+    #[test]
+    fn complexity_events_cover_typescript_decisions() {
+        let src = r#"
+            function f(a: boolean, b: boolean, value: number): number {
+                if (a && b || a) {} else if (b) {}
+                switch (value) { case 1: break; default: break; }
+                do {} while (a);
+                return a ? 1 : 0;
+            }
+        "#;
+        let parsed = parse_source(&SupportLang::TypeScript, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flows: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        for expected in [
+            "logical_and",
+            "logical_or",
+            "elseif_statement",
+            "do_while_statement",
+        ] {
+            assert!(
+                flows.contains(&expected),
+                "missing {expected}: {entities:?}"
+            );
+        }
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| **name == "case_statement")
+                .count(),
+            2,
+            "entities: {entities:?}"
+        );
     }
 
     #[test]

@@ -1,11 +1,11 @@
 //! `scan` orchestration: tie the rule-pack loader and both rule engines
 //! together into one read-and-report flow.
 //!
-//! Flow: open the persisted DB read-only (error if absent/unopenable) →
-//! staleness check against the working tree (error if stale) →
+//! Flow: build or refresh the index against the working tree →
+//! open the persisted DB read-only →
 //! `load_rules(repo_root)` → dispatch `kind=pattern` rules over the source
 //! tree and `kind=sql` rules against the connection → merge findings and
-//! diagnostics from all three sources into `{ findings, diagnostics }`.
+//! rule/source diagnostics into `{ findings, diagnostics, gate }`.
 //!
 //! Named `scan_cli` (distinct from `scan`, the low-level file-listing
 //! module this flow reuses for the pattern-rule file set).
@@ -13,8 +13,10 @@
 use crate::query::ApiError;
 use crate::rules::Severity;
 use crate::rules::rewrite::{RewriteStatus, RewriteTarget};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+
+const DEFAULT_FINDINGS_LIMIT: usize = 100;
 
 /// Required `repoRoot` from the input, validated to be an existing directory.
 /// Shared by the rule-pack management endpoints (`rules_list`/`rules_seed`/
@@ -34,15 +36,21 @@ fn require_repo_dir(input: &serde_json::Value) -> Result<&Path, ApiError> {
 
 /// Resolve `severityThreshold` from the scan input (default `"error"`).
 pub fn severity_threshold(input: &serde_json::Value) -> Result<Severity, ApiError> {
-    match input.get("severityThreshold").and_then(|v| v.as_str()) {
-        None => Ok(Severity::Error),
-        Some(name) => Severity::from_name(name).ok_or_else(|| {
-            ApiError::new(
-                "invalid_input",
-                format!("unknown severityThreshold {name:?} (expected error|warning|info)"),
-            )
-        }),
-    }
+    let Some(value) = input.get("severityThreshold") else {
+        return Ok(Severity::Error);
+    };
+    let Some(name) = value.as_str() else {
+        return Err(ApiError::new(
+            "invalid_input",
+            "severityThreshold must be a string (expected error|warning|info)",
+        ));
+    };
+    Severity::from_name(name).ok_or_else(|| {
+        ApiError::new(
+            "invalid_input",
+            format!("unknown severityThreshold {name:?} (expected error|warning|info)"),
+        )
+    })
 }
 
 /// Whether any finding's severity meets or exceeds `threshold`.
@@ -74,26 +82,31 @@ pub fn findings_at_or_above(payload: &serde_json::Value, threshold: Severity) ->
 /// exactly as before. Non-apply runs emit no `rewrite_status`, so this is
 /// identical to `findings_at_or_above` for them.
 pub fn unresolved_findings_at_or_above(payload: &serde_json::Value, threshold: Severity) -> bool {
+    unresolved_finding_count(payload, threshold) > 0
+}
+
+fn unresolved_finding_count(payload: &serde_json::Value, threshold: Severity) -> usize {
     payload
         .get("findings")
         .and_then(|f| f.as_array())
         .into_iter()
         .flatten()
         .filter(|f| f.get("rewrite_status").and_then(|s| s.as_str()) != Some("applied"))
-        .any(|f| {
+        .filter(|f| {
             f.get("severity")
                 .and_then(|s| s.as_str())
                 .and_then(Severity::from_name)
                 .is_some_and(|severity| severity >= threshold)
         })
+        .count()
 }
 
 /// Run the scan flow for `{ repoRoot, ... }` and return the merged
 /// `{ findings, diagnostics }` payload.
 ///
-/// Tool-level failures — a missing/unopenable database, a stale database,
-/// or an unreadable repo root — are whole-flow `ApiError`s (the CLI renders
-/// the `{ok:false,error}` envelope and exits non-zero). An empty rule pack
+/// Tool-level failures during index refresh or database access, or an
+/// unreadable repo root, are whole-flow `ApiError`s (the CLI renders
+/// the `{ok:false,data:{error},meta}` envelope and exits non-zero). An empty rule pack
 /// is a valid no-op scan: `Ok` with empty arrays.
 ///
 /// `apply: true` (from the `--apply` CLI flag) additionally runs the
@@ -102,6 +115,111 @@ pub fn unresolved_findings_at_or_above(payload: &serde_json::Value, threshold: S
 /// atomic writes. Findings from rules without a `rewrite` template are
 /// never written and never git-gated.
 pub fn scan_repo(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
+    let (repo_path, apply, force, findings_options) = scan_options(input)?;
+    let (rules, rule_diagnostics, origins) = crate::rules::load_rules_with_origins(repo_path);
+    let gate_rules = selected_gate_rules(input, &rules)?;
+    let threshold = severity_threshold(input)?;
+    crate::query::freshen_for_mode("scan", input)?;
+    let conn = open_scan_db(repo_path)?;
+    let (rules, findings, diagnostics) = run_scan_rules(repo_path, &conn, rules, rule_diagnostics)?;
+    let (findings, stale_suppressions) =
+        crate::rules::suppress::filter_findings(filter_generated(findings), repo_path);
+    // An incomplete scan cannot safely rewrite source. Keep the findings and
+    // diagnostics in the successful result so callers can repair the cause.
+    let complete = diagnostics
+        .iter()
+        .all(|diagnostic| !blocks_gate(diagnostic));
+    let statuses = if apply && complete {
+        apply_rewrites(&rules, &findings, repo_path, force)?
+    } else {
+        HashMap::new()
+    };
+    let rewrite_count = rewrite_bearing_count(&rules, &findings);
+    let mut payload = build_scan_payload(findings, diagnostics, stale_suppressions);
+    if apply && complete {
+        attach_rewrite_statuses(&mut payload, &statuses, rewrite_count);
+    }
+    attach_gate(&mut payload, threshold, gate_rules.as_deref());
+    attach_policy(
+        &mut payload,
+        &rules,
+        &origins,
+        threshold,
+        gate_rules.as_deref(),
+    );
+    attach_findings_summary(&mut payload);
+    hoist_rule_legend(&mut payload, &rules);
+    truncate_findings(&mut payload, findings_options);
+    crate::query::output::postprocess(&mut payload, input);
+    Ok(payload)
+}
+
+fn selected_gate_rules(
+    input: &serde_json::Value,
+    rules: &[crate::rules::Rule],
+) -> Result<Option<Vec<String>>, ApiError> {
+    let Some(selection) = input.get("gateRules") else {
+        return Ok(None);
+    };
+    if input.get("severityThreshold").is_some() {
+        return Err(ApiError::new(
+            "invalid_input",
+            "gateRules and severityThreshold are mutually exclusive",
+        ));
+    }
+    let ids = selection
+        .as_array()
+        .filter(|ids| !ids.is_empty())
+        .ok_or_else(|| {
+            ApiError::new(
+                "invalid_input",
+                "gateRules must be a nonempty array of rule IDs",
+            )
+        })?;
+    let mut selected = Vec::with_capacity(ids.len());
+    for id in ids {
+        let id = id.as_str().ok_or_else(|| {
+            ApiError::new("invalid_input", "gateRules entries must be rule ID strings")
+        })?;
+        if !rules.iter().any(|rule| rule.id == id) {
+            return Err(ApiError::new(
+                "invalid_input",
+                format!("unknown active gate rule: {id}"),
+            ));
+        }
+        let rule = rules
+            .iter()
+            .find(|rule| rule.id == id)
+            .expect("active rule checked");
+        if !crate::rules::boundary_configured(rule)
+            .map_err(|reason| ApiError::new("invalid_input", reason))?
+        {
+            return Err(ApiError::new(
+                "invalid_input",
+                format!("gate rule {id} requires source_prefix and target_prefix configuration"),
+            ));
+        }
+        if selected.iter().any(|previous| previous == id) {
+            return Err(ApiError::new(
+                "invalid_input",
+                format!("duplicate gate rule: {id}"),
+            ));
+        }
+        selected.push(id.to_owned());
+    }
+    selected.sort();
+    Ok(Some(selected))
+}
+
+fn scan_options(
+    input: &serde_json::Value,
+) -> Result<(&Path, bool, bool, FindingsOptions), ApiError> {
+    if !input.is_object() {
+        return Err(ApiError::new(
+            "invalid_input",
+            "scan input must be a JSON object",
+        ));
+    }
     let repo_root = crate::query::req_str(input, "repoRoot")?;
     let repo_path = Path::new(repo_root);
     if !repo_path.is_dir() {
@@ -110,229 +228,620 @@ pub fn scan_repo(input: &serde_json::Value) -> Result<serde_json::Value, ApiErro
             format!("repoRoot is not a directory: {repo_root}"),
         ));
     }
-    let apply = input
-        .get("apply")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let force = input
-        .get("force")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let flag = |name| -> Result<bool, ApiError> {
+        match input.get(name) {
+            None => Ok(false),
+            Some(value) => value
+                .as_bool()
+                .ok_or_else(|| ApiError::new("invalid_input", format!("{name} must be a boolean"))),
+        }
+    };
+    let apply = flag("apply")?;
+    let force = flag("force")?;
+    severity_threshold(input)?;
+    let findings_options = findings_options(input)?;
+    if input.get("output").is_some_and(|value| !value.is_string()) {
+        return Err(ApiError::new("invalid_input", "output must be a string"));
+    }
+    Ok((repo_path, apply, force, findings_options))
+}
 
-    // 1. Build-on-read (§ Phase 3): scan's SQL rules read the global slice
-    //    (communities, clone bands, `community_id`) plus churn, so freshen
-    //    those before opening the index. This replaces the old stale/missing
-    //    DB hard errors with freshen-then-scan — every tool is build-on-read.
-    crate::query::freshen_for_mode("scan", input)?;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FindingsOptions {
+    full: bool,
+    limit: usize,
+    offset: usize,
+}
 
-    // 2. Read-only connection to the now-fresh persisted DB.
+fn findings_options(input: &serde_json::Value) -> Result<FindingsOptions, ApiError> {
+    let full = match input.get("fullFindings") {
+        None => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| ApiError::new("invalid_input", "fullFindings must be a boolean"))?,
+    };
+    let number = |name: &str| -> Result<Option<usize>, ApiError> {
+        let Some(value) = input.get(name) else {
+            return Ok(None);
+        };
+        let number = value.as_u64().ok_or_else(|| {
+            ApiError::new(
+                "invalid_input",
+                format!("{name} must be a nonnegative integer"),
+            )
+        })?;
+        usize::try_from(number).map(Some).map_err(|_| {
+            ApiError::new(
+                "invalid_input",
+                format!("{name} is too large for this platform"),
+            )
+        })
+    };
+    let limit = number("findingsLimit")?.unwrap_or(DEFAULT_FINDINGS_LIMIT);
+    if limit == 0 {
+        return Err(ApiError::new(
+            "invalid_input",
+            "findingsLimit must be greater than zero",
+        ));
+    }
+    Ok(FindingsOptions {
+        full,
+        limit,
+        offset: number("findingsOffset")?.unwrap_or(0),
+    })
+}
+
+fn open_scan_db(repo_path: &Path) -> Result<rusqlite::Connection, ApiError> {
     let db_path = crate::db::path::repo_db_path(repo_path);
-    let conn = crate::db::open_read_only(&db_path).map_err(|e| {
+    crate::db::open_read_only(&db_path).map_err(|error| {
         ApiError::new(
             "db_error",
             format!(
-                "database unavailable at {}: {e}; run `varde-code build --repo-root {repo_root}` first",
-                db_path.display()
+                "database unavailable at {}: {error}; run `varde-code build --repo-root {}` first",
+                db_path.display(),
+                repo_path.display()
             ),
         )
-    })?;
+    })
+}
 
-    // 3. Load + merge rule packs (never fails the run — malformed rules are
-    //    skip-and-reported as diagnostics by the loader itself).
-    let (rules, mut diagnostics) = crate::rules::load_rules(repo_path);
+type ScanResults = (
+    Vec<crate::rules::Rule>,
+    Vec<crate::rules::finding::Finding>,
+    Vec<serde_json::Value>,
+);
 
-    // 4. Dispatch: pattern rules over the source tree, SQL rules against
-    //    the open connection. Hard `Err`s from either engine (e.g. the DB
-    //    became unusable) propagate as whole-flow errors; per-rule failures
-    //    come back as diagnostics.
-    let (mut findings, pattern_diags) =
-        crate::rules::pattern::run_pattern_rules(&rules, repo_path, &conn)?;
-    let (sql_findings, sql_diags) = crate::rules::sql::run_sql_rules(&rules, &conn)?;
-    findings.extend(sql_findings);
-    diagnostics.extend(pattern_diags);
-    diagnostics.extend(sql_diags);
-
-    // 4a′. Drop findings on generated/vendored/minified files — bundled JS
-    //      assets (`priv/static/phoenix.*.js`), committed tree-sitter
-    //      `grammars/*/parser.c`, `node_modules`, `vendor`, etc. This code is
-    //      not the user's to fix, so a complexity/clone/lint finding on it is
-    //      pure noise (audit S8: 87% of one repo's findings cited generated JS;
-    //      25 complexity findings cited a generated `parser.c`). Applied here,
-    //      after both engines merge, so it covers pattern AND SQL rules
-    //      uniformly regardless of how each selects files.
-    let before_generated_filter = findings.len();
-    findings
-        .retain(|f| !crate::query::noise_filter::is_generated_or_vendored_path(&f.location.file));
-    let generated_dropped = before_generated_filter - findings.len();
-    if generated_dropped > 0 {
-        tracing::info!(
-            dropped = generated_dropped,
-            "suppressed findings on generated/vendored files"
-        );
-    }
-
-    // 4b. Drop findings covered by an inline per-file or next-line
-    //     suppression comment (see rules::suppress for the marker
-    //     constants), and collect suppressions that matched nothing
-    //     (stale — likely safe to delete).
-    let (findings, stale_suppressions) =
-        crate::rules::suppress::filter_findings(findings, repo_path);
-
-    // 5. Optional rewrite application: only with `apply: true`, and only
-    //    for pattern-rule findings whose rule carries a `rewrite` template.
-    //    File contents outside matched spans stay byte-exact; writes are
-    //    atomic (temp file + rename). Each rewrite-bearing finding carries
-    //    its outcome in `rewrite_status`; a top-level `rewrite_summary`
-    //    counts findings per status.
-    let statuses = if apply {
-        apply_rewrites(&rules, &findings, repo_path, force)?
-    } else {
-        HashMap::new()
-    };
-
-    // (ARCHITECTURE-002) The id-keyed status wiring below is safe because
-    // of three invariants, which a future change must re-check:
-    //   1. finding ids are content-addressed (FNV-1a over
-    //      `rule_id \0 file \0 start \0 end` — see rules/finding.rs), so
-    //      they are unique per rule+file+span within one run;
-    //   2. `statuses` keys are exactly the ids of rewrite-bearing findings
-    //      (apply_rewrites inserts a status for every finding whose rule
-    //      carries a `rewrite` template, and nothing else);
-    //   3. duplicate rule ids are deduped at load with diagnostics, so a
-    //      rule id maps to one template.
-    // The debug_assert below makes #2 observable in debug builds.
-    let rewrite_rule_ids: std::collections::HashSet<&str> = rules
-        .iter()
-        .filter(|r| r.kind == crate::rules::RuleKind::Pattern)
-        .filter_map(|r| r.rewrite.as_deref().map(|_| r.id.as_str()))
+fn run_scan_rules(
+    repo_path: &Path,
+    conn: &rusqlite::Connection,
+    rules: Vec<crate::rules::Rule>,
+    rule_diagnostics: Vec<crate::rules::Diagnostic>,
+) -> Result<ScanResults, ApiError> {
+    let mut diagnostics: Vec<serde_json::Value> = rule_diagnostics
+        .into_iter()
+        .map(|diagnostic| serde_json::to_value(diagnostic).expect("rule diagnostic serializes"))
         .collect();
-    let rewrite_bearing_count = findings
+    let (mut findings, mut pattern_diagnostics) =
+        crate::rules::pattern::run_pattern_rules(&rules, repo_path, conn)?;
+    let (sql_findings, mut sql_diagnostics) =
+        crate::rules::sql::run_sql_rules_in_repo(&rules, conn, repo_path)?;
+    findings.extend(sql_findings);
+    diagnostics.extend(pattern_diagnostics.drain(..).map(|diagnostic| {
+        serde_json::to_value(diagnostic).expect("pattern diagnostic serializes")
+    }));
+    diagnostics.extend(
+        sql_diagnostics
+            .drain(..)
+            .map(|diagnostic| serde_json::to_value(diagnostic).expect("SQL diagnostic serializes")),
+    );
+    diagnostics.extend(persisted_diagnostics(conn)?);
+    for diagnostic in &mut diagnostics {
+        normalize_diagnostic(diagnostic);
+    }
+    Ok((rules, findings, diagnostics))
+}
+
+fn persisted_diagnostics(conn: &rusqlite::Connection) -> Result<Vec<serde_json::Value>, ApiError> {
+    let mut statement = conn
+        .prepare(
+            "SELECT d.file_id, d.path, d.message, d.severity, \
+             COALESCE(f.is_test_path, 0) \
+             FROM diagnostics d LEFT JOIN files f ON f.id = d.file_id \
+             ORDER BY d.id",
+        )
+        .map_err(crate::query::db_err)?;
+    let rows = statement
+        .query_map([], |row| {
+            let message = row.get::<_, String>(2)?;
+            if is_expected_source_skip(&message) {
+                return Ok(None);
+            }
+            Ok(Some(serde_json::json!({
+                "source": "persisted",
+                "file_id": row.get::<_, Option<i64>>(0)?,
+                "path": row.get::<_, String>(1)?,
+                "message": message,
+                "severity": row.get::<_, String>(3)?,
+                "is_test_path": row.get::<_, bool>(4)?,
+            })))
+        })
+        .map_err(crate::query::db_err)?;
+    rows.collect::<rusqlite::Result<Vec<Option<serde_json::Value>>>>()
+        .map(|values| values.into_iter().flatten().collect())
+        .map_err(crate::query::db_err)
+}
+
+fn is_expected_source_skip(message: &str) -> bool {
+    matches!(
+        message,
+        "unsupported file type — skipped" | "minified/generated source — skipped"
+    )
+}
+
+/// Production diagnostics and rule-loader failures block gates. Diagnostics
+/// from test fixtures remain visible without making production analysis
+/// incomplete.
+fn blocks_gate(diagnostic: &serde_json::Value) -> bool {
+    if let Some(blocking) = diagnostic
+        .get("blocking")
+        .and_then(serde_json::Value::as_bool)
+    {
+        return blocking;
+    }
+    diagnostic.get("source").and_then(|value| value.as_str()) != Some("persisted")
+        || !diagnostic
+            .get("is_test_path")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+            && diagnostic
+                .get("message")
+                .and_then(|value| value.as_str())
+                .is_none_or(|message| !is_expected_source_skip(message))
+}
+
+/// Add a stable common shape while retaining legacy diagnostic fields.
+///
+/// Rule-loader, pattern, and SQL diagnostics historically exposed
+/// `{rule_id,file,reason}` while persisted parser diagnostics exposed a
+/// different shape. The additive fields let callers consume one tagged model
+/// without breaking existing integrations that still read the old fields.
+fn normalize_diagnostic(diagnostic: &mut serde_json::Value) {
+    let persisted = diagnostic.get("source").and_then(|value| value.as_str()) == Some("persisted");
+    let blocking = blocks_gate(diagnostic);
+    let file = diagnostic
+        .get("path")
+        .or_else(|| diagnostic.get("file"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("<unknown>")
+        .to_owned();
+    let message = diagnostic
+        .get("message")
+        .or_else(|| diagnostic.get("reason"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("analysis diagnostic")
+        .to_owned();
+    let severity = diagnostic
+        .get("severity")
+        .and_then(|value| value.as_str())
+        .unwrap_or(if blocking { "error" } else { "info" })
+        .to_owned();
+    diagnostic["kind"] = serde_json::json!(if persisted { "source" } else { "rules" });
+    diagnostic["source"] = serde_json::json!(if persisted { "persisted" } else { "rules" });
+    diagnostic["message"] = serde_json::json!(message);
+    diagnostic["severity"] = serde_json::json!(severity);
+    diagnostic["blocking"] = serde_json::json!(blocking);
+    diagnostic["location"] = serde_json::json!({ "file": file });
+}
+
+fn filter_generated(
+    mut findings: Vec<crate::rules::finding::Finding>,
+) -> Vec<crate::rules::finding::Finding> {
+    let before = findings.len();
+    findings.retain(|finding| {
+        !crate::query::noise_filter::is_generated_or_vendored_path(&finding.location.file)
+    });
+    let dropped = before - findings.len();
+    if dropped > 0 {
+        tracing::info!(dropped, "suppressed findings on generated/vendored files");
+    }
+    findings
+}
+
+fn rewrite_bearing_count(
+    rules: &[crate::rules::Rule],
+    findings: &[crate::rules::finding::Finding],
+) -> usize {
+    let rule_ids: std::collections::HashSet<&str> = rules
         .iter()
-        .filter(|f| rewrite_rule_ids.contains(f.rule_id.as_str()))
-        .count();
+        .filter(|rule| rule.kind == crate::rules::RuleKind::Pattern && rule.rewrite.is_some())
+        .map(|rule| rule.id.as_str())
+        .collect();
+    findings
+        .iter()
+        .filter(|finding| rule_ids.contains(finding.rule_id.as_str()))
+        .count()
+}
 
-    // Collapse each clone band into ONE finding listing its members, instead
-    // of N findings that each point at a single member and never name the
-    // others (audit F3). Clone findings are SQL rules — never rewrite-bearing —
-    // so this runs after the rewrite wiring above without affecting it.
-    let findings = collapse_clone_bands(findings);
-
-    let mut payload = serde_json::json!({ "findings": findings, "diagnostics": diagnostics });
+fn build_scan_payload(
+    findings: Vec<crate::rules::finding::Finding>,
+    diagnostics: Vec<serde_json::Value>,
+    stale_suppressions: Vec<crate::rules::suppress::StaleSuppression>,
+) -> serde_json::Value {
+    let mut payload = serde_json::json!({
+        "findings": collapse_clone_bands(findings),
+        "diagnostics": diagnostics,
+    });
     if !stale_suppressions.is_empty() {
         payload["stale_suppressions"] = serde_json::json!(stale_suppressions);
     }
-    if apply {
-        debug_assert_eq!(
-            statuses.len(),
-            rewrite_bearing_count,
-            "every rewrite-bearing finding must receive a rewrite_status"
-        );
-        let mut summary = serde_json::Map::new();
-        for (status, count) in count_statuses(&statuses) {
-            summary.insert(status.to_string(), serde_json::json!(count));
-        }
-        for finding in payload["findings"].as_array_mut().expect("findings array") {
-            if let Some(status) = finding["id"].as_str().and_then(|id| statuses.get(id)) {
-                finding["rewrite_status"] = serde_json::json!(status);
-            }
-        }
-        if !summary.is_empty() {
-            payload["rewrite_summary"] = serde_json::Value::Object(summary);
-        }
-    }
-
-    // 6. Hoist per-rule static text (message template + remediation) into a
-    //    one-per-rule `rules` legend so it is stated once, not re-inlined on
-    //    every finding (audit F2). Done last, after rewrite_status wiring,
-    //    which keys off the untouched `id` field.
-    hoist_rule_legend(&mut payload, &rules);
-
-    // 7. Same output boundary the query modes use: repo-relative paths (F5)
-    //    and line-only spans (F6). Runs last, after `--apply` has already read
-    //    each finding's byte offsets from the in-memory `Finding`, so trimming
-    //    the JSON never affects splicing.
-    crate::query::output::postprocess(&mut payload, input);
-
-    Ok(payload)
+    payload
 }
 
-/// The `rule_id` whose findings are collapsed one-per-band by
-/// [`collapse_clone_bands`].
+fn attach_gate(payload: &mut serde_json::Value, threshold: Severity, selected: Option<&[String]>) {
+    let diagnostic_count = payload["diagnostics"].as_array().map_or(0, Vec::len);
+    let blocking_diagnostic_count = payload["diagnostics"].as_array().map_or(0, |diagnostics| {
+        diagnostics
+            .iter()
+            .filter(|diagnostic| blocks_gate(diagnostic))
+            .count()
+    });
+    let incomplete = blocking_diagnostic_count > 0;
+    let blocking_findings = blocking_finding_count(payload, threshold, selected);
+    let (status, outcome, outcome_reasons) = gate_decision(blocking_findings, incomplete);
+    payload["analysis"] = serde_json::json!({
+        "status": if incomplete { "incomplete" } else { "complete" },
+    });
+    payload["outcome"] = serde_json::json!(outcome);
+    payload["outcome_reasons"] = serde_json::json!(outcome_reasons);
+    payload["gate"] = serde_json::json!({
+        "status": status,
+        "severity_threshold": severity_name(threshold),
+        "blocking_findings": blocking_findings,
+        "diagnostic_count": diagnostic_count,
+        "blocking_diagnostic_count": blocking_diagnostic_count,
+    });
+    if let Some(ids) = selected {
+        payload["gate"]["severity_threshold"] = serde_json::Value::Null;
+        payload["gate"]["rule_ids"] = serde_json::json!(ids);
+    }
+}
+
+fn blocking_finding_count(
+    payload: &serde_json::Value,
+    threshold: Severity,
+    selected: Option<&[String]>,
+) -> usize {
+    let Some(ids) = selected else {
+        return unresolved_finding_count(payload, threshold);
+    };
+    payload["findings"].as_array().map_or(0, |findings| {
+        findings
+            .iter()
+            .filter(|finding| finding["rewrite_status"].as_str() != Some("applied"))
+            .filter(|finding| {
+                finding["rule_id"]
+                    .as_str()
+                    .is_some_and(|id| ids.iter().any(|selected| selected == id))
+            })
+            .count()
+    })
+}
+
+fn gate_decision(
+    blocking_findings: usize,
+    incomplete: bool,
+) -> (&'static str, &'static str, &'static [&'static str]) {
+    match (blocking_findings > 0, incomplete) {
+        (true, true) => (
+            "fail",
+            "code-quality-error",
+            &["code-quality-error", "analysis-incomplete"],
+        ),
+        (true, false) => ("fail", "code-quality-error", &["code-quality-error"]),
+        (false, true) => ("unknown", "analysis-incomplete", &["analysis-incomplete"]),
+        (false, false) => ("pass", "passed", &["passed"]),
+    }
+}
+
+fn attach_policy(
+    payload: &mut serde_json::Value,
+    rules: &[crate::rules::Rule],
+    origins: &HashMap<String, crate::rules::RuleOrigin>,
+    threshold: Severity,
+    selected: Option<&[String]>,
+) {
+    let explicit = selected.is_some();
+    let gating_rule_count = match selected {
+        Some(ids) => ids.len(),
+        None => rules
+            .iter()
+            .filter(|rule| rule.severity >= threshold)
+            .count(),
+    };
+    let mut source_counts = BTreeMap::from([
+        ("builtin", 0usize),
+        ("override", 0usize),
+        ("custom", 0usize),
+    ]);
+    for rule in rules {
+        let key = match origins.get(&rule.id) {
+            Some(crate::rules::RuleOrigin::Builtin) => "builtin",
+            Some(crate::rules::RuleOrigin::Override) => "override",
+            Some(crate::rules::RuleOrigin::Custom) | None => "custom",
+        };
+        *source_counts.get_mut(key).expect("policy source key") += 1;
+    }
+    let fingerprint = policy_fingerprint(rules, origins, threshold, selected);
+    let mut policy = serde_json::json!({
+        "mode": if explicit { "selected-rules" } else { "severity-threshold" },
+        "active_rule_count": rules.len(),
+        "gating_rule_count": gating_rule_count,
+        "severity_threshold": if explicit {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!(severity_name(threshold))
+        },
+        "sources": source_counts,
+        "fingerprint": fingerprint,
+    });
+    if let Some(ids) = selected {
+        policy["rule_ids"] = serde_json::json!(ids);
+    }
+    payload["policy"] = policy;
+}
+
+fn policy_fingerprint(
+    rules: &[crate::rules::Rule],
+    origins: &HashMap<String, crate::rules::RuleOrigin>,
+    threshold: Severity,
+    selected: Option<&[String]>,
+) -> String {
+    let mut definitions: Vec<serde_json::Value> = rules
+        .iter()
+        .map(|rule| {
+            serde_json::json!({
+                "id": rule.id,
+                "origin": match origins.get(&rule.id) {
+                    Some(crate::rules::RuleOrigin::Builtin) => "builtin",
+                    Some(crate::rules::RuleOrigin::Override) => "override",
+                    Some(crate::rules::RuleOrigin::Custom) | None => "custom",
+                },
+                "definition": serde_json::to_value(rule).expect("rule serializes"),
+            })
+        })
+        .collect();
+    definitions.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
+    let policy = serde_json::json!({
+        "threshold": severity_name(threshold),
+        "selected": selected,
+        "rules": definitions,
+    });
+    let mut serialized = String::new();
+    write_canonical_json(&policy, &mut serialized);
+    format!("fnv1a64:{:016x}", fnv1a64(serialized.as_bytes()))
+}
+
+/// Serialize JSON with object keys sorted at every nesting level.
+/// Rule definitions contain maps, so relying on insertion order would make
+/// otherwise identical policy fingerprints unstable across loader paths.
+fn write_canonical_json(value: &serde_json::Value, output: &mut String) {
+    match value {
+        serde_json::Value::Object(map) => {
+            output.push('{');
+            let mut keys: Vec<&str> = map.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            for (index, key) in keys.into_iter().enumerate() {
+                if index > 0 {
+                    output.push(',');
+                }
+                output.push_str(&serde_json::to_string(key).expect("JSON key serializes"));
+                output.push(':');
+                write_canonical_json(&map[key], output);
+            }
+            output.push('}');
+        }
+        serde_json::Value::Array(values) => {
+            output.push('[');
+            for (index, value) in values.iter().enumerate() {
+                if index > 0 {
+                    output.push(',');
+                }
+                write_canonical_json(value, output);
+            }
+            output.push(']');
+        }
+        scalar => output.push_str(&serde_json::to_string(scalar).expect("JSON value serializes")),
+    }
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf29ce484222325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+    })
+}
+
+fn attach_findings_summary(payload: &mut serde_json::Value) {
+    let findings = payload["findings"].as_array().expect("findings array");
+    let mut by_rule = BTreeMap::<String, usize>::new();
+    let mut by_severity = BTreeMap::from([
+        ("error".to_owned(), 0usize),
+        ("warning".to_owned(), 0usize),
+        ("info".to_owned(), 0usize),
+    ]);
+    for finding in findings {
+        if let Some(rule_id) = finding["rule_id"].as_str() {
+            *by_rule.entry(rule_id.to_owned()).or_default() += 1;
+        }
+        if let Some(severity) = finding["severity"].as_str() {
+            *by_severity.entry(severity.to_owned()).or_default() += 1;
+        }
+    }
+    payload["findings_summary"] = serde_json::json!({
+        "total": findings.len(),
+        "shown": findings.len(),
+        "truncated": false,
+        "by_rule": by_rule,
+        "by_severity": by_severity,
+    });
+}
+
+fn truncate_findings(payload: &mut serde_json::Value, options: FindingsOptions) {
+    let findings = payload["findings"].take();
+    let Some(findings) = findings.as_array() else {
+        return;
+    };
+    let total = findings.len();
+    let start = options.offset.min(total);
+    let end = if options.full {
+        total
+    } else {
+        start.saturating_add(options.limit).min(total)
+    };
+    let shown = end.saturating_sub(start);
+    let truncated = start > 0 || end < total;
+    payload["findings"] = serde_json::Value::Array(findings[start..end].to_vec());
+    payload["findings_summary"]["shown"] = serde_json::json!(shown);
+    payload["findings_summary"]["truncated"] = serde_json::json!(truncated);
+    payload["findings_summary"]["offset"] = serde_json::json!(start);
+    if truncated {
+        let guide = serde_json::json!({
+            "shown": shown,
+            "total": total,
+            "offset": start,
+            "limit": if options.full { serde_json::Value::Null } else { serde_json::json!(options.limit) },
+            "next_offset": if end < total { serde_json::json!(end) } else { serde_json::Value::Null },
+            "request": if end < total {
+                "set findingsOffset to next_offset, or set fullFindings to true"
+            } else {
+                "set fullFindings to true for all findings"
+            },
+        });
+        payload["guide"]["truncated"]["findings"] = guide;
+    }
+}
+
+fn severity_name(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+        Severity::Info => "info",
+    }
+}
+
+fn attach_rewrite_statuses(
+    payload: &mut serde_json::Value,
+    statuses: &HashMap<String, RewriteStatus>,
+    expected_count: usize,
+) {
+    debug_assert_eq!(statuses.len(), expected_count);
+    let mut summary = serde_json::Map::new();
+    for (status, count) in count_statuses(statuses) {
+        summary.insert(status.to_string(), serde_json::json!(count));
+    }
+    for finding in payload["findings"].as_array_mut().expect("findings array") {
+        if let Some(status) = finding["id"].as_str().and_then(|id| statuses.get(id)) {
+            finding["rewrite_status"] = serde_json::json!(status);
+        }
+    }
+    if !summary.is_empty() {
+        payload["rewrite_summary"] = serde_json::Value::Object(summary);
+    }
+}
+
+/// The built-in clone policy also supports legacy user overrides.
 const CLONE_RULE_ID: &str = "duplicate-code-clone";
 
-/// Collapse duplicate-code-clone findings into ONE finding per clone band
-/// (audit F3).
-///
-/// The `duplicate-code-clone` SQL rule emits one finding per band *member*,
-/// each carrying only `evidence.label` (the band id) and its own location —
-/// never naming the other members. On real repos these are 58–95% of all
-/// findings (6,555 of 7,446 on a C# repo) and, as emitted, are not actionable:
-/// an agent can't act on "member of a clone band" without re-deriving the band.
-///
-/// This groups those findings by band label and emits a single finding whose
-/// `evidence` is `{band, members: [{file, startLine, endLine}, …]}`, sorted for
-/// determinism. Every other finding passes through untouched. Findings without
-/// a band label (shouldn't happen) also pass through, so no clone finding is
-/// ever dropped. The band finding reuses the first member's rule text/severity,
-/// so the F2 legend hoist still applies uniformly.
+/// Collapse members after suppression, preserving verified group identity.
+/// Legacy unverified bands still merge when their member sets match.
 fn collapse_clone_bands(
     findings: Vec<crate::rules::finding::Finding>,
 ) -> Vec<crate::rules::finding::Finding> {
-    use crate::rules::finding::{Finding, finding_id};
+    use crate::rules::finding::Finding;
     use std::collections::BTreeMap;
 
+    type CloneMember = (String, u32, u32);
+    type CloneGroup = (Vec<String>, Vec<Finding>);
+
     let mut bands: BTreeMap<String, Vec<Finding>> = BTreeMap::new();
-    let mut out: Vec<Finding> = Vec::new();
-    for f in findings {
-        match f
+    let mut out = Vec::new();
+    for finding in findings {
+        match finding
             .evidence
             .get("label")
             .and_then(|v| v.as_str())
             .map(str::to_string)
         {
-            Some(label) if f.rule_id == CLONE_RULE_ID => {
-                bands.entry(label).or_default().push(f);
+            Some(label) if finding.rule_id == CLONE_RULE_ID => {
+                bands.entry(label).or_default().push(finding);
             }
-            _ => out.push(f),
+            _ => out.push(finding),
         }
     }
 
+    let mut member_sets: BTreeMap<Vec<CloneMember>, CloneGroup> = BTreeMap::new();
     for (label, mut members) in bands {
-        members.sort_by(|a, b| {
-            a.location
-                .file
-                .cmp(&b.location.file)
-                .then(a.location.span.start_line.cmp(&b.location.span.start_line))
-                .then(a.location.span.end_line.cmp(&b.location.span.end_line))
-        });
-        let member_json: Vec<serde_json::Value> = members
-            .iter()
-            .map(|m| {
-                serde_json::json!({
-                    "file": m.location.file,
-                    "startLine": m.location.span.start_line,
-                    "endLine": m.location.span.end_line,
-                })
-            })
-            .collect();
-        // Anchor the band finding on its first (sorted) member: stable
-        // location + id, keyed by the band label so it's unique per band.
-        let anchor = &members[0];
-        out.push(Finding {
-            id: finding_id(&anchor.rule_id, &label, &anchor.location.span),
-            rule_id: anchor.rule_id.clone(),
-            severity: anchor.severity,
-            message: anchor.message.clone(),
-            location: anchor.location.clone(),
-            evidence: serde_json::json!({ "band": label, "members": member_json }),
-            remediation: anchor.remediation.clone(),
-            certainty: anchor.certainty,
-            agent_instructions: anchor.agent_instructions.clone(),
-            rewrite_status: None,
-            matched_file_state: None,
-        });
+        members.sort_by_key(clone_member_key);
+        if members[0].evidence["verification"] == "exact-clone" {
+            out.push(collapsed_clone_finding(vec![label], &members));
+            continue;
+        }
+        let key = members.iter().map(clone_member_key).collect();
+        member_sets
+            .entry(key)
+            .and_modify(|(labels, _)| labels.push(label.clone()))
+            .or_insert_with(|| (vec![label], members));
+    }
+
+    for (_, (mut labels, members)) in member_sets {
+        labels.sort();
+        out.push(collapsed_clone_finding(labels, &members));
     }
     out
+}
+
+fn clone_member_key(finding: &crate::rules::finding::Finding) -> (String, u32, u32) {
+    (
+        finding.location.file.clone(),
+        finding.location.span.start_line,
+        finding.location.span.end_line,
+    )
+}
+
+fn collapsed_clone_finding(
+    labels: Vec<String>,
+    members: &[crate::rules::finding::Finding],
+) -> crate::rules::finding::Finding {
+    use crate::rules::finding::{Finding, finding_id};
+
+    let label = &labels[0];
+    let member_json: Vec<_> = members
+        .iter()
+        .map(|member| {
+            serde_json::json!({
+                "file": member.location.file,
+                "startLine": member.location.span.start_line,
+                "endLine": member.location.span.end_line,
+            })
+        })
+        .collect();
+    let anchor = &members[0];
+    let mut evidence = anchor.evidence.clone();
+    evidence["band"] = serde_json::json!(label);
+    evidence["bands"] = serde_json::json!(labels);
+    evidence["members"] = serde_json::json!(member_json);
+    Finding {
+        id: finding_id(&anchor.rule_id, label, &anchor.location.span),
+        rule_id: anchor.rule_id.clone(),
+        severity: anchor.severity,
+        message: anchor.message.clone(),
+        location: anchor.location.clone(),
+        evidence,
+        remediation: anchor.remediation.clone(),
+        certainty: anchor.certainty,
+        agent_instructions: anchor.agent_instructions.clone(),
+        rewrite_status: None,
+        matched_file_state: None,
+    }
 }
 
 /// Hoist per-rule static text out of every finding into a one-per-rule
@@ -419,6 +928,12 @@ fn count_statuses(statuses: &HashMap<String, RewriteStatus>) -> Vec<(&'static st
     counts.into_iter().filter(|(_, n)| *n > 0).collect()
 }
 
+struct FileTarget<'a> {
+    finding: &'a crate::rules::finding::Finding,
+    template: &'a str,
+    target: RewriteTarget,
+}
+
 /// Apply every `rewrite`-bearing finding's substitution to disk, gated per
 /// file by git status, and return each finding's outcome.
 ///
@@ -456,32 +971,7 @@ pub(crate) fn apply_rewrites(
         return Ok(HashMap::new());
     }
 
-    // Group each rewrite-bearing finding's span+replacement by file.
-    struct FileTarget<'a> {
-        finding: &'a crate::rules::finding::Finding,
-        target: RewriteTarget,
-    }
-    let mut by_file: HashMap<std::path::PathBuf, Vec<FileTarget<'_>>> = HashMap::new();
-    for finding in findings {
-        let Some(template) = rewrite_by_rule.get(finding.rule_id.as_str()) else {
-            continue;
-        };
-        let span = &finding.location.span;
-        let replacement = crate::rules::rewrite::substitute(template, &finding.evidence);
-        // Resolve the walk path (possibly relative — the scan walked a
-        // relative repoRoot) to the absolute physical file, following
-        // symlinks: that is what gets read and written (CORRECTNESS-002,
-        // CORRECTNESS-004).
-        let real = crate::rules::finding::resolve_real_path(&finding.location.file);
-        by_file.entry(real).or_default().push(FileTarget {
-            finding,
-            target: RewriteTarget {
-                start_byte: span.start_byte,
-                end_byte: span.end_byte,
-                replacement,
-            },
-        });
-    }
+    let by_file = group_rewrite_targets(findings, &rewrite_by_rule);
 
     // One git probe for the whole run (CODE-003). A canonicalized
     // repo_root keeps `--is-inside-work-tree` correct for relative inputs
@@ -503,103 +993,150 @@ pub(crate) fn apply_rewrites(
 
     let mut statuses = HashMap::new();
     for (real_path, targets) in &by_file {
-        if gate.dirty(real_path) {
-            for t in targets {
-                statuses.insert(t.finding.id.clone(), RewriteStatus::SkippedDirty);
-            }
-            continue;
-        }
-
-        // Span planning: sort by span, first-sorted wins, overlaps skipped.
-        let rewrites: Vec<RewriteTarget> = targets.iter().map(|t| t.target.clone()).collect();
-        let plans = crate::rules::rewrite::plan_file_rewrites(&rewrites);
-        let mut applied: Vec<&RewriteTarget> = Vec::new();
-        for (t, plan) in targets.iter().zip(&plans) {
-            match plan {
-                crate::rules::rewrite::RewritePlan::Apply => {
-                    applied.push(&t.target);
-                    statuses.insert(t.finding.id.clone(), RewriteStatus::Applied);
-                }
-                crate::rules::rewrite::RewritePlan::SkippedOverlap => {
-                    statuses.insert(t.finding.id.clone(), RewriteStatus::SkippedOverlap);
-                }
-            }
-        }
-        if applied.is_empty() {
-            continue;
-        }
-
-        // Staleness guard (closes the parse-to-write TOCTOU): the applied
-        // spans were computed against whatever the file looked like when it
-        // was matched, which can be long before this write — the scan's SQL
-        // rules and suppression filtering run in between. A read failure or
-        // out-of-range/off-char-boundary span is already caught by `splice`
-        // below, but a file that changed and happens to still be in-range
-        // would otherwise be silently misapplied. Compare against the state
-        // recorded at match time; `None` (stat unavailable then) leaves this
-        // unverified rather than blocking the write. Not redundant with the
-        // `recheck_dirty` git-status check below: this catches a filesystem
-        // mtime/content change since match time, that catches a git-stage
-        // change since the batched dirty probe — distinct windows, both real.
-        if let Some(expected) = targets.iter().find_map(|t| t.finding.matched_file_state)
-            && crate::rules::finding::FileState::of(real_path) != Some(expected)
-        {
-            for t in targets {
-                statuses.insert(t.finding.id.clone(), RewriteStatus::SkippedConflict);
-            }
-            tracing::warn!(
-                file = %real_path.display(),
-                "apply: file changed since it was matched; skipped to avoid misapplying stale offsets"
-            );
-            continue;
-        }
-
-        // Read, splice, atomic-write against the canonical physical file
-        // (the same path the git gate keyed on). A read failure or a span
-        // that is not on a UTF-8 char boundary is a per-file conflict —
-        // reported, not a crash (byte-exact preservation elsewhere is the
-        // priority).
-        let content = match std::fs::read_to_string(real_path) {
-            Ok(content) => content,
-            Err(e) => {
-                for t in targets {
-                    statuses.insert(t.finding.id.clone(), RewriteStatus::SkippedConflict);
-                }
-                tracing::warn!(file = %real_path.display(), "apply: unreadable file skipped: {e}");
-                continue;
-            }
-        };
-        applied.sort_by_key(|t| (t.start_byte, t.end_byte));
-        let rewritten = match splice(&content, &applied) {
-            Some(rewritten) => rewritten,
-            None => {
-                for t in targets {
-                    statuses.insert(t.finding.id.clone(), RewriteStatus::SkippedConflict);
-                }
-                tracing::warn!(file = %real_path.display(), "apply: span not on a UTF-8 boundary; file skipped");
-                continue;
-            }
-        };
-        // Re-verify git-clean immediately before writing (closes the
-        // gate-to-write TOCTOU): the batched probe above ran once for the
-        // whole run, so a file that became dirty afterward — but before its
-        // own turn in this loop — would otherwise still be overwritten.
-        if gate.recheck_dirty(real_path) {
-            for t in targets {
-                statuses.insert(t.finding.id.clone(), RewriteStatus::SkippedDirty);
-            }
-            tracing::warn!(file = %real_path.display(), "apply: file became dirty since the initial git check; skipped");
-            continue;
-        }
-
-        if let Err(e) = write_atomic(real_path, &rewritten) {
-            for t in targets {
-                statuses.insert(t.finding.id.clone(), RewriteStatus::SkippedConflict);
-            }
-            tracing::warn!(file = %real_path.display(), "apply: write failed, file skipped: {e}");
-        }
+        apply_file_rewrites(real_path, targets, &gate, &mut statuses);
     }
     Ok(statuses)
+}
+
+fn group_rewrite_targets<'a>(
+    findings: &'a [crate::rules::finding::Finding],
+    rewrite_by_rule: &HashMap<&str, &'a str>,
+) -> HashMap<std::path::PathBuf, Vec<FileTarget<'a>>> {
+    let mut by_file = HashMap::new();
+    for finding in findings {
+        let Some(template) = rewrite_by_rule.get(finding.rule_id.as_str()) else {
+            continue;
+        };
+        let span = &finding.location.span;
+        let real = crate::rules::finding::resolve_real_path(&finding.location.file);
+        by_file
+            .entry(real)
+            .or_insert_with(Vec::new)
+            .push(FileTarget {
+                finding,
+                template,
+                target: RewriteTarget {
+                    start_byte: span.start_byte,
+                    end_byte: span.end_byte,
+                    replacement: String::new(),
+                },
+            });
+    }
+    by_file
+}
+
+fn apply_file_rewrites(
+    real_path: &Path,
+    targets: &[FileTarget<'_>],
+    gate: &GitGate,
+    statuses: &mut HashMap<String, RewriteStatus>,
+) {
+    if gate.dirty(real_path) {
+        mark_targets(targets, RewriteStatus::SkippedDirty, statuses);
+        return;
+    }
+    let applied = plan_rewrite_targets(targets, statuses);
+    if applied.is_empty() {
+        return;
+    }
+    let Some(content) = read_verified_content(real_path, targets, statuses) else {
+        return;
+    };
+    let Some(rewritten) = render_rewrites(&content, &applied) else {
+        mark_targets(targets, RewriteStatus::SkippedConflict, statuses);
+        tracing::warn!(file = %real_path.display(), "apply: span not on a UTF-8 boundary; file skipped");
+        return;
+    };
+    if gate.recheck_dirty(real_path) {
+        mark_targets(targets, RewriteStatus::SkippedDirty, statuses);
+        tracing::warn!(file = %real_path.display(), "apply: file became dirty since the initial git check; skipped");
+        return;
+    }
+    if let Err(error) = write_atomic(real_path, &rewritten) {
+        mark_targets(targets, RewriteStatus::SkippedConflict, statuses);
+        tracing::warn!(file = %real_path.display(), "apply: write failed, file skipped: {error}");
+    }
+}
+
+fn mark_targets(
+    targets: &[FileTarget<'_>],
+    status: RewriteStatus,
+    statuses: &mut HashMap<String, RewriteStatus>,
+) {
+    for target in targets {
+        statuses.insert(target.finding.id.clone(), status);
+    }
+}
+
+fn plan_rewrite_targets<'a>(
+    targets: &'a [FileTarget<'a>],
+    statuses: &mut HashMap<String, RewriteStatus>,
+) -> Vec<&'a FileTarget<'a>> {
+    let rewrites: Vec<_> = targets.iter().map(|target| target.target.clone()).collect();
+    let plans = crate::rules::rewrite::plan_file_rewrites(&rewrites);
+    targets
+        .iter()
+        .zip(plans)
+        .filter_map(|(target, plan)| {
+            let status = match plan {
+                crate::rules::rewrite::RewritePlan::Apply => RewriteStatus::Applied,
+                crate::rules::rewrite::RewritePlan::SkippedOverlap => RewriteStatus::SkippedOverlap,
+            };
+            statuses.insert(target.finding.id.clone(), status);
+            matches!(status, RewriteStatus::Applied).then_some(target)
+        })
+        .collect()
+}
+
+fn read_verified_content(
+    real_path: &Path,
+    targets: &[FileTarget<'_>],
+    statuses: &mut HashMap<String, RewriteStatus>,
+) -> Option<String> {
+    let state_before_read = crate::rules::finding::FileState::of(real_path);
+    let content = match std::fs::read_to_string(real_path) {
+        Ok(content) => content,
+        Err(error) => {
+            mark_targets(targets, RewriteStatus::SkippedConflict, statuses);
+            tracing::warn!(file = %real_path.display(), "apply: unreadable file skipped: {error}");
+            return None;
+        }
+    };
+    let state_after_read = crate::rules::finding::FileState::of(real_path);
+    let changed = targets
+        .iter()
+        .filter_map(|target| target.finding.matched_file_state)
+        .any(|expected| {
+            state_before_read != Some(expected)
+                || state_after_read != Some(expected)
+                || content.len() as u64 != expected.len
+        });
+    if changed {
+        mark_targets(targets, RewriteStatus::SkippedConflict, statuses);
+        tracing::warn!(
+            file = %real_path.display(),
+            "apply: file changed since it was matched; skipped to avoid misapplying stale offsets"
+        );
+        return None;
+    }
+    Some(content)
+}
+
+fn render_rewrites(content: &str, targets: &[&FileTarget<'_>]) -> Option<String> {
+    let mut replacements: Vec<_> = targets
+        .iter()
+        .map(|target| RewriteTarget {
+            start_byte: target.target.start_byte,
+            end_byte: target.target.end_byte,
+            replacement: crate::rules::rewrite::substitute_with_source(
+                target.template,
+                &target.finding.evidence,
+                Some(content),
+            ),
+        })
+        .collect();
+    replacements.sort_by_key(|target| (target.start_byte, target.end_byte));
+    splice(content, &replacements.iter().collect::<Vec<_>>())
 }
 
 /// Outcome of the batched git gate for one `--apply` run.
@@ -871,33 +1408,38 @@ fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
 /// - `"override"`: a user/repo rule reusing a built-in id (the built-in is
 ///   shadowed, per `load_rules`'s override semantics);
 /// - `"custom"`: a user/repo-only rule with no built-in counterpart.
+///
+/// Entries include the active serialized definition, excluding self-tests.
 pub fn rules_list(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
     let repo_path = require_repo_dir(input)?;
 
-    let (rules, diagnostics) = crate::rules::load_rules(repo_path);
-    let builtin_by_id: std::collections::HashMap<String, crate::rules::Rule> =
-        crate::rules::builtin_rules()
-            .into_iter()
-            .map(|r| (r.id.clone(), r))
-            .collect();
+    let (rules, diagnostics, origins) = crate::rules::load_rules_with_origins(repo_path);
 
     let rules_json: Vec<serde_json::Value> = rules
         .iter()
         .map(|rule| {
-            let source = match builtin_by_id.get(&rule.id) {
-                Some(builtin) if builtin == rule => "builtin",
-                Some(_) => "override",
-                None => "custom",
+            let source = match origins.get(&rule.id) {
+                Some(crate::rules::RuleOrigin::Builtin) => "builtin",
+                Some(crate::rules::RuleOrigin::Override) => "override",
+                Some(crate::rules::RuleOrigin::Custom) => "custom",
+                None => unreachable!("every active rule has an origin"),
             };
-            serde_json::json!({
-                "id": rule.id,
-                "kind": rule.kind,
-                "severity": rule.severity,
-                "name": rule.name,
-                "description": rule.description,
-                "message": rule.message,
-                "source": source,
-            })
+            let mut definition = serde_json::to_value(rule).expect("rule serializes");
+            if rule.verification == Some(crate::rules::Verification::DependencyBoundary) {
+                definition["configuration_status"] = serde_json::json!(
+                    if crate::rules::boundary_configured(rule).unwrap_or(false) {
+                        "configured"
+                    } else {
+                        "requires_configuration"
+                    }
+                );
+            }
+
+            definition["source"] = serde_json::json!(source);
+            // Preserve the original listing's nullable display fields.
+            definition["name"] = serde_json::json!(rule.name);
+            definition["description"] = serde_json::json!(rule.description);
+            definition
         })
         .collect();
 
@@ -991,6 +1533,63 @@ pub fn rules_remove(
 mod threshold {
     use super::*;
     use crate::rules::Severity;
+
+    #[test]
+    fn selected_policy_counts_only_unresolved_selected_findings() {
+        let mut payload = serde_json::json!({
+            "diagnostics": [],
+            "findings": [
+                {"rule_id": "chosen", "severity": "info", "rewrite_status": "applied"},
+                {"rule_id": "chosen", "severity": "info", "rewrite_status": "skipped_dirty"},
+                {"rule_id": "other", "severity": "error"}
+            ]
+        });
+        attach_gate(&mut payload, Severity::Error, Some(&["chosen".into()]));
+        assert_eq!(payload["gate"]["blocking_findings"], 1);
+        assert_eq!(payload["gate"]["status"], "fail");
+        payload["findings"].as_array_mut().unwrap().remove(1);
+        attach_gate(&mut payload, Severity::Error, Some(&["chosen".into()]));
+        assert_eq!(payload["gate"]["status"], "pass");
+    }
+
+    #[test]
+    fn persisted_test_diagnostics_do_not_block_the_gate() {
+        let fixture = serde_json::json!({
+            "source": "persisted",
+            "message": "syntax error — partial extract kept",
+            "is_test_path": true
+        });
+        let production = serde_json::json!({
+            "source": "persisted",
+            "message": "syntax error — partial extract kept",
+            "is_test_path": false
+        });
+        assert!(!blocks_gate(&fixture));
+        assert!(blocks_gate(&production));
+    }
+
+    #[test]
+    fn diagnostic_counts_distinguish_visible_and_blocking_entries() {
+        let mut payload = serde_json::json!({
+            "diagnostics": [
+                {
+                    "source": "persisted",
+                    "message": "syntax error — partial extract kept",
+                    "is_test_path": true
+                },
+                {
+                    "source": "rules",
+                    "message": "invalid rule"
+                }
+            ],
+            "findings": []
+        });
+        attach_gate(&mut payload, Severity::Error, None);
+        assert_eq!(payload["gate"]["diagnostic_count"], 2);
+        assert_eq!(payload["gate"]["blocking_diagnostic_count"], 1);
+        assert_eq!(payload["analysis"]["status"], "incomplete");
+        assert_eq!(payload["gate"]["status"], "unknown");
+    }
 
     fn payload_with_severities(severities: &[&str]) -> serde_json::Value {
         let findings: Vec<serde_json::Value> = severities
@@ -1216,6 +1815,29 @@ async function fetchData(): Promise<void> {
 }
 "#;
 
+    const VARIADIC_REWRITE_RULE_PACK: &str = r#"
+[[rule]]
+id = "rename-function"
+kind = "pattern"
+severity = "warning"
+message = "rename function"
+pattern = "function $NAME() { $$$BODY }"
+rewrite = "function after() { $$$BODY }"
+languages = ["typescript"]
+
+[[rule]]
+id = "rename-call"
+kind = "pattern"
+severity = "warning"
+message = "rename call"
+pattern = "before($$$ARGS)"
+rewrite = "after($$$ARGS)"
+languages = ["typescript"]
+"#;
+
+    const TS_WITH_VARIADIC_CAPTURES: &str =
+        "function beforeBody() { first();\n  second(); }\nbefore(alpha ,\n  beta);\n";
+
     /// Error-severity rewrite rule — for the exit-code gate test: an applied
     /// error finding is resolved, a skipped one is not.
     const REWRITE_RULE_PACK_ERROR: &str = r#"
@@ -1304,6 +1926,37 @@ rewrite = "console.info($MSG)"
             .filter(|e| e.file_name().to_string_lossy().contains("varde-apply-tmp"))
             .collect();
         assert!(leftovers.is_empty(), "no tmp files: {leftovers:?}");
+
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn scan_with_apply_preserves_variadic_statement_and_argument_separators() {
+        let _guard = crate::test_support::home_lock();
+        let home = tempdir("home-apply-variadic-separators");
+        let repo = tempdir("repo-apply-variadic-separators");
+        write(&repo.join("main.ts"), TS_WITH_VARIADIC_CAPTURES);
+        write(
+            &repo.join(".varde-code/rules/pack.toml"),
+            VARIADIC_REWRITE_RULE_PACK,
+        );
+        let _home_override = with_fresh_db(&home, &repo);
+        git_init_and_commit(&repo);
+
+        let input = serde_json::json!({
+            "repoRoot": repo.display().to_string(),
+            "apply": true,
+        });
+        let payload = scan_repo(&input).expect("apply scan succeeds");
+        assert_eq!(
+            payload["rewrite_summary"],
+            serde_json::json!({ "applied": 2 })
+        );
+        assert_eq!(
+            std::fs::read_to_string(repo.join("main.ts")).expect("reads"),
+            "function after() { first();\n  second(); }\nafter(alpha ,\n  beta);\n"
+        );
 
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&repo);
@@ -1430,18 +2083,21 @@ rewrite = "console.info($MSG)"
             matched_file_state: Some(stale_state),
         };
 
-        let statuses =
-            apply_rewrites(&rules, &[finding], &repo, false).expect("apply_rewrites runs");
-        assert_eq!(
-            statuses.get("stale-test"),
-            Some(&RewriteStatus::SkippedConflict)
-        );
-        // File untouched — the guard fired before any read-splice-write.
-        assert_eq!(
-            std::fs::read_to_string(&file_path).expect("reads"),
-            content_before,
-            "file must be untouched when the match-time state is stale"
-        );
+        for force in [false, true] {
+            let statuses = apply_rewrites(&rules, std::slice::from_ref(&finding), &repo, force)
+                .expect("apply_rewrites runs");
+            assert_eq!(
+                statuses.get("stale-test"),
+                Some(&RewriteStatus::SkippedConflict),
+                "force={force}"
+            );
+            // File untouched after the post-read state guard.
+            assert_eq!(
+                std::fs::read_to_string(&file_path).expect("reads"),
+                content_before,
+                "file must be untouched when the match-time state is stale"
+            );
+        }
 
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&repo);
@@ -1983,6 +2639,9 @@ query = "SELECT f.path AS file, e.start_line AS line FROM entities e JOIN files 
 
     #[test]
     fn rules_list_tags_builtin_override_and_custom() {
+        let _guard = crate::test_support::home_lock();
+        let home = tempdir("rules-list-home");
+        let _home_override = crate::test_support::HomeOverride::while_locked(&home);
         let repo = tempdir("rules-list-repo");
         write(
             &repo.join(".varde-code/rules/pack.toml"),
@@ -1994,6 +2653,8 @@ severity = "error"
 message = "repo override of the built-in"
 query = "SELECT path AS file, 1 AS line FROM files WHERE complexity > :max_complexity"
 thresholds = { max_complexity = 1.0 }
+strings = { scope = "production" }
+fix = "Review this repository's chosen threshold."
 
 [[rule]]
 id = "no-console"
@@ -2001,6 +2662,12 @@ kind = "pattern"
 severity = "warning"
 message = "custom repo-only rule"
 pattern = "console.log($MSG)"
+languages = ["typescript"]
+constraints = { MSG = "^message$" }
+exclude_test_paths = true
+exclude_tooling_paths = false
+remediation = "Use the configured logger."
+rewrite = "logger.info($MSG)"
 "#,
         );
 
@@ -2014,6 +2681,53 @@ pattern = "console.log($MSG)"
         assert_eq!(by_id("no-console")["source"], "custom");
         assert_eq!(by_id("file-complexity-hotspot")["source"], "builtin");
 
+        let overridden = by_id("churn-complexity-hotspot");
+        assert_eq!(overridden["severity"], "error");
+        assert_eq!(
+            overridden["thresholds"],
+            serde_json::json!({"max_complexity": 1.0})
+        );
+        assert_eq!(
+            overridden["strings"],
+            serde_json::json!({"scope": "production"})
+        );
+        assert_eq!(
+            overridden["fix"],
+            "Review this repository's chosen threshold."
+        );
+        assert_eq!(
+            overridden["query"],
+            "SELECT path AS file, 1 AS line FROM files WHERE complexity > :max_complexity"
+        );
+        assert!(overridden.get("pattern").is_none());
+        // Keep the original listing's nullable display fields for clients.
+        assert_eq!(overridden.get("name"), Some(&serde_json::Value::Null));
+        assert_eq!(
+            overridden.get("description"),
+            Some(&serde_json::Value::Null)
+        );
+
+        let custom = by_id("no-console");
+        assert_eq!(custom["pattern"], "console.log($MSG)");
+        assert_eq!(custom["languages"], serde_json::json!(["typescript"]));
+        assert_eq!(
+            custom["constraints"],
+            serde_json::json!({"MSG": "^message$"})
+        );
+        assert_eq!(custom["exclude_test_paths"], true);
+        assert_eq!(custom["exclude_tooling_paths"], false);
+        assert_eq!(custom["remediation"], "Use the configured logger.");
+        assert_eq!(custom["rewrite"], "logger.info($MSG)");
+        assert!(custom.get("query").is_none());
+        assert!(custom.get("fix").is_none());
+        assert!(custom.get("tests").is_none());
+
+        let gate = by_id("function-complexity-gate");
+        assert_eq!(gate["thresholds"]["max_cognitive"], 15.0);
+        assert!(gate["query"].as_str().unwrap().contains("function_metrics"));
+        assert!(gate.get("languages").is_none());
+        assert_eq!(payload, rules_list(&input).expect("repeat listing"));
+
         assert_eq!(
             rules.len(),
             crate::rules::builtin_rules().len() + 1,
@@ -2021,6 +2735,30 @@ pattern = "console.log($MSG)"
         );
 
         let _ = std::fs::remove_dir_all(&repo);
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn rules_list_tags_seeded_builtin_as_override() {
+        let _guard = crate::test_support::home_lock();
+        let home = tempdir("rules-list-seeded-home");
+        let _home_override = crate::test_support::HomeOverride::while_locked(&home);
+        let repo = tempdir("rules-list-seeded-repo");
+        crate::rules::seed_builtin_rules(&repo.join(".varde-code/rules"), false)
+            .expect("seed built-ins");
+
+        let input = serde_json::json!({ "repoRoot": repo.display().to_string() });
+        let payload = rules_list(&input).expect("rules_list succeeds");
+        let rule = payload["rules"]
+            .as_array()
+            .expect("rules array")
+            .iter()
+            .find(|rule| rule["id"] == "churn-complexity-hotspot")
+            .expect("seeded rule present");
+        assert_eq!(rule["source"], "override");
+
+        let _ = std::fs::remove_dir_all(&repo);
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]
@@ -2274,6 +3012,23 @@ mod clone_collapse {
         assert_eq!(members[0]["startLine"], 10);
         assert_eq!(members[1]["file"], "b.rs");
     }
+
+    #[test]
+    fn collapses_identical_members_across_bands() {
+        let findings = vec![
+            clone_member("a.rs", 10, "clone-band-1"),
+            clone_member("b.rs", 20, "clone-band-1"),
+            clone_member("a.rs", 10, "clone-band-2"),
+            clone_member("b.rs", 20, "clone-band-2"),
+        ];
+
+        let out = collapse_clone_bands(findings);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            out[0].evidence["bands"],
+            serde_json::json!(["clone-band-1", "clone-band-2"])
+        );
+    }
 }
 
 #[cfg(test)]
@@ -2285,6 +3040,7 @@ mod rule_legend {
         Rule {
             id: id.to_string(),
             kind: RuleKind::Sql,
+            verification: None,
             severity: Severity::Warning,
             message: message.to_string(),
             name: None,

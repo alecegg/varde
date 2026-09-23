@@ -49,7 +49,7 @@
 //!   is the head of the (left-nested) application spine: a bare `variable`
 //!   (`g`), or a `qualified` name (`M.lookup` -> "lookup"). `error`/`throw`/
 //!   `throwIO`/`ioError`/`errorWithoutStackTrace` heads become Throw and
-//!   `catch`/`handle`/`try`/`bracket`/`finally` heads become Catch (Haskell's
+//!   `catch`/`handle`/`try` heads become Catch (Haskell's
 //!   exception idiom is library functions, not syntax — see below).
 //! - MemberAccess: `qualified` (`M.lookup` -> "lookup") — the qualified-name
 //!   form is Haskell's closest analog to member access (a name reached through a
@@ -61,10 +61,11 @@
 //! - Throw: an `apply` whose callee is `error`/`throw`/`throwIO`/`ioError`/
 //!   `errorWithoutStackTrace`. Haskell has no `throw` keyword — these library
 //!   functions are the error-raising idiom. Named after the callee.
-//! - Catch: an `apply` whose callee is `catch`/`handle`/`try`/`bracket`/
-//!   `finally`. Haskell has no `try`/`catch` syntax — these `Control.Exception`
-//!   combinators are the protected-execution idiom, the closest structural
-//!   analog to a catch boundary. Named after the callee.
+//! - Catch: an `apply` whose callee is `catch`/`handle`/`try`. Haskell has no
+//!   `try`/`catch` syntax — these `Control.Exception` combinators are the
+//!   protected-execution idiom, the closest structural analog to a catch
+//!   boundary. `bracket` and `finally` remain ordinary calls because their
+//!   cleanup wrappers do not introduce handler decisions.
 //! - ControlFlow: `conditional` (`if … then … else …`), `case`
 //!   (`case … of …`), `guards` (equation guards `| cond = …`), and `let_in`
 //!   (`let … in …`). Haskell has no statement-level control flow — these are all
@@ -94,7 +95,7 @@
 
 use crate::extract::entity::ExtractCtx;
 use crate::extract::field_name;
-use crate::extract::langs::push_type_ref;
+use crate::extract::langs::{boolean_operator_name, push_type_ref};
 use crate::model::EntityKind;
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
@@ -139,16 +140,36 @@ const THROW_FUNCTIONS: &[&str] = &[
     "errorWithoutStackTrace",
 ];
 
-/// Application heads that run a protected/exception-handling action (Haskell's
-/// `try`/`catch` analog — `Control.Exception` combinators).
-const CATCH_FUNCTIONS: &[&str] = &["catch", "handle", "try", "bracket", "finally"];
+/// Application heads introducing an exception-handling decision.
+const CATCH_FUNCTIONS: &[&str] = &["catch", "handle", "try"];
 
 /// Emit entities for one node (called for every node in the tree).
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_5(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- imports / exports ----
         "import" => {
@@ -157,16 +178,22 @@ pub fn visit(
         "export" => {
             ctx.push(EntityKind::Export, node.text().into_owned(), node);
         }
-
         // ---- structural: functions & value binds ----
         // `f x = …` (pattern clause) -> Function. Multi-clause functions emit
         // one Function per clause (see module docs).
         "function" => {
-            ctx.push(
-                EntityKind::Function,
-                field_name(node).unwrap_or_default(),
-                node,
-            );
+            let name = field_name(node).unwrap_or_default();
+            ctx.push(EntityKind::Function, name.clone(), node);
+            if has_guarded_matches(node) {
+                ctx.push(EntityKind::ControlFlow, "cond".to_string(), node);
+            }
+            if has_sibling_function_clause(node, &name) {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "unknown_multi_clause_grouping".to_string(),
+                    node,
+                );
+            }
         }
         // `x = …` (no patterns) -> Variable. Covers top-level value binds and
         // `let`/`where` local binds uniformly.
@@ -177,8 +204,22 @@ pub fn visit(
                 node,
             );
         }
-        "lambda" => ctx.push_callable_boundary(node),
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "lambda" => ctx.push_callable_boundary(node),
+        "lambda_case" | "lambda_cases" => {
+            ctx.push_callable_boundary(node);
+            ctx.push(EntityKind::ControlFlow, "case".to_string(), node);
+        }
         // ---- structural: types & typeclasses ----
         "data_type" | "newtype" | "type_synomym" => {
             ctx.push(
@@ -194,6 +235,17 @@ pub fn visit(
                 node,
             );
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // `type family HeaderValMap …` / `data family …` -> Interface (a
         // type-level declaration). Previously dropped (audit S3).
         "type_family" | "data_family" => {
@@ -213,17 +265,25 @@ pub fn visit(
                 node,
             );
         }
-
         // ---- parameters ----
         "patterns" => {
             for name in pattern_param_names(node) {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
-
         // ---- application (calls / throws / catches) ----
         "apply" => visit_apply(node, ctx),
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- qualified name access (`M.lookup`) -> MemberAccess ----
         "qualified" => {
             // A `qualified` that is the callee of an `apply` is handled in
@@ -231,25 +291,50 @@ pub fn visit(
             // isn't processed twice). Skip when the parent is that `apply`'s
             // head spine.
             if is_apply_callee(node) {
-                return;
+                return true;
             }
             if let Some(member) = qualified_member(node) {
                 ctx.push(EntityKind::MemberAccess, member, node);
             }
         }
-
         // ---- literals ----
         "integer" | "float" | "string" | "char" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
-
         // ---- control flow (all expressions in Haskell) ----
-        "conditional" | "case" | "guards" | "let_in" => {
+        "conditional" | "case" | "let_in" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
-        _ => {}
+        "alternative" => {
+            ctx.push(EntityKind::ControlFlow, "case_item".to_string(), node);
+        }
+        _ => return false,
     }
+    true
+}
+
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "match" if node.field("guards").is_some() => {
+            ctx.push(EntityKind::ControlFlow, "case_item".to_string(), node);
+        }
+        "guards" => {
+            for _ in 1..node.field_children("guard").count() {
+                ctx.push(EntityKind::ControlFlow, "logical_and".to_string(), node);
+            }
+        }
+        "infix" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        _ => return false,
+    }
+    true
 }
 
 /// Handle an `apply` (function application): dispatch on the callee head to
@@ -268,7 +353,9 @@ fn visit_apply(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ex
     }
     // `catch action handler` / `try act` -> Catch (not a plain Call).
     if CATCH_FUNCTIONS.contains(&callee.as_str()) {
-        ctx.push(EntityKind::Catch, callee, node);
+        if !is_apply_function_of_parent(node) {
+            ctx.push(EntityKind::Catch, callee, node);
+        }
         return;
     }
     // `M.lookup x` -> MemberAccess for the accessed member, plus the Call.
@@ -278,6 +365,34 @@ fn visit_apply(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ex
         ctx.push(EntityKind::MemberAccess, member, node);
     }
     ctx.push(EntityKind::Call, callee, node);
+}
+
+fn is_apply_function_of_parent(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent.kind() == "apply"
+            && parent
+                .field("function")
+                .is_some_and(|function| function.node_id() == node.node_id())
+    })
+}
+
+fn has_guarded_matches(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.field_children("match")
+        .any(|matched| matched.field("guards").is_some())
+}
+
+fn has_sibling_function_clause(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    name: &str,
+) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent
+            .children()
+            .filter(|sibling| sibling.kind() == "function")
+            .filter(|sibling| field_name(sibling).as_deref() == Some(name))
+            .nth(1)
+            .is_some()
+    })
 }
 
 /// The head of an application spine. `apply` is left-nested (`((g x) y)`), so
@@ -502,7 +617,7 @@ mod tests {
             "classify :: Int -> String\nclassify n\n  | n < 0 = \"neg\"\n  | otherwise = branch\n  where branch = case n of\n                   0 -> \"zero\"\n                   _ -> if n > 10 then \"big\" else \"pos\"\n",
         );
         assert!(
-            find(&es, EntityKind::ControlFlow, "guards").is_some(),
+            find(&es, EntityKind::ControlFlow, "cond").is_some(),
             "{es:?}"
         );
         assert!(
@@ -533,6 +648,69 @@ mod tests {
                 .count(),
             1,
             "entities: {es:?}"
+        );
+    }
+
+    #[test]
+    fn complexity_events_cover_booleans_arms_guards_and_lambda_case() {
+        let es = entities(
+            "classify :: Int -> String\nclassify n\n  | n < 0 = \"negative\"\n  | n > 10, Just value <- lookup n = value\n  | otherwise = case n of\n      0 -> \"zero\"\n      1 -> \"one\"\n      _ -> \"other\"\nchoose :: Either Int Int -> Int\nchoose = \\case { Left x -> x; Right 0 -> 0; Right x -> x }\nready :: Bool\nready = a && b || c\n",
+        );
+        let flow_names: Vec<&str> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(flow_names.contains(&"logical_and"), "events: {es:?}");
+        assert!(flow_names.contains(&"logical_or"), "events: {es:?}");
+        assert!(flow_names.contains(&"cond"), "events: {es:?}");
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "case_item")
+                .count(),
+            9,
+            "events: {es:?}"
+        );
+        assert_eq!(
+            es.iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            1,
+            "events: {es:?}"
+        );
+    }
+
+    #[test]
+    fn catch_is_single_path_but_finally_and_bracket_are_wrappers() {
+        let es = entities(
+            "safe :: IO ()\nsafe = catch action handler\nclean :: IO ()\nclean = finally action cleanup\nresource :: IO ()\nresource = bracket acquire release use\n",
+        );
+
+        let catches: Vec<_> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Catch)
+            .collect();
+        assert_eq!(catches.len(), 1, "events: {es:?}");
+        assert_eq!(catches[0].name, "catch");
+        assert!(find(&es, EntityKind::Call, "finally").is_some(), "{es:?}");
+        assert!(find(&es, EntityKind::Call, "bracket").is_some(), "{es:?}");
+    }
+
+    #[test]
+    fn unresolved_function_clause_grouping_lowers_confidence() {
+        let es = entities("choose :: Int -> Int\nchoose 0 = 0\nchoose value = value\n");
+        let metrics: Vec<_> = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .filter(|metric| metric.name == "choose")
+            .collect();
+
+        assert_eq!(metrics.len(), 2, "metrics: {metrics:?}");
+        assert!(
+            metrics.iter().all(|metric| {
+                metric.confidence == crate::complexity::ComplexityConfidence::Low
+            })
         );
     }
 }

@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "id": "plan-build-verify",
+      "name": "Plan, build, and verify a bounded change",
+      "setup": [
+        "Prepare a disposable repository containing one bounded change request.",
+        "Install the Varde skills and workflow CLI under evaluation."
+      ],
+      "workflow_actions": [
+        "Create and finalize a plan with acceptance criteria.",
+        "Decompose the plan and execute every ready task sequentially.",
+        "Review the aggregate changes and verify every acceptance criterion."
+      ],
+      "observable_assertions": [
+        "The finalized plan records explicit scope and acceptance criteria.",
+        "Every task reaches done with verification evidence.",
+        "The completed plan records verified acceptance criteria."
+      ],
+      "evidence_paths": [
+        "memory-bank/working/plans/<plan-id>/plan.md",
+        "memory-bank/working/plans/<plan-id>/tasks/*.md",
+        "benchmark-runs/plan-build-verify/transcript.jsonl"
+      ],
+      "token_capture": {
+        "method": "Record harness usage after planning, each task, and final verification.",
+        "evidence_path": "benchmark-runs/plan-build-verify/tokens.json",
+        "fields": [
+          "input_tokens",
+          "output_tokens"
+        ]
+      }
+    },
+    {
+      "id": "review-fix-verify",
+      "name": "Review, fix, and verify a seeded defect",
+      "setup": [
+        "Prepare a disposable repository containing one observable seeded defect.",
+        "Capture the expected defect and regression check independently."
+      ],
+      "workflow_actions": [
+        "Run a report-only review against the seeded change.",
+        "Apply the accepted finding through the review fix workflow.",
+        "Run the independent regression check."
+      ],
+      "observable_assertions": [
+        "The review reports the seeded defect with concrete evidence.",
+        "The fix changes only files required by the finding.",
+        "The independent regression check passes afterward."
+      ],
+      "evidence_paths": [
+        "memory-bank/working/reviews/<review-id>.md",
+        "benchmark-runs/review-fix-verify/diff.patch",
+        "benchmark-runs/review-fix-verify/verification.txt"
+      ],
+      "token_capture": {
+        "method": "Record harness usage for review, fix, and verification phases.",
+        "evidence_path": "benchmark-runs/review-fix-verify/tokens.json",
+        "fields": [
+          "input_tokens",
+          "output_tokens"
+        ]
+      }
+    },
+    {
+      "id": "knowledge-record-recall",
+      "name": "Record and recall durable project knowledge",
+      "setup": [
+        "Prepare a disposable repository with one documented project decision.",
+        "Remove that decision from the active conversation context."
+      ],
+      "workflow_actions": [
+        "Record the decision through the knowledge workflow.",
+        "Start a fresh agent context.",
+        "Ask the agent to retrieve and apply the decision."
+      ],
+      "observable_assertions": [
+        "The knowledge note preserves the decision and its rationale.",
+        "The fresh context locates the correct knowledge note.",
+        "The resulting recommendation follows the recorded decision."
+      ],
+      "evidence_paths": [
+        "memory-bank/knowledge/<type>/<decision-slug>.md",
+        "benchmark-runs/knowledge-record-recall/transcript.jsonl",
+        "benchmark-runs/knowledge-record-recall/result.md"
+      ],
+      "token_capture": {
+        "method": "Record harness usage for recording and fresh-context recall.",
+        "evidence_path": "benchmark-runs/knowledge-record-recall/tokens.json",
+        "fields": [
+          "input_tokens",
+          "output_tokens"
+        ]
+      }
+    }
+  ]
+}

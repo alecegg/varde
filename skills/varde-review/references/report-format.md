@@ -5,7 +5,7 @@
 Each review uses one dated folder:
 
 ```text
-memory-bank/working/reviews/
+<working>/reviews/
   <YYYY-MM-DD>-<branch>-<target>/
     review.md
     index.md
@@ -24,7 +24,8 @@ spaces with hyphens. Keep the target short and recognizable.
 
 ### review.md
 
-Create `review.md` before category reviews begin. It carries the review concept's YAML frontmatter:
+Create `review.md` before category reviews begin. It uses the review concept's
+YAML frontmatter:
 
 ```yaml
 ---
@@ -67,8 +68,8 @@ their status, and finding counts.
 
 ### Category files
 
-Each category file is a `review-category` concept: YAML frontmatter (below)
-followed by a heading. Use the category name as the file name in uppercase.
+Each category file uses the `review-category` concept: YAML frontmatter (below)
+followed by a heading. Use the category name as the uppercase file name.
 Finding sections follow the `## Finding format` section below.
 
 ```markdown
@@ -76,7 +77,7 @@ Finding sections follow the `## Finding format` section below.
 title: CORRECTNESS findings
 type: review-category
 description: CORRECTNESS review findings
-resource: memory-bank/working/reviews/<review-folder>
+resource: <working>/reviews/<review-folder>
 tags:
   - review
   - correctness
@@ -88,9 +89,10 @@ edited_at: <ISO 8601>
 # CORRECTNESS
 ```
 
-Findings follow the frontmatter as level-two sections — see the
-`## Finding format` section below for the field structure. Identifiers are local to their category file. Use the category name and a
-one-based sequence number. Do not reuse an identifier after dismissal.
+Findings follow the frontmatter as level-two sections. See `## Finding format`
+below for the field structure. Identifiers are local to their category file.
+Use the category name and a one-based sequence number. Do not reuse an
+identifier after dismissal.
 
 ### Review lifecycle
 
@@ -104,6 +106,10 @@ one-based sequence number. Do not reuse an identifier after dismissal.
 8. Mark review and triage statuses complete in `review.md`.
 
 The review folder is the long-term, readable record.
+
+Specialist candidates are not category files. Keep them as coordinator-owned
+review input until the coordinator verifies their evidence, uniqueness,
+severity, and disposition under `references/report-candidates.md`.
 
 ## Finding format
 
@@ -132,23 +138,21 @@ The parser accepts expired tokens.
 
 ### Finding discipline
 
-A finding is a defect confirmed by reading the code, not a speculation. "This
-could break" is not a finding; "this breaks when X — here is the code path" is.
+A finding is a defect confirmed by reading the code, not speculation. "This
+could break" is not a finding. State when it breaks and show the code path.
 
 - Only a reproduced or code-confirmed defect earns `high` or `critical`. An
   unverified "might" is at most `low`/`info`, or omit it.
-- Treat each finding as a claim. Show the check, not just the conclusion:
-  "grepped 4 call sites, all unguarded" shows evidence. "Nothing guards this"
+- Treat each finding as a claim. Show the check, not only the conclusion.
+  "Grepped 4 call sites, all unguarded" shows evidence. "Nothing guards this"
   does not.
 - A claim over a set ("every writer", "the only path", "the class is closed")
   requires enumerating the set. One example supports only that example — call a
   sample a sample.
 - Numbers carry the boundary of their sample: "3 of 7 call sites", not "most
   call sites".
-- Calibration: if a review's findings keep dismissing as empty on inspection,
-  raise the bar on what earns a finding rather than lowering it. Auditing
-  everything is where false findings breed — scope to the change and its
-  consumption path.
+- Calibration: if findings are repeatedly dismissed, raise the evidence bar.
+  Do not lower it. Scope the review to the change and its consumption path.
 
 ### Required fields
 
@@ -182,9 +186,9 @@ records its disposition after the automated pass.
 
 ### Stable parsing markers
 
-Use the exact bold field names shown above. The triage workflow identifies
-finding sections by level-two headings and reads fields until the next
-heading. Keep `Summary` and `Solutions` as level-three headings.
+Use the exact bold field names shown above. The triage workflow finds finding
+sections through level-two headings and reads fields until the next heading.
+Keep `Summary` and `Solutions` as level-three headings.
 
 ### Disposition edits
 
@@ -194,23 +198,20 @@ decision note below the solutions when useful.
 
 ## Category file format
 
-A new review category is defined in its own file, `CATEGORY-<KEBAB-NAME>.md` —
-uppercase prefix for discoverability, kebab-case descriptor, e.g.
-CATEGORY-API-DESIGN.md. It carries a `# Category: <Name>` heading followed by
-the sections below, in that order, written as the built-in categories in
-`references/report-categories.md` write them — use any of those ten as the
-worked example rather than reconstructing the shape from prose.
+A new review category uses its own file,
+`CATEGORY-<KEBAB-NAME>.md`: an uppercase prefix and kebab-case descriptor, such
+as CATEGORY-API-DESIGN.md. Start with a `# Category: <Name>` heading. Add the
+sections below in this order. Follow the built-in categories in
+`references/report-categories.md` as examples.
 
-`references/report-categories.md`'s "Rules for every category" already covers
-evidence bar, the generic read-the-full-body sweep, and the auto-fix principle.
-A new category states only what those rules don't.
+`references/report-categories.md` already defines the evidence bar, the generic
+full-body sweep, and the auto-fix principle. A new category states only its
+additional rules.
 
 ### Section rules
 
-Each section opens with its name in bold followed by a colon — `**Look for:**`,
-not `**Look for.**`. The colon reads as "here is what this label covers"; a
-period starts a sentence the gloss then interrupts. Imperative step labels
-elsewhere in these skills are complete sentences and keep their period.
+Each section opens with its name in bold followed by a colon, such as
+`**Look for:**`, not `**Look for.**`. Use periods for complete imperative steps.
 
 | Section | Contents |
 |---|---|

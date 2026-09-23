@@ -8,12 +8,10 @@
 //! the result to disk in `scan_cli.rs`.
 //!
 //! Substitution source is the match's `captures` map as produced by
-//! `find_pattern.rs` (`collect_captures`/`bind_sequence`) and carried on
-//! `Finding.evidence`: `$VAR` binds a single node object `{kind, text,
-//! span}`, `$$$VAR` binds an array of node objects. A `$$$VAR` capture's
-//! bound nodes join into the replacement text with no separator — the same
-//! binding semantics the constraint filter applies to a variadic capture's
-//! joined text (`filter_matches`'s `.concat()`).
+//! `find_pattern.rs` and carried on `Finding.evidence`: `$VAR` binds a
+//! single node object `{kind, text, span}`, `$$$VAR` binds an array of node
+//! objects. When source text is available, a `$$$VAR` capture preserves the
+//! exact bytes between its bound nodes.
 
 /// Substitute `$VAR` / `$$$VAR` tokens in a `rewrite` template with the
 /// matched capture texts from `captures`.
@@ -31,6 +29,20 @@
 /// a name absent from the map is unreachable in practice; it is passed
 /// through untouched defensively.
 pub fn substitute(template: &str, captures: &serde_json::Value) -> String {
+    substitute_with_source(template, captures, None)
+}
+
+/// Substitute captures while preserving source separators for arrays.
+///
+/// Capture spans are absolute byte offsets into `source`. When every
+/// adjacent pair has valid ordered UTF-8 boundaries, their intervening
+/// source bytes are copied exactly. Malformed or absent spans fall back to
+/// concatenating node texts, which avoids inventing punctuation.
+pub fn substitute_with_source(
+    template: &str,
+    captures: &serde_json::Value,
+    source: Option<&str>,
+) -> String {
     let captures = captures.as_object();
     let mut out = String::with_capacity(template.len());
     let mut cursor = 0usize;
@@ -40,7 +52,7 @@ pub fn substitute(template: &str, captures: &serde_json::Value) -> String {
         // char boundary and slicing can never split a multi-byte sequence.
         out.push_str(&template[cursor..token.start]);
         match captures.and_then(|m| m.get(token.name)) {
-            Some(value) => out.push_str(&capture_text(value)),
+            Some(value) => out.push_str(&capture_text(value, source)),
             None => out.push_str(&template[token.start..token.end]),
         }
         cursor = token.end;
@@ -127,22 +139,57 @@ pub(crate) fn template_tokens(template: &str) -> impl Iterator<Item = TemplateTo
 /// `$VAR` expects a single node object; `$$$VAR` expects an array of node
 /// objects. A shape mismatch (e.g. a `$$$VAR` in the template against a
 /// single-node capture) degrades gracefully: single object → its text,
-/// array → joined texts, anything else → empty.
-fn capture_text(value: &serde_json::Value) -> String {
+/// array → source-separated texts or safe concatenation, anything else → empty.
+fn capture_text(value: &serde_json::Value, source: Option<&str>) -> String {
     match value {
         // Array capture, whether bound as `$$$VAR` or referenced as `$VAR`
         // (defensive — load-time validation permits same-name cross-sigil
-        // references by token-name comparison): join all bound nodes' text.
-        serde_json::Value::Array(nodes) => nodes
-            .iter()
-            .filter_map(node_text)
-            .collect::<Vec<_>>()
-            .concat(),
+        // references by token-name comparison): preserve source separation.
+        serde_json::Value::Array(nodes) => source
+            .and_then(|source| capture_array_with_separators(nodes, source))
+            .unwrap_or_else(|| nodes.iter().filter_map(node_text).collect()),
         node => match node_text(node) {
             Some(text) => text.to_string(),
             None => String::new(),
         },
     }
+}
+
+/// Rebuild an array capture using the exact bytes between adjacent nodes.
+/// Returns `None` when evidence spans cannot safely index `source`.
+fn capture_array_with_separators(nodes: &[serde_json::Value], source: &str) -> Option<String> {
+    let texts: Vec<&str> = nodes.iter().map(node_text).collect::<Option<_>>()?;
+    let spans: Vec<(usize, usize)> = nodes.iter().map(node_span).collect::<Option<_>>()?;
+    if spans
+        .iter()
+        .any(|&(start, end)| source.get(start..end).is_none())
+        || spans.windows(2).any(|pair| pair[0].1 > pair[1].0)
+    {
+        return None;
+    }
+
+    let mut out = String::new();
+    for (index, text) in texts.iter().enumerate() {
+        out.push_str(text);
+        let Some(next) = spans.get(index + 1) else {
+            continue;
+        };
+        let end = spans[index].1;
+        let start = next.0;
+        out.push_str(&source[end..start]);
+    }
+    Some(out)
+}
+
+fn node_span(node: &serde_json::Value) -> Option<(usize, usize)> {
+    Some((
+        node_span_offset(node, "start_byte")?,
+        node_span_offset(node, "end_byte")?,
+    ))
+}
+
+fn node_span_offset(node: &serde_json::Value, key: &str) -> Option<usize> {
+    node.get("span")?.get(key)?.as_u64()?.try_into().ok()
 }
 
 /// The `text` field of a capture node object, if present.
@@ -224,6 +271,14 @@ mod tests {
         serde_json::json!({ "kind": "identifier", "text": text })
     }
 
+    fn spanned(text: &str, start_byte: usize, end_byte: usize) -> serde_json::Value {
+        serde_json::json!({
+            "kind": "identifier",
+            "text": text,
+            "span": { "start_byte": start_byte, "end_byte": end_byte }
+        })
+    }
+
     fn captures(pairs: Vec<(&str, serde_json::Value)>) -> serde_json::Value {
         let mut map = serde_json::Map::new();
         for (name, value) in pairs {
@@ -250,13 +305,56 @@ mod tests {
     }
 
     #[test]
-    fn variadic_capture_joins_bound_nodes_without_separator() {
+    fn variadic_capture_preserves_argument_separators() {
+        let source = "f(a,\n  b , c)";
         let caps = captures(vec![(
             "ARGS",
-            serde_json::json!([single("a"), single("b"), single("c")]),
+            serde_json::json!([spanned("a", 2, 3), spanned("b", 7, 8), spanned("c", 11, 12)]),
         )]);
-        let out = substitute("f($$$ARGS)", &caps);
-        assert_eq!(out, "f(abc)");
+        let out = substitute_with_source("g($$$ARGS)", &caps, Some(source));
+        assert_eq!(out, "g(a,\n  b , c)");
+    }
+
+    #[test]
+    fn variadic_capture_preserves_statement_separators() {
+        let source = "first();\n  second();";
+        let caps = captures(vec![(
+            "BODY",
+            serde_json::json!([spanned("first();", 0, 8), spanned("second();", 11, 20)]),
+        )]);
+        let out = substitute_with_source("{$$$BODY}", &caps, Some(source));
+        assert_eq!(out, "{first();\n  second();}");
+    }
+
+    #[test]
+    fn malformed_variadic_spans_fall_back_without_punctuation() {
+        let cases = [
+            (
+                "reversed node",
+                "abcdef",
+                serde_json::json!([spanned("a", 2, 1), spanned("b", 3, 4)]),
+            ),
+            (
+                "out of bounds",
+                "abcdef",
+                serde_json::json!([spanned("a", 0, 1), spanned("b", 5, 99)]),
+            ),
+            (
+                "overlapping nodes",
+                "abcdef",
+                serde_json::json!([spanned("a", 0, 4), spanned("b", 3, 5)]),
+            ),
+            (
+                "non utf8 boundary",
+                "éx",
+                serde_json::json!([spanned("a", 0, 1), spanned("b", 2, 3)]),
+            ),
+        ];
+        for (name, source, nodes) in cases {
+            let caps = captures(vec![("BODY", nodes)]);
+            let out = substitute_with_source("{$$$BODY}", &caps, Some(source));
+            assert_eq!(out, "{ab}", "{name}");
+        }
     }
 
     #[test]

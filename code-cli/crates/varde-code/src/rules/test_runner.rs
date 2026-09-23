@@ -61,107 +61,129 @@ pub fn run_pattern_rule_tests(rule: &Rule) -> Vec<TestResult> {
 }
 
 fn run_one(rule: &Rule, case: &crate::rules::TestCase) -> TestResult {
-    if let Some(valid) = case.valid.as_ref() {
-        for snippet in valid {
-            match match_snippet(rule, snippet) {
-                Ok(matches) if !matches.is_empty() => {
-                    return fail(
-                        rule,
-                        &case.name,
-                        format!(
-                            "valid snippet unexpectedly matched:\nsnippet: {snippet}\nexpected match count: 0\nactual match count: {}",
-                            matches.len()
-                        ),
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    return fail(
-                        rule,
-                        &case.name,
-                        format!("valid snippet {snippet} failed to evaluate: {}", e.message),
-                    );
-                }
+    check_valid_snippets(rule, case)
+        .or_else(|| check_invalid_snippets(rule, case))
+        .or_else(|| check_rewrites(rule, case))
+        .unwrap_or_else(|| pass(rule, &case.name))
+}
+
+fn check_valid_snippets(rule: &Rule, case: &crate::rules::TestCase) -> Option<TestResult> {
+    for snippet in case.valid.as_deref().unwrap_or_default() {
+        match match_snippet(rule, snippet) {
+            Ok(matches) if !matches.is_empty() => {
+                return Some(fail(
+                    rule,
+                    &case.name,
+                    format!(
+                        "valid snippet unexpectedly matched:\nsnippet: {snippet}\nexpected match count: 0\nactual match count: {}",
+                        matches.len()
+                    ),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) => {
+                return Some(fail(
+                    rule,
+                    &case.name,
+                    format!(
+                        "valid snippet {snippet} failed to evaluate: {}",
+                        error.message
+                    ),
+                ));
             }
         }
     }
+    None
+}
 
-    if let Some(invalid) = case.invalid.as_ref() {
-        for snippet in invalid {
-            match match_snippet(rule, snippet) {
-                Ok(matches) if matches.is_empty() => {
-                    return fail(
-                        rule,
-                        &case.name,
-                        format!(
-                            "invalid snippet unexpectedly had zero matches:\nsnippet: {snippet}\nexpected match count: >=1\nactual match count: 0"
-                        ),
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    return fail(
-                        rule,
-                        &case.name,
-                        format!(
-                            "invalid snippet {snippet} failed to evaluate: {}",
-                            e.message
-                        ),
-                    );
-                }
+fn check_invalid_snippets(rule: &Rule, case: &crate::rules::TestCase) -> Option<TestResult> {
+    for snippet in case.invalid.as_deref().unwrap_or_default() {
+        match match_snippet(rule, snippet) {
+            Ok(matches) if matches.is_empty() => {
+                return Some(fail(
+                    rule,
+                    &case.name,
+                    format!(
+                        "invalid snippet unexpectedly had zero matches:\nsnippet: {snippet}\nexpected match count: >=1\nactual match count: 0"
+                    ),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) => {
+                return Some(fail(
+                    rule,
+                    &case.name,
+                    format!(
+                        "invalid snippet {snippet} failed to evaluate: {}",
+                        error.message
+                    ),
+                ));
             }
         }
     }
+    None
+}
 
-    if let Some(expect_rewrite) = case.expect_rewrite.as_ref() {
-        let Some(template) = rule.rewrite.as_deref() else {
-            return fail(
+fn check_rewrites(rule: &Rule, case: &crate::rules::TestCase) -> Option<TestResult> {
+    let rewrites = case.expect_rewrite.as_ref()?;
+    let Some(template) = rule.rewrite.as_deref() else {
+        return Some(fail(
+            rule,
+            &case.name,
+            "expect_rewrite entries declared but rule has no `rewrite` field".to_string(),
+        ));
+    };
+    for (snippet, expected) in rewrites {
+        if let Some(failure) = check_rewrite(rule, case, template, snippet, expected) {
+            return Some(failure);
+        }
+    }
+    None
+}
+
+fn check_rewrite(
+    rule: &Rule,
+    case: &crate::rules::TestCase,
+    template: &str,
+    snippet: &str,
+    expected: &str,
+) -> Option<TestResult> {
+    let matches = match match_snippet(rule, snippet) {
+        Ok(matches) => matches,
+        Err(error) => {
+            return Some(fail(
                 rule,
                 &case.name,
-                "expect_rewrite entries declared but rule has no `rewrite` field".to_string(),
-            );
-        };
-        for (snippet, expected) in expect_rewrite {
-            let matches = match match_snippet(rule, snippet) {
-                Ok(matches) => matches,
-                Err(e) => {
-                    return fail(
-                        rule,
-                        &case.name,
-                        format!(
-                            "expect_rewrite snippet {snippet} failed to evaluate: {}",
-                            e.message
-                        ),
-                    );
-                }
-            };
-            let Some(m) = matches.first() else {
-                return fail(
-                    rule,
-                    &case.name,
-                    format!(
-                        "expect_rewrite snippet did not match:\nsnippet: {snippet}\nexpected output: {expected}\nactual: no match"
-                    ),
-                );
-            };
-            let captures = m
-                .get("captures")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null);
-            let actual = rewrite::substitute(template, &captures);
-            if &actual != expected {
-                return fail(
-                    rule,
-                    &case.name,
-                    format!(
-                        "expect_rewrite output mismatch:\nsnippet: {snippet}\nexpected output: {expected}\nactual output: {actual}"
-                    ),
-                );
-            }
+                format!(
+                    "expect_rewrite snippet {snippet} failed to evaluate: {}",
+                    error.message
+                ),
+            ));
         }
-    }
-
-    pass(rule, &case.name)
+    };
+    let Some(matched) = matches.first() else {
+        return Some(fail(
+            rule,
+            &case.name,
+            format!(
+                "expect_rewrite snippet did not match:\nsnippet: {snippet}\nexpected output: {expected}\nactual: no match"
+            ),
+        ));
+    };
+    let captures = matched
+        .get("captures")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let actual = rewrite::substitute_with_source(template, &captures, Some(snippet));
+    (actual != expected).then(|| {
+        fail(
+            rule,
+            &case.name,
+            format!(
+                "expect_rewrite output mismatch:\nsnippet: {snippet}\nexpected output: {expected}\nactual output: {actual}"
+            ),
+        )
+    })
 }
 
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -190,6 +212,8 @@ fn match_snippet(rule: &Rule, snippet: &str) -> Result<Vec<serde_json::Value>, A
     };
 
     let mut all_matches = Vec::new();
+    let mut last_error = None;
+    let mut evaluated = false;
     for lang in langs {
         let path = write_snippet(snippet)?;
         let input = serde_json::json!({
@@ -200,12 +224,18 @@ fn match_snippet(rule: &Rule, snippet: &str) -> Result<Vec<serde_json::Value>, A
         let result = crate::query::find_pattern::find_pattern(&input);
         let _ = std::fs::remove_file(&path);
         let matches = match result {
-            Ok(v) => v["matches"].as_array().cloned().unwrap_or_default(),
+            Ok(v) => {
+                evaluated = true;
+                v["matches"].as_array().cloned().unwrap_or_default()
+            }
             // A snippet that doesn't parse (or a pattern that doesn't parse)
             // in this candidate language is expected for language-agnostic
             // rules tried against every supported language — skip, don't
             // fail the whole check.
-            Err(_) => continue,
+            Err(error) => {
+                last_error = Some(error);
+                continue;
+            }
         };
         let kept = match rule.constraints.as_ref() {
             Some(constraints) if !constraints.is_empty() => {
@@ -214,6 +244,11 @@ fn match_snippet(rule: &Rule, snippet: &str) -> Result<Vec<serde_json::Value>, A
             _ => matches,
         };
         all_matches.extend(kept);
+    }
+    if !evaluated {
+        return Err(last_error.unwrap_or_else(|| {
+            ApiError::new("invalid_input", "rule did not target a supported language")
+        }));
     }
     Ok(all_matches)
 }
@@ -360,63 +395,41 @@ fn run_sql_one(rule: &Rule, case: &crate::rules::TestCase) -> TestResult {
         );
     };
 
-    let guard = match TempFixture::build(fixture) {
-        Ok(guard) => guard,
-        Err(e) => {
-            return fail(
-                rule,
-                &case.name,
-                format!("failed to prepare fixture temp directory: {e}"),
-            );
-        }
+    let actual = match run_sql_fixture(rule, fixture) {
+        Ok(actual) => actual,
+        Err(detail) => return fail(rule, &case.name, detail),
     };
-
-    let repo_root = guard.repo_root.to_string_lossy().into_owned();
-    if let Err(e) = crate::build::run_with_force(&repo_root, true) {
-        return fail(rule, &case.name, format!("indexing fixture failed: {e}"));
-    }
-
-    let db_path = crate::db::path::repo_db_path(&guard.repo_root);
-    let conn = match crate::db::open_read_only(&db_path) {
-        Ok(conn) => conn,
-        Err(e) => {
-            return fail(
-                rule,
-                &case.name,
-                format!("opening fixture database failed: {e}"),
-            );
-        }
-    };
-
-    let (findings, diagnostics) =
-        match crate::rules::sql::run_sql_rules(std::slice::from_ref(rule), &conn) {
-            Ok(result) => result,
-            Err(e) => {
-                return fail(
-                    rule,
-                    &case.name,
-                    format!("running rule query failed: {}", e.message),
-                );
-            }
-        };
-    if let Some(diag) = diagnostics
-        .into_iter()
-        .find(|d| d.rule_id.as_deref() == Some(rule.id.as_str()))
-    {
-        return fail(
-            rule,
-            &case.name,
-            format!("query execution failed: {}", diag.reason),
-        );
-    }
-
-    let actual_rows: Vec<std::collections::HashMap<String, serde_json::Value>> =
-        findings.iter().map(finding_to_row).collect();
-
-    if let Err(detail) = compare_rows_multiset(expected, &actual_rows) {
+    if let Err(detail) = compare_rows_multiset(expected, &actual) {
         return fail(rule, &case.name, detail);
     }
     pass(rule, &case.name)
+}
+
+fn run_sql_fixture(
+    rule: &Rule,
+    fixture: &std::collections::HashMap<String, String>,
+) -> Result<Vec<std::collections::HashMap<String, serde_json::Value>>, String> {
+    let guard = TempFixture::build(fixture)
+        .map_err(|error| format!("failed to prepare fixture temp directory: {error}"))?;
+    let repo_root = guard.repo_root.to_string_lossy().into_owned();
+    crate::build::run_with_force(&repo_root, true)
+        .map_err(|error| format!("indexing fixture failed: {error}"))?;
+    let db_path = crate::db::path::repo_db_path(&guard.repo_root);
+    let conn = crate::db::open_read_only(&db_path)
+        .map_err(|error| format!("opening fixture database failed: {error}"))?;
+    let (findings, diagnostics) = crate::rules::sql::run_sql_rules_in_repo(
+        std::slice::from_ref(rule),
+        &conn,
+        &guard.repo_root,
+    )
+    .map_err(|error| format!("running rule query failed: {}", error.message))?;
+    if let Some(diagnostic) = diagnostics
+        .into_iter()
+        .find(|diagnostic| diagnostic.rule_id.as_deref() == Some(rule.id.as_str()))
+    {
+        return Err(format!("query execution failed: {}", diagnostic.reason));
+    }
+    Ok(findings.iter().map(finding_to_row).collect())
 }
 
 /// A fresh, uniquely-named temp directory populated from a fixture's
@@ -477,6 +490,7 @@ mod pattern_tests {
         Rule {
             id: "no-console-log".to_string(),
             kind: RuleKind::Pattern,
+            verification: None,
             severity: crate::rules::Severity::Warning,
             message: "no console.log".to_string(),
             name: None,
@@ -512,6 +526,28 @@ mod pattern_tests {
         assert_eq!(result.rule_id, "no-console-log");
         assert_eq!(result.test_name, "no console.log in clean code");
         assert!(result.detail.is_none());
+    }
+
+    #[test]
+    fn invalid_pattern_fails_instead_of_passing_as_zero_matches() {
+        let rule = base_rule("const (");
+        let case = TestCase {
+            name: "invalid pattern".to_string(),
+            valid: Some(vec!["const answer = 42;".to_string()]),
+            invalid: None,
+            expect_rewrite: None,
+            fixture: None,
+            expect_rows: None,
+        };
+        let result = run_one(&rule, &case);
+        assert!(!result.pass, "invalid patterns must fail tests");
+        assert!(
+            result
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("failed to evaluate")),
+            "failure should identify evaluation: {result:?}"
+        );
     }
 
     #[test]
@@ -698,6 +734,7 @@ mod sql_tests {
         Rule {
             id: id.to_string(),
             kind: RuleKind::Sql,
+            verification: None,
             severity: Severity::Warning,
             message: format!("{id} fired"),
             name: None,

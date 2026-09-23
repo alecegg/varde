@@ -1,5 +1,3 @@
-<!-- docs:v1 {"specs":{"architecture":"crates/varde-code/src/lib.rs"}} -->
-
 # Architecture
 
 `varde-code` is a library plus a single CLI binary (see [CLI.md](CLI.md)): no
@@ -43,9 +41,9 @@ scan.rs        walk the tree, emit files (skip-and-report for unparseable ones)
   -> index.db   ~/.config/varde-code/repos/<name>-<hash>/index.db
 ```
 
-`build.rs` runs this pipeline in full on every invocation unless incremental
-detection (file mtime/size/content-hash) determines a file is unchanged.
-`--force` skips incremental detection.
+`build.rs` runs the full pipeline for a missing index or `--force`.
+Otherwise it updates changed files incrementally. File metadata drives
+change detection, with content hashes used when metadata is unavailable.
 
 ### Concurrency & durability
 
@@ -100,4 +98,3 @@ substrates: pattern rules (`rules/pattern.rs`) walk the live AST, SQL rules
 (`rules/sql.rs`) query the persisted index directly. Findings from both are
 merged and deduplicated (`rules/correlate.rs`) before being reported or
 (`--apply`) used to drive `rules/rewrite.rs` auto-fixes.
-</content>

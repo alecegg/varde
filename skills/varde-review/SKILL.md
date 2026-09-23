@@ -1,13 +1,13 @@
 ---
 name: varde-review
-description: "Review code and act on it: report findings without touching source, apply an existing review's findings, tighten just-changed lines, or run a varde-code scan to triage findings and author rules."
+description: "Review code and act on findings: report findings without touching source, apply an existing review's findings, simplify just-changed lines, or run a varde-code scan to triage findings and author rules. Not for planning, building new functionality, or docs."
 ---
 
 # Review and improve code
 
 Reporting is the default. Changing source requires an explicit request.
 
-## What the request needs
+## Choose the mode
 
 | The request is | Read |
 |---|---|
@@ -19,9 +19,12 @@ Reporting is the default. Changing source requires an explicit request.
 Load only the reference the request needs.
 Then load its explicitly required supporting files.
 
-Report mode never changes source files.
-Mutation requires fix or simplify mode.
-Rule authoring confirms thresholds with users.
-Every reported scan finding gets an explicit verdict.
+## Gotchas
 
-Load `references/worktree.md` before isolated fixes.
+- Paths written `<working>/…` and `<knowledge>/…` resolve per
+  `references/memory-locations.md`. Read it before the first memory read or write.
+- Report mode never changes source files.
+- Mutation requires fix or simplify mode.
+- When authoring rules, confirm thresholds with the user.
+- Every reported scan finding gets an explicit verdict.
+- Load `references/worktree.md` before isolated fixes.

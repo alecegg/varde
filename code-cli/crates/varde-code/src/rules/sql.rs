@@ -9,7 +9,7 @@
 
 use crate::query::ApiError;
 use crate::rules::finding::{Finding, Location, finding_id};
-use crate::rules::{Diagnostic, Rule, RuleKind};
+use crate::rules::{Diagnostic, Rule, RuleKind, Verification};
 use rusqlite::{Connection, ToSql};
 
 /// Run every `kind = sql` rule in `rules` against `conn`.
@@ -32,9 +32,77 @@ pub fn run_sql_rules(
     let mut findings = Vec::new();
     let mut diagnostics = Vec::new();
     for rule in rules.iter().filter(|r| r.kind == RuleKind::Sql) {
+        if rule.verification.is_some() {
+            diagnostics.push(sql_diagnostic(
+                rule,
+                "source verification requires a repository root".to_string(),
+            ));
+            continue;
+        }
         match run_sql_rule(rule, conn) {
             Ok(mut rule_findings) => findings.append(&mut rule_findings),
             Err(diag) => diagnostics.push(diag),
+        }
+    }
+    Ok((findings, diagnostics))
+}
+
+/// Run SQL rules, then apply explicit source-aware verification policies.
+pub fn run_sql_rules_in_repo(
+    rules: &[Rule],
+    conn: &Connection,
+    repo_root: &std::path::Path,
+) -> Result<(Vec<Finding>, Vec<Diagnostic>), ApiError> {
+    let needs_facts = rules.iter().any(|r| {
+        matches!(
+            r.verification,
+            Some(Verification::DependencyFacts | Verification::DependencyBoundary)
+        ) && crate::rules::boundary_configured(r).unwrap_or(false)
+    });
+    let fact_error = if needs_facts {
+        crate::rules::dependency_facts::prepare(conn, repo_root).err()
+    } else {
+        None
+    };
+    let mut findings = Vec::new();
+    let mut diagnostics = Vec::new();
+    for rule in rules.iter().filter(|r| r.kind == RuleKind::Sql) {
+        match crate::rules::boundary_configured(rule) {
+            Ok(false) => continue,
+            Err(reason) => {
+                diagnostics.push(sql_diagnostic(rule, reason));
+                continue;
+            }
+            Ok(true) => {}
+        }
+        if matches!(
+            rule.verification,
+            Some(Verification::DependencyFacts | Verification::DependencyBoundary)
+        ) && let Some(reason) = &fact_error
+        {
+            diagnostics.push(sql_diagnostic(
+                rule,
+                format!("dependency certification failed: {reason}"),
+            ));
+            continue;
+        }
+        let candidates = match run_sql_rule(rule, conn) {
+            Ok(rows) => rows,
+            Err(diag) => {
+                diagnostics.push(diag);
+                continue;
+            }
+        };
+        match rule.verification {
+            None | Some(Verification::DependencyFacts | Verification::DependencyBoundary) => {
+                findings.extend(candidates)
+            }
+            Some(Verification::ExactClone) => {
+                let (verified, mut diags) =
+                    crate::rules::clone_verification::verify(rule, repo_root, candidates);
+                findings.extend(verified);
+                diagnostics.append(&mut diags);
+            }
         }
     }
     Ok((findings, diagnostics))
@@ -67,154 +135,197 @@ impl ToSql for Param {
 /// surface (including `ATTACH` and writes): open a read-only connection for
 /// rule SQL and/or reject anything that isn't a single `SELECT` before then.
 fn run_sql_rule(rule: &Rule, conn: &Connection) -> Result<Vec<Finding>, Diagnostic> {
-    let diag = |reason: String| Diagnostic {
-        rule_id: Some(rule.id.clone()),
-        file: "<sql rule>".to_string(),
-        reason,
-    };
-
     let Some(query) = rule.query.as_deref() else {
-        return Err(diag(
+        return Err(sql_diagnostic(
+            rule,
             "rule kind=sql is missing its `query` field".to_string(),
         ));
     };
-
-    let mut stmt = match conn.prepare(query) {
-        Ok(stmt) => stmt,
-        Err(e) => return Err(diag(format!("SQL prepare failed: {e}"))),
-    };
-
-    // Build the `:key` binding list from thresholds + strings (rule-defined,
-    // so the set of params is dynamic, not fixed at compile time). Only keys
-    // the query text actually declares are bound — rusqlite errors on any
-    // `:key` binding absent from the statement, so a rule that keeps a
-    // shared thresholds/strings map and references a subset in `query`
-    // would otherwise fail outright on the unreferenced keys.
-    let declared: std::collections::HashSet<String> = (1..=stmt.parameter_count())
-        .filter_map(|i| stmt.parameter_name(i).map(str::to_string))
-        .collect();
-    let mut keys: Vec<String> = Vec::new();
-    let mut params: Vec<Param> = Vec::new();
-    if let Some(thresholds) = &rule.thresholds {
-        for (key, value) in thresholds {
-            let name = format!(":{key}");
-            if declared.contains(&name) {
-                keys.push(name);
-                params.push(Param::F64(*value));
-            }
-        }
-    }
-    if let Some(strings) = &rule.strings {
-        for (key, value) in strings {
-            let name = format!(":{key}");
-            if declared.contains(&name) {
-                keys.push(name);
-                params.push(Param::Str(value.clone()));
-            }
-        }
-    }
+    let mut stmt = conn
+        .prepare(query)
+        .map_err(|error| sql_diagnostic(rule, format!("SQL prepare failed: {error}")))?;
+    let (keys, params) = rule_params(rule, &stmt);
     let bound: Vec<(&str, &dyn ToSql)> = keys
         .iter()
         .zip(params.iter())
         .map(|(key, param)| (key.as_str(), param as &dyn ToSql))
         .collect();
+    let columns = SqlColumns::new(&stmt).map_err(|reason| sql_diagnostic(rule, reason))?;
+    let rows = collect_rows(&mut stmt, bound.as_slice(), &columns)
+        .map_err(|error| sql_diagnostic(rule, format!("SQL execution failed: {error}")))?;
+    Ok(rows
+        .into_iter()
+        .map(|row| finding_from_row(rule, row))
+        .collect())
+}
 
-    let column_names: Vec<String> = stmt.column_names().iter().map(|c| c.to_string()).collect();
-    let file_col = column_names.iter().position(|c| c == "file");
-    let line_col = column_names.iter().position(|c| c == "line");
-    let (Some(file_col), Some(line_col)) = (file_col, line_col) else {
-        return Err(diag(
-            "query must select a `file` column and a `line` column".to_string(),
-        ));
-    };
+fn sql_diagnostic(rule: &Rule, reason: String) -> Diagnostic {
+    Diagnostic {
+        rule_id: Some(rule.id.clone()),
+        file: "<sql rule>".to_string(),
+        reason,
+    }
+}
 
-    // Optional precise-span columns. A rule that selects these (typically its
-    // anchor entity's `start_byte`/`end_col`/…) gets a finding with a real
-    // byte/column span instead of the line-only fallback. They are treated as
-    // location columns — recognized here so they don't leak into `evidence`
-    // (and thus into `{placeholder}` message rendering). Absent, the span
-    // degrades to `start_line == end_line == line` with zero byte/col, exactly
-    // as before this was added.
-    let col_of = |name: &str| column_names.iter().position(|c| c == name);
-    let start_byte_col = col_of("start_byte");
-    let end_byte_col = col_of("end_byte");
-    let start_col_col = col_of("start_col");
-    let end_line_col = col_of("end_line");
-    let end_col_col = col_of("end_col");
-    let is_location = |index: usize| {
-        index == file_col
-            || index == line_col
-            || Some(index) == start_byte_col
-            || Some(index) == end_byte_col
-            || Some(index) == start_col_col
-            || Some(index) == end_line_col
-            || Some(index) == end_col_col
-    };
+fn rule_params(rule: &Rule, stmt: &rusqlite::Statement<'_>) -> (Vec<String>, Vec<Param>) {
+    let declared: std::collections::HashSet<String> = (1..=stmt.parameter_count())
+        .filter_map(|index| stmt.parameter_name(index).map(str::to_string))
+        .collect();
+    let mut keys = Vec::new();
+    let mut params = Vec::new();
+    for (key, value) in rule.thresholds.iter().flatten() {
+        push_param(&declared, &mut keys, &mut params, key, Param::F64(*value));
+    }
+    for (key, value) in rule.strings.iter().flatten() {
+        push_param(
+            &declared,
+            &mut keys,
+            &mut params,
+            key,
+            Param::Str(value.clone()),
+        );
+    }
+    (keys, params)
+}
 
-    let rows = match stmt.query_map(bound.as_slice(), |row| {
-        let file: String = row.get(file_col)?;
-        let line: i64 = row.get(line_col)?;
-        let opt = |c: Option<usize>| -> rusqlite::Result<Option<i64>> {
-            match c {
-                Some(i) => row.get::<_, Option<i64>>(i),
-                None => Ok(None),
-            }
+fn push_param(
+    declared: &std::collections::HashSet<String>,
+    keys: &mut Vec<String>,
+    params: &mut Vec<Param>,
+    key: &str,
+    value: Param,
+) {
+    let name = format!(":{key}");
+    if declared.contains(&name) {
+        keys.push(name);
+        params.push(value);
+    }
+}
+
+struct SqlColumns {
+    names: Vec<String>,
+    file: usize,
+    line: usize,
+    start_byte: Option<usize>,
+    end_byte: Option<usize>,
+    start_col: Option<usize>,
+    end_line: Option<usize>,
+    end_col: Option<usize>,
+}
+
+impl SqlColumns {
+    fn new(stmt: &rusqlite::Statement<'_>) -> Result<Self, String> {
+        let names: Vec<String> = stmt
+            .column_names()
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
+        let position = |name: &str| names.iter().position(|candidate| candidate == name);
+        let Some(file) = position("file") else {
+            return Err("query must select a `file` column and a `line` column".to_string());
         };
-        let span_cols = (
-            opt(start_byte_col)?,
-            opt(end_byte_col)?,
-            opt(start_col_col)?,
-            opt(end_line_col)?,
-            opt(end_col_col)?,
+        let Some(line) = position("line") else {
+            return Err("query must select a `file` column and a `line` column".to_string());
+        };
+        Ok(Self {
+            file,
+            line,
+            start_byte: position("start_byte"),
+            end_byte: position("end_byte"),
+            start_col: position("start_col"),
+            end_line: position("end_line"),
+            end_col: position("end_col"),
+            names,
+        })
+    }
+
+    fn is_location(&self, index: usize) -> bool {
+        index == self.file
+            || index == self.line
+            || [
+                self.start_byte,
+                self.end_byte,
+                self.start_col,
+                self.end_line,
+                self.end_col,
+            ]
+            .contains(&Some(index))
+    }
+}
+
+type SpanColumns = (
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+type SqlRow = (
+    String,
+    i64,
+    SpanColumns,
+    serde_json::Map<String, serde_json::Value>,
+);
+
+fn collect_rows(
+    stmt: &mut rusqlite::Statement<'_>,
+    bound: &[(&str, &dyn ToSql)],
+    columns: &SqlColumns,
+) -> rusqlite::Result<Vec<SqlRow>> {
+    let rows = stmt.query_map(bound, |row| {
+        let optional = |column: Option<usize>| -> rusqlite::Result<Option<i64>> {
+            column.map_or(Ok(None), |index| row.get(index))
+        };
+        let span = (
+            optional(columns.start_byte)?,
+            optional(columns.end_byte)?,
+            optional(columns.start_col)?,
+            optional(columns.end_line)?,
+            optional(columns.end_col)?,
         );
         let mut evidence = serde_json::Map::new();
-        for (index, name) in column_names.iter().enumerate() {
-            if is_location(index) {
-                continue;
+        for (index, name) in columns.names.iter().enumerate() {
+            if !columns.is_location(index) {
+                evidence.insert(name.clone(), value_ref_to_json(row.get_ref(index)?));
             }
-            evidence.insert(name.clone(), value_ref_to_json(row.get_ref(index)?));
         }
-        Ok((file, line, span_cols, evidence))
-    }) {
-        Ok(rows) => rows,
-        Err(e) => return Err(diag(format!("SQL execution failed: {e}"))),
-    };
+        Ok((
+            row.get(columns.file)?,
+            row.get(columns.line)?,
+            span,
+            evidence,
+        ))
+    })?;
+    rows.collect()
+}
 
-    let mut findings = Vec::new();
-    for row in rows {
-        let (file, line, span_cols, evidence) = match row {
-            Ok(row) => row,
-            Err(e) => return Err(diag(format!("SQL row mapping failed: {e}"))),
-        };
-        let (start_byte, end_byte, start_col, end_line, end_col) = span_cols;
-        let u32_or =
-            |v: Option<i64>, default: u32| v.map(crate::model::saturating_u32).unwrap_or(default);
-        let line_u32 = crate::model::saturating_u32(line);
-        let span = crate::model::Span {
-            start_byte: u32_or(start_byte, 0),
-            end_byte: u32_or(end_byte, 0),
-            start_line: line_u32,
-            start_col: u32_or(start_col, 0),
-            end_line: u32_or(end_line, line_u32),
-            end_col: u32_or(end_col, 0),
-        };
-        let id = finding_id(&rule.id, &file, &span);
-        let message = render_message(&rule.message, &evidence);
-        findings.push(Finding {
-            id,
-            rule_id: rule.id.clone(),
-            severity: rule.severity,
-            message,
-            location: Location { file, span },
-            evidence: serde_json::Value::Object(evidence),
-            remediation: rule.remediation.clone(),
-            certainty: None,
-            agent_instructions: rule.fix.clone(),
-            rewrite_status: None,
-            matched_file_state: None,
-        });
+fn finding_from_row(rule: &Rule, row: SqlRow) -> Finding {
+    let (file, line, span_columns, evidence) = row;
+    let (start_byte, end_byte, start_col, end_line, end_col) = span_columns;
+    let line = crate::model::saturating_u32(line);
+    let value_or =
+        |value: Option<i64>, default| value.map(crate::model::saturating_u32).unwrap_or(default);
+    let span = crate::model::Span {
+        start_byte: value_or(start_byte, 0),
+        end_byte: value_or(end_byte, 0),
+        start_line: line,
+        start_col: value_or(start_col, 0),
+        end_line: value_or(end_line, line),
+        end_col: value_or(end_col, 0),
+    };
+    Finding {
+        id: finding_id(&rule.id, &file, &span),
+        rule_id: rule.id.clone(),
+        severity: rule.severity,
+        message: render_message(&rule.message, &evidence),
+        location: Location { file, span },
+        evidence: serde_json::Value::Object(evidence),
+        remediation: rule.remediation.clone(),
+        certainty: None,
+        agent_instructions: rule.fix.clone(),
+        rewrite_status: None,
+        matched_file_state: None,
     }
-    Ok(findings)
 }
 
 /// Substitute `{column_name}` placeholders in a rule's `message` template
@@ -278,6 +389,13 @@ mod tests {
     use crate::rules::Severity;
     use std::collections::HashMap;
 
+    fn ordinary_builtin_rules() -> Vec<Rule> {
+        crate::rules::builtin_rules()
+            .into_iter()
+            .filter(|rule| rule.verification.is_none())
+            .collect()
+    }
+
     fn temp_db(tag: &str) -> (std::path::PathBuf, Connection) {
         let dir = std::env::temp_dir().join(format!("varde-sql-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -302,6 +420,7 @@ mod tests {
         Rule {
             id: id.to_string(),
             kind: RuleKind::Sql,
+            verification: None,
             severity: Severity::Error,
             message: format!("{id} fired"),
             name: None,
@@ -478,13 +597,14 @@ mod tests {
         conn.execute_batch(
             "INSERT INTO files (path, complexity, churn) VALUES
                 ('hot.rs', 80, 40),
+                ('tests/hot.rs', 80, 40),
                 ('complex-only.rs', 80, 5),
                 ('churny-only.rs', 10, 40),
                 ('neither.rs', 10, 5);",
         )
         .expect("files fixture rows insert");
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
@@ -508,12 +628,32 @@ mod tests {
         conn.execute_batch(
             "INSERT INTO files (path, complexity, churn) VALUES
                 ('complex.rs', 80, 5),
+                ('tests/complex.rs', 80, 5),
                 ('low.rs', 10, 40),
-                ('boundary.rs', 50, 3);",
+                ('boundary.rs', 50, 3);
+             INSERT INTO entities (kind, name, file_id, start_byte, end_byte,
+                                   start_line, start_col, end_line, end_col)
+             VALUES
+                (0, 'one', 1, 0, 10, 1, 0, 2, 1),
+                (0, 'two', 1, 11, 20, 3, 0, 4, 1),
+                (0, 'three', 1, 21, 30, 5, 0, 6, 1),
+                (0, 'four', 1, 31, 40, 7, 0, 8, 1),
+                (0, 'five', 1, 41, 50, 9, 0, 10, 1),
+                (0, 'test_one', 2, 0, 10, 1, 0, 2, 1);
+             INSERT INTO function_metrics (
+                 file_id, identity, name, start_byte, end_byte, start_line, start_col,
+                 end_line, end_col, cyclomatic, cognitive, max_nesting, line_span,
+                 byte_size, confidence, confidence_reasons, metric_version)
+             VALUES
+                 (1, 'one@0', 'one', 0, 10, 1, 0, 2, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
+                 (1, 'two@11', 'two', 11, 20, 3, 0, 4, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
+                 (1, 'three@21', 'three', 21, 30, 5, 0, 6, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
+                 (1, 'four@31', 'four', 31, 40, 7, 0, 8, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
+                 (1, 'five@41', 'five', 41, 50, 9, 0, 10, 1, 2, 16, 1, 2, 10, 'high', '[]', 2);",
         )
         .expect("files fixture rows insert");
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
@@ -532,149 +672,62 @@ mod tests {
     }
 
     #[test]
-    fn builtin_function_complexity_hotspot_fires_only_above_threshold_per_function() {
+    fn builtin_function_complexity_rules_gate_only_trusted_metrics() {
         let (_dir, conn) = temp_db("builtin-function-hotspot");
         conn.execute_batch(
-            "INSERT INTO files (path) VALUES ('a.rs'), ('b.rs');
-             INSERT INTO entities (kind, name, file_id, start_byte, end_byte,
-                                   start_line, start_col, end_line, end_col)
+            "INSERT INTO files (path) VALUES ('a.rs'), ('b.rs'), ('tests/complex.rs');
+             INSERT INTO function_metrics (
+                 file_id, identity, name, owner_type,
+                 start_byte, end_byte, start_line, start_col, end_line, end_col,
+                 cyclomatic, cognitive, max_nesting, line_span, byte_size,
+                 confidence, confidence_reasons, metric_version)
              VALUES
-                -- a.rs: complex_fn (16 control-flow entities -> complexity 17)
-                (0, 'complex_fn', 1, 0, 500, 5, 0, 40, 1),
-                -- a.rs: simple_fn (2 control-flow entities -> complexity 3)
-                (0, 'simple_fn', 1, 600, 700, 50, 0, 55, 1),
-                -- b.rs: other_simple_fn (0 control-flow entities -> complexity 1)
-                (0, 'other_simple_fn', 2, 0, 50, 3, 0, 5, 1);",
+                (1, 'complex_fn@0', 'complex_fn', NULL,
+                 0, 500, 5, 0, 40, 1,
+                 21, 16, 4, 36, 500, 'high', '[]', 2),
+                (1, 'boundary_fn@600', 'boundary_fn', NULL,
+                 600, 700, 50, 0, 64, 1,
+                 20, 15, 2, 15, 100, 'high', '[]', 2),
+                (2, 'partial_fn@0', 'partial_fn', NULL,
+                 0, 500, 3, 0, 70, 1,
+                 30, 25, 6, 68, 500, 'partial', '[\"uncertified_language\"]', 2),
+                (3, 'test_complex_fn@0', 'test_complex_fn', NULL,
+                 0, 500, 5, 0, 70, 1,
+                 30, 25, 6, 66, 500, 'high', '[]', 2);",
         )
-        .expect("entities fixture rows insert");
-        for line in 6..22 {
-            conn.execute(
-                "INSERT INTO entities (kind, name, file_id, start_byte, end_byte,
-                                       start_line, start_col, end_line, end_col,
-                                       enclosing_function)
-                 VALUES (12, 'if', 1, 0, 1, ?1, 0, ?1, 1, 'complex_fn')",
-                [line],
-            )
-            .expect("control-flow entity insert");
-        }
-        for line in 51..53 {
-            conn.execute(
-                "INSERT INTO entities (kind, name, file_id, start_byte, end_byte,
-                                       start_line, start_col, end_line, end_col,
-                                       enclosing_function)
-                 VALUES (12, 'if', 1, 0, 1, ?1, 0, ?1, 1, 'simple_fn')",
-                [line],
-            )
-            .expect("control-flow entity insert");
-        }
+        .expect("function metric fixture rows insert");
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
-        let hotspot_findings: Vec<&Finding> = findings
+        let gate_findings: Vec<&Finding> = findings
             .iter()
-            .filter(|f| f.rule_id == "function-complexity-hotspot")
+            .filter(|f| f.rule_id == "function-complexity-gate")
             .collect();
         assert_eq!(
-            hotspot_findings.len(),
+            gate_findings.len(),
             1,
-            "only the function strictly above the threshold fires: {hotspot_findings:?}"
+            "only trusted metrics above a threshold gate: {gate_findings:?}"
         );
-        assert_eq!(hotspot_findings[0].location.file, "a.rs");
+        assert_eq!(gate_findings[0].location.file, "a.rs");
         assert_eq!(
-            hotspot_findings[0]
+            gate_findings[0]
                 .evidence
                 .get("name")
                 .and_then(|v| v.as_str()),
             Some("complex_fn")
         );
-        assert_eq!(hotspot_findings[0].certainty, None);
+        assert_eq!(gate_findings[0].certainty, None);
+
+        let advisory_findings: Vec<&Finding> = findings
+            .iter()
+            .filter(|f| f.rule_id == "function-complexity-advisory")
+            .collect();
+        assert_eq!(advisory_findings.len(), 1);
+        assert_eq!(advisory_findings[0].location.file, "b.rs");
+        assert_eq!(advisory_findings[0].severity, crate::rules::Severity::Info);
         let _ = std::fs::remove_dir_all(&_dir);
-    }
-
-    #[test]
-    fn builtin_low_fan_in_high_fan_out_fires_on_glue_files_only() {
-        let (_dir, conn) = temp_db("builtin-fan-shape");
-        conn.execute_batch(
-            "INSERT INTO files (path, fan_in, fan_out) VALUES
-                ('glue.rs', 1, 20),
-                ('entry.rs', 50, 45),
-                ('isolated.rs', 0, 5),
-                ('boundary.rs', 2, 15);",
-        )
-        .expect("files fixture rows insert");
-
-        let rules = crate::rules::builtin_rules();
-        let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
-        assert!(diagnostics.is_empty(), "{diagnostics:?}");
-
-        let fan_findings: Vec<&Finding> = findings
-            .iter()
-            .filter(|f| f.rule_id == "low-fan-in-high-fan-out-file")
-            .collect();
-        // glue.rs is the classic orchestrator (1 in, 20 out); boundary.rs
-        // sits exactly on both thresholds (fan_in <= 2, fan_out >= 15 are
-        // inclusive). entry.rs has huge fan-out but is a hub (50 in), and
-        // isolated.rs simply depends on little — neither fires.
-        let mut fired: Vec<&str> = fan_findings
-            .iter()
-            .map(|f| f.location.file.as_str())
-            .collect();
-        fired.sort_unstable();
-        assert_eq!(fired, vec!["boundary.rs", "glue.rs"], "{fan_findings:?}");
-        for f in &fan_findings {
-            assert_eq!(f.location.span.start_line, 1, "{f:?}");
-            assert_eq!(f.certainty, None, "{f:?}");
-        }
-    }
-
-    #[test]
-    fn builtin_circular_import_fires_once_per_direct_cycle_only() {
-        let (_dir, conn) = temp_db("builtin-circular-import");
-        conn.execute_batch(
-            "INSERT INTO files (path) VALUES
-                ('a.rs'), ('b.rs'), ('c.rs'), ('d.rs'), ('unresolved.rs');
-             -- a.rs <-> b.rs: a direct cycle, should fire exactly once.
-             INSERT INTO resolved_edges (from_file_id, to_file_id, kind, resolved) VALUES
-                (1, 2, 1, 1),
-                (2, 1, 1, 1),
-                -- c.rs -> d.rs one-way: no cycle, must not fire.
-                (3, 4, 1, 1),
-                -- a.rs -> c.rs: a call edge (kind=0), not an import; must
-                -- not be treated as part of any import cycle.
-                (1, 3, 0, 1),
-                (3, 1, 0, 1),
-                -- unresolved.rs -> a.rs and a.rs -> unresolved.rs, but
-                -- neither edge is resolved; an unresolved 'cycle' must not
-                -- fire.
-                (5, 1, 1, 0),
-                (1, 5, 1, 0);",
-        )
-        .expect("resolved_edges fixture rows insert");
-
-        let rules = crate::rules::builtin_rules();
-        let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
-        assert!(diagnostics.is_empty(), "{diagnostics:?}");
-
-        let cycle_findings: Vec<&Finding> = findings
-            .iter()
-            .filter(|f| f.rule_id == "circular-import")
-            .collect();
-        assert_eq!(
-            cycle_findings.len(),
-            1,
-            "exactly one finding for the a.rs/b.rs cycle, no double-report, no false positives: {cycle_findings:?}"
-        );
-        assert_eq!(cycle_findings[0].location.file, "a.rs");
-        assert_eq!(
-            cycle_findings[0]
-                .evidence
-                .get("other")
-                .and_then(|v| v.as_str()),
-            Some("b.rs")
-        );
-        assert_eq!(cycle_findings[0].certainty, None);
     }
 
     #[test]
@@ -731,7 +784,7 @@ mod tests {
             }
         }
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
@@ -748,6 +801,86 @@ mod tests {
             "count must be the per-declaration 16, not a cross-file sum: {}",
             fat[0].message
         );
+    }
+
+    #[test]
+    fn builtin_solid_lsp_matches_interface_names_and_excludes_default_bodies() {
+        let (_dir, conn) = temp_db("builtin-solid-lsp-identity");
+        conn.execute_batch(
+            "INSERT INTO files (path) VALUES ('same.rs'), ('other.rs');
+             INSERT INTO entities
+                (kind, name, file_id, start_byte, end_byte,
+                 start_line, start_col, end_line, end_col, owner_type, enclosing_function)
+             VALUES
+                (1, 'Widget', 1, 0, 100, 1, 0, 20, 1, NULL, NULL),
+                (2, 'Contract', 1, 200, 400, 30, 0, 50, 1, NULL, NULL),
+                (16, 'Contract', 1, 100, 150, 21, 0, 21, 10, NULL, 'Widget'),
+                (0, 'required', 1, 220, 230, 31, 0, 31, 10, 'Contract', NULL),
+                (0, 'another', 1, 235, 238, 32, 0, 32, 10, 'Contract', NULL),
+                (0, 'defaulted', 1, 240, 260, 33, 0, 35, 10, 'Contract', NULL),
+                (0, 'required', 1, 110, 120, 22, 0, 22, 10, 'Widget', NULL),
+                (0, 'other', 1, 130, 140, 23, 0, 23, 10, 'Widget', NULL),
+                (1, 'Widget', 2, 0, 100, 1, 0, 20, 1, NULL, NULL);
+             INSERT INTO resolved_edges
+                (from_file_id, to_file_id, kind, resolved, from_entity_id, to_entity_id)
+             VALUES (1, 1, 3, 1, 1, 2), (2, 2, 3, 1, 8, 2);",
+        )
+        .expect("solid fixture inserts");
+
+        let rules = ordinary_builtin_rules();
+        let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let lsp = findings
+            .iter()
+            .find(|finding| finding.rule_id == "solid-lsp")
+            .expect("same-file relationship is reported");
+        assert_eq!(lsp.location.file, "same.rs");
+        assert_eq!(lsp.evidence["class_methods"], 1);
+        assert_eq!(lsp.evidence["iface_methods"], 2);
+        assert!(findings.iter().all(|finding| {
+            finding.rule_id != "solid-lsp" || finding.location.file != "other.rs"
+        }));
+    }
+
+    #[test]
+    fn builtin_deep_inheritance_uses_same_file_resolved_identity() {
+        let (_dir, conn) = temp_db("builtin-deep-inheritance-identity");
+        conn.execute_batch(
+            "INSERT INTO files (path) VALUES ('chain.rs'), ('foreign.rs');
+             INSERT INTO entities
+                (kind, name, file_id, start_byte, end_byte,
+                 start_line, start_col, end_line, end_col)
+             VALUES
+                (1, 'A', 1, 0, 10, 1, 0, 1, 1),
+                (1, 'B', 1, 20, 30, 2, 0, 2, 1),
+                (1, 'C', 1, 40, 50, 3, 0, 3, 1),
+                (1, 'D', 1, 60, 70, 4, 0, 4, 1),
+                (1, 'E', 1, 80, 90, 5, 0, 5, 1),
+                (1, 'A', 2, 0, 10, 1, 0, 1, 1);
+             INSERT INTO resolved_edges
+                (from_file_id, to_file_id, kind, resolved, from_entity_id, to_entity_id)
+             VALUES
+                (1, 1, 2, 1, 1, 2),
+                (1, 1, 2, 1, 2, 3),
+                (1, 1, 2, 1, 3, 4),
+                (1, 1, 2, 1, 4, 5),
+                (2, 2, 2, 1, 6, 1);",
+        )
+        .expect("inheritance fixture inserts");
+
+        let rules = ordinary_builtin_rules();
+        let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let deep = findings
+            .iter()
+            .find(|finding| finding.rule_id == "deep-inheritance")
+            .expect("three-link same-file chain is reported");
+        assert_eq!(deep.location.file, "chain.rs");
+        assert_eq!(deep.evidence["chain_depth"], 4);
+        assert_eq!(deep.evidence["depth_evidence"], "lower_bound");
+        assert!(findings.iter().all(|finding| {
+            finding.rule_id != "deep-inheritance" || finding.location.file != "foreign.rs"
+        }));
     }
 
     #[test]
@@ -807,7 +940,7 @@ mod tests {
         )
         .expect("resolved_edges fixture rows insert");
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
 
@@ -856,7 +989,7 @@ mod tests {
         )
         .expect("fixture inserts");
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         let starts: Vec<u64> = findings
@@ -881,7 +1014,7 @@ mod tests {
         )
         .expect("fixture inserts");
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -902,7 +1035,7 @@ mod tests {
         )
         .expect("fixture inserts");
 
-        let rules = crate::rules::builtin_rules();
+        let rules = ordinary_builtin_rules();
         let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         assert!(
@@ -914,88 +1047,17 @@ mod tests {
     }
 
     #[test]
-    fn builtin_duplicate_code_clone_fires_only_for_bands_at_or_above_min_size() {
-        let (_dir, conn) = temp_db("builtin-clone");
-        conn.execute_batch(
-            "INSERT INTO files (path) VALUES
-                ('tri_a.rs'), ('tri_b.rs'), ('tri_c.rs'),
-                ('pair_a.rs'), ('pair_b.rs'), ('solo.rs');
-             INSERT INTO entities (kind, name, file_id, start_byte, end_byte,
-                                   start_line, start_col, end_line, end_col)
-             VALUES
-                (0, 'tri_a_fn', 1, 0, 10, 10, 0, 12, 4),
-                (0, 'tri_b_fn', 2, 0, 10, 20, 0, 22, 4),
-                (0, 'tri_c_fn', 3, 0, 10, 30, 0, 32, 4),
-                (0, 'pair_a_fn', 4, 0, 10, 40, 0, 42, 4),
-                (0, 'pair_b_fn', 5, 0, 10, 50, 0, 52, 4),
-                (0, 'solo_fn', 6, 0, 10, 60, 0, 62, 4);
-             INSERT INTO clone_bands (label) VALUES ('clone-band-0'), ('clone-band-1');
-             INSERT INTO clone_band_members (band_id, entity_id) VALUES
-                (1, 1), (1, 2), (1, 3),
-                (2, 4), (2, 5);",
-        )
-        .expect("clone fixture rows insert");
-
-        let rules = crate::rules::builtin_rules();
-        let (findings, diagnostics) = run_sql_rules(&rules, &conn).expect("runs");
-        assert!(diagnostics.is_empty(), "{diagnostics:?}");
-
-        let clone_findings: Vec<&Finding> = findings
-            .iter()
-            .filter(|f| f.rule_id == "duplicate-code-clone")
+    fn exact_clone_rule_requires_source_context_even_without_candidates() {
+        let (_dir, conn) = temp_db("clone-source-required");
+        let rules: Vec<_> = crate::rules::builtin_rules()
+            .into_iter()
+            .filter(|r| r.id == "duplicate-code-clone")
             .collect();
-        assert_eq!(
-            clone_findings.len(),
-            3,
-            "one finding per member of the 3-member band, no others: {clone_findings:?}"
-        );
-        let mut located: Vec<(String, u32)> = clone_findings
-            .iter()
-            .map(|f| (f.location.file.clone(), f.location.span.start_line))
-            .collect();
-        located.sort();
-        assert_eq!(
-            located,
-            vec![
-                ("tri_a.rs".to_string(), 10),
-                ("tri_b.rs".to_string(), 20),
-                ("tri_c.rs".to_string(), 30),
-            ],
-            "every member of the qualifying band is reported at its own line"
-        );
-        // Precise span carried from the anchor entity, not the line-only
-        // fallback that collapsed `end_line` to `start_line` with zero
-        // byte/col — the "C/C++ zeroed scan spans" bug, which was really every
-        // SQL rule that selected only `line`. The fixture's band members end at
-        // `start_line + 2`, col 4, byte 10.
-        let mut spans: Vec<(u32, u32, u32, u32)> = clone_findings
-            .iter()
-            .map(|f| {
-                let s = &f.location.span;
-                (s.start_line, s.end_line, s.end_byte, s.end_col)
-            })
-            .collect();
-        spans.sort();
-        assert_eq!(
-            spans,
-            vec![(10, 12, 10, 4), (20, 22, 10, 4), (30, 32, 10, 4)],
-            "clone findings carry the anchor entity's full byte/line/col span"
-        );
-        assert!(
-            clone_findings
-                .iter()
-                .all(|f| f.evidence.get("label").and_then(|l| l.as_str()) == Some("clone-band-0")),
-            "band label rides along as evidence"
-        );
-        assert!(
-            findings
-                .iter()
-                .all(|f| f.rule_id != "churn-complexity-hotspot"
-                    && f.rule_id != "file-complexity-hotspot"),
-            "NULL complexity/churn must not fire the hotspot rules: {:?}",
-            findings.iter().map(|f| &f.rule_id).collect::<Vec<_>>()
-        );
-        let _ = std::fs::remove_dir_all(&_dir);
+        let (findings, diagnostics) = run_sql_rules(&rules, &conn).unwrap();
+        assert!(findings.is_empty());
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].reason.contains("repository root"));
+        let _ = std::fs::remove_dir_all(_dir);
     }
 
     #[test]

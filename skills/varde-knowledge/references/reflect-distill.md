@@ -2,8 +2,8 @@
 
 ## Scope
 
-Runs only on an explicit request. Finds repeated friction and proposes one
-specific improvement to skills, documentation, commands, or code.
+Run only on an explicit request. Find repeated friction and propose one
+specific improvement to a skill, document, command, or code.
 
 **A human approves the exact scope before anything is written.** Approval must be
 stated — silence, context, and another skill's request are all not approval — and
@@ -23,7 +23,8 @@ approval names them.
 
 1. **Confirm the request is explicit.** Stop otherwise.
 
-2. **Search first.** Use `Glob` on `**/memory-bank/friction/*.md` — every
+2. **Search first.** Use `Glob` on `<working>/friction/*.md` (and the legacy
+   `**/memory-bank/friction/*.md`) — every
    store in the repo, since a monorepo module owns its own and a cluster
    routinely spans them. Then `Grep`/`Read` each candidate for concrete cluster
    terms, keeping only items with `type: friction-item` and `status: open`.
@@ -44,10 +45,10 @@ approval names them.
    Two items support a proposal; they do not prove its fix will work. State the
    expected result as a hypothesis.
 
-4. **Inspect existing work before proposing.** Search every likely target:
+4. **Inspect existing work before proposing.** Search these targets:
 
    - `Grep`/`Glob` for repository skill contracts, rendered skills, and any
-     `memory-bank/knowledge/` concepts.
+     `<knowledge>/` concepts.
    - Read source files directly for relevant symbols, dependencies, and callers.
    - Inspect `~/.claude/skills/`, `~/.config/opencode/skills/`,
      `~/.codex/skills/`, and `~/.pi/agent/skills/` for installed copies.
@@ -55,8 +56,8 @@ approval names them.
    Treat installed directories as read-only here. Compare them against the
    repository sources and record any drift in the proposal.
 
-5. **Classify the proposal before drafting.** From the items' `signal` values and
-   content, decide which shape this is, and state it in the proposal:
+5. **Classify the proposal before drafting.** Use the items' `signal` values and
+   content to choose one shape. State that shape in the proposal:
 
    - **Add** — new guidance for a gap the target doesn't cover.
    - **Tighten** — an existing rule is right but under-specified enough to cause

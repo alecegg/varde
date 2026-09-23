@@ -34,6 +34,7 @@ pub struct FileMeta {
 /// superset-safe additions (Import). Sourced from varde's `intelligence-schema.ts`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
+#[repr(i64)]
 pub enum EntityKind {
     Function,
     Class,
@@ -74,84 +75,67 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
+    const ALL: [Self; 20] = [
+        Self::Function,
+        Self::Class,
+        Self::Interface,
+        Self::Variable,
+        Self::Parameter,
+        Self::Export,
+        Self::Call,
+        Self::Literal,
+        Self::MemberAccess,
+        Self::Import,
+        Self::Catch,
+        Self::Throw,
+        Self::ControlFlow,
+        Self::Route,
+        Self::Response,
+        Self::Extends,
+        Self::Implements,
+        Self::Decorator,
+        Self::TypeRef,
+        Self::CallableBoundary,
+    ];
+
+    const NAMES: [&'static str; 20] = [
+        "function",
+        "class",
+        "interface",
+        "variable",
+        "parameter",
+        "export",
+        "call",
+        "literal",
+        "member_access",
+        "import",
+        "catch",
+        "throw",
+        "control_flow",
+        "route",
+        "response",
+        "extends",
+        "implements",
+        "decorator",
+        "type_ref",
+        "callable_boundary",
+    ];
+
     /// Stable discriminant for `entities.kind INTEGER` storage — order must
     /// never change (existing DBs would silently misread), only append.
     pub fn as_i64(self) -> i64 {
-        match self {
-            EntityKind::Function => 0,
-            EntityKind::Class => 1,
-            EntityKind::Interface => 2,
-            EntityKind::Variable => 3,
-            EntityKind::Parameter => 4,
-            EntityKind::Export => 5,
-            EntityKind::Call => 6,
-            EntityKind::Literal => 7,
-            EntityKind::MemberAccess => 8,
-            EntityKind::Import => 9,
-            EntityKind::Catch => 10,
-            EntityKind::Throw => 11,
-            EntityKind::ControlFlow => 12,
-            EntityKind::Route => 13,
-            EntityKind::Response => 14,
-            EntityKind::Extends => 15,
-            EntityKind::Implements => 16,
-            EntityKind::Decorator => 17,
-            EntityKind::TypeRef => 18,
-            EntityKind::CallableBoundary => 19,
-        }
+        self as i64
     }
 
     pub fn from_i64(v: i64) -> Option<Self> {
-        Some(match v {
-            0 => EntityKind::Function,
-            1 => EntityKind::Class,
-            2 => EntityKind::Interface,
-            3 => EntityKind::Variable,
-            4 => EntityKind::Parameter,
-            5 => EntityKind::Export,
-            6 => EntityKind::Call,
-            7 => EntityKind::Literal,
-            8 => EntityKind::MemberAccess,
-            9 => EntityKind::Import,
-            10 => EntityKind::Catch,
-            11 => EntityKind::Throw,
-            12 => EntityKind::ControlFlow,
-            13 => EntityKind::Route,
-            14 => EntityKind::Response,
-            15 => EntityKind::Extends,
-            16 => EntityKind::Implements,
-            17 => EntityKind::Decorator,
-            18 => EntityKind::TypeRef,
-            19 => EntityKind::CallableBoundary,
-            _ => return None,
-        })
+        let index = usize::try_from(v).ok()?;
+        Self::ALL.get(index).copied()
     }
 
     /// snake_case name, matching the existing serde rendering — used where
     /// SQL-stored entities need to be rendered back to the CLI/JSON contract.
     pub fn as_str(self) -> &'static str {
-        match self {
-            EntityKind::Function => "function",
-            EntityKind::Class => "class",
-            EntityKind::Interface => "interface",
-            EntityKind::Variable => "variable",
-            EntityKind::Parameter => "parameter",
-            EntityKind::Export => "export",
-            EntityKind::Call => "call",
-            EntityKind::Literal => "literal",
-            EntityKind::MemberAccess => "member_access",
-            EntityKind::Import => "import",
-            EntityKind::Catch => "catch",
-            EntityKind::Throw => "throw",
-            EntityKind::ControlFlow => "control_flow",
-            EntityKind::Route => "route",
-            EntityKind::Response => "response",
-            EntityKind::Extends => "extends",
-            EntityKind::Implements => "implements",
-            EntityKind::Decorator => "decorator",
-            EntityKind::TypeRef => "type_ref",
-            EntityKind::CallableBoundary => "callable_boundary",
-        }
+        Self::NAMES[self as usize]
     }
 }
 

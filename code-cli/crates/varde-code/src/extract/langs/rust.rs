@@ -22,7 +22,8 @@
 //!   error handling is not a syntactic counterpart).
 //! - Throw: `panic!` macro invocation -> Throw, named after the first
 //!   argument (the panic message).
-//! - ControlFlow: if/for/while/loop/match/return/break/continue expressions.
+//! - ControlFlow: if/for/while/loop/match/return/break/continue expressions,
+//!   each match arm, and short-circuit boolean operators.
 //!   (`if let` / `while let` parse as if_expression / while_expression with a
 //!   let_condition — tree-sitter-rust has no separate node kinds.)
 //! - Route/Response: carved out — Rust has no built-in web framework shapes
@@ -30,6 +31,7 @@
 
 use crate::extract::entity::{EntityMeta, ExtractCtx, entity};
 use crate::extract::field_name;
+use crate::extract::langs::boolean_operator_name;
 use crate::model::EntityKind;
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
@@ -65,101 +67,130 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_declaration(node, kind, ctx) {
+        return;
+    }
+    if visit_binding(node, kind, ctx) {
+        return;
+    }
+    if visit_expression(node, kind, ctx) {
+        return;
+    }
+    visit_control_flow(node, kind, ctx);
+}
+
+fn visit_declaration(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
-        // ---- structural ----
         "function_item" | "function_signature_item" => {
-            let name = field_name(node).unwrap_or_default();
-            ctx.push(EntityKind::Function, name.clone(), node);
-            maybe_export(node, &name, ctx);
+            emit_named_declaration(node, EntityKind::Function, ctx);
         }
         "closure_expression" => ctx.push_callable_boundary(node),
-        // structs and enums are both type declarations -> Class.
         "struct_item" | "enum_item" => {
-            let name = field_name(node).unwrap_or_default();
-            ctx.push(EntityKind::Class, name.clone(), node);
-            maybe_export(node, &name, ctx);
+            emit_named_declaration(node, EntityKind::Class, ctx);
         }
-        // traits are Rust's abstraction mechanism -> Interface.
         "trait_item" => {
-            let name = field_name(node).unwrap_or_default();
-            ctx.push(EntityKind::Interface, name.clone(), node);
-            maybe_export(node, &name, ctx);
+            emit_named_declaration(node, EntityKind::Interface, ctx);
         }
-        // const items have no dedicated entity kind; only the export linkage
-        // matters at the top level.
         "const_item" => {
             if let Some(name) = field_name(node) {
                 maybe_export(node, &name, ctx);
             }
         }
+        "impl_item" => emit_implementation(node, ctx),
+        _ => return false,
+    }
+    true
+}
 
-        // `impl Trait for Type { ... }` -> Implements, linking Type to
-        // Trait. Inherent impls (`impl Type { ... }`, no `trait` field) are
-        // not a hierarchy relationship and are skipped.
-        "impl_item" => {
-            if let (Some(trait_node), Some(type_node)) = (node.field("trait"), node.field("type")) {
-                let trait_name = impl_type_name(&trait_node);
-                let type_name = impl_type_name(&type_node);
-                if !trait_name.is_empty() && !type_name.is_empty() {
-                    ctx.out.push(entity(
-                        EntityKind::Implements,
-                        trait_name,
-                        ctx.file_id,
-                        node,
-                        EntityMeta {
-                            enclosing: Some(type_name),
-                            ..Default::default()
-                        },
-                    ));
-                }
-            }
+fn emit_named_declaration(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    entity_kind: EntityKind,
+    ctx: &mut ExtractCtx,
+) {
+    let name = field_name(node).unwrap_or_default();
+    ctx.push(entity_kind, name.clone(), node);
+    maybe_export(node, &name, ctx);
+}
+
+fn emit_implementation(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    let (Some(trait_node), Some(type_node)) = (node.field("trait"), node.field("type")) else {
+        return;
+    };
+    let trait_name = impl_type_name(&trait_node);
+    let type_name = impl_type_name(&type_node);
+    if trait_name.is_empty() || type_name.is_empty() {
+        return;
+    }
+    ctx.out.push(entity(
+        EntityKind::Implements,
+        trait_name,
+        ctx.file_id,
+        node,
+        EntityMeta {
+            enclosing: Some(type_name),
+            ..Default::default()
+        },
+    ));
+}
+
+fn visit_binding(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "use_declaration" => emit_import(node, ctx),
+        "let_declaration" => emit_variables(node, ctx),
+        "parameters" => emit_parameters(node, ctx),
+        _ => return false,
+    }
+    true
+}
+
+fn emit_import(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    ctx.out.push(entity(
+        EntityKind::Import,
+        rust_use_info(node),
+        ctx.file_id,
+        node,
+        EntityMeta::default(),
+    ));
+}
+
+fn emit_variables(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    if let Some(pattern) = node.field("pattern") {
+        for name in pattern_identifiers(&pattern) {
+            ctx.push(EntityKind::Variable, name, node);
         }
+    }
+}
 
-        // ---- imports ----
-        // `use` items: one Import entity per statement, named after the
-        // module path portion (e.g. "crate::helper::util" -> "crate::helper").
-        "use_declaration" => {
-            let path = rust_use_info(node);
-            let imp = entity(
-                EntityKind::Import,
-                path,
-                ctx.file_id,
-                node,
-                EntityMeta::default(),
-            );
-            ctx.out.push(imp);
-        }
-
-        // ---- variables ----
-        // `let` with a pattern: one Variable per bound identifier.
-        "let_declaration" => {
-            if let Some(pattern) = node.field("pattern") {
-                for name in pattern_identifiers(&pattern) {
-                    ctx.push(EntityKind::Variable, name, node);
-                }
-            }
-        }
-
-        // ---- parameters ----
-        "parameters" => {
-            for child in node.children() {
-                match child.kind().as_ref() {
-                    "parameter" => {
-                        if let Some(pattern) = child.field("pattern") {
-                            for name in pattern_identifiers(&pattern) {
-                                ctx.push(EntityKind::Parameter, name, node);
-                            }
-                        }
+fn emit_parameters(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    for child in node.children() {
+        match child.kind().as_ref() {
+            "parameter" => {
+                if let Some(pattern) = child.field("pattern") {
+                    for name in pattern_identifiers(&pattern) {
+                        ctx.push(EntityKind::Parameter, name, node);
                     }
-                    "self_parameter" => {
-                        ctx.push(EntityKind::Parameter, "self".to_string(), node);
-                    }
-                    _ => {}
                 }
             }
+            "self_parameter" => ctx.push(EntityKind::Parameter, "self".to_string(), node),
+            _ => {}
         }
+    }
+}
 
-        // ---- expression-level ----
+fn visit_expression(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "call_expression" => {
             let name = node
                 .field("function")
@@ -194,23 +225,39 @@ pub fn visit(
                 );
             }
         }
+        _ => return false,
+    }
+    true
+}
 
-        // ---- control flow ----
+fn visit_control_flow(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) {
+    match kind {
         "if_expression"
         | "for_expression"
         | "while_expression"
         | "loop_expression"
         | "match_expression"
+        | "match_arm"
         | "return_expression"
         | "break_expression"
         | "continue_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
         }
 
         _ => {}
     }
 }
 
+/// Stable complexity name for Rust's short-circuit boolean operators.
 /// All bound identifiers in a let/parameter pattern, recursing through
 /// tuple/struct/tuple-struct/ref/mut/or patterns and skipping the type name
 /// of struct-like patterns.
@@ -416,6 +463,53 @@ mod tests {
                 .filter(|e| e.kind == EntityKind::CallableBoundary)
                 .count(),
             1,
+            "entities: {entities:?}"
+        );
+    }
+
+    #[test]
+    fn match_arms_and_boolean_operators_are_control_flow() {
+        let parsed = parse_source(
+            &SupportLang::Rust,
+            r#"
+fn accepts(value: i32, ready: bool, enabled: bool) -> bool {
+    match value {
+        0 => ready && enabled,
+        _ => ready || enabled,
+    }
+}
+"#,
+        );
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let names: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert_eq!(
+            names.iter().filter(|name| **name == "match_arm").count(),
+            2,
+            "entities: {entities:?}"
+        );
+        assert!(names.contains(&"logical_and"), "entities: {entities:?}");
+        assert!(names.contains(&"logical_or"), "entities: {entities:?}");
+    }
+
+    #[test]
+    fn non_boolean_binary_expressions_are_not_control_flow() {
+        let parsed = parse_source(
+            &SupportLang::Rust,
+            "fn calculate(a: i32, b: i32) -> bool { (a + b) * 2 > a }",
+        );
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+
+        assert!(
+            entities
+                .iter()
+                .all(|entity| entity.kind != EntityKind::ControlFlow),
             "entities: {entities:?}"
         );
     }

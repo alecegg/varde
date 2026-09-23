@@ -1,13 +1,13 @@
 # Handoffs
 
 Summarize the current conversation so a new session can continue without
-repeating settled work.
+repeating finished work.
 
-A handoff carries context to the next session. It is also useful after
-completed work. Reflection usually reaches this procedure, but a direct request
-for a handoff runs it on its own.
+A handoff carries context to the next session. Use it after completed work too.
+Reflection usually reaches this procedure. A direct handoff request runs it on
+its own.
 
-Store handoffs under `memory-bank/working/handoffs/`. Writing a new handoff is
+Store handoffs under `<working>/handoffs/`. Writing a new handoff is
 the default. When the user instead wants to pick up an open handoff, skip the
 write workflow entirely and follow **Resuming a handoff** at the end of this
 file.
@@ -17,8 +17,8 @@ handoff points at them.
 
 ## Workflow
 
-1. **Capture the git anchor.** This is what lets a later session resume cold and is the basis for staleness checks. Run `git rev-parse --abbrev-ref HEAD` (branch), `git rev-parse HEAD` (`head_sha`), and `git status --porcelain` (uncommitted/untracked paths). Record all three. If the session ran inside a worktree, also note its path. If the directory is not a git repo, record `head_sha: none` and skip the git-backed staleness path on resume.
-2. **Gather what belongs in the doc.** Read back through the conversation and collect, without re-deriving:
+1. **Capture the git anchor.** Use it to resume later and check staleness. Run `git rev-parse --abbrev-ref HEAD` (branch), `git rev-parse HEAD` (`head_sha`), and `git status --porcelain` (uncommitted/untracked paths). Record all three. If the session ran inside a worktree, also note its path. If the directory is not a git repo, record `head_sha: none` and skip git-backed staleness checks on resume.
+2. **Gather the handoff content.** Read the conversation and collect these facts without re-deriving them:
    - What was accomplished this session and what remains.
    - Key decisions made and *why* — including **rejected alternatives**, which are load-bearing: the next session needs to know what was already ruled out and why, or it re-litigates settled ground.
    - The current state of the work (committed, uncommitted, failing, unverified).
@@ -30,11 +30,20 @@ handoff points at them.
      plan's own log. A `kind: knowledge` link points at a note
      reflection harvested from this work — reference it, never restate it.
 
-   **Keep vs. drop:** A handoff carries reusable conclusions, not a transcript. *Keep:* decisions and their rationale, rejected alternatives, blockers, verification results, fragile local state (worktree, uncommitted changes), and the next concrete steps. *Drop:* "the command succeeded", "the file was edited", the user's request restated, generic framework/tooling knowledge, and any transcript play-by-play that carries no reusable conclusion. When in doubt, ask "would the next session waste time rediscovering this?" — if not, drop it.
+   **Keep vs. drop:** Keep reusable conclusions, not a transcript. Keep decisions
+   and their rationale, rejected alternatives, blockers, verification results,
+   fragile local state (worktree, uncommitted changes), and the next concrete
+   steps. Drop "the command succeeded", "the file was edited", the user's
+   request restated, generic framework or tooling knowledge, and transcript
+   play-by-play without a reusable conclusion. Keep a detail only if the next
+   session would waste time rediscovering it.
 
    Content that already lives in another artifact — a plan body, a review's findings file, a prototype's README, a commit diff — is referenced by Link, not copied. A copy goes stale the moment the original changes.
 3. **Redact before writing anything to disk.** Strip API keys, tokens, passwords, connection strings, and any personally identifying information from quoted output or logs. If in doubt, redact.
-4. **Write the doc** using the template below. Trim sections that have nothing to report rather than leaving them as empty headers. If the user passed a description of what the next session will focus on (an argument, or stated in chat), tailor **What's left** and **Suggested next skill** to that focus rather than listing everything open.
+4. **Write the doc** using the template below. Remove sections that have
+   nothing to report instead of leaving empty headers. If the user gave a focus
+   for the next session, tailor **What's left** and **Suggested next skill** to
+   that focus instead of listing every open item.
 5. **Save the doc.** Verify every collected Link resolves. Drop a missing link,
    report it, and continue writing the handoff:
    - `kind: file` → confirm the path exists (e.g. via `Read` or `Glob`).
@@ -42,7 +51,7 @@ handoff points at them.
    - `kind: review` / `kind: knowledge` → confirm the review folder/file or
      knowledge note exists at the given path.
 
-   Then `Write` into `memory-bank/working/handoffs/<handoff-id>/handoff.md`, where `<handoff-id>` follows the `<YYYY-MM-DD>-<slug>` convention (UTC date + kebab-case slug, same as plan IDs). Create the directory if it does not already exist. Prefix the doc with the handoff frontmatter:
+   Then `Write` into `<working>/handoffs/<handoff-id>/handoff.md`, where `<handoff-id>` follows the `<YYYY-MM-DD>-<slug>` convention (UTC date + kebab-case slug, same as plan IDs). Create the directory if it does not already exist. Prefix the doc with the handoff frontmatter:
    - `type: handoff`, `status: open`
    - `description` (one line identifying what the handoff resumes)
    - `timestamp` (ISO-8601 UTC creation time)
@@ -87,9 +96,11 @@ handoff points at them.
 
 ## Resuming a handoff
 
-Resuming picks up an open Handoff instead of writing a new one: list what's open, let the human pick, then surface the chosen doc with every Link's staleness recomputed and labeled. Unlike write time, resume never blocks on a stale Link — it labels only.
+To resume, list open Handoffs instead of writing a new one. Let the human pick
+one, then recompute and label every Link's staleness. A stale Link does not block
+resume; label it and continue.
 
-1. **List and rank open Handoffs.** `Glob` `memory-bank/working/handoffs/*/handoff.md`. For each, read **only the frontmatter** — the leading `---` block — and keep those with `status: open`. If nothing comes back, report that there are no open Handoffs and stop. Rank the survivors so the most likely resume floats to the top, using the frontmatter fields: same `cwd` as the current directory first, then matching `branch`, then `keywords` overlapping the user's stated focus, then most recent `timestamp`. Bodies stay unread until the human picks — ranking off frontmatter alone keeps this cheap when many handoffs are open.
+1. **List and rank open Handoffs.** `Glob` `<working>/handoffs/*/handoff.md`. For each, read **only the frontmatter** — the leading `---` block — and keep those with `status: open`. If nothing comes back, report that there are no open Handoffs and stop. Rank the survivors so the most likely resume floats to the top, using the frontmatter fields: same `cwd` as the current directory first, then matching `branch`, then `keywords` overlapping the user's stated focus, then most recent `timestamp`. Bodies stay unread until the human picks — ranking off frontmatter alone keeps this cheap when many handoffs are open.
 2. **Let the human pick.** Present each candidate's `description` in ranked order as an inline numbered menu in your message text, one option per Handoff, with a recommendation:
 
 ```text
@@ -107,6 +118,9 @@ Recommendation: <n> — <one-sentence reason>.
    - If `head_sha` is present and the path is tracked, run `git log <head_sha>..HEAD -- <target>`: no commits touch it → `unchanged`; commits touch it → `modified`. Also confirm the path still exists on disk; gone → `missing` (overrides the log result).
    - If `head_sha` is `none`/absent (handoff written outside a repo) or the path is untracked, fall back to existence only: present → `unchanged`, absent → `missing`.
    - `kind: plan` / `kind: review` / `kind: knowledge` targets use the same rules — they are paths like any other. A `modified` `kind: plan` link is the cue to read that plan's own log for what changed since; a `modified` `kind: knowledge` link is the cue to reconcile that note against the code it now describes.
-4. **Label before surfacing.** Prepend a per-Link label — `unchanged`, `modified`, or `missing` — to each Link entry in what the agent reads, before the Handoff's content is surfaced. The labels inform the resuming session; they never gate the read. Also surface the anchor itself: if the current `HEAD` has moved past `head_sha`, say so, so the session knows it is resuming onto newer code.
+4. **Label before surfacing.** Before showing the Handoff, prepend one label —
+   `unchanged`, `modified`, or `missing` — to each Link entry. The labels inform
+   the resuming session and never block the read. Also say when the current
+   `HEAD` is newer than `head_sha`.
 5. **Orient, then wait.** After ingesting the Handoff, summarize the recovered context, note which Links are `modified`/`missing`, and propose the next concrete steps — then stop and wait for the user to confirm the direction before touching files, builds, or another workflow. If the Handoff is too thin to orient from, say what's missing rather than inventing a plan.
 6. **Transition the Handoff.** Edit the Handoff's `handoff.md` frontmatter, changing `status: open` to `status: resumed`. That is resume's only transition; archiving belongs elsewhere.

@@ -1,11 +1,28 @@
 ---
 name: varde-change
-description: "Run the change lifecycle: show what work is in flight, plan scope and acceptance criteria, build a plan or a bounded change, verify finished work, or run a group of plans in order. Not for exploration, review, or docs."
+description: "Run the change lifecycle: show work in flight, plan scope, build bounded changes, verify plans, or orchestrate groups. Route named bugs through evidence-led debugging. Not for exploration, review, or docs."
 ---
 
 # Manage the change lifecycle
 
-Read the request and pick one reference. Never ask the user which mode to use.
+Read the request, then open the matching reference. Never ask the user which mode to use.
+
+## Entry routing
+
+Resolve explicit intent before automatic routing. Use this precedence:
+
+1. A review request belongs to `varde-review report`.
+2. An exploration request belongs to `varde-explore`.
+3. An explicit diagnosis-only request opens `references/debugging-entry.md`
+   with `debug_mode: diagnose`.
+4. An explicit build request keeps the normal build path, even when it names a
+   bug or regression.
+5. A named bug or regression without an explicit mode opens
+   `references/debugging-entry.md` with `debug_mode: fix`.
+
+The debugging entry records `route_source` as `explicit` or `automatic`.
+Diagnosis does not edit production source. Fixes begin only after reproduction
+and tested hypothesis evidence exists.
 
 ## What the request needs
 
@@ -17,11 +34,16 @@ Read the request and pick one reference. Never ask the user which mode to use.
 | Report evidence for finished work without changing anything | `references/verify.md` |
 | Run a group of related plans end to end, in dependency order | `references/orchestrate.md` |
 
-Load only the reference the request needs.
-Then load its explicitly required supporting files.
+Open only the matching reference.
+Then open every supporting file it explicitly requires.
 
-Derive status from existing artifacts.
-Verification reports never mutate plan files.
-Handoffs require a stopping boundary.
+## Gotchas
 
-Load `references/worktree.md` before isolated edits.
+- Paths written `<working>/…` and `<knowledge>/…` resolve per
+  `references/memory-locations.md`. Read it before the first memory read or write.
+- Derive status from existing artifacts. Read each inspected artifact and leave it unchanged.
+- Verification reports never mutate plan files.
+- Handoffs require a stopping boundary.
+- Review-only requests belong to `varde-review`. Name it and stop.
+- Load `references/worktree.md` before isolated edits.
+- Parallel builds require a complete task manifest and atomic verification.

@@ -6,17 +6,17 @@ files before execution. Template: `assets/TASK-TEMPLATE.md`. Acceptance criteria
 stay **plan-level** and are never re-authored per task; a task's own check is its
 `#### Verification` block.
 
-Run once per plan run, after loading the plan and before deriving the first ready
+Run once per plan run, after reading the plan and before choosing the first ready
 task. A plan authored by `varde-change plan` already had its scope indicators
 caught (`references/plan-acceptance-criteria.md`) — re-check anyway, since ad-hoc
 work never passed through planning.
 
 ## Check the edge cases first
 
-Three narrow branches need handling *before* decomposition, not during. Load
-`references/build-edge-cases.md` when one fires, and only then:
+Check these three edge cases *before* decomposition, not during it. Read
+`references/build-edge-cases.md` when one applies, and only then:
 
-- The goal names a shared symbol, type, or interface — a possible wide refactor.
+- The goal names a shared symbol, type, or interface, which may affect many files.
   With `varde-code` available, run `symbol_blast_radius` rather than guessing
   from package structure.
 - The work ports a native scan rule to TOML or SQL.
@@ -25,33 +25,53 @@ Three narrow branches need handling *before* decomposition, not during. Load
 ## Decide whether a doc task is needed
 
 A new agent-visible capability needs a doc task writing
-`memory-bank/knowledge/reference/<slug>.md`; a new multi-step workflow needs one
-writing `memory-bank/knowledge/flows/<slug>.md`. Either depends on all
+`<knowledge>/reference/<slug>.md`; a new multi-step workflow needs one
+writing `<knowledge>/flows/<slug>.md`. Either depends on all
 implementation tasks, and its only output is an accurate, concise Concept — no
 implementation narrative. Refactor-only or bug-fix work with no agent-visible
 change skips it.
 
 ## Build the breakdown
 
-Draft it directly by default; delegate only when unfamiliar code or a large
-bounded investigation benefits from fresh context, giving that executor the
+Draft it directly by default. Delegate only when unfamiliar code or a large
+bounded investigation benefits from fresh context. Give that executor the
 confirmed spec, plan-level acceptance criteria, any prototype output, and the
 scope indicators.
 
 Require per task: an observable outcome; expected files touched *if already
 known* — otherwise say so and trust the executor to find them; dependencies;
 risks; the `assert:`/`retrieve:` checks proving this slice works; and
-`test_approach`.
+`#### Test approach` with one supported profile and one-line rationale.
+
+For every task that touches existing code, record `#### Impact evidence` with
+the file or symbol query, its consumer summary, and focused source confirmation.
+Put each confirmed consumer in `verification_resources` as an exact
+`impact:<repo-relative-path>` identifier. Keep resources opaque after
+`impact:`. If the optional CLI is unavailable, record the manual consumers and
+relevant tests instead; unresolved impact keeps parallel eligibility disabled.
+
+Supported profiles are `tdd`, `regression`, `characterization`, `smoke`, and
+`not-applicable`. The profile chooses the evidence expected in `#### Progress`.
+Each completed task records one concise `evidence` marker with its profile,
+profile-specific checks, passing result, and short note.
+
+Profile authority is explicit. Direct user instructions outrank repository policy.
+Repository policy outranks decomposition defaults. Resolve the result
+with `scripts/resolve-testing-profile.sh`, then record its `profile_source`
+and `strict_tdd` values in the task's `#### Test approach`. A user can
+`require` or `waive` strict TDD. Repository policy can `require` strict TDD or
+declare an exception. Without either directive, decomposition keeps selecting
+any existing profile.
 
 Do **not** require a fixed step count or a named test function at authoring time.
 The executor works those out, and over-specifying spends tokens re-deriving what
 execution re-derives while risking a stale guess.
 
-Derive `test_approach`'s **direction** from what research found, not a bare
+Set `test_approach`'s **direction** from what research found, not a bare
 command: fragile or legacy code with no coverage takes characterization tests
 first (pin behaviour, then change); mostly config, packaging, or wiring takes a
-smoke test first (does it still start, build, load). One line — a steer, not a
-test plan.
+smoke test first (does it still start, build, load). Use one line as direction,
+not as a full test plan.
 
 ## Research and design
 
@@ -59,8 +79,7 @@ Investigate directly by default; delegate a targeted question only when fresh
 context helps. Convert findings into a task's `Context`, `Design notes`, or
 `Test approach`. A codebase-answerable unknown must never become a research task.
 
-For a genuinely open interface decision — a real fork where several shapes are
-defensible, not a mechanical detail — run "Design It Twice"
+For an open interface decision where multiple designs are valid, run "Design It Twice"
 (`references/plan-design-vocabulary.md`) before finalizing that task's
 `Design notes`. Skip it when an existing pattern or adjacent module dictates the
 interface.
@@ -114,15 +133,15 @@ another task's scope by analogy.
 
 ## Present and record
 
-A user steering the build directly gets the settled breakdown as an informational
-table and one pause: "Here's the breakdown I'll execute — say now if any task is
-missing, wrong-scoped, or should be split differently." Wait one turn, then
-proceed. An unattended run skips the pause.
+In interactive mode, show the settled breakdown as an informational table and
+pause once: "Here's the breakdown I'll execute — say now if any task is missing,
+wrong-scoped, or should be split differently." Wait one turn, then proceed. An
+unattended run skips the pause.
 
-Author each task from `assets/TASK-TEMPLATE.md` with populated `modifies`,
-`creates`, `depends_on`, and `status: backlog`. Task IDs are
+Write each task from `assets/TASK-TEMPLATE.md` with populated `modifies`,
+`creates`, `depends_on`, and `status: todo`. Task IDs are
 kebab-case with no date prefix; ensure uniqueness by globbing every plan's
 `tasks/*.md`. Author them in the selected execution location, then commit the
-initial task files once so a crashed run's resume check finds them. Hand the
-ordered list to `references/build-dispatch.md` — readiness is computed live from
+initial task files once so a crashed run's resume check finds them. Pass the
+ordered list to `references/build-dispatch.md`. Readiness is computed live from
 `depends_on`, never stored.

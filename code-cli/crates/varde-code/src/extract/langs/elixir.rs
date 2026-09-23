@@ -115,25 +115,52 @@ const CONTROL_FLOW: &[&str] = &[
 /// Phoenix router HTTP-verb macros: `get "/path", Ctrl, :action` -> Route.
 const HTTP_VERBS: &[&str] = &["get", "post", "put", "patch", "delete", "options", "head"];
 
+/// Semantic category for a plain-identifier call target.
+enum NamedCallKind {
+    FunctionDefinition,
+    Module,
+    Protocol,
+    ProtocolImplementation,
+    Struct,
+    Import,
+    Throw,
+    Route,
+    ControlFlow,
+    Call,
+}
+
 /// Emit entities for one node (called for every node in the tree).
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
-    match kind {
-        "anonymous_function" => ctx.push_callable_boundary(node),
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_2(node, kind, ctx);
+}
 
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "anonymous_function" => {
+            ctx.push_callable_boundary(node);
+            if direct_stab_clause_count(node) > 1 {
+                ctx.push(EntityKind::ControlFlow, "case".to_string(), node);
+            }
+        }
         // Every macro/definition/call is a `call` node — dispatch on callee.
         "call" => visit_call(node, ctx),
-
         // `@x value` module attribute -> Variable named `@x`.
         "unary_operator" => {
             if let Some(name) = module_attribute_name(node) {
                 ctx.push(EntityKind::Variable, name, node);
             }
         }
-
         // `a = 1`, `{b, c} = {2, 3}` -> Variable per bound identifier. Other
         // binary operators (`+`, `<-`, `>`, ...) are ignored here.
         "binary_operator" => {
@@ -144,128 +171,247 @@ pub fn visit(
                     ctx.push(EntityKind::Variable, name, node);
                 }
             }
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+            if operator_text(node).as_deref() == Some("when") {
+                ctx.push(EntityKind::ControlFlow, "guard_statement".to_string(), node);
+            }
         }
+        _ => return false,
+    }
+    true
+}
 
-        // rescue/catch clauses of a `try`.
-        "rescue_block" | "catch_block" | "after_block" => {
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        // Rescue/catch clauses are paths. `after` is cleanup only.
+        "rescue_block" | "catch_block" if direct_stab_clause_count(node) == 0 => {
             ctx.push(EntityKind::Catch, node.kind().into_owned(), node);
         }
-
+        "stab_clause" => match stab_context(node) {
+            StabContext::Catch => {
+                ctx.push(EntityKind::Catch, "catch_clause".to_string(), node);
+            }
+            StabContext::DecisionArm => {
+                ctx.push(EntityKind::ControlFlow, "case_item".to_string(), node);
+            }
+            StabContext::Other => {}
+        },
         // Literals.
         "integer" | "float" | "string" | "atom" | "boolean" | "nil" | "char" | "charlist" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
+        _ => return false,
+    }
+    true
+}
 
-        _ => {}
+#[derive(Clone, Copy)]
+enum StabContext {
+    Catch,
+    DecisionArm,
+    Other,
+}
+
+fn stab_context(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> StabContext {
+    for ancestor in node.ancestors() {
+        match ancestor.kind().as_ref() {
+            "rescue_block" | "catch_block" => return StabContext::Catch,
+            "else_block" => return StabContext::DecisionArm,
+            "anonymous_function" => {
+                return if direct_stab_clause_count(&ancestor) > 1 {
+                    StabContext::DecisionArm
+                } else {
+                    StabContext::Other
+                };
+            }
+            "call" => {
+                let target = ancestor.field("target").map(|target| target.text());
+                return match target.as_deref() {
+                    Some("case" | "cond" | "receive") => StabContext::DecisionArm,
+                    _ => StabContext::Other,
+                };
+            }
+            _ => {}
+        }
+    }
+    StabContext::Other
+}
+
+fn direct_stab_clause_count(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> usize {
+    node.children()
+        .filter(|child| child.kind() == "stab_clause")
+        .count()
+}
+
+fn operator_text(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.field("operator")
+        .map(|operator| operator.text().into_owned())
+}
+
+fn boolean_operator_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<&'static str> {
+    match operator_text(node)?.as_str() {
+        "&&" | "and" => Some("logical_and"),
+        "||" | "or" => Some("logical_or"),
+        _ => None,
     }
 }
 
 /// Handle a `call` node: definitions, imports, control-flow, raises, routes,
 /// member access, and the plain call itself.
 fn visit_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
-    let target = match node.field("target") {
-        Some(t) => t,
-        None => return,
+    let Some(target) = node.field("target") else {
+        return;
     };
 
     // Remote call / field access: `Enum.map(...)`, `x.field` — target is a
     // `dot`. Handle member access + Call, then done.
     if target.kind() == "dot" {
-        if let Some(member) = dot_member(&target) {
-            ctx.push(EntityKind::MemberAccess, member.clone(), node);
-            ctx.push(EntityKind::Call, member, node);
-        }
+        visit_remote_call(node, ctx, &target);
         return;
     }
 
-    // Otherwise the callee is a plain identifier.
     let callee = target.text().into_owned();
+    visit_named_call(node, ctx, callee);
+}
 
-    // `def bar(x, y)` / `defp helper(z)` / `defmacro mac(a)` -> Function.
-    if FUNCTION_DEFS.contains(&callee.as_str()) {
-        if let Some((name, head)) = function_head(node) {
-            ctx.push(EntityKind::Function, name, node);
-            // The enclosing `defmodule` is this function's owning type. Both
-            // `def` and `defmodule` are `call` kind, so the generic type-scope
-            // stack (keyed on node kind) can't distinguish them — resolve the
-            // module by walking ancestors and stamp it on the just-pushed
-            // Function entity, preserving the is_async/is_test/minhash that
-            // `ctx.push` computed.
-            if let Some(owner) = enclosing_module_name(node)
-                && let Some(last) = ctx.out.last_mut()
-            {
-                last.owner_type = Some(owner);
-            }
-            // Parameters live in the function head's argument list.
-            if let Some(head) = head {
-                for pname in head_parameter_names(&head) {
-                    ctx.push(EntityKind::Parameter, pname, node);
-                }
+/// Emit member access and call entities for a remote target.
+fn visit_remote_call(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+    target: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) {
+    if let Some(member) = dot_member(target) {
+        ctx.push(EntityKind::MemberAccess, member.clone(), node);
+        ctx.push(EntityKind::Call, member, node);
+    }
+}
+
+/// Classify a plain call before extracting its entities.
+fn named_call_kind(callee: &str) -> NamedCallKind {
+    match callee {
+        name if FUNCTION_DEFS.contains(&name) => NamedCallKind::FunctionDefinition,
+        "defmodule" => NamedCallKind::Module,
+        "defprotocol" => NamedCallKind::Protocol,
+        "defimpl" => NamedCallKind::ProtocolImplementation,
+        "defstruct" => NamedCallKind::Struct,
+        name if IMPORT_DIRECTIVES.contains(&name) => NamedCallKind::Import,
+        "raise" | "throw" => NamedCallKind::Throw,
+        name if HTTP_VERBS.contains(&name) => NamedCallKind::Route,
+        name if CONTROL_FLOW.contains(&name) => NamedCallKind::ControlFlow,
+        _ => NamedCallKind::Call,
+    }
+}
+
+/// Emit entities for a call whose target is a plain identifier.
+fn visit_named_call(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+    callee: String,
+) {
+    match named_call_kind(&callee) {
+        NamedCallKind::FunctionDefinition => push_function_definition(node, ctx),
+        NamedCallKind::Module => push_first_arg(ctx, EntityKind::Class, node),
+        NamedCallKind::Protocol => push_first_arg(ctx, EntityKind::Interface, node),
+        NamedCallKind::ProtocolImplementation => {
+            push_owned(ctx, EntityKind::Implements, first_arg_or_empty(node), node);
+        }
+        NamedCallKind::Struct => {
+            let name = first_arg_text(node).unwrap_or_else(|| "defstruct".to_string());
+            ctx.push(EntityKind::Class, name, node);
+        }
+        NamedCallKind::Import => {
+            if let Some(spec) = first_arg_text(node) {
+                ctx.push(EntityKind::Import, spec, node);
             }
         }
-        return;
+        NamedCallKind::Throw => ctx.push(EntityKind::Throw, first_arg_or_empty(node), node),
+        NamedCallKind::Route => push_route_or_call(node, ctx, callee),
+        NamedCallKind::ControlFlow => ctx.push(EntityKind::ControlFlow, callee, node),
+        NamedCallKind::Call => ctx.push(EntityKind::Call, callee, node),
     }
+}
 
-    // `defmodule Foo.Bar` -> Class.
-    if callee == "defmodule" {
-        ctx.push(
-            EntityKind::Class,
-            first_arg_text(node).unwrap_or_default(),
-            node,
-        );
+/// Emit a function and its parameters from a definition macro.
+fn push_function_definition(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+) {
+    let Some((name, head)) = function_head(node) else {
         return;
-    }
+    };
+    ctx.push(EntityKind::Function, name.clone(), node);
 
-    // `defprotocol Size` -> Interface.
-    if callee == "defprotocol" {
-        ctx.push(
-            EntityKind::Interface,
-            first_arg_text(node).unwrap_or_default(),
-            node,
-        );
-        return;
-    }
-
-    // `defimpl Size, for: BitString` -> Implements referencing the protocol.
-    if callee == "defimpl" {
-        push_owned(
-            ctx,
-            EntityKind::Implements,
-            first_arg_text(node).unwrap_or_default(),
-            node,
-        );
-        return;
-    }
-
-    // `defstruct name: nil, age: 0` -> Class (module-level record).
-    if callee == "defstruct" {
-        let name = first_arg_text(node).unwrap_or_else(|| "defstruct".to_string());
-        ctx.push(EntityKind::Class, name, node);
-        return;
-    }
-
-    // `import X` / `alias A.B` / `require Y` / `use Z` -> Import.
-    if IMPORT_DIRECTIVES.contains(&callee.as_str()) {
-        if let Some(spec) = first_arg_text(node) {
-            ctx.push(EntityKind::Import, spec, node);
-        }
-        return;
-    }
-
-    // `raise ...` / `throw ...` -> Throw.
-    if callee == "raise" || callee == "throw" {
-        ctx.push(
-            EntityKind::Throw,
-            first_arg_text(node).unwrap_or_default(),
-            node,
-        );
-        return;
-    }
-
-    // Phoenix route `get "/users", Ctrl, :index` -> Route.
-    if HTTP_VERBS.contains(&callee.as_str())
-        && let Some(path) = first_string_arg(node)
+    // Generic scope stacking cannot distinguish `def` from `defmodule`.
+    if let Some(owner) = enclosing_module_name(node)
+        && let Some(function) = ctx.out.last_mut()
     {
+        function.owner_type = Some(owner);
+    }
+
+    if has_sibling_function_clause(node, &name) {
+        ctx.push(
+            EntityKind::ControlFlow,
+            "unknown_multi_clause_grouping".to_string(),
+            node,
+        );
+    }
+
+    if let Some(head) = head {
+        for name in head_parameter_names(&head) {
+            ctx.push(EntityKind::Parameter, name, node);
+        }
+    }
+}
+
+fn has_sibling_function_clause(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    name: &str,
+) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent
+            .children()
+            .filter(|sibling| sibling.kind() == "call")
+            .filter(|sibling| {
+                sibling
+                    .field("target")
+                    .is_some_and(|target| FUNCTION_DEFS.contains(&target.text().as_ref()))
+            })
+            .filter_map(|sibling| function_head(&sibling).map(|(sibling_name, _)| sibling_name))
+            .filter(|sibling_name| sibling_name == name)
+            .nth(1)
+            .is_some()
+    })
+}
+
+/// Emit an entity named by the call's first argument.
+fn push_first_arg(
+    ctx: &mut ExtractCtx,
+    kind: EntityKind,
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) {
+    ctx.push(kind, first_arg_or_empty(node), node);
+}
+
+/// Return the first argument text, or an empty fallback.
+fn first_arg_or_empty(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> String {
+    first_arg_text(node).unwrap_or_default()
+}
+
+/// Emit a Phoenix route, falling back to a normal call.
+fn push_route_or_call(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+    callee: String,
+) {
+    if let Some(path) = first_string_arg(node) {
         ctx.out.push(Entity {
             kind: EntityKind::Route,
             name: callee.clone(),
@@ -281,17 +427,9 @@ fn visit_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ext
             is_test: false,
             owner_type: ctx.type_scope.map(|s| s.to_owned()),
         });
-        return;
+    } else {
+        ctx.push(EntityKind::Call, callee, node);
     }
-
-    // Control-flow macros -> ControlFlow.
-    if CONTROL_FLOW.contains(&callee.as_str()) {
-        ctx.push(EntityKind::ControlFlow, callee, node);
-        return;
-    }
-
-    // Plain local call.
-    ctx.push(EntityKind::Call, callee, node);
 }
 
 /// Push a type-reference entity (`Implements`) — Elixir has no owner-type
@@ -654,6 +792,69 @@ mod tests {
                 .count(),
             1,
             "{es:?}"
+        );
+    }
+
+    #[test]
+    fn complexity_events_cover_booleans_arms_guards_catches_and_lambdas() {
+        let es = entities(
+            "defmodule M do\n  def classify(x) when x > 0 do\n    case x do\n      0 -> :zero\n      n when n > 1 -> :many\n      _ -> :other\n    end\n    cond do\n      x < 0 -> :negative\n      true -> :positive\n    end\n    try do\n      work()\n    rescue\n      RuntimeError -> :runtime\n      _ -> :other\n    catch\n      :throw, reason -> reason\n    after\n      cleanup()\n    end\n    callback = fn\n      value -> value\n      value when value > 0 -> value\n    end\n    x && ready or fallback\n  end\nend\n",
+        );
+        let flow_names: Vec<&str> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(flow_names.contains(&"logical_and"), "events: {es:?}");
+        assert!(flow_names.contains(&"logical_or"), "events: {es:?}");
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "case_item")
+                .count(),
+            7,
+            "events: {es:?}"
+        );
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "guard_statement")
+                .count(),
+            3,
+            "events: {es:?}"
+        );
+        assert_eq!(
+            es.iter()
+                .filter(|entity| entity.kind == EntityKind::Catch)
+                .count(),
+            3,
+            "events: {es:?}"
+        );
+        assert_eq!(
+            es.iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            1,
+            "events: {es:?}"
+        );
+    }
+
+    #[test]
+    fn unresolved_function_clause_grouping_lowers_confidence() {
+        let es = entities(
+            "defmodule M do\n  def choose(0), do: :zero\n  def choose(value), do: value\nend\n",
+        );
+        let metrics: Vec<_> = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .filter(|metric| metric.name == "choose")
+            .collect();
+
+        assert_eq!(metrics.len(), 2, "metrics: {metrics:?}");
+        assert!(
+            metrics.iter().all(|metric| {
+                metric.confidence == crate::complexity::ComplexityConfidence::Low
+            })
         );
     }
 }

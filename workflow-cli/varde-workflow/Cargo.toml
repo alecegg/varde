@@ -1,0 +1,16 @@
+[package]
+name = "varde-workflow"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "CLI for OKF Concept/Knowledge Bundle CRUD with OCC writes."
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+fs4 = { version = "1.1.0", features = ["sync"] }
+okf-core = { path = "../okf-core" }
+serde_json = "1"
+serde_yaml = "0.9"
+sha1 = "0.10"

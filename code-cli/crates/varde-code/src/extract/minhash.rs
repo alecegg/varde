@@ -7,8 +7,8 @@
 //! token stream (which summed to ~67 MB of JSON per build on large repos).
 //!
 //! Parameters: shingle size 5, 16 FNV-1a hash functions split into 4 bands
-//! of 4 rows. Hashing is deterministic (FNV-1a with a per-function seed), so
-//! results are reproducible across runs.
+//! of 4 rows. Each row stores its minimum shingle hash. Each band then hashes
+//! its four-row tuple. Hashing remains deterministic across runs.
 
 /// Window size for the token shingles.
 pub(crate) const SHINGLE_SIZE: usize = 5;
@@ -55,7 +55,17 @@ const HASH_SEEDS: [u64; NUM_HASHES] = {
 /// boundaries are located as maximal alphanumeric runs and hashed in place,
 /// never materializing a `Vec<String>` of tokens or of space-joined shingles.
 pub(crate) fn body_minhash(text: &str) -> Option<Vec<u64>> {
-    // Locate the byte ranges of each maximal alphanumeric run (token).
+    let (starts, ends) = token_ranges(text);
+    if starts.len() < SHINGLE_SIZE {
+        return None;
+    }
+
+    let minima = shingle_minima(text.as_bytes(), &starts, &ends);
+    Some(band_signatures(&minima))
+}
+
+/// Locate every maximal alphanumeric token without allocating its text.
+fn token_ranges(text: &str) -> (Vec<usize>, Vec<usize>) {
     let mut starts: Vec<usize> = Vec::new();
     let mut ends: Vec<usize> = Vec::new();
     let mut run_start: Option<usize> = None;
@@ -71,36 +81,56 @@ pub(crate) fn body_minhash(text: &str) -> Option<Vec<u64>> {
         starts.push(s);
         ends.push(text.len());
     }
+    (starts, ends)
+}
 
-    let n = starts.len();
-    if n < SHINGLE_SIZE {
-        return None;
-    }
-
-    let bytes = text.as_bytes();
-    let mut signatures = vec![u64::MAX; BANDS];
+/// Find each seeded hash function's minimum shingle value.
+fn shingle_minima(bytes: &[u8], starts: &[usize], ends: &[usize]) -> [u64; NUM_HASHES] {
+    let mut minima = [u64::MAX; NUM_HASHES];
     // For each shingle (window of SHINGLE_SIZE tokens), independently hash
     // the joined space-separated lowercased tokens once per hash function —
     // each starting from its own seeded offset basis ([`HASH_SEEDS`]) rather
     // than derived from one shared FNV pass.
-    for w in 0..=n - SHINGLE_SIZE {
+    for w in 0..=starts.len() - SHINGLE_SIZE {
         for (h, &seed) in HASH_SEEDS.iter().enumerate().take(NUM_HASHES) {
-            let mut hash = seed;
-            for k in 0..SHINGLE_SIZE {
-                if k > 0 {
-                    hash = fnv1a64_update(hash, b' ');
-                }
-                for &b in &bytes[starts[w + k]..ends[w + k]] {
-                    hash = fnv1a64_update(hash, b.to_ascii_lowercase());
-                }
-            }
-            let band = h / ROWS;
-            if hash < signatures[band] {
-                signatures[band] = hash;
+            let hash = hash_shingle(bytes, starts, ends, w, seed);
+            if hash < minima[h] {
+                minima[h] = hash;
             }
         }
     }
-    Some(signatures)
+    minima
+}
+
+/// Hash one normalized token window using one seed.
+fn hash_shingle(bytes: &[u8], starts: &[usize], ends: &[usize], w: usize, seed: u64) -> u64 {
+    let mut hash = seed;
+    for k in 0..SHINGLE_SIZE {
+        if k > 0 {
+            hash = fnv1a64_update(hash, b' ');
+        }
+        for &byte in &bytes[starts[w + k]..ends[w + k]] {
+            hash = fnv1a64_update(hash, byte.to_ascii_lowercase());
+        }
+    }
+    hash
+}
+
+/// Fold contiguous MinHash rows into persisted LSH bands.
+fn band_signatures(minima: &[u64; NUM_HASHES]) -> Vec<u64> {
+    minima
+        .chunks_exact(ROWS)
+        .enumerate()
+        .map(|(band, rows)| {
+            let mut hash = HASH_SEEDS[band];
+            for row in rows {
+                for byte in row.to_le_bytes() {
+                    hash = fnv1a64_update(hash, byte);
+                }
+            }
+            hash
+        })
+        .collect()
 }
 
 /// One FNV-1a 64-bit round: fold a byte into the running hash.
@@ -155,6 +185,31 @@ mod tests {
         assert!(
             orderings.len() > 1,
             "expected bands to disagree on relative ordering across texts, all matched: {sigs:?}"
+        );
+    }
+
+    #[test]
+    fn identical_bodies_share_every_band() {
+        let body = "alpha beta gamma delta epsilon zeta eta theta";
+        let left = body_minhash(body).expect("signature");
+        let right = body_minhash(body).expect("signature");
+        assert_eq!(left.len(), BANDS);
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn one_shared_shingle_does_not_define_a_clone_band() {
+        let left = body_minhash(
+            "alpha beta gamma delta epsilon left one two three four five six seven eight",
+        )
+        .expect("left signature");
+        let right = body_minhash(
+            "alpha beta gamma delta epsilon right nine ten eleven twelve thirteen fourteen",
+        )
+        .expect("right signature");
+        assert!(
+            left.iter().zip(&right).all(|(a, b)| a != b),
+            "one common shingle must not satisfy a four-row band: {left:?} {right:?}"
         );
     }
 }

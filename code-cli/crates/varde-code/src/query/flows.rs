@@ -120,6 +120,8 @@ fn entity_info(conn: &Connection, entity_id: i64) -> Result<(String, String), Ap
 /// O(nodes) round-trip cost inside a recursive descent (the same shape
 /// `entrypoints::detect` was refactored away from).
 type FunctionKey = (i64, Option<String>, String);
+type EntityInfo = HashMap<i64, (String, String)>;
+type EntityKeys = HashMap<i64, FunctionKey>;
 
 struct CallGraph {
     /// entity_id -> (file path, symbol name)
@@ -137,67 +139,8 @@ struct CallGraph {
 
 impl CallGraph {
     fn load(conn: &Connection) -> Result<Self, ApiError> {
-        let mut entity_info = HashMap::new();
-        let mut entity_key = HashMap::new();
-        {
-            let mut stmt = conn
-                .prepare_cached(
-                    "SELECT e.id, e.file_id, e.name, e.owner_type, f.path
-                     FROM entities e JOIN files f ON f.id = e.file_id",
-                )
-                .map_err(db_err)?;
-            let rows = stmt
-                .query_map([], |r| {
-                    Ok((
-                        r.get::<_, i64>(0)?,
-                        r.get::<_, i64>(1)?,
-                        r.get::<_, String>(2)?,
-                        r.get::<_, Option<String>>(3)?,
-                        r.get::<_, String>(4)?,
-                    ))
-                })
-                .map_err(db_err)?;
-            for row in rows {
-                let (id, file_id, name, owner_type, path) = row.map_err(db_err)?;
-                entity_info.insert(id, (path, name.clone()));
-                entity_key.insert(id, (file_id, owner_type, name));
-            }
-        }
-
-        let call_kind = crate::resolve::EdgeKind::Call.as_i64();
-        let mut callees: HashMap<FunctionKey, Vec<i64>> = HashMap::new();
-        {
-            let mut stmt = conn
-                .prepare_cached(
-                    "SELECT call_e.file_id, call_e.owner_type,
-                            call_e.enclosing_function, re.to_entity_id
-                     FROM resolved_edges re
-                     JOIN entities call_e ON call_e.id = re.from_entity_id
-                     WHERE re.kind = ?1 AND re.resolved = 1 AND re.to_entity_id IS NOT NULL
-                     ORDER BY re.id",
-                )
-                .map_err(db_err)?;
-            let rows = stmt
-                .query_map([call_kind], |r| {
-                    Ok((
-                        r.get::<_, i64>(0)?,
-                        r.get::<_, Option<String>>(1)?,
-                        r.get::<_, Option<String>>(2)?,
-                        r.get::<_, i64>(3)?,
-                    ))
-                })
-                .map_err(db_err)?;
-            for row in rows {
-                let (file_id, owner_type, enclosing, to_id) = row.map_err(db_err)?;
-                if let Some(name) = enclosing {
-                    callees
-                        .entry((file_id, owner_type, name))
-                        .or_default()
-                        .push(to_id);
-                }
-            }
-        }
-
+        let (entity_info, entity_key) = load_entities(conn)?;
+        let callees = load_callees(conn)?;
         Ok(CallGraph {
             entity_info,
             entity_key,
@@ -219,6 +162,69 @@ impl CallGraph {
             .map(Vec::as_slice)
             .unwrap_or(&[])
     }
+}
+
+fn load_entities(conn: &Connection) -> Result<(EntityInfo, EntityKeys), ApiError> {
+    let mut entity_info = HashMap::new();
+    let mut entity_key = HashMap::new();
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT e.id, e.file_id, e.name, e.owner_type, f.path
+                     FROM entities e JOIN files f ON f.id = e.file_id",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, String>(4)?,
+            ))
+        })
+        .map_err(db_err)?;
+    for row in rows {
+        let (id, file_id, name, owner_type, path) = row.map_err(db_err)?;
+        entity_info.insert(id, (path, name.clone()));
+        entity_key.insert(id, (file_id, owner_type, name));
+    }
+    Ok((entity_info, entity_key))
+}
+
+fn load_callees(conn: &Connection) -> Result<HashMap<FunctionKey, Vec<i64>>, ApiError> {
+    let call_kind = crate::resolve::EdgeKind::Call.as_i64();
+    let mut callees: HashMap<FunctionKey, Vec<i64>> = HashMap::new();
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT call_e.file_id, call_e.owner_type,
+                            call_e.enclosing_function, re.to_entity_id
+                     FROM resolved_edges re
+                     JOIN entities call_e ON call_e.id = re.from_entity_id
+                     WHERE re.kind = ?1 AND re.resolved = 1 AND re.to_entity_id IS NOT NULL
+                     ORDER BY re.id",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([call_kind], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, i64>(3)?,
+            ))
+        })
+        .map_err(db_err)?;
+    for row in rows {
+        let (file_id, owner_type, enclosing, to_id) = row.map_err(db_err)?;
+        if let Some(name) = enclosing {
+            callees
+                .entry((file_id, owner_type, name))
+                .or_default()
+                .push(to_id);
+        }
+    }
+    Ok(callees)
 }
 
 /// Maximum call-chain depth `expand` will descend before rendering deeper
@@ -246,66 +252,9 @@ fn expand(
 
     let mut children = Vec::new();
     for &callee_id in graph.callees(entity_id) {
-        if path.contains(&callee_id) {
-            // Call-graph cycle back onto the current DFS path: stop
-            // expanding rather than recursing forever. Not a
-            // collapse-with-backref case (that mechanism is for
-            // cross-entrypoint reuse, not cycles).
-            continue;
+        if let Some(child) = expand_callee(graph, callee_id, entrypoint, rendered, path, depth)? {
+            children.push(child);
         }
-        let (cf, cs) = graph.info(callee_id)?;
-        if super::noise_filter::is_generated_or_vendored_path(&cf) {
-            // Generated/vendored callees are dropped from the tree
-            // entirely, matching every other nav-map section's
-            // noise-filtering guarantee.
-            continue;
-        }
-        if let Some(r) = rendered.get(&callee_id) {
-            children.push(FlowNode {
-                entity_id: callee_id,
-                file: cf,
-                symbol: cs,
-                children: Vec::new(),
-                backref_to: Some(Backref {
-                    entrypoint: r.entrypoint.clone(),
-                    file: r.file.clone(),
-                    symbol: r.symbol.clone(),
-                    entity_id: callee_id,
-                }),
-            });
-            continue;
-        }
-
-        if depth + 1 >= MAX_FLOW_DEPTH {
-            // Stop expanding before overflowing the stack on a pathologically
-            // deep (but acyclic) call chain. Render the callee as a leaf; its
-            // own callees are simply not descended into.
-            children.push(FlowNode {
-                entity_id: callee_id,
-                file: cf,
-                symbol: cs,
-                children: Vec::new(),
-                backref_to: None,
-            });
-            continue;
-        }
-
-        rendered.insert(
-            callee_id,
-            RenderedRef {
-                entrypoint: entrypoint.to_string(),
-                file: cf,
-                symbol: cs,
-            },
-        );
-        children.push(expand(
-            graph,
-            callee_id,
-            entrypoint,
-            rendered,
-            path,
-            depth + 1,
-        )?);
     }
 
     path.remove(&entity_id);
@@ -316,6 +265,63 @@ fn expand(
         children,
         backref_to: None,
     })
+}
+
+fn expand_callee(
+    graph: &CallGraph,
+    callee_id: i64,
+    entrypoint: &str,
+    rendered: &mut HashMap<i64, RenderedRef>,
+    path: &mut HashSet<i64>,
+    depth: u32,
+) -> Result<Option<FlowNode>, ApiError> {
+    if path.contains(&callee_id) {
+        return Ok(None);
+    }
+    let (file, symbol) = graph.info(callee_id)?;
+    if super::noise_filter::is_generated_or_vendored_path(&file) {
+        return Ok(None);
+    }
+    if let Some(reference) = rendered.get(&callee_id) {
+        return Ok(Some(backref_node(callee_id, file, symbol, reference)));
+    }
+    if depth + 1 >= MAX_FLOW_DEPTH {
+        return Ok(Some(leaf_node(callee_id, file, symbol)));
+    }
+    rendered.insert(
+        callee_id,
+        RenderedRef {
+            entrypoint: entrypoint.to_string(),
+            file,
+            symbol,
+        },
+    );
+    expand(graph, callee_id, entrypoint, rendered, path, depth + 1).map(Some)
+}
+
+fn leaf_node(entity_id: i64, file: String, symbol: String) -> FlowNode {
+    FlowNode {
+        entity_id,
+        file,
+        symbol,
+        children: Vec::new(),
+        backref_to: None,
+    }
+}
+
+fn backref_node(entity_id: i64, file: String, symbol: String, reference: &RenderedRef) -> FlowNode {
+    FlowNode {
+        entity_id,
+        file,
+        symbol,
+        children: Vec::new(),
+        backref_to: Some(Backref {
+            entrypoint: reference.entrypoint.clone(),
+            file: reference.file.clone(),
+            symbol: reference.symbol.clone(),
+            entity_id,
+        }),
+    }
 }
 
 /// Build the full reachable-tree flow for every semantic entrypoint in

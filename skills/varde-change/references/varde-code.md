@@ -1,14 +1,25 @@
 # Optional `varde-code` CLI
 
-An optional Rust CLI on PATH. If `command -v varde-code` finds nothing, ignore
-this file and use Read/Grep/Glob — not an error, and never build or install it
-yourself. Index once per session first:
+`varde-code` is an optional Rust CLI on PATH. If
+`command -v varde-code` finds nothing, use Read/Grep/Glob. Its absence is not
+an error. Never build or install it yourself. When the decision below selects
+the CLI, build its index once before other commands:
 
 ```bash
 varde-code build --repo-root "$(pwd)"   # full rebuild each time
 ```
 
 Every command prints `{"ok": true, "data": ...}` or `{"ok": false, "error": {...}}`.
+
+## Decision rule
+
+- **Discovery and relationships:** Use Varde Code for unknown scope,
+  dependencies, tests, and blast radius.
+- **Known content:** Read short, located files directly.
+- **Large known files:** Use `get_symbol` for one exact symbol.
+- **Batch related lookups:** Build once, then batch related queries.
+- **New or trivial targets:** Skip indexing.
+- **Confirmation:** Confirm important CLI results against focused source reads.
 
 ## Scoping a plan
 
@@ -17,11 +28,19 @@ reading the touched code. Use it to answer "what does this affect" before a
 decomposition judgment call, not to author task content.
 
 ```bash
+# Orient before scoping an unfamiliar area — entrypoints, module layers,
+# subsystems, and hotspots, so the plan's shape follows the repo's
+varde-code nav_map              --json '{"repoRoot": "'"$(pwd)"'"}' --format text
+
 # External contract surface: who currently depends on a file or symbol the
 # plan is about to change (`references/plan-fundamentals.md`)
 varde-code dependents           --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
 varde-code dependencies         --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
 varde-code blast_radius         --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
+
+# Whether a change in one file can reach another at all — the dependency path
+# between them, for splitting decisions that hinge on real coupling
+varde-code map_path             --json '{"repoRoot": "'"$(pwd)"'", "sourceFile": "src/foo.ts", "targetFile": "src/bar.ts"}'
 
 # Wide-refactor scope: does a renamed or retyped symbol's blast radius fan
 # across independent packages (→ expand/migrate/contract) or stay contained
@@ -75,7 +94,20 @@ retry that call once with escalated filesystem access, keeping the command
 unchanged. If approval is unavailable, denied, or the retry fails, use Read/Grep
 for that lookup and name the degraded capability in your next message.
 
-On any other failure, fall back to Read/Grep for that one lookup and carry on
-using the CLI for the rest of the run. A call that *succeeds* but looks
-implausible — zero dependents for a symbol you know is exported — is not a
-failure; spot-check with a targeted grep before trusting it.
+On any other failure, use Read/Grep for that lookup and keep using the CLI for
+the rest of the run. If a successful result looks implausible, such as zero
+dependents for an exported symbol, spot-check it with targeted grep before
+trusting it.
+
+## Impact evidence contract
+
+Planning uses `dependents` for a direct consumer set and `blast_radius` for
+transitive impact. After either query, read the important consumers and
+relevant tests directly. Record the query and a short evidence summary in the
+task's `#### Impact evidence` section.
+
+For each confirmed consumer, add the exact
+`impact:<repo-relative-path>` identifier to `verification_resources`. The
+identifier is an opaque exact-match resource. Do not rewrite or infer it during
+wave scheduling. If the CLI is unavailable, record the manually inspected
+consumer paths and tests. Unresolved impact evidence disables parallel work.

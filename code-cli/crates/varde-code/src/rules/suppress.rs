@@ -10,8 +10,7 @@
 //! comment.
 
 use std::collections::HashMap;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::{Path, PathBuf};
 
 use crate::parse::{language_for_path, parse_source};
 use crate::rules::finding::Finding;
@@ -157,49 +156,12 @@ pub fn filter_findings(
 
     let mut keep = vec![true; findings.len()];
     let mut stale = Vec::new();
+    let root = std::fs::canonicalize(repo_root)
+        .or_else(|_| std::path::absolute(repo_root))
+        .unwrap_or_else(|_| repo_root.to_path_buf());
 
     for (file, idxs) in by_file {
-        let path = Path::new(file);
-        let abs = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            repo_root.join(path)
-        };
-        let Ok(source) = std::fs::read_to_string(&abs) else {
-            continue;
-        };
-        let suppressions = parse_suppressions(&source, &abs);
-        if suppressions.is_empty() {
-            continue;
-        }
-        let used: Vec<AtomicBool> = suppressions
-            .iter()
-            .map(|_| AtomicBool::new(false))
-            .collect();
-
-        for &i in &idxs {
-            let finding = &findings[i];
-            let line = finding.location.span.start_line;
-            if let Some((si, _)) = suppressions
-                .iter()
-                .enumerate()
-                .find(|(_, s)| s.matches(line, &finding.rule_id))
-            {
-                used[si].store(true, Ordering::Relaxed);
-                keep[i] = false;
-            }
-        }
-
-        for (si, s) in suppressions.iter().enumerate() {
-            if !used[si].load(Ordering::Relaxed) {
-                stale.push(StaleSuppression {
-                    file: file.to_string(),
-                    comment_line: s.comment_line,
-                    rule_ids: s.rule_ids.clone(),
-                    reason: s.reason.clone(),
-                });
-            }
-        }
+        apply_file_suppressions(file, &idxs, &findings, &root, &mut keep, &mut stale);
     }
 
     let out = findings
@@ -208,6 +170,58 @@ pub fn filter_findings(
         .filter_map(|(i, f)| keep[i].then_some(f))
         .collect();
     (out, stale)
+}
+
+fn apply_file_suppressions(
+    file: &str,
+    indexes: &[usize],
+    findings: &[Finding],
+    root: &Path,
+    keep: &mut [bool],
+    stale: &mut Vec<StaleSuppression>,
+) {
+    let absolute = finding_path(root, Path::new(file));
+    let Ok(source) = std::fs::read_to_string(&absolute) else {
+        return;
+    };
+    let suppressions = parse_suppressions(&source, &absolute);
+    if suppressions.is_empty() {
+        return;
+    }
+    let mut used = vec![false; suppressions.len()];
+    for &index in indexes {
+        let finding = &findings[index];
+        let line = finding.location.span.start_line;
+        if let Some((suppression_index, _)) = suppressions
+            .iter()
+            .enumerate()
+            .find(|(_, suppression)| suppression.matches(line, &finding.rule_id))
+        {
+            used[suppression_index] = true;
+            keep[index] = false;
+        }
+    }
+    stale.extend(
+        suppressions
+            .into_iter()
+            .zip(used)
+            .filter(|(_, used)| !used)
+            .map(|(suppression, _)| StaleSuppression {
+                file: file.to_string(),
+                comment_line: suppression.comment_line,
+                rule_ids: suppression.rule_ids,
+                reason: suppression.reason,
+            }),
+    );
+}
+
+fn finding_path(root: &Path, path: &Path) -> PathBuf {
+    let current = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    if path.is_absolute() || current.starts_with(root) {
+        current
+    } else {
+        root.join(path)
+    }
 }
 
 #[cfg(test)]

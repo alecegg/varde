@@ -5,12 +5,11 @@ specifications.
 
 This skill has two kinds of output:
 
-- **Auto-generate**: sections explicitly declared inside a freshness marker are
-  rewritten by reading the source they describe and authoring the replacement text
-  directly.
-- **Propose**: all other content — hand-authored sections in marked docs, and the
-  entirety of unmarked docs — is compared against the current code/specs and
-  surfaced as a proposed diff for user review. Changes are applied only on approval.
+- **Auto-generate**: Rewrite sections declared inside a freshness marker by
+  reading the source they describe and authoring replacement text directly.
+- **Propose**: Compare all other content — hand-authored sections in marked docs
+  and all content in unmarked docs — with the current code/specs. Show the
+  differences for user review. Apply changes only after approval.
 
 ## Inputs
 
@@ -27,17 +26,15 @@ This skill has two kinds of output:
    effective `repoRoot`) **only** when a concrete concurrent-edit risk makes the
    local checkout unsafe — another agent editing the same docs mid-run. If you
    do isolate, merge back before Phase 3's approval step so the user reviews the
-   real files, and follow that file's `created=` ownership rule. Interactive-throughout work belongs in the checkout,
-   not a worktree.
-2. **Load the optional CLIs.** Load `references/varde-code.md` if that CLI is
-   on PATH — it is the preferred way to scope Phase 1 and read source content
-   in Phases 0 and 2. Likewise load `references/varde-docs-cli.md` if
-   `varde-docs` is; when present,
-   use it to read generated specs and for ranked `search`/whole-doc `show` and
-   OCC-safe whole-file writes over README/`docs/*.md` — section-marker
-   rewrites stay Edit. Absent, use plain Read/Grep/Write/Edit.
+   real files, and follow that file's `created=` ownership rule. Keep all
+   interactive work in the checkout, not a worktree.
+2. **Load optional CLIs.** Load `references/varde-code.md` for unknown scope,
+   changed relationships, or several related lookups. Read one short, known
+   source file directly. Load `references/varde-workflow-cli.md` only for
+   ranked bundle search or whole-file mutation. Read known documents directly
+   when no mutation follows. Section-marker rewrites stay Edit.
 3. **Refresh specifications first, if any exist.** Check whether the repo has
-   generated specification documents (e.g. under `memory-bank/knowledge/specs/`
+   generated specification documents (e.g. under `<knowledge>/specs/`
    or similar). If so, update any that are stale before touching docs. Full
    procedure: `references/refresh-phase-0-spec.md`.
 4. **Discover all documents.** Enumerate README.md and docs/*.md, classify
@@ -52,19 +49,19 @@ This skill has two kinds of output:
 6. **Propose edits for all docs.** Process documents one at a time. Delegate
    only independent comparisons and cap concurrent delegates at three. Full
    procedure: `references/refresh-phase-3-propose.md`.
-7. **Verify generated documents.** Re-read each edited document next to the
-   source it describes and check for accuracy and drift; report findings without
-   auto-repairing them. Full procedure: `references/refresh-phase-4-verify.md`.
-8. **Merge back only if you isolated.** In the default current-checkout case
-   there is nothing to merge — skip this step. You only reach here with an open
-   worktree if step 1 isolated for a concurrent-edit risk *and* the run never
-   reached Phase 3's approval; in that case merge and clean up per
+7. **Verify generated documents.** Compare each edited document with the source
+   it describes. Check accuracy and drift, then report findings without
+   repairing them automatically. Full procedure:
+   `references/refresh-phase-4-verify.md`.
+8. **Merge back only if you isolated.** If you stayed in the current checkout,
+   skip this step. You reach this step with an open worktree only when step 1
+   isolated for a concurrent-edit risk and the run stopped before Phase 3's
+   approval. In that case, merge and clean up per
    `references/worktree.md`, whose `created=` rule decides ownership. On a merge
    conflict, resolve with
    intent "regenerate docs from current source/specs" before cleaning up.
 9. **Record lessons.** Invoke `varde-knowledge reflect`, scoped to this run. It
-   records friction and durable lessons only — a handoff belongs at a
-   session boundary, which this is not.
+   records friction and durable lessons. Do not write a handoff during this run.
 
 ## Constraints
 

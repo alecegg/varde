@@ -1,6 +1,6 @@
 # Closing summary
 
-Report separate counts:
+Use separate counts for automated fixes and triage:
 
 ```text
 Review fix summary
@@ -17,14 +17,14 @@ Triage:
   open: <n>
 ```
 
-Update `triage_status` in the review's `review.md` when the pass completes. Leave it
-`in-progress` when the human stops early.
+After the pass completes, update `triage_status` in the review's `review.md`.
+Leave it `in-progress` when the human stops early.
 
-Read every category file listed in `index.md` before closing.
+Before closing, read every category file listed in `index.md`.
 Check every `**Disposition:**` field. If any field is blank, leave the review
-folder in place and keep its status `in-progress`. If none are blank, set
-`triage_status: complete`. For a nested review, leave the folder inside its
-parent plan bundle. For a standalone review, move the folder to
-`reviews/archive/<folder-name>` with `mv`, or `git mv` when tracked, then set
+folder in place and keep its status `in-progress`. If no field is blank, set
+`triage_status: complete`. Keep a nested review inside its parent plan bundle.
+For a standalone review, move the folder to
+`reviews/archive/<folder-name>` with `mv`, or `git mv` when tracked. Then set
 `status: archived` in the moved `review.md`. Nested review completion does not
 wait for companion plan tasks.

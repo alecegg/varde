@@ -143,10 +143,10 @@ pub fn is_frontend_asset_path(path: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Returns `true` if `path` is generated/vendored: under a dependency/build
-/// directory (`target/`, `node_modules/`, `vendor/`, `grammars/`, ...), under a
-/// framework compiled-asset tree (`priv/static/`), or a minified/bundled
-/// filename (`*.min.js`, `*.bundle.js`).
+/// Returns `true` for generated, vendored, or fixture-only paths.
+///
+/// This includes dependency and build directories, compiled assets, source
+/// fixtures, and minified bundles.
 ///
 /// Matching is component-based: a path only matches on a whole directory
 /// component (e.g. `target`), never a substring, so `distiller.rs` or
@@ -160,6 +160,12 @@ pub fn is_generated_or_vendored_path(path: &str) -> bool {
     if components
         .iter()
         .any(|c| EXCLUDED_DIR_COMPONENTS.contains(c))
+    {
+        return true;
+    }
+    if components
+        .iter()
+        .any(|c| c.ends_with("_fixture") || c.ends_with("_fixtures"))
     {
         return true;
     }
@@ -242,6 +248,13 @@ mod tests {
     fn true_for_nested_generated_or_vendored_paths() {
         assert!(is_generated_or_vendored_path("crates/foo/target/debug/x"));
         assert!(is_generated_or_vendored_path("a/b/node_modules/c.js"));
+        assert!(is_generated_or_vendored_path(
+            "crates/foo/resolve_fixtures/rust/cycle.rs"
+        ));
+        assert!(is_generated_or_vendored_path("src/parser_fixture/input.rs"));
+        assert!(!is_generated_or_vendored_path(
+            "src/fixtures_runtime/input.rs"
+        ));
     }
 
     #[test]

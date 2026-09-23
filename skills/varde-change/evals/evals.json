@@ -1,0 +1,160 @@
+{
+  "skill_name": "varde-change",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What's in flight right now?",
+      "expected_output": "Dispatches to references/status.md without asking the user which mode to use. Globs memory-bank/working/plans/*/plan.md and memory-bank/working/handoffs/*/handoff.md, shows the non-terminal plans table (top 5, most recent by date-prefixed id) and the open handoffs panel, then names exactly one next varde-change mode. Reads only \u2014 no plan, task, or handoff file is written or modified.",
+      "assertions": [
+        "Routes to status mode without asking the user to choose a mode",
+        "Derives status from files on disk, not from conversation memory or inference",
+        "Leaves every plan, task, and handoff file byte-identical",
+        "Recommends exactly one next mode and stops there rather than running it"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 2,
+      "prompt": "I want to add rate limiting to the public API. Let's figure out what that involves.",
+      "expected_output": "Dispatches to references/plan.md \u2014 the request defines scope rather than naming a concrete change to make. Creates plan.md from the initial prompt before asking anything, seeded with a best-guess Problem/Solution and unknowns routed into ## Open Questions / ## Assumptions, reports the path, then works the open questions one per turn. Authors no task files and writes no production code.",
+      "assertions": [
+        "Routes to plan mode, not build mode, and does not ask the user which mode to use",
+        "Creates plan.md seeded with a best guess before asking the first question",
+        "Produces exactly one file \u2014 plan.md \u2014 with no ## Tasks section and no tasks/ files",
+        "Changes no production source during planning",
+        "Asks questions inline as a numbered menu, not via a native question-prompt tool"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 3,
+      "prompt": "The retry backoff in src/queue/worker.ts is using a fixed delay \u2014 make it exponential with jitter.",
+      "expected_output": "Dispatches to references/build.md. This is a clear micro-change, so build edits src/queue/worker.ts directly, runs the narrowest relevant check, and reports the result without creating plan or task artifacts.",
+      "assertions": [
+        "Routes to build mode, not plan mode, for a concrete bounded change",
+        "Implements exponential backoff with jitter in src/queue/worker.ts",
+        "Runs a narrow verification for the changed retry behavior",
+        "Creates no plan or task artifacts for the micro-change",
+        "Changes production source directly for the requested micro-change"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 4,
+      "prompt": "Did we actually finish 2026-08-10-manage-command? Show me the evidence.",
+      "expected_output": "Dispatches to references/verify.md. Resolves the plan at memory-bank/working/plans/2026-08-10-manage-command/plan.md, states its frontmatter status, reads the ## Acceptance criteria items, runs each assert: command and judges each retrieve: criterion against the named files, then reports passed / failed / unavailable with the command output or quoted line behind each. Ticks no checkbox and changes no task status.",
+      "assertions": [
+        "Routes to verify mode, not build mode, for a request asking for evidence rather than fixes",
+        "Grades against each criterion's assert:/retrieve: clause rather than trusting the checkbox state",
+        "Leaves plan.md acceptance checkboxes and every task status exactly as found",
+        "Separates unavailable evidence from failed criteria instead of reporting both as failures",
+        "Recommends varde-change build if fixes are needed rather than making them"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 5,
+      "prompt": "Build out the whole notifications feature.",
+      "expected_output": "Dispatches to references/orchestrate.md. With no group named, finds the notifications group because its frontmatter is shape: group and its nested children remain incomplete. Presents that group for selection, then stops without dispatching children or editing source until the user selects it.",
+      "assertions": [
+        "Routes to orchestrate mode for a whole-feature request spanning multiple plans",
+        "Discovers the notifications group from shape: group and nested child plans",
+        "Presents the discovered group for selection before running children",
+        "Leaves group plans and production source unchanged before selection"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 6,
+      "prompt": "Go over the auth changes I just made and tell me what's wrong with them.",
+      "expected_output": "Does not dispatch to any varde-change mode. Reviewing a diff belongs to varde-review report, which the description's 'Not for exploration, review, or docs' boundary excludes. Names varde-review rather than treating the request as a build or verify.",
+      "assertions": [
+        "Does not route to build, verify, or any other varde-change mode",
+        "Names varde-review as the owner of the request",
+        "Modifies no source files"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Show how you would run the named notifications group. Do not execute it or edit anything.",
+      "expected_output": "Dispatches to references/orchestrate.md and resolves the named notifications group from its shape: group plan and nested children. Orders schema before delivery from depends_on, describes sequential delegation of each child through varde-change build, and states that any failed child stops later execution immediately. The walkthrough performs no edits because execution was explicitly excluded.",
+      "assertions": [
+        "Orders the schema child before delivery using the declared dependency",
+        "Delegates child plans sequentially through varde-change build",
+        "Stops immediately after a failed child without running later children",
+        "Leaves group plans and production source unchanged during the walkthrough"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 8,
+      "prompt": "Build the existing 2026-09-20-retry-policy plan.",
+      "expected_output": "Dispatches to references/build.md and selects the named existing plan without creating a replacement. Decomposes the plan into task files, executes them sequentially, creates src/retry-policy.ts with maxAttempts returning 5, verifies both plan acceptance criteria, marks every task done, checks every criterion, and completes the plan.",
+      "assertions": [
+        "Builds the named existing plan without creating a replacement plan",
+        "Decomposes the plan specification into task files before implementation",
+        "Creates src/retry-policy.ts with maxAttempts returning 5",
+        "Marks every generated task done and the plan completed",
+        "Verifies and checks every plan acceptance criterion"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 9,
+      "prompt": "The cache invalidation regression returned after the last release. Find the cause and fix it.",
+      "expected_output": "Automatically enters the debugging entry path with debug_mode fix. Reproduces and minimizes the regression, records ranked hypotheses and tested experiments before editing source, then records the root cause and reruns the original reproduction and regression verification.",
+      "assertions": [
+        "Routes a named regression to references/debugging-entry.md without an explicit mode",
+        "Records reproduction, hypotheses, and experiments before implementation",
+        "Records cause and verification after the fix",
+        "Changes the seeded source after the evidence gate"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 10,
+      "prompt": "Diagnose the cache invalidation regression only. Do not modify production source.",
+      "expected_output": "Enters the debugging entry path with debug_mode diagnose and route_source explicit. Reports reproduction, ranked hypotheses, experiments, and evidence limits without changing source.",
+      "assertions": [
+        "Honors explicit diagnosis-only mode over automatic bug routing",
+        "Leaves production source unchanged",
+        "Reports reproduction and tested hypotheses",
+        "States evidence limits without claiming a fix"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 11,
+      "prompt": "Explore why the parser regression reproduces. Do not diagnose or fix it through varde-change.",
+      "expected_output": "Routes the explicit exploration request to varde-explore, overriding automatic debugging routing, and makes no source changes.",
+      "assertions": [
+        "Honors explicit exploration over automatic debugging routing",
+        "Names varde-explore as the owning workflow",
+        "Leaves production source unchanged"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 12,
+      "prompt": "Build the direct fix for the parser regression now. Change parse() to return fixed. Do not enter diagnosis mode.",
+      "expected_output": "Routes to the normal build path because explicit build intent overrides automatic debugging, changes src/parser.ts, and runs a focused verification.",
+      "assertions": [
+        "Honors explicit build over automatic debugging routing",
+        "Changes the seeded parser source directly",
+        "Runs a focused verification"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    }
+  ]
+}

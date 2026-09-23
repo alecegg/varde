@@ -42,13 +42,66 @@ const VARIADIC_PREFIX: &str = "__varde_meta_v_";
 const SUFFIX: &str = "__";
 const MATCH_LIMIT: usize = 100;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
+struct MatchOptions {
+    full: bool,
+    limit: usize,
+    offset: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct MatchOutputOptions {
+    compact: bool,
+    window: MatchOptions,
+}
+
+fn match_options(input: &serde_json::Value) -> Result<MatchOptions, ApiError> {
+    let full = match input.get("fullMatches") {
+        None => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| ApiError::new("invalid_input", "fullMatches must be a boolean"))?,
+    };
+    let number = |name: &str| -> Result<Option<usize>, ApiError> {
+        let Some(value) = input.get(name) else {
+            return Ok(None);
+        };
+        let number = value.as_u64().ok_or_else(|| {
+            ApiError::new(
+                "invalid_input",
+                format!("{name} must be a nonnegative integer"),
+            )
+        })?;
+        usize::try_from(number).map(Some).map_err(|_| {
+            ApiError::new(
+                "invalid_input",
+                format!("{name} is too large for this platform"),
+            )
+        })
+    };
+    let limit = number("matchesLimit")?.unwrap_or(MATCH_LIMIT);
+    if limit == 0 {
+        return Err(ApiError::new(
+            "invalid_input",
+            "matchesLimit must be greater than zero",
+        ));
+    }
+    Ok(MatchOptions {
+        full,
+        limit,
+        offset: number("matchesOffset")?.unwrap_or(0),
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum MetaKind {
     /// `$NAME` — matches any single node.
-    Single(&'static str),
+    Single(String),
     /// `$$$NAME` — matches zero or more sibling nodes.
-    Variadic(&'static str),
+    Variadic(String),
 }
+
+type PatternMeta = HashMap<usize, MetaKind>;
 
 /// Rewrite `$VAR` / `$$$VAR` tokens in a pattern into parseable marker
 /// identifiers.
@@ -72,43 +125,60 @@ fn split_kind_constraints(pattern: &str) -> (String, HashMap<String, String>) {
     let bytes = pattern.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        let sigil = if pattern[i..].starts_with("$$$") {
-            Some("$$$")
-        } else if pattern[i..].starts_with('$') {
-            Some("$")
-        } else {
-            None
-        };
-        if let Some(sigil) = sigil {
-            let rest = &pattern[i + sigil.len()..];
-            let name_end = rest
-                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                .unwrap_or(rest.len());
-            let name = &rest[..name_end];
-            if !name.is_empty() {
-                out.push_str(sigil);
-                out.push_str(name);
-                let mut consumed = sigil.len() + name_end;
-                let after_name = &pattern[i + consumed..];
-                if let Some(rest2) = after_name.strip_prefix(':') {
-                    let kind_end = rest2
-                        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-                        .unwrap_or(rest2.len());
-                    let kind = &rest2[..kind_end];
-                    if !kind.is_empty() {
-                        constraints.insert(name.to_string(), kind.to_string());
-                        consumed += 1 + kind_end;
-                    }
-                }
-                i += consumed;
-                continue;
+        if let Some(token) = kind_constraint_token(&pattern[i..]) {
+            out.push_str(token.sigil);
+            out.push_str(token.name);
+            if let Some(kind) = token.kind {
+                constraints.insert(token.name.to_string(), kind.to_string());
             }
+            i += token.consumed;
+            continue;
         }
         let ch_len = pattern[i..].chars().next().map(char::len_utf8).unwrap_or(1);
         out.push_str(&pattern[i..i + ch_len]);
         i += ch_len;
     }
     (out, constraints)
+}
+
+struct KindConstraintToken<'a> {
+    sigil: &'static str,
+    name: &'a str,
+    kind: Option<&'a str>,
+    consumed: usize,
+}
+
+fn kind_constraint_token(input: &str) -> Option<KindConstraintToken<'_>> {
+    let sigil = if input.starts_with("$$$") {
+        "$$$"
+    } else if input.starts_with('$') {
+        "$"
+    } else {
+        return None;
+    };
+    let rest = &input[sigil.len()..];
+    let name_end = identifier_end(rest);
+    let name = &rest[..name_end];
+    if name.is_empty() {
+        return None;
+    }
+    let after_name = &rest[name_end..];
+    let kind = after_name.strip_prefix(':').and_then(|remaining| {
+        let end = identifier_end(remaining);
+        (end > 0).then_some(&remaining[..end])
+    });
+    let consumed = sigil.len() + name_end + kind.map_or(0, |kind| kind.len() + 1);
+    Some(KindConstraintToken {
+        sigil,
+        name,
+        kind,
+        consumed,
+    })
+}
+
+fn identifier_end(text: &str) -> usize {
+    text.find(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+        .unwrap_or(text.len())
 }
 
 fn replace_meta(pattern: &str, sigil: &str, prefix: &str) -> String {
@@ -204,6 +274,12 @@ type PNode<'a> =
 /// caching only) is what's implemented; see the task's Progress notes.
 type PatternChildCache<'p> = std::cell::RefCell<HashMap<usize, Vec<PNode<'p>>>>;
 
+struct PatternMatchContext<'a, 'p> {
+    cache: &'a PatternChildCache<'p>,
+    meta: &'a PatternMeta,
+    constraints: &'a HashMap<String, String>,
+}
+
 fn cached_pattern_children<'p>(cache: &PatternChildCache<'p>, node: &PNode<'p>) -> Vec<PNode<'p>> {
     let id = node.node_id();
     if let Some(children) = cache.borrow().get(&id) {
@@ -228,16 +304,16 @@ fn cached_pattern_children<'p>(cache: &PatternChildCache<'p>, node: &PNode<'p>) 
 /// (keep). Only variadic markers are considered: single markers already match
 /// through ordinary recursive descent, and lifting them would change which node
 /// their capture binds.
-fn lift_variadic_marker<'p>(node: &PNode<'p>) -> Option<PNode<'p>> {
+fn lift_variadic_marker<'p>(node: &PNode<'p>, meta: &PatternMeta) -> Option<PNode<'p>> {
     // A node that is itself a bare marker has no wrapper to lift.
-    if meta_of(node).is_some() {
+    if meta_of(meta, node).is_some() {
         return None;
     }
     let named: Vec<PNode<'p>> = node.children().filter(|c| c.is_named()).collect();
     let [only] = named.as_slice() else {
         return None;
     };
-    matches!(meta_of(only), Some(MetaKind::Variadic(_))).then(|| only.clone())
+    matches!(meta_of(meta, only), Some(MetaKind::Variadic(_))).then(|| only.clone())
 }
 
 /// Detect whether a node is a meta-variable marker.
@@ -249,7 +325,7 @@ fn lift_variadic_marker<'p>(node: &PNode<'p>) -> Option<PNode<'p>> {
 /// __varde_meta_s_VAL__` — is misdetected as one giant meta variable named
 /// `KEY__ = __varde_meta_s_VAL`, which then matches any node and binds the
 /// whole program as a single capture.
-fn meta_of(node: &PNode<'_>) -> Option<MetaKind> {
+fn parse_meta(node: &PNode<'_>) -> Option<MetaKind> {
     if node.children().count() != 0 {
         return None;
     }
@@ -257,19 +333,31 @@ fn meta_of(node: &PNode<'_>) -> Option<MetaKind> {
     if let Some(rest) = text.strip_prefix(SINGLE_PREFIX)
         && let Some(name) = rest.strip_suffix(SUFFIX)
     {
-        return Some(MetaKind::Single(leak(name)));
+        return Some(MetaKind::Single(name.to_string()));
     }
     if let Some(rest) = text.strip_prefix(VARIADIC_PREFIX)
         && let Some(name) = rest.strip_suffix(SUFFIX)
     {
-        return Some(MetaKind::Variadic(leak(name)));
+        return Some(MetaKind::Variadic(name.to_string()));
     }
     None
+}
+
+fn compile_pattern_meta(root: &PNode<'_>) -> PatternMeta {
+    root.dfs()
+        .filter_map(|node| parse_meta(&node).map(|meta| (node.node_id(), meta)))
+        .collect()
+}
+
+fn meta_of<'a>(meta: &'a PatternMeta, node: &PNode<'_>) -> Option<&'a MetaKind> {
+    meta.get(&node.node_id())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    static NEXT_TEST_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
     fn run_pattern(pattern: &str, source: &str) -> serde_json::Value {
         run_pattern_ex(pattern, source, serde_json::json!({}))
@@ -281,9 +369,11 @@ mod tests {
 
     fn run_pattern_ex(pattern: &str, source: &str, extra: serde_json::Value) -> serde_json::Value {
         let dir = std::env::temp_dir().join(format!(
-            "fp-meta-test-{}-{}",
+            "fp-meta-test-{}-{}-{}-{}",
             std::process::id(),
-            pattern.len()
+            pattern.len(),
+            source.len(),
+            NEXT_TEST_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir creates");
@@ -343,6 +433,34 @@ mod tests {
         let matches = match_rows(&out);
         assert_eq!(matches.len(), 1, "only the all-numeric call matches: {out}");
         assert_eq!(matches[0]["text"], "foo(1, 2, 3)");
+    }
+
+    #[test]
+    fn csharp_catch_fragment_wrapper_locates_catch_clause() {
+        let rewritten = preprocess("catch ($TYPE $ERR) { }");
+        let wrapped = wrap_for_lang(&ast_grep_language::SupportLang::CSharp, &rewritten);
+        assert!(wrapped.contains("try {} catch"), "{wrapped}");
+        let raw = crate::parse::parse_source(&ast_grep_language::SupportLang::CSharp, &rewritten);
+        let wrapped_parsed =
+            crate::parse::parse_source(&ast_grep_language::SupportLang::CSharp, &wrapped);
+        assert!(
+            !wrapped_parsed.has_error(),
+            "wrapped catch parses: {wrapped}"
+        );
+        let root = locate_pattern_root(&raw, &wrapped_parsed, &rewritten)
+            .expect("catch fragment root resolves");
+        assert_eq!(root.kind().as_ref(), "catch_clause");
+    }
+
+    #[test]
+    fn csharp_identifier_starting_with_catch_uses_statement_wrapper() {
+        let matches = run_pattern_cs("catcher($ARG)", "class C { void M() { catcher(value); } }");
+        assert_eq!(
+            matches.len(),
+            1,
+            "ordinary catcher call matches: {matches:?}"
+        );
+        assert_eq!(matches[0]["kind"], "invocation_expression");
     }
 
     /// Run a pattern over a C# source fixture (`sample.cs`), returning the match
@@ -581,26 +699,82 @@ mod tests {
         let matches = match_rows(&out);
         assert_eq!(matches.len(), 2, "both assignments found: {out}");
     }
-}
 
-/// Intern the meta-variable name to a &'static str, leaking only the first
-/// time a given name is seen. Meta-variable names come from a small,
-/// naturally bounded vocabulary per pattern (`$FOO`, `$BAR`, ...), but this
-/// process runs as a resident daemon serving many pattern-match requests
-/// over its lifetime — leaking unconditionally on every call would grow the
-/// leaked set without bound as new pattern text is seen. The interner caps
-/// it at the number of *distinct* names ever seen, not the number of calls.
-fn leak(s: &str) -> &'static str {
-    static INTERNED: std::sync::OnceLock<std::sync::Mutex<HashMap<String, &'static str>>> =
-        std::sync::OnceLock::new();
-    let cache = INTERNED.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
-    let mut cache = cache.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(&interned) = cache.get(s) {
-        return interned;
+    #[test]
+    fn bounded_results_keep_exact_total_and_first_matches() {
+        let source = (0..150)
+            .map(|index| format!("value{index} = {index};"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let out = run_pattern("$A = $B", &source);
+        let matches = match_rows(&out);
+        assert_eq!(matches.len(), MATCH_LIMIT);
+        assert_eq!(out["guide"]["truncated"]["matches"]["shown"], 100);
+        assert_eq!(out["guide"]["truncated"]["matches"]["total"], 150);
+        assert_eq!(matches[0]["captures"]["A"]["text"], "value0");
+        assert_eq!(matches[99]["captures"]["A"]["text"], "value99");
     }
-    let interned: &'static str = Box::leak(s.to_string().into_boxed_str());
-    cache.insert(s.to_string(), interned);
-    interned
+
+    #[test]
+    fn bounded_results_support_offset_and_explicit_limit() {
+        let source = (0..8)
+            .map(|index| format!("value{index} = {index};"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let out = run_pattern_ex(
+            "$A = $B",
+            &source,
+            serde_json::json!({"matchesLimit": 3, "matchesOffset": 2}),
+        );
+        let matches = match_rows(&out);
+        assert_eq!(matches.len(), 3, "window size: {out}");
+        assert_eq!(out["guide"]["truncated"]["matches"]["shown"], 3);
+        assert_eq!(out["guide"]["truncated"]["matches"]["total"], 8);
+        assert_eq!(out["guide"]["truncated"]["matches"]["offset"], 2);
+        assert_eq!(out["guide"]["truncated"]["matches"]["next_offset"], 5);
+        assert_eq!(matches[0]["captures"]["A"]["text"], "value2");
+        assert_eq!(matches[2]["captures"]["A"]["text"], "value4");
+    }
+
+    #[test]
+    fn full_matches_recovers_results_after_a_bounded_default() {
+        let source = (0..8)
+            .map(|index| format!("value{index} = {index};"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let out = run_pattern_ex(
+            "$A = $B",
+            &source,
+            serde_json::json!({"fullMatches": true, "matchesOffset": 6}),
+        );
+        let matches = match_rows(&out);
+        assert_eq!(matches.len(), 2, "tail window: {out}");
+        assert_eq!(out["guide"]["truncated"]["matches"]["total"], 8);
+        assert_eq!(matches[0]["captures"]["A"]["text"], "value6");
+    }
+
+    #[test]
+    fn batched_patterns_preserve_per_pattern_results() {
+        let dir = std::env::temp_dir().join(format!("fp-batch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir creates");
+        std::fs::write(dir.join("a.ts"), "console.log('a');\nwarn('a');\n").expect("a.ts writes");
+        std::fs::write(dir.join("b.ts"), "console.log('b');\n").expect("b.ts writes");
+
+        let patterns = ["console.log($MSG)", "warn($MSG)"];
+        let results =
+            find_patterns_unbounded(&dir, &ast_grep_language::SupportLang::TypeScript, &patterns);
+        assert_eq!(
+            results[0].as_ref().expect("first pattern succeeds").len(),
+            2
+        );
+        assert_eq!(
+            results[1].as_ref().expect("second pattern succeeds").len(),
+            1
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
 
 /// Drop trivia — unnamed (anonymous) tokens, e.g. `;`, `,`, `(`, `)` — from a
@@ -619,7 +793,36 @@ fn strip_trivia<'a>(children: Vec<PNode<'a>>) -> Vec<PNode<'a>> {
     if children.iter().all(|c| c.is_named()) {
         return children;
     }
-    children.into_iter().filter(|c| c.is_named()).collect()
+    children
+        .into_iter()
+        .filter(|c| c.is_named() || is_semantic_operator(c.text().as_ref()))
+        .collect()
+}
+
+fn is_semantic_operator(text: &str) -> bool {
+    !text.is_empty()
+        && text.chars().all(|ch| {
+            matches!(
+                ch,
+                '=' | '+' | '-' | '*' | '/' | '%' | '!' | '<' | '>' | '&' | '|' | '^' | '~' | '?'
+            )
+        })
+}
+
+fn merge_captures(
+    mut left: serde_json::Map<String, serde_json::Value>,
+    right: serde_json::Map<String, serde_json::Value>,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    for (name, value) in right {
+        if let Some(existing) = left.get(&name) {
+            if existing != &value {
+                return None;
+            }
+        } else {
+            left.insert(name, value);
+        }
+    }
+    Some(left)
 }
 
 /// Does the pattern node match the source node, and if so, what captures
@@ -633,47 +836,40 @@ fn strip_trivia<'a>(children: Vec<PNode<'a>>) -> Vec<PNode<'a>> {
 fn match_node_capture<'p>(
     pattern: &PNode<'p>,
     source: &PNode<'_>,
-    cache: &PatternChildCache<'p>,
-    constraints: &HashMap<String, String>,
+    context: &PatternMatchContext<'_, 'p>,
 ) -> Option<serde_json::Map<String, serde_json::Value>> {
-    if let Some(meta) = meta_of(pattern) {
-        return match meta {
-            MetaKind::Single(name) => {
-                if let Some(k) = constraints.get(name)
-                    && source.kind().as_ref() != k.as_str()
-                {
-                    return None;
-                }
-                let mut caps = serde_json::Map::new();
-                caps.insert(name.to_string(), node_json(source));
-                Some(caps)
-            }
-            // A variadic marker only makes sense at the sequence level;
-            // treat it as matching a single node here (harmless for
-            // root-position checks, mirrors match_node's prior behavior).
-            MetaKind::Variadic(name) => {
-                if let Some(k) = constraints.get(name)
-                    && source.kind().as_ref() != k.as_str()
-                {
-                    return None;
-                }
-                let mut caps = serde_json::Map::new();
-                caps.insert(name.to_string(), serde_json::json!([node_json(source)]));
-                Some(caps)
-            }
-        };
+    if let Some(marker) = meta_of(context.meta, pattern) {
+        return capture_meta_node(marker, source, context.constraints);
     }
     if pattern.kind() != source.kind() {
         return None;
     }
-    let pchildren = cached_pattern_children(cache, pattern);
+    let pchildren = cached_pattern_children(context.cache, pattern);
     if pchildren.is_empty() {
-        // Leaf: text must match exactly, no captures at this level.
-        return if pattern.text() == source.text() {
-            Some(serde_json::Map::new())
-        } else {
-            None
-        };
+        // Keep the common leaf path cheap and exact.
+        if pattern.text() == source.text() {
+            return Some(serde_json::Map::new());
+        }
+        // Empty punctuation containers such as `{}` have unnamed children
+        // which `strip_trivia` removes. Compare those children directly so
+        // layout whitespace does not matter, while literal tokens, operators,
+        // and comments still require exact kind and text equality.
+        let raw_pattern_children: Vec<PNode<'p>> = pattern.children().collect();
+        if raw_pattern_children.is_empty() {
+            return None;
+        }
+        let raw_source_children: Vec<PNode<'_>> = source.children().collect();
+        if raw_pattern_children.len() != raw_source_children.len()
+            || !raw_pattern_children
+                .iter()
+                .zip(raw_source_children.iter())
+                .all(|(expected, actual)| {
+                    expected.kind() == actual.kind() && expected.text() == actual.text()
+                })
+        {
+            return None;
+        }
+        return Some(serde_json::Map::new());
     }
     let schildren: Vec<PNode<'_>> = strip_trivia(source.children().collect());
     // Lift per-element wrappers that bury a variadic marker (e.g. C#'s
@@ -686,20 +882,59 @@ fn match_node_capture<'p>(
     // count gate, that container would be collapsed and the variadic would
     // wrongly swallow sibling slots. Most patterns have no liftable child, so
     // the common path returns the cached `pchildren` untouched.
-    let plifted: Vec<PNode<'_>> = if pchildren.iter().any(|c| lift_variadic_marker(c).is_some()) {
-        pchildren
-            .iter()
-            .map(|c| match lift_variadic_marker(c) {
-                Some(marker) if schildren.iter().filter(|s| s.kind() == c.kind()).count() != 1 => {
-                    marker
-                }
-                _ => c.clone(),
-            })
-            .collect()
-    } else {
-        pchildren
+    let plifted = lift_pattern_variadics(pchildren, &schildren, context.meta);
+    match_sequence_capture(&plifted, &schildren, context)
+}
+
+fn capture_meta_node(
+    marker: &MetaKind,
+    source: &PNode<'_>,
+    constraints: &HashMap<String, String>,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let name = match marker {
+        MetaKind::Single(name) | MetaKind::Variadic(name) => name,
     };
-    match_sequence_capture(&plifted, &schildren, cache, constraints)
+    if constraints
+        .get(name.as_str())
+        .is_some_and(|kind| source.kind().as_ref() != kind)
+    {
+        return None;
+    }
+    let value = match marker {
+        MetaKind::Single(_) => node_json(source),
+        MetaKind::Variadic(_) => serde_json::json!([node_json(source)]),
+    };
+    let mut captures = serde_json::Map::new();
+    captures.insert(name.to_string(), value);
+    Some(captures)
+}
+
+fn lift_pattern_variadics<'p>(
+    children: Vec<PNode<'p>>,
+    source_children: &[PNode<'_>],
+    meta: &PatternMeta,
+) -> Vec<PNode<'p>> {
+    if !children
+        .iter()
+        .any(|child| lift_variadic_marker(child, meta).is_some())
+    {
+        return children;
+    }
+    children
+        .iter()
+        .map(|child| match lift_variadic_marker(child, meta) {
+            Some(marker)
+                if source_children
+                    .iter()
+                    .filter(|source| source.kind() == child.kind())
+                    .count()
+                    != 1 =>
+            {
+                marker
+            }
+            _ => child.clone(),
+        })
+        .collect()
 }
 
 /// Match a pattern-child sequence against a source-child sequence, allowing
@@ -712,74 +947,97 @@ fn match_node_capture<'p>(
 fn match_sequence_capture<'p>(
     p: &[PNode<'p>],
     s: &[PNode<'_>],
-    cache: &PatternChildCache<'p>,
-    constraints: &HashMap<String, String>,
+    context: &PatternMatchContext<'_, 'p>,
 ) -> Option<serde_json::Map<String, serde_json::Value>> {
-    type Memo = HashMap<(usize, usize), Option<serde_json::Map<String, serde_json::Value>>>;
-    fn rec<'p>(
-        p: &[PNode<'p>],
-        s: &[PNode<'_>],
-        pi: usize,
-        si: usize,
-        memo: &mut Memo,
-        cache: &PatternChildCache<'p>,
-        constraints: &HashMap<String, String>,
-    ) -> Option<serde_json::Map<String, serde_json::Value>> {
-        if let Some(result) = memo.get(&(pi, si)) {
-            return result.clone();
-        }
-        if !tick_budget() {
-            // Backtracking budget exhausted: bail out of this branch rather
-            // than continuing to recurse on a pathological pattern.
-            return None;
-        }
-        let result = if pi == p.len() {
-            if si == s.len() {
-                Some(serde_json::Map::new())
-            } else {
-                None
-            }
-        } else {
-            let pnode = &p[pi];
-            if let Some(MetaKind::Variadic(name)) = meta_of(pnode) {
-                // Widest/first accepted alignment: the smallest `consume`
-                // for which the remaining pattern still matches the
-                // remaining source, tried in ascending order (mirrors the
-                // old `match_sequence`'s `.any` over ascending `consume` and
-                // `bind_sequence`'s ascending loop with early return).
-                (0..=(s.len() - si)).find_map(|consume| {
-                    if let Some(k) = constraints.get(name)
-                        && !s[si..si + consume]
-                            .iter()
-                            .all(|n| n.kind().as_ref() == k.as_str())
-                    {
-                        return None;
-                    }
-                    rec(p, s, pi + 1, si + consume, memo, cache, constraints).map(|rest_caps| {
-                        let mut caps = serde_json::Map::new();
-                        let bound: Vec<serde_json::Value> =
-                            s[si..si + consume].iter().map(node_json).collect();
-                        caps.insert(name.to_string(), serde_json::json!(bound));
-                        caps.extend(rest_caps);
-                        caps
-                    })
-                })
-            } else if si >= s.len() {
-                None
-            } else {
-                match_node_capture(pnode, &s[si], cache, constraints).and_then(|node_caps| {
-                    rec(p, s, pi + 1, si + 1, memo, cache, constraints).map(|rest_caps| {
-                        let mut caps = node_caps;
-                        caps.extend(rest_caps);
-                        caps
-                    })
-                })
-            }
-        };
-        memo.insert((pi, si), result.clone());
-        result
+    match_sequence_suffix(p, s, 0, 0, &mut HashMap::new(), context)
+}
+
+type CaptureMap = serde_json::Map<String, serde_json::Value>;
+type SequenceMemo = HashMap<(usize, usize), Option<CaptureMap>>;
+
+fn match_sequence_suffix<'p>(
+    pattern: &[PNode<'p>],
+    source: &[PNode<'_>],
+    pattern_index: usize,
+    source_index: usize,
+    memo: &mut SequenceMemo,
+    context: &PatternMatchContext<'_, 'p>,
+) -> Option<CaptureMap> {
+    if let Some(result) = memo.get(&(pattern_index, source_index)) {
+        return result.clone();
     }
-    rec(p, s, 0, 0, &mut HashMap::new(), cache, constraints)
+    if !tick_budget() {
+        return None;
+    }
+    let result = if pattern_index == pattern.len() {
+        (source_index == source.len()).then(serde_json::Map::new)
+    } else if let Some(MetaKind::Variadic(name)) = meta_of(context.meta, &pattern[pattern_index]) {
+        match_variadic_suffix(
+            pattern,
+            source,
+            pattern_index,
+            source_index,
+            name.as_str(),
+            memo,
+            context,
+        )
+    } else if source_index >= source.len() {
+        None
+    } else {
+        match_node_capture(&pattern[pattern_index], &source[source_index], context).and_then(
+            |node_captures| {
+                match_sequence_suffix(
+                    pattern,
+                    source,
+                    pattern_index + 1,
+                    source_index + 1,
+                    memo,
+                    context,
+                )
+                .and_then(|rest| merge_captures(node_captures, rest))
+            },
+        )
+    };
+    memo.insert((pattern_index, source_index), result.clone());
+    result
+}
+
+fn match_variadic_suffix<'p>(
+    pattern: &[PNode<'p>],
+    source: &[PNode<'_>],
+    pattern_index: usize,
+    source_index: usize,
+    name: &str,
+    memo: &mut SequenceMemo,
+    context: &PatternMatchContext<'_, 'p>,
+) -> Option<CaptureMap> {
+    for consume in 0..=(source.len() - source_index) {
+        let consumed = &source[source_index..source_index + consume];
+        let compatible = context
+            .constraints
+            .get(name)
+            .is_none_or(|kind| consumed.iter().all(|node| node.kind().as_ref() == kind));
+        if !compatible {
+            continue;
+        }
+        let Some(rest) = match_sequence_suffix(
+            pattern,
+            source,
+            pattern_index + 1,
+            source_index + consume,
+            memo,
+            context,
+        ) else {
+            continue;
+        };
+        let mut captures = serde_json::Map::new();
+        let bound: Vec<_> = consumed.iter().map(node_json).collect();
+        captures.insert(name.to_string(), serde_json::json!(bound));
+        if let Some(merged) = merge_captures(captures, rest) {
+            return Some(merged);
+        }
+    }
+    None
 }
 
 /// Find every node in `source` (root included) matching the pattern root,
@@ -796,15 +1054,26 @@ fn match_sequence_capture<'p>(
 fn find_matches<'p, 's>(
     pattern: &PNode<'p>,
     node: &PNode<'s>,
-    out: &mut Vec<(PNode<'s>, serde_json::Map<String, serde_json::Value>)>,
-    cache: &PatternChildCache<'p>,
-    constraints: &HashMap<String, String>,
+    out: &mut MatchOutput,
+    context: &PatternMatchContext<'_, 'p>,
+    relations: &Relations,
+    limit: Option<usize>,
 ) {
-    let plain_kind_mismatch = meta_of(pattern).is_none() && pattern.kind() != node.kind();
+    let plain_kind_mismatch =
+        meta_of(context.meta, pattern).is_none() && pattern.kind() != node.kind();
     if !plain_kind_mismatch
-        && let Some(captures) = match_node_capture(pattern, node, cache, constraints)
+        && let Some(captures) = match_node_capture(pattern, node, context)
+        && (relations.is_empty() || relations.matches(node))
     {
-        out.push((node.clone(), captures));
+        out.total += 1;
+        if limit.is_none_or(|limit| out.matches.len() < limit) {
+            out.matches.push(serde_json::json!({
+                "kind": node.kind().as_ref(),
+                "text": node.text().as_ref(),
+                "span": node_json(node)["span"],
+                "captures": serde_json::Value::Object(captures),
+            }));
+        }
     }
     // Still recurse into every child regardless of whether `node` matched —
     // a matched node's descendants (or its siblings) can independently
@@ -814,7 +1083,7 @@ fn find_matches<'p, 's>(
     // captures, were already computed by `match_node_capture` in this same
     // call).
     for child in node.children() {
-        find_matches(pattern, &child, out, cache, constraints);
+        find_matches(pattern, &child, out, context, relations, limit);
     }
 }
 
@@ -976,8 +1245,19 @@ fn wrap_for_lang(lang: &ast_grep_language::SupportLang, rewritten: &str) -> Stri
         SupportLang::C | SupportLang::Cpp | SupportLang::Dart => {
             format!("void __varde_wrapper__() {{ {rewritten}; }}")
         }
-        // Java/C# require the method to live inside a type declaration.
-        SupportLang::Java | SupportLang::CSharp => {
+        // Java requires the method to live inside a type declaration.
+        SupportLang::Java => {
+            format!("class __VardeWrapper__ {{ void __varde_wrapper__() {{ {rewritten}; }} }}")
+        }
+        // A bare C# catch clause is only valid after a try statement. Keep
+        // the fragment exact so locate_pattern_root selects `catch_clause`.
+        SupportLang::CSharp if is_csharp_catch_fragment(rewritten) => {
+            format!(
+                "class __VardeWrapper__ {{ void __varde_wrapper__() {{ try {{}} {rewritten} }} }}"
+            )
+        }
+        // Other C# fragments need the ordinary statement wrapper.
+        SupportLang::CSharp => {
             format!("class __VardeWrapper__ {{ void __varde_wrapper__() {{ {rewritten}; }} }}")
         }
         SupportLang::Kotlin => format!("fun __varde_wrapper__() {{ {rewritten} }}"),
@@ -996,6 +1276,14 @@ fn wrap_for_lang(lang: &ast_grep_language::SupportLang, rewritten: &str) -> Stri
         // still prefers the raw parse whenever the fragment parses on its own.
         _ => rewritten.to_string(),
     }
+}
+
+fn is_csharp_catch_fragment(rewritten: &str) -> bool {
+    let trimmed = rewritten.trim_start();
+    let Some(rest) = trimmed.strip_prefix("catch") else {
+        return false;
+    };
+    matches!(rest.chars().next(), Some(c) if c.is_whitespace() || c == '(' || c == '{')
 }
 
 /// Locate the pattern's root node for matching. Always prefers an exact
@@ -1051,32 +1339,16 @@ fn locate_pattern_root<'a>(
 /// the prefilter is skipped (parse everything), which is correct.
 fn mandatory_atoms(pattern: &str) -> Vec<String> {
     let bytes = pattern.as_bytes();
-    let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
     let mut atoms = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'$' {
-            // Skip a `$`/`$$$` sigil, its meta-var name, and any `:kind`
-            // suffix — none of that is literal source text.
-            while i < bytes.len() && bytes[i] == b'$' {
-                i += 1;
-            }
-            while i < bytes.len() && ident(bytes[i]) {
-                i += 1;
-            }
-            if i < bytes.len() && bytes[i] == b':' {
-                i += 1;
-                while i < bytes.len() && ident(bytes[i]) {
-                    i += 1;
-                }
-            }
+            i = metavariable_end(bytes, i);
             continue;
         }
-        if ident(bytes[i]) {
+        if is_identifier_byte(bytes[i]) {
             let start = i;
-            while i < bytes.len() && ident(bytes[i]) {
-                i += 1;
-            }
+            i = identifier_byte_end(bytes, i);
             atoms.push(pattern[start..i].to_string());
             continue;
         }
@@ -1087,13 +1359,45 @@ fn mandatory_atoms(pattern: &str) -> Vec<String> {
     atoms
 }
 
+fn metavariable_end(bytes: &[u8], start: usize) -> usize {
+    let mut end = start;
+    while end < bytes.len() && bytes[end] == b'$' {
+        end += 1;
+    }
+    end = identifier_byte_end(bytes, end);
+    if end < bytes.len() && bytes[end] == b':' {
+        return identifier_byte_end(bytes, end + 1);
+    }
+    end
+}
+
+fn identifier_byte_end(bytes: &[u8], start: usize) -> usize {
+    let mut end = start;
+    while end < bytes.len() && is_identifier_byte(bytes[end]) {
+        end += 1;
+    }
+    end
+}
+
+fn is_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+#[derive(Default)]
+struct MatchOutput {
+    matches: Vec<serde_json::Value>,
+    total: usize,
+}
+
 fn match_source(
     pattern_root: &PNode<'_>,
+    meta: &PatternMeta,
     lang: &ast_grep_language::SupportLang,
     source: &str,
     constraints: &HashMap<String, String>,
     relations: &Relations,
-) -> Result<Vec<serde_json::Value>, ApiError> {
+    limit: Option<usize>,
+) -> Result<MatchOutput, ApiError> {
     // Match on tree-sitter's error-recovered tree rather than rejecting the
     // whole file on the first syntax error. A single unparseable construct
     // (often just modern-syntax the pinned grammar version doesn't know)
@@ -1105,19 +1409,43 @@ fn match_source(
     let source_parsed = crate::parse::parse_source(lang, source);
     let source_root = source_parsed.root.root();
 
+    match_parsed_source(
+        pattern_root,
+        meta,
+        &source_root,
+        constraints,
+        relations,
+        limit,
+    )
+}
+
+fn match_parsed_source(
+    pattern_root: &PNode<'_>,
+    meta: &PatternMeta,
+    source_root: &PNode<'_>,
+    constraints: &HashMap<String, String>,
+    relations: &Relations,
+    limit: Option<usize>,
+) -> Result<MatchOutput, ApiError> {
     reset_budget();
     let cache: PatternChildCache<'_> = std::cell::RefCell::new(HashMap::new());
+    let context = PatternMatchContext {
+        cache: &cache,
+        meta,
+        constraints,
+    };
     // Locate and bind captures in one structural walk per match: `find_matches`
     // now calls `match_node_capture`, which checks alignment and collects
     // captures together, instead of the old two-phase locate-then-rewalk
     // (`find_matches` followed by a per-match `collect_captures` call).
-    let mut matched: Vec<(PNode<'_>, serde_json::Map<String, serde_json::Value>)> = Vec::new();
+    let mut matched = MatchOutput::default();
     find_matches(
         pattern_root,
-        &source_root,
+        source_root,
         &mut matched,
-        &cache,
-        constraints,
+        &context,
+        relations,
+        limit,
     );
     if budget_exhausted() {
         return Err(ApiError::new(
@@ -1126,22 +1454,155 @@ fn match_source(
              simplify the pattern (fewer $$$VAR markers or a narrower search)",
         ));
     }
-    if !relations.is_empty() {
-        matched.retain(|(node, _)| relations.matches(node));
-    }
+    Ok(matched)
+}
 
-    let out: Vec<serde_json::Value> = matched
-        .into_iter()
-        .map(|(m, captures)| {
-            serde_json::json!({
-                "kind": m.kind().as_ref(),
-                "text": m.text().as_ref(),
-                "span": node_json(&m)["span"],
-                "captures": serde_json::Value::Object(captures),
-            })
+struct BatchPattern<'a> {
+    root: PNode<'a>,
+    meta: PatternMeta,
+    constraints: HashMap<String, String>,
+    atoms: Vec<String>,
+    matches: std::sync::Mutex<Vec<serde_json::Value>>,
+}
+
+enum BatchSlot<'a> {
+    Ready(BatchPattern<'a>),
+    Failed(ApiError),
+}
+
+/// Search many patterns through one language-specific repository traversal.
+///
+/// Every candidate file is read and parsed once. Its syntax tree is then
+/// matched against all viable patterns for that language.
+pub(crate) fn find_patterns_unbounded(
+    repo_root: &std::path::Path,
+    lang: &ast_grep_language::SupportLang,
+    patterns: &[&str],
+) -> Vec<Result<Vec<serde_json::Value>, ApiError>> {
+    let parsed: Vec<_> = patterns
+        .iter()
+        .map(|pattern| {
+            let (stripped, constraints) = split_kind_constraints(pattern);
+            let rewritten = preprocess(&stripped);
+            let wrapped = wrap_for_lang(lang, &rewritten);
+            let raw = crate::parse::parse_source(lang, &rewritten);
+            let wrapped_parsed = crate::parse::parse_source(lang, &wrapped);
+            (rewritten, constraints, raw, wrapped_parsed)
         })
         .collect();
-    Ok(out)
+    let slots: Vec<_> = parsed
+        .iter()
+        .zip(patterns)
+        .map(|((rewritten, constraints, raw, wrapped), pattern)| {
+            match locate_pattern_root(raw, wrapped, rewritten) {
+                Ok(root) => BatchSlot::Ready(BatchPattern {
+                    meta: compile_pattern_meta(&root),
+                    root,
+                    constraints: constraints.clone(),
+                    atoms: mandatory_atoms(pattern),
+                    matches: std::sync::Mutex::new(Vec::new()),
+                }),
+                Err(error) => BatchSlot::Failed(error),
+            }
+        })
+        .collect();
+    if !slots.iter().any(|slot| matches!(slot, BatchSlot::Ready(_))) {
+        return slots
+            .into_iter()
+            .map(|slot| match slot {
+                BatchSlot::Failed(error) => Err(error),
+                BatchSlot::Ready(_) => unreachable!(),
+            })
+            .collect();
+    }
+    walk_batch_patterns(repo_root, lang, &slots);
+    slots
+        .into_iter()
+        .map(|slot| match slot {
+            BatchSlot::Failed(error) => Err(error),
+            BatchSlot::Ready(pattern) => {
+                let mut matches = pattern.matches.into_inner().unwrap();
+                sort_matches(&mut matches);
+                Ok(matches)
+            }
+        })
+        .collect()
+}
+
+fn walk_batch_patterns(
+    repo_root: &std::path::Path,
+    lang: &ast_grep_language::SupportLang,
+    slots: &[BatchSlot<'_>],
+) {
+    let relations = Relations::default();
+    ignore::WalkBuilder::new(repo_root)
+        .hidden(false)
+        .filter_entry(|entry| !crate::scan::is_vcs_internal(entry))
+        .build_parallel()
+        .run(|| {
+            Box::new(|entry| {
+                use ignore::WalkState;
+                let Ok(entry) = entry else {
+                    return WalkState::Continue;
+                };
+                visit_batch_path(entry.path(), lang, slots, &relations);
+                WalkState::Continue
+            })
+        });
+}
+
+fn visit_batch_path(
+    path: &std::path::Path,
+    lang: &ast_grep_language::SupportLang,
+    slots: &[BatchSlot<'_>],
+    relations: &Relations,
+) {
+    if !path.is_file() || crate::parse::any_language_for_path(path).as_ref() != Some(lang) {
+        return;
+    }
+    let Ok(source) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let viable =
+        |pattern: &BatchPattern<'_>| pattern.atoms.iter().all(|atom| source.contains(atom));
+    if !slots
+        .iter()
+        .any(|slot| matches!(slot, BatchSlot::Ready(pattern) if viable(pattern)))
+    {
+        return;
+    }
+    let parsed_source = crate::parse::parse_source(lang, &source);
+    let source_root = parsed_source.root.root();
+    for slot in slots {
+        let BatchSlot::Ready(pattern) = slot else {
+            continue;
+        };
+        if !viable(pattern) {
+            continue;
+        }
+        let Ok(matched) = match_parsed_source(
+            &pattern.root,
+            &pattern.meta,
+            &source_root,
+            &pattern.constraints,
+            relations,
+            None,
+        ) else {
+            continue;
+        };
+        if matched.matches.is_empty() {
+            continue;
+        }
+        let file = path.display().to_string();
+        pattern
+            .matches
+            .lock()
+            .unwrap()
+            .extend(matched.matches.into_iter().map(|mut row| {
+                row["file"] = serde_json::json!(file);
+                row
+            }));
+    }
 }
 
 /// find_pattern — find AST nodes matching a `$VAR`/`$$$VAR` pattern.
@@ -1162,157 +1623,254 @@ pub fn find_pattern(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     find_pattern_with_compaction(input, true)
 }
 
-/// Internal scan path that preserves every match.
-pub(crate) fn find_pattern_unbounded(
-    input: &serde_json::Value,
-) -> Result<serde_json::Value, ApiError> {
-    find_pattern_with_compaction(input, false)
-}
-
 fn find_pattern_with_compaction(
     input: &serde_json::Value,
     compact: bool,
 ) -> Result<serde_json::Value, ApiError> {
+    let options = match_options(input)?;
+    let output = MatchOutputOptions {
+        compact,
+        window: options,
+    };
     let pattern_text = req_str(input, "pattern")?;
-
-    let single_file = input
-        .get("filePath")
-        .and_then(|v| v.as_str())
-        .or_else(|| input.get("file").and_then(|v| v.as_str()));
-    let dir_path = input.get("path").and_then(|v| v.as_str());
-
-    let target = single_file.or(dir_path).ok_or_else(|| {
-        ApiError::new(
-            "invalid_input",
-            "missing filePath (or path for a directory search)",
-        )
-    })?;
-    let target_path = std::path::Path::new(target);
+    let target_path = pattern_target(input)?;
     let is_dir = target_path.is_dir();
-
     let lang = resolve_lang(input, (!is_dir).then_some(target_path))?;
     let (stripped, constraints) = split_kind_constraints(pattern_text);
     let rewritten = preprocess(&stripped);
-
-    let relations = Relations {
-        inside: parse_relation_kind(input, "inside")?,
-        has: parse_relation_kind(input, "has")?,
-        precedes: parse_relation_kind(input, "precedes")?,
-        follows: parse_relation_kind(input, "follows")?,
-    };
-
-    // Parse the pattern once, up front — shared across every file in the
-    // walk rather than re-parsed per file (previously 2N+2 pattern parses
-    // across N files; this was the leading cause of find_pattern's ~4x
-    // slowdown vs. ast-grep, see BENCHMARK.md).
+    let relations = pattern_relations(input)?;
     let raw_parsed = crate::parse::parse_source(&lang, &rewritten);
     let wrapped = wrap_for_lang(&lang, &rewritten);
     let wrapped_parsed = crate::parse::parse_source(&lang, &wrapped);
     let pattern_root = locate_pattern_root(&raw_parsed, &wrapped_parsed, &rewritten)?;
     let pattern_root = &pattern_root;
+    let pattern_meta = compile_pattern_meta(pattern_root);
 
-    // Literal atoms every match must contain verbatim; empty ⇒ no prefilter.
     let atoms = mandatory_atoms(pattern_text);
-
     if !is_dir {
-        let source = std::fs::read_to_string(target_path)
-            .map_err(|e| ApiError::new("file_error", format!("{}: {e}", target_path.display())))?;
-        let matches = match_source(pattern_root, &lang, &source, &constraints, &relations)?;
-        let out: Vec<_> = matches
-            .into_iter()
-            .map(|mut m| {
-                m["file"] = serde_json::json!(target_path.display().to_string());
-                m
-            })
-            .collect();
-        return Ok(compact_matches(out, compact));
+        return match_single_file(
+            target_path,
+            pattern_root,
+            &pattern_meta,
+            &lang,
+            &constraints,
+            &relations,
+            output,
+        );
+    }
+    let search = DirectoryPatternSearch::new(
+        pattern_root,
+        &pattern_meta,
+        &lang,
+        &constraints,
+        &relations,
+        &atoms,
+        output,
+    );
+    finish_directory_search(search, target_path, output)
+}
+
+fn pattern_target(input: &serde_json::Value) -> Result<&std::path::Path, ApiError> {
+    let target = input
+        .get("filePath")
+        .and_then(|value| value.as_str())
+        .or_else(|| input.get("file").and_then(|value| value.as_str()))
+        .or_else(|| input.get("path").and_then(|value| value.as_str()))
+        .ok_or_else(|| {
+            ApiError::new(
+                "invalid_input",
+                "missing filePath (or path for a directory search)",
+            )
+        })?;
+    Ok(std::path::Path::new(target))
+}
+
+fn pattern_relations(input: &serde_json::Value) -> Result<Relations, ApiError> {
+    Ok(Relations {
+        inside: parse_relation_kind(input, "inside")?,
+        has: parse_relation_kind(input, "has")?,
+        precedes: parse_relation_kind(input, "precedes")?,
+        follows: parse_relation_kind(input, "follows")?,
+    })
+}
+
+fn finish_directory_search(
+    search: DirectoryPatternSearch<'_, '_>,
+    target_path: &std::path::Path,
+    output: MatchOutputOptions,
+) -> Result<serde_json::Value, ApiError> {
+    let started = std::time::Instant::now();
+    search.walk(target_path);
+    search.report_profile(started.elapsed());
+    let results = search.results.into_inner().unwrap();
+    let total = results.total;
+    let mut out = results.matches;
+    sort_matches(&mut out);
+    Ok(compact_matches(out, total, output.compact, output.window))
+}
+
+fn match_single_file(
+    path: &std::path::Path,
+    pattern_root: &PNode<'_>,
+    pattern_meta: &PatternMeta,
+    lang: &ast_grep_language::SupportLang,
+    constraints: &HashMap<String, String>,
+    relations: &Relations,
+    output: MatchOutputOptions,
+) -> Result<serde_json::Value, ApiError> {
+    let source = std::fs::read_to_string(path)
+        .map_err(|error| ApiError::new("file_error", format!("{}: {error}", path.display())))?;
+    let matched = match_source(
+        pattern_root,
+        pattern_meta,
+        lang,
+        &source,
+        constraints,
+        relations,
+        (output.compact && !output.window.full && output.window.offset == 0)
+            .then_some(output.window.limit),
+    )?;
+    let out = matched
+        .matches
+        .into_iter()
+        .map(|mut row| {
+            row["file"] = serde_json::json!(path.display().to_string());
+            row
+        })
+        .collect();
+    Ok(compact_matches(
+        out,
+        matched.total,
+        output.compact,
+        output.window,
+    ))
+}
+
+struct DirectoryPatternSearch<'a, 'p> {
+    pattern_root: &'a PNode<'p>,
+    pattern_meta: &'a PatternMeta,
+    lang: &'a ast_grep_language::SupportLang,
+    constraints: &'a HashMap<String, String>,
+    relations: &'a Relations,
+    atoms: &'a [String],
+    output: MatchOutputOptions,
+    results: std::sync::Mutex<MatchOutput>,
+    scanned: std::sync::atomic::AtomicUsize,
+    parsed: std::sync::atomic::AtomicUsize,
+}
+
+impl<'a, 'p> DirectoryPatternSearch<'a, 'p> {
+    fn new(
+        pattern_root: &'a PNode<'p>,
+        pattern_meta: &'a PatternMeta,
+        lang: &'a ast_grep_language::SupportLang,
+        constraints: &'a HashMap<String, String>,
+        relations: &'a Relations,
+        atoms: &'a [String],
+        output: MatchOutputOptions,
+    ) -> Self {
+        Self {
+            pattern_root,
+            pattern_meta,
+            lang,
+            constraints,
+            relations,
+            atoms,
+            output,
+            results: std::sync::Mutex::new(MatchOutput::default()),
+            scanned: std::sync::atomic::AtomicUsize::new(0),
+            parsed: std::sync::atomic::AtomicUsize::new(0),
+        }
     }
 
-    let profile = std::env::var_os("VARDE_PROFILE").is_some();
-    let t_total = std::time::Instant::now();
+    fn walk(&self, root: &std::path::Path) {
+        ignore::WalkBuilder::new(root)
+            .hidden(false)
+            .filter_entry(|entry| !crate::scan::is_vcs_internal(entry))
+            .build_parallel()
+            .run(|| Box::new(|entry| self.visit(entry)))
+    }
 
-    // Overlap the directory walk with per-file parse/match instead of the old
-    // two-phase "collect every path, sort, then parallel-match" pipeline. That
-    // pipeline serialized the entire tree walk (and a full path sort) as a
-    // barrier before the first file could be parsed — measurably a fifth of
-    // the wall-clock on a large, sparse-match repo (see BENCHMARK.md). Using
-    // `ignore`'s parallel walker (the same `WalkParallel` ast-grep's CLI uses)
-    // lets a file be matched the instant it is discovered, on whichever worker
-    // thread found it. `.hidden(false)` preserves the gitignore-respecting,
-    // dot-file-including walk policy the old `collect_files_for_lang` set (see
-    // that removed helper's note on the match-count gap it fixed).
-    //
-    // pattern_root/constraints/relations are read-only and shared by reference
-    // across worker threads (the old rayon `par_iter` relied on the same
-    // `Sync`-ness); each thread pushes its matches under a short-lived `Mutex`
-    // guard, contended only for the append, not for the parse/match work.
-    // Literal-atom prefilter: skip parsing any file that cannot contain a
-    // match because it lacks one of the pattern's mandatory literal atoms (see
-    // `mandatory_atoms`). This is where a persist-and-serve tool should be able
-    // to beat a live-parse tool on sparse patterns — most files never reach the
-    // tree-sitter parse. This prototype reads each file to substring-check it;
-    // a persisted token→files index would answer the prefilter without the read
-    // (the read is the only cost left for skipped files — see the profile
-    // counters below). `scanned`/`parsed` count files that reached the byte
-    // check vs. files that survived it into the parser.
-    use std::sync::Mutex;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    let results: Mutex<Vec<serde_json::Value>> = Mutex::new(Vec::new());
-    let scanned = AtomicUsize::new(0);
-    let parsed = AtomicUsize::new(0);
-    ignore::WalkBuilder::new(target_path)
-        .hidden(false)
-        .filter_entry(|entry| !crate::scan::is_vcs_internal(entry))
-        .build_parallel()
-        .run(|| {
-            Box::new(|entry| {
-                use ignore::WalkState;
-                let Ok(entry) = entry else {
-                    return WalkState::Continue;
-                };
-                let path = entry.path();
-                if !path.is_file()
-                    || crate::parse::any_language_for_path(path).as_ref() != Some(&lang)
-                {
-                    return WalkState::Continue;
-                }
-                scanned.fetch_add(1, Ordering::Relaxed);
-                let Ok(source) = std::fs::read_to_string(path) else {
-                    // Unreadable/non-UTF-8 file: skip-and-report, as before.
-                    return WalkState::Continue;
-                };
-                // Prefilter: every mandatory atom must be present, else the
-                // file provably cannot match — skip the parse entirely.
-                if !atoms.iter().all(|a| source.contains(a.as_str())) {
-                    return WalkState::Continue;
-                }
-                parsed.fetch_add(1, Ordering::Relaxed);
-                // Skip-and-report: a single unparseable/pathological file in a
-                // tree search doesn't fail the whole call.
-                if let Ok(matches) =
-                    match_source(pattern_root, &lang, &source, &constraints, &relations)
-                {
-                    let mut local: Vec<serde_json::Value> = matches
-                        .into_iter()
-                        .map(|mut m| {
-                            m["file"] = serde_json::json!(path.display().to_string());
-                            m
-                        })
-                        .collect();
-                    if !local.is_empty() {
-                        results.lock().unwrap().append(&mut local);
-                    }
-                }
-                WalkState::Continue
+    fn visit(&self, entry: Result<ignore::DirEntry, ignore::Error>) -> ignore::WalkState {
+        use std::sync::atomic::Ordering;
+        let Ok(entry) = entry else {
+            return ignore::WalkState::Continue;
+        };
+        let path = entry.path();
+        if !path.is_file() || crate::parse::any_language_for_path(path).as_ref() != Some(self.lang)
+        {
+            return ignore::WalkState::Continue;
+        }
+        self.scanned.fetch_add(1, Ordering::Relaxed);
+        let Ok(source) = std::fs::read_to_string(path) else {
+            return ignore::WalkState::Continue;
+        };
+        if !self.atoms.iter().all(|atom| source.contains(atom)) {
+            return ignore::WalkState::Continue;
+        }
+        self.parsed.fetch_add(1, Ordering::Relaxed);
+        if let Ok(matched) = match_source(
+            self.pattern_root,
+            self.pattern_meta,
+            self.lang,
+            &source,
+            self.constraints,
+            self.relations,
+            (self.output.compact && !self.output.window.full && self.output.window.offset == 0)
+                .then_some(self.output.window.limit),
+        ) {
+            self.store(path, matched);
+        }
+        ignore::WalkState::Continue
+    }
+
+    fn store(&self, path: &std::path::Path, matched: MatchOutput) {
+        let file = path.display().to_string();
+        let mut local: Vec<_> = matched
+            .matches
+            .into_iter()
+            .map(|mut row| {
+                row["file"] = serde_json::json!(file);
+                row
             })
-        });
-    let mut out = results.into_inner().unwrap();
+            .collect();
+        let mut results = self.results.lock().unwrap();
+        results.total += matched.total;
+        results.matches.append(&mut local);
+        if self.output.compact
+            && !self.output.window.full
+            && self.output.window.offset == 0
+            && results.matches.len() > self.output.window.limit
+        {
+            sort_matches(&mut results.matches);
+            results.matches.truncate(self.output.window.limit);
+        }
+    }
 
-    // The parallel walk yields matches in nondeterministic thread order; sort
-    // by (file, start byte) to restore the old file-sorted-then-tree-order
-    // output. Only matched results are sorted (not every walked path), so this
-    // is off the hot path unless a pattern matches nearly everything.
-    out.sort_by(|a, b| {
+    fn report_profile(&self, elapsed: std::time::Duration) {
+        use std::sync::atomic::Ordering;
+        if std::env::var_os("VARDE_PROFILE").is_none() {
+            return;
+        }
+        let scanned = self.scanned.load(Ordering::Relaxed);
+        let parsed = self.parsed.load(Ordering::Relaxed);
+        let skipped_percent = if scanned > 0 {
+            100.0 * (scanned - parsed) as f64 / scanned as f64
+        } else {
+            0.0
+        };
+        eprintln!(
+            "VARDE_PROFILE find_pattern: walk+match={elapsed:?} matches={} atoms={:?} \
+             scanned={scanned} parsed={parsed} skipped_by_prefilter={} ({skipped_percent:.0}%)",
+            self.results.lock().unwrap().total,
+            self.atoms,
+            scanned - parsed,
+        );
+    }
+}
+
+fn sort_matches(matches: &mut [serde_json::Value]) {
+    matches.sort_by(|a, b| {
         let fa = a["file"].as_str().unwrap_or("");
         let fb = b["file"].as_str().unwrap_or("");
         fa.cmp(fb).then_with(|| {
@@ -1321,37 +1879,41 @@ fn find_pattern_with_compaction(
             sa.cmp(&sb)
         })
     });
-
-    if profile {
-        let scanned = scanned.load(Ordering::Relaxed);
-        let parsed = parsed.load(Ordering::Relaxed);
-        eprintln!(
-            "VARDE_PROFILE find_pattern: walk+match={:?} matches={} atoms={:?} \
-             scanned={} parsed={} skipped_by_prefilter={} ({:.0}%)",
-            t_total.elapsed(),
-            out.len(),
-            atoms,
-            scanned,
-            parsed,
-            scanned - parsed,
-            if scanned > 0 {
-                100.0 * (scanned - parsed) as f64 / scanned as f64
-            } else {
-                0.0
-            },
-        );
-    }
-    Ok(compact_matches(out, compact))
 }
 
-fn compact_matches(mut matches: Vec<serde_json::Value>, compact: bool) -> serde_json::Value {
-    let total = matches.len();
-    if !compact || total <= MATCH_LIMIT {
+fn compact_matches(
+    mut matches: Vec<serde_json::Value>,
+    total: usize,
+    compact: bool,
+    options: MatchOptions,
+) -> serde_json::Value {
+    if !compact {
         return serde_json::json!({ "matches": matches });
     }
-    matches.truncate(MATCH_LIMIT);
+    let start = options.offset.min(total);
+    let end = if options.full {
+        total
+    } else {
+        start.saturating_add(options.limit).min(total)
+    };
+    let truncated = start > 0 || end < total;
+    if !truncated {
+        return serde_json::json!({ "matches": matches });
+    }
+    matches = matches[start.min(matches.len())..end.min(matches.len())].to_vec();
     serde_json::json!({
         "matches": matches,
-        "guide": { "truncated": { "matches": { "shown": MATCH_LIMIT, "total": total } } },
+        "guide": { "truncated": { "matches": {
+            "shown": end.saturating_sub(start),
+            "total": total,
+            "offset": start,
+            "limit": if options.full { serde_json::Value::Null } else { serde_json::json!(options.limit) },
+            "next_offset": if end < total { serde_json::json!(end) } else { serde_json::Value::Null },
+            "request": if end < total {
+                "set matchesOffset to next_offset, or set fullMatches to true"
+            } else {
+                "set fullMatches to true for all matches"
+            }
+        } } },
     })
 }

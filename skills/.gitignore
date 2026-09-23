@@ -6,5 +6,6 @@
 *-workspace/
 benchmark.json
 
-# Local working plans, reviews, and session artifacts.
-memory-bank/
+# Local working plans, reviews, friction, and session artifacts.
+memory-bank/working/
+memory-bank/friction/

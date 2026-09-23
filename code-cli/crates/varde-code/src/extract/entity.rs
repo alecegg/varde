@@ -29,8 +29,8 @@ pub struct ExtractCtx<'a> {
 impl<'a> ExtractCtx<'a> {
     /// Emit an anonymous callable span for containment-based rules.
     ///
-    /// Boundaries intentionally have no name. They partition their enclosing
-    /// named declaration but must never produce an independent finding.
+    /// Boundaries intentionally have no declaration name. Complexity metrics
+    /// assign them synthetic location-based names when reporting findings.
     pub fn push_callable_boundary(&mut self, node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) {
         self.push(EntityKind::CallableBoundary, String::new(), node);
     }
@@ -83,7 +83,10 @@ impl<'a> ExtractCtx<'a> {
             body_shape: None,
             body_minhash,
             is_async: is_function.then(|| super::langs::node_is_async(node)),
-            is_test: is_function && super::langs::node_is_test(node),
+            is_test: matches!(
+                kind,
+                EntityKind::Function | EntityKind::ControlFlow | EntityKind::CallableBoundary
+            ) && super::langs::node_is_test(node),
             owner_type,
         });
     }

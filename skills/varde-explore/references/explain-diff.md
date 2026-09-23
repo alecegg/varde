@@ -1,25 +1,21 @@
 # Diff explanation
 
-Trigger: target is a git ref (branch, commit range, or PR reference).
+Use when the target is a git ref: branch, commit range, or PR reference.
 
 1. Resolve the target to a concrete diff before running `git diff`:
-   - Branch: run `git diff <branch>` (with `--stat` and full patch as
-     appropriate) to determine the changed files.
+   - Branch: run `git diff <branch>`. Include `--stat` and the full patch as
+     needed to identify the changed files.
    - Commit range: run `git diff abc..def`.
-   - PR reference (`pr/123`, `#123`): this is not a directly executable
-     `git diff` target. Resolve it first — prefer `gh pr diff <n>` when the
-     GitHub CLI is available; otherwise fetch the PR head ref (`git fetch
+   - PR reference (`pr/123`, `#123`): you cannot pass this reference directly
+     to `git diff`. Resolve it first. Prefer `gh pr diff <n>` when the GitHub
+     CLI is available. Otherwise fetch the PR head ref (`git fetch
      origin pull/<n>/head:pr-<n>`) and diff it against its base branch
-     (`git diff <base>...pr-<n>`). The PR's base is its merge target, not
+     (`git diff <base>...pr-<n>`). Use the PR's merge target as its base, not
      the current checkout.
-2. For each changed source file, gather context (see
-   step 2 of the workflow). When `varde-code` is available
-   (`references/varde-code.md`), use `get_symbol`/`symbols_in_file`
-   (`includeBody`) for the changed symbols' content and `explore`
-   (`direction: "both"`) from each changed file for callers/callees — this
-   provides the callers and callees for the Code section. Otherwise,
-   `Grep`/`Glob` for symbol references and importers, then
-   `Read` the file directly.
-3. Read the diff hunks for the changed files so the explanation is grounded in
-   the actual change, not just the files' steady state.
-4. Proceed to write the HTML output (workflow step 4).
+2. Read changed hunks and short, known files directly. Load
+   `references/varde-code.md` for callers, callees, or cross-file impact.
+   Batch related lookups. Use `get_symbol` only for an exact symbol inside a
+   large file. Otherwise, use `Grep` and direct reads.
+3. Read the diff hunks for the changed files. Use those hunks, not only the
+   files' current contents, to explain the change.
+4. Write the HTML output by following workflow step 4.

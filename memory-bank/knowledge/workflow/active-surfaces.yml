@@ -1,0 +1,25 @@
+version: 1
+executable: varde-workflow
+surfaces:
+  - path: skills/varde-change/references/memory-locations.md
+    capability: working and knowledge directory resolution
+  - path: skills/varde-change/references/plan-authoring.md
+    capability: plan artifact validation
+  - path: skills/varde-change/references/varde-workflow-cli.md
+    capability: plan artifact operations
+  - path: skills/varde-docs/references/varde-workflow-cli.md
+    capability: documentation artifact operations
+  - path: skills/varde-docs/references/memory-locations.md
+    capability: documentation memory directory resolution
+  - path: skills/varde-knowledge/references/varde-workflow-cli.md
+    capability: knowledge artifact operations
+  - path: skills/varde-knowledge/references/memory-locations.md
+    capability: knowledge memory directory resolution
+  - path: skills/varde-docs/references/spec.md
+    capability: observed specification mutations
+  - path: skills/varde-knowledge/references/note.md
+    capability: durable knowledge mutations
+  - path: skills/varde-prototype/references/memory-locations.md
+    capability: prototype memory directory resolution
+  - path: skills/varde-review/references/memory-locations.md
+    capability: review memory directory resolution

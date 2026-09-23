@@ -4,7 +4,9 @@ Read this when drafting a skill, choosing how it runs, or diagnosing failures.
 
 ## Predictability is the root virtue
 
-A skill exists to wrangle determinism out of a stochastic system. The goal is the agent taking the same *process* every run — not the same output (a brainstorming skill should predictably diverge). Every lever below serves this.
+A skill should make the agent follow the same *process* every run, even when
+outputs differ. Brainstorming skills should produce varied outputs. Every term
+below supports that goal.
 
 ## Context pointers
 
@@ -21,10 +23,14 @@ A pointer does two jobs: state what the material is, and name the **branches** �
 Content in any agent document is either a **step** (an ordered action the agent performs) or **reference** (a definition, rule, or fact consulted on demand) — most documents mix both. Rank each piece on a ladder by how immediately it's needed:
 
 1. **In-file step** — the primary tier: what the agent does, in order.
-2. **In-file reference** — consulted on demand but cheap enough to keep inline. A flat peer-set (every rule in a checklist at the same rung) is a legitimate shape here, not a smell.
+2. **In-file reference** — consulted on demand but cheap enough to keep inline. A checklist with every rule at the same level is valid.
 3. **Disclosed reference** — pushed to a separate file behind a context pointer, loaded only when the pointer fires.
 
-Push too little down and the top bloats past relevance; push too much down and the agent silently skips material it actually needed inline. **Branching is the test**: inline whatever every branch needs, disclose whatever only some branches reach. In a document with ordered steps, in-file reference that should have been disclosed sits between the steps and turns attending to it into a coin-flip — this is a correctness risk on top of the token cost.
+Keep too much detail inline and the top becomes bloated; hide too much and the
+agent may skip material it needs. **Use the branches to decide:** keep inline
+what every branch needs, and disclose what only some branches need. In an
+ordered workflow, detail that belongs in a reference can distract from the
+steps and create a correctness risk as well as token cost.
 
 ## Co-location
 

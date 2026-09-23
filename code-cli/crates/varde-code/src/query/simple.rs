@@ -12,6 +12,9 @@ use crate::model::SymbolKind;
 
 use super::{ApiError, db_err, freshen_for_mode, open_db, opt_str, req_str};
 
+#[cfg(test)]
+static SOURCE_READ_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// Render a persisted `symbols.kind` integer back to its snake_case string.
 fn symbol_kind_of(v: i64) -> String {
     SymbolKind::from_i64(v)
@@ -164,7 +167,7 @@ struct SymbolRow {
 /// whole request.
 fn symbol_json(
     row: &SymbolRow,
-    body_root: Option<&std::path::Path>,
+    source: Option<&[u8]>,
 ) -> std::result::Result<serde_json::Value, ApiError> {
     let mut json = serde_json::json!({
         "kind": row.kind,
@@ -176,24 +179,25 @@ fn symbol_json(
             "end_line": row.el, "end_col": row.ec,
         },
     });
-    if let Some(root) = body_root
-        && let Some(body) = read_span(root, &row.path, row.sb, row.eb)
+    if let Some(source) = source
+        && let Some(body) = read_span(source, row.sb, row.eb)
     {
         json["body"] = serde_json::json!(body);
     }
     Ok(json)
 }
 
-/// Read `[start_byte, end_byte)` from `root.join(rel_path)` as UTF-8 text.
-/// Returns `None` on any IO/UTF-8/range failure so callers can degrade
+/// Read one source file for all body slices returned by a file query.
+fn read_source(root: &std::path::Path, rel_path: &str) -> Option<Vec<u8>> {
+    #[cfg(test)]
+    SOURCE_READ_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    std::fs::read(root.join(rel_path)).ok()
+}
+
+/// Slice `[start_byte, end_byte)` from one previously-read source file.
+/// Returns `None` on any UTF-8/range failure so callers can degrade
 /// gracefully instead of failing the whole query.
-fn read_span(
-    root: &std::path::Path,
-    rel_path: &str,
-    start_byte: i64,
-    end_byte: i64,
-) -> Option<String> {
-    let bytes = std::fs::read(root.join(rel_path)).ok()?;
+fn read_span(bytes: &[u8], start_byte: i64, end_byte: i64) -> Option<String> {
     let (start, end) = (
         usize::try_from(start_byte).ok()?,
         usize::try_from(end_byte).ok()?,
@@ -205,9 +209,8 @@ fn read_span(
 fn query_symbols(
     conn: &Connection,
     file_id: i64,
-    body_root: Option<&std::path::Path>,
     include_references: bool,
-) -> std::result::Result<Vec<serde_json::Value>, ApiError> {
+) -> std::result::Result<Vec<SymbolRow>, ApiError> {
     // `reference`-kind rows (call sites / usages) are 80–95% of a file's
     // `symbols` rows and are noise when surveying what a file *declares*
     // (audit F4) — excluded unless the caller opts in with `includeReferences`.
@@ -248,7 +251,7 @@ fn query_symbols(
     let mut out = Vec::new();
     for row in rows {
         let (k, n, path, sb, eb, sl, sc, el, ec) = row.map_err(db_err)?;
-        let row = SymbolRow {
+        out.push(SymbolRow {
             kind: symbol_kind_of(k),
             name: n,
             path,
@@ -258,8 +261,7 @@ fn query_symbols(
             sc,
             el,
             ec,
-        };
-        out.push(symbol_json(&row, body_root)?);
+        });
     }
     Ok(out)
 }
@@ -270,8 +272,7 @@ fn query_symbols(
 fn query_entity_declarations(
     conn: &Connection,
     file_id: i64,
-    body_root: Option<&std::path::Path>,
-) -> std::result::Result<Vec<serde_json::Value>, ApiError> {
+) -> std::result::Result<Vec<SymbolRow>, ApiError> {
     let sql = format!(
         "SELECT e.kind, e.name, f.path,
                 e.start_byte, e.end_byte, e.start_line, e.start_col,
@@ -301,7 +302,7 @@ fn query_entity_declarations(
     let mut out = Vec::new();
     for row in rows {
         let (k, n, path, sb, eb, sl, sc, el, ec) = row.map_err(db_err)?;
-        let row = SymbolRow {
+        out.push(SymbolRow {
             kind: entity_kind_of(k),
             name: n,
             path,
@@ -311,8 +312,7 @@ fn query_entity_declarations(
             sc,
             el,
             ec,
-        };
-        out.push(symbol_json(&row, body_root)?);
+        });
     }
     Ok(out)
 }
@@ -327,9 +327,14 @@ fn query_file_symbols(
     body_root: Option<&std::path::Path>,
     include_references: bool,
 ) -> std::result::Result<Vec<serde_json::Value>, ApiError> {
-    let mut out = query_entity_declarations(conn, file_id, body_root)?;
-    out.extend(query_symbols(conn, file_id, body_root, include_references)?);
-    Ok(out)
+    let mut rows = query_entity_declarations(conn, file_id)?;
+    rows.extend(query_symbols(conn, file_id, include_references)?);
+    let source = body_root
+        .zip(rows.first())
+        .and_then(|(root, row)| read_source(root, &row.path));
+    rows.iter()
+        .map(|row| symbol_json(row, source.as_deref()))
+        .collect()
 }
 
 /// Read the optional `includeReferences` input flag (default `false`): when
@@ -481,7 +486,11 @@ pub fn get_symbol(input: &serde_json::Value) -> Result<serde_json::Value, ApiErr
     let Some(row) = candidates.into_iter().next() else {
         return Err(ApiError::not_found(format!("symbol {name:?}")));
     };
-    symbol_json(&row, body_root(input).as_deref())
+    let root = body_root(input);
+    let source = root
+        .as_deref()
+        .and_then(|root| read_source(root, &row.path));
+    symbol_json(&row, source.as_deref())
 }
 
 /// Which persisted table a lookup reads from — `entities` (declarations) or
@@ -553,45 +562,16 @@ fn rows_by_name(
     kind_int: Option<i64>,
     file_path: Option<&str>,
 ) -> std::result::Result<Vec<SymbolRow>, ApiError> {
-    let kind_clause = match kind_int {
-        Some(_) => " AND t.kind = ?2".to_string(),
-        None => format!("{} AND ?2 = ?2", source.default_kind_filter()),
-    };
-    let sql = format!(
-        "SELECT t.kind, t.name, f.path,
-                t.start_byte, t.end_byte, t.start_line, t.start_col,
-                t.end_line, t.end_col
-         FROM {} t JOIN files f ON f.id = t.file_id
-         WHERE t.name = ?1{kind_clause}
-         ORDER BY {}, t.id",
-        source.table(),
-        source.kind_priority_sql()
-    );
-    // `?2` is the kind discriminant when filtering; when not, the `?2 = ?2`
-    // tautology keeps a stable two-parameter binding (value is irrelevant).
+    let sql = rows_by_name_sql(source, kind_int.is_some());
     let kind_param = kind_int.unwrap_or(0);
     let mut stmt = conn.prepare(&sql).map_err(db_err)?;
     let rows = stmt
-        .query_map(rusqlite::params![name, kind_param], |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
-                r.get::<_, i64>(3)?,
-                r.get::<_, i64>(4)?,
-                r.get::<_, i64>(5)?,
-                r.get::<_, i64>(6)?,
-                r.get::<_, i64>(7)?,
-                r.get::<_, i64>(8)?,
-            ))
-        })
+        .query_map(rusqlite::params![name, kind_param], read_named_row)
         .map_err(db_err)?;
     let mut out = Vec::new();
     for row in rows {
         let (k, n, path, sb, eb, sl, sc, el, ec) = row.map_err(db_err)?;
-        if let Some(fp) = file_path
-            && !matches_path(&path, fp)
-        {
+        if file_path.is_some_and(|fp| !matches_path(&path, fp)) {
             continue;
         }
         out.push(SymbolRow {
@@ -607,6 +587,40 @@ fn rows_by_name(
         });
     }
     Ok(out)
+}
+
+fn rows_by_name_sql(source: RowSource, filter_kind: bool) -> String {
+    let kind_clause = match filter_kind {
+        true => " AND t.kind = ?2".to_string(),
+        false => format!("{} AND ?2 = ?2", source.default_kind_filter()),
+    };
+    let sql = format!(
+        "SELECT t.kind, t.name, f.path,
+                t.start_byte, t.end_byte, t.start_line, t.start_col,
+                t.end_line, t.end_col
+         FROM {} t JOIN files f ON f.id = t.file_id
+         WHERE t.name = ?1{kind_clause}
+         ORDER BY {}, t.id",
+        source.table(),
+        source.kind_priority_sql()
+    );
+    sql
+}
+
+type NamedRow = (i64, String, String, i64, i64, i64, i64, i64, i64);
+
+fn read_named_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NamedRow> {
+    Ok((
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+        row.get(7)?,
+        row.get(8)?,
+    ))
 }
 
 /// tests_for_file — test files that (transitively) import the given file.
@@ -766,8 +780,10 @@ pub fn find_imports(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
 ///
 /// Inputs (all optional): `kind` (binding|reference), `file` (path suffix),
 /// `language` (derived from the file extension), `minCyclomaticComplexity`
-/// (file-level), `maxSymbols` (cap). Output: array of symbol objects. Empty
-/// array when nothing matches; `not_found` for an unknown `file`.
+/// (file-level), `maxSymbols` (legacy cap). Output: an array of symbol
+/// objects. The CLI boundary also accepts `resultsLimit`, `resultsOffset`,
+/// and `fullResults` for bounded recovery. Empty array when nothing matches;
+/// `not_found` for an unknown `file`.
 pub fn filter_symbols(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
     let file = opt_str(input, "file");
     freshen_for_mode("filter_symbols", input)?;
@@ -777,7 +793,12 @@ pub fn filter_symbols(input: &serde_json::Value) -> Result<serde_json::Value, Ap
     let min_complexity = input
         .get("minCyclomaticComplexity")
         .and_then(|v| v.as_i64());
-    let max_symbols = input.get("maxSymbols").and_then(|v| v.as_i64());
+    let has_pagination = input.get("resultsLimit").is_some()
+        || input.get("resultsOffset").is_some()
+        || input.get("fullResults").is_some();
+    let max_symbols = (!has_pagination)
+        .then(|| input.get("maxSymbols").and_then(|v| v.as_i64()))
+        .flatten();
 
     // Resolve a specific file to its id when `file` is given. When it is not,
     // we deliberately skip the file filter entirely: an `IN (all file ids)`
@@ -815,22 +836,30 @@ pub fn filter_symbols(input: &serde_json::Value) -> Result<serde_json::Value, Ap
         )?);
     }
 
+    Ok(serde_json::json!(render_filtered_rows(
+        rows,
+        language,
+        max_symbols
+    )?))
+}
+
+fn render_filtered_rows(
+    rows: Vec<SymbolRow>,
+    language: Option<&str>,
+    max_symbols: Option<i64>,
+) -> Result<Vec<serde_json::Value>, ApiError> {
     let mut out = Vec::new();
     for row in rows {
-        if let Some(lang) = language {
-            let file_lang = crate::parse::language_for_path(std::path::Path::new(&row.path));
-            if !matches_language_filter(file_lang, lang) {
-                continue;
-            }
+        let file_lang = crate::parse::language_for_path(std::path::Path::new(&row.path));
+        if language.is_some_and(|lang| !matches_language_filter(file_lang, lang)) {
+            continue;
         }
         out.push(symbol_json(&row, None)?);
-        if let Some(cap) = max_symbols
-            && out.len() as i64 >= cap
-        {
+        if max_symbols.is_some_and(|cap| out.len() as i64 >= cap) {
             break;
         }
     }
-    Ok(serde_json::json!(out))
+    Ok(out)
 }
 
 /// Rows from `source` matching the `filter_symbols` predicates: an optional
@@ -844,6 +873,35 @@ fn collect_rows(
     specific_file_id: Option<i64>,
     min_complexity: Option<i64>,
 ) -> std::result::Result<Vec<SymbolRow>, ApiError> {
+    let (sql, params) = filtered_rows_query(source, kind_int, specific_file_id, min_complexity);
+    let mut stmt = conn.prepare(&sql).map_err(db_err)?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params_from_iter(params.iter().map(|p| p as &dyn rusqlite::ToSql)),
+            |r| {
+                Ok(SymbolRow {
+                    kind: source.render_kind(r.get(0)?),
+                    name: r.get(1)?,
+                    sb: r.get(2)?,
+                    eb: r.get(3)?,
+                    sl: r.get(4)?,
+                    sc: r.get(5)?,
+                    el: r.get(6)?,
+                    ec: r.get(7)?,
+                    path: r.get(8)?,
+                })
+            },
+        )
+        .map_err(db_err)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(db_err)
+}
+
+fn filtered_rows_query(
+    source: RowSource,
+    kind_int: Option<i64>,
+    specific_file_id: Option<i64>,
+    min_complexity: Option<i64>,
+) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
     let mut sql = format!(
         "SELECT t.kind, t.name, t.start_byte, t.end_byte, t.start_line, t.start_col, t.end_line, t.end_col, f.path
          FROM {} t JOIN files f ON f.id = t.file_id WHERE 1=1",
@@ -867,41 +925,7 @@ fn collect_rows(
     }
     sql.push_str(" ORDER BY t.id");
 
-    let mut stmt = conn.prepare(&sql).map_err(db_err)?;
-    let rows = stmt
-        .query_map(
-            rusqlite::params_from_iter(params.iter().map(|p| p as &dyn rusqlite::ToSql)),
-            |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, i64>(2)?,
-                    r.get::<_, i64>(3)?,
-                    r.get::<_, i64>(4)?,
-                    r.get::<_, i64>(5)?,
-                    r.get::<_, i64>(6)?,
-                    r.get::<_, i64>(7)?,
-                    r.get::<_, String>(8)?,
-                ))
-            },
-        )
-        .map_err(db_err)?;
-    let mut out = Vec::new();
-    for row in rows {
-        let (k, n, sb, eb, sl, sc, el, ec, path) = row.map_err(db_err)?;
-        out.push(SymbolRow {
-            kind: source.render_kind(k),
-            name: n,
-            path,
-            sb,
-            eb,
-            sl,
-            sc,
-            el,
-            ec,
-        });
-    }
-    Ok(out)
+    (sql, params)
 }
 
 #[cfg(test)]
@@ -994,6 +1018,41 @@ mod build_on_read_tests {
                     .any(|s| s["name"] == "Widget"),
                 "class filter surfaces Widget: {classes}"
             );
+
+            let db = crate::db::path::repo_db_path(&root);
+            let _ = std::fs::remove_file(&db);
+            let _ = std::fs::remove_dir_all(&root);
+        });
+    }
+
+    #[test]
+    fn symbols_in_file_reads_source_once_for_all_bodies() {
+        with_isolated_home("bor", "single-body-read", || {
+            let root = temp_root("single-body-read");
+            let file = root.join("a.ts");
+            std::fs::write(
+                &file,
+                "export class Widget {\n  render() { return 1; }\n}\n",
+            )
+            .expect("write a.ts");
+
+            let input = serde_json::json!({
+                "repoRoot": root.to_str().unwrap(),
+                "filePath": file.to_str().unwrap(),
+                "includeBody": true,
+            });
+            let before = super::SOURCE_READ_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+            let symbols = symbols_in_file(&input).expect("query returns bodies");
+            let after = super::SOURCE_READ_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+
+            assert_eq!(after - before, 1, "one source read serves every symbol");
+            let bodies = symbols
+                .as_array()
+                .expect("symbol array")
+                .iter()
+                .filter(|symbol| symbol.get("body").is_some())
+                .count();
+            assert!(bodies >= 2, "multiple symbols receive bodies: {symbols}");
 
             let db = crate::db::path::repo_db_path(&root);
             let _ = std::fs::remove_file(&db);

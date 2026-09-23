@@ -88,7 +88,8 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ] && [ "$DRY_RUN" -eq 0 ] && [ ! -t 0 ]; then
+if [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ] && [ "$DRY_RUN" -eq 0 ] &&
+  [ ! -t 0 ]; then
   echo "No terminal is available. Run: varde init --yes"
   exit 0
 fi

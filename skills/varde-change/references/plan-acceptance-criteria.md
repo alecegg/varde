@@ -1,70 +1,71 @@
 # Acceptance criteria & scope indicators
 
-Covers the plan's `## Acceptance criteria` — the plan-level definition of done
-for the whole change — and the scope indicators that must be caught at plan time
-because they change the spec, the AC, or the split.
+Covers the plan's `## Acceptance criteria`, the plan-level definition of done
+for the whole change, and scope indicators. Catch scope indicators during
+planning because they can change the spec, AC, or split.
 
 Acceptance criteria are **plan-level**, not per-task. They describe what must be
-observably true once the change ships, independent of how the work is later
-sliced into tasks. Decomposition is not done here — it's `varde-change build`'s job
+observably true after the change ships, regardless of how the work is later
+sliced into tasks. `varde-change build` handles decomposition
 (`references/build-decomposition.md`).
 
 ## Acceptance-criteria review
 
-Grow the criteria inline in the plan-document loop (`references/plan-grow-doc.md`), then run this
-review over the full set before the final completeness check.
+Grow the criteria in the plan-document loop
+(`references/plan-grow-doc.md`). Run this review over the full set before the
+final completeness check.
 
 **Assert vs. retrieve:**
-- `assert:` — structural facts checkable mechanically (a command, a grep, a test
-  run). Pass/fail, no LLM judgment.
-- `retrieve:` — when the LLM must judge fetched output; point at the specific
+- `assert:` — structural facts checked mechanically by a command, grep, or test
+  run. The result is pass or fail, with no LLM judgment.
+- `retrieve:` — use when an LLM must judge fetched output. Point to the specific
   file(s) or grep to read, not a full-file read.
 
-**Prefer `assert:` — a criterion the agent grades against its own output is the
-weakest kind of "done."** An `assert:` criterion is checked by something outside
-the agent (a command that exits non-zero, a grep that finds or doesn't, a test
-that fails); a `retrieve:` criterion is the agent judging text it just produced,
-which it is biased to pass. Before accepting any `retrieve:`, try to restate it
-as an `assert:` — name the command, exit code, file existence, or non-empty
-output that would make the same claim mechanically. Keep `retrieve:` only when
-the outcome genuinely needs semantic judgment no command can stand in for (e.g.
-"the error message explains the cause"), and say in the criterion what the judge
-must look for. A criterion no command can check and no reader can judge from a
-named file is not yet an acceptance criterion.
+**Prefer `assert:`.** A criterion the agent grades against its own output is the
+weakest kind of "done." An `assert:` criterion is checked outside the agent by a
+command exit code, grep result, or test. A `retrieve:` criterion asks the agent
+to judge text it just produced, which biases the result. Before accepting
+`retrieve:`, try to restate it as `assert:` by naming a command, exit code, file
+existence, or non-empty output. Keep `retrieve:` only when the outcome needs
+semantic judgment that no command can provide, such as whether an error message
+explains the cause. State what the judge must look for. A criterion that no
+command can check and no reader can judge from a named file is not an acceptance
+criterion.
 
 **GWT compliance:** Each criterion must contain `Given`, `When`, and `Then`
-lines in that order. For any that fails, rewrite into Given/When/Then form and
-re-score for testability before writing to the plan.
+lines in that order. Rewrite any criterion that fails, then re-score it for
+testability before writing it to the plan.
 
 **Score testability.** Spawn a scoring subagent for the full criteria set. It
-outputs a JSON array of `{ criterion, testable: boolean, reason }` — one entry
-per criterion. Validate: array with one entry per criterion, `criterion` matches
-verbatim, `testable` is boolean, `reason` is non-empty. If malformed, show
-raw output and stop. For any `testable: false` entry, automatically rewrite the
-criterion using the scoring reason and confirmed scope, and re-score after every
-rewrite. Repeat until all pass or a faithful rewrite is impossible (stop with a
-blocker). Rewriting is automatic; the user sees the finalized set.
+outputs a JSON array of `{ criterion, testable: boolean, reason }`, with one
+entry per criterion. Validate that the output is an array with one entry per
+criterion, that `criterion` matches verbatim, that `testable` is boolean, and
+that `reason` is non-empty. If the output is malformed, show the raw output and
+stop. For each `testable: false` entry, automatically rewrite the criterion
+using the scoring reason and confirmed scope. Re-score after every rewrite.
+Repeat until all pass or a faithful rewrite is impossible; stop with a blocker
+in that case. Rewriting is automatic; the user sees the finalized set.
 
-Criteria are the observable outcomes of the *change*, not of an arbitrary slice.
+Criteria describe observable outcomes of the *change*, not an arbitrary slice.
 Write each at the level of a public behavior or workflow rule the user can point
-at — not the internal step count build will later choose.
+to, not the internal step count that build later chooses.
 
 ## Scope signals — catch these at plan time
 
-Some patterns don't just affect how work is sliced; they change scope, AC, or
-whether the plan should split. Catch them during the breadth-first /
-completeness check (`references/plan-fundamentals.md`) so the spec and AC are right before
-build ever decomposes. Build re-derives the *slicing* from the spec
+Some patterns affect more than task slicing. They change scope, AC, or whether
+the plan should split. Catch them during the breadth-first and completeness
+check (`references/plan-fundamentals.md`) so the spec and AC are correct before
+build decomposes anything. Build re-derives the *slicing* from the spec
 (`references/build-decomposition.md` owns the expand→migrate→contract / upfront-foundation
 steps); the plan's job is only to make sure the scope-affecting fact is
 recorded, not left for build to discover mid-run.
 
 - **Wide refactor:** If the goal names a shared symbol, type, or interface, find
-  its blast radius before assuming a small footprint — grep usages/dependents,
+  its blast radius before assuming a small footprint. Grep usages/dependents,
   or run `symbol_blast_radius` when `varde-code` is available
   (`references/varde-code.md`). A result fanning across many independent
-  packages is itself grounds to flag in `## Design`/`## Constraints` and to weigh
-  a plan split — it can't land as one green slice.
+  packages is grounds to flag it in `## Design`/`## Constraints` and weigh a
+  plan split. It cannot land as one green slice.
 - **Native scan rule port → data availability:** If the change ports a native
   scan rule to TOML/SQL, native rules can read `entity.data.<field>` values the
   persisted schema never populates. Read each rule's implementation, list every

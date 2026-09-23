@@ -129,67 +129,62 @@ pub const SUPPORTED_LANGUAGES: &[SupportLang] = &[
     SupportLang::Rust,
 ];
 
+const CANONICAL_LANGUAGE_NAMES: &[(&str, SupportLang)] = &[
+    ("typescript", SupportLang::TypeScript),
+    ("tsx", SupportLang::Tsx),
+    ("javascript", SupportLang::JavaScript),
+    ("c", SupportLang::C),
+    ("cpp", SupportLang::Cpp),
+    ("go", SupportLang::Go),
+    ("java", SupportLang::Java),
+    ("csharp", SupportLang::CSharp),
+    ("kotlin", SupportLang::Kotlin),
+    ("swift", SupportLang::Swift),
+    ("python", SupportLang::Python),
+    ("ruby", SupportLang::Ruby),
+    ("php", SupportLang::Php),
+    ("scala", SupportLang::Scala),
+    ("dart", SupportLang::Dart),
+    ("lua", SupportLang::Lua),
+    ("elixir", SupportLang::Elixir),
+    ("solidity", SupportLang::Solidity),
+    ("haskell", SupportLang::Haskell),
+    ("bash", SupportLang::Bash),
+    ("rust", SupportLang::Rust),
+];
+
+const LANGUAGE_ALIASES: &[(&str, SupportLang)] = &[
+    ("ts", SupportLang::TypeScript),
+    ("js", SupportLang::JavaScript),
+    ("c++", SupportLang::Cpp),
+    ("cxx", SupportLang::Cpp),
+    ("golang", SupportLang::Go),
+    ("cs", SupportLang::CSharp),
+    ("kt", SupportLang::Kotlin),
+    ("py", SupportLang::Python),
+    ("rb", SupportLang::Ruby),
+    ("ex", SupportLang::Elixir),
+    ("sol", SupportLang::Solidity),
+    ("hs", SupportLang::Haskell),
+    ("sh", SupportLang::Bash),
+    ("shell", SupportLang::Bash),
+];
+
 /// Resolve a rule/CLI language name to its `SupportLang`. Accepts the
 /// canonical names plus common aliases (`ts`, `js`, `py`, `cs`).
 pub fn language_from_name(name: &str) -> Option<SupportLang> {
-    use SupportLang::*;
-    Some(match name {
-        "rust" => Rust,
-        "typescript" | "ts" => TypeScript,
-        "tsx" => Tsx,
-        "javascript" | "js" => JavaScript,
-        "c" => C,
-        "cpp" | "c++" | "cxx" => Cpp,
-        "go" | "golang" => Go,
-        "java" => Java,
-        "csharp" | "cs" => CSharp,
-        "kotlin" | "kt" => Kotlin,
-        "swift" => Swift,
-        "python" | "py" => Python,
-        "ruby" | "rb" => Ruby,
-        "php" => Php,
-        "lua" => Lua,
-        "scala" => Scala,
-        "dart" => Dart,
-        "elixir" | "ex" => Elixir,
-        "solidity" | "sol" => Solidity,
-        "haskell" | "hs" => Haskell,
-        "bash" | "sh" | "shell" => Bash,
-        _ => return None,
-    })
+    CANONICAL_LANGUAGE_NAMES
+        .iter()
+        .chain(LANGUAGE_ALIASES)
+        .find_map(|(candidate, language)| (*candidate == name).then_some(*language))
 }
 
 /// Canonical name accepted by ast-grep for an extraction-supported language.
 pub fn language_name(lang: &SupportLang) -> &'static str {
-    use SupportLang::*;
-    match lang {
-        TypeScript => "typescript",
-        Tsx => "tsx",
-        JavaScript => "javascript",
-        C => "c",
-        Cpp => "cpp",
-        Go => "go",
-        Java => "java",
-        CSharp => "csharp",
-        Kotlin => "kotlin",
-        Swift => "swift",
-        Python => "python",
-        Ruby => "ruby",
-        Php => "php",
-        Lua => "lua",
-        Scala => "scala",
-        Dart => "dart",
-        Elixir => "elixir",
-        Solidity => "solidity",
-        Haskell => "haskell",
-        Bash => "bash",
-        Rust => "rust",
-        // Rules resolve only `SUPPORTED_LANGUAGES`. Keep this exhaustive so
-        // a new supported language requires an explicit canonical name.
-        Css | Hcl | Html | Json | Markdown | Nix | Yaml => {
-            unreachable!("non-rule language cannot reach the pattern rule pipeline")
-        }
-    }
+    CANONICAL_LANGUAGE_NAMES
+        .iter()
+        .find_map(|(name, candidate)| (candidate == lang).then_some(*name))
+        .unwrap_or_else(|| unreachable!("non-rule language cannot reach pattern rules"))
 }
 
 /// A parsed source file: the ast-grep root plus a syntax-error flag.

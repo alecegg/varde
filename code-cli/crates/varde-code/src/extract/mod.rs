@@ -115,68 +115,24 @@ fn walk(
     parent_is_type: bool,
     depth: u32,
 ) {
-    // Syntax-error flag: a single ERROR/MISSING node anywhere in the file.
     if node.is_error() || node.is_missing() {
         ctx.result.has_error = true;
     }
-
-    // `node.kind()` is an FFI call returning a `Cow<str>`; the walk consulted it
-    // ~4× per node (identifier check, function-scope test, type-scope test,
-    // type-kind test). Materialize it once and reuse the borrow — the walk is
-    // the dominant cold-build cost (55–63% of parse+extract; see
-    // examples/parse_vs_walk), so shaving repeated per-node work compounds
-    // across millions of nodes.
     let kind_cow = node.kind();
     let kind: &str = kind_cow.as_ref();
-
-    // Entities: per-language visit threaded with the enclosing-scope stack.
-    {
-        let mut ectx = entity::ExtractCtx {
-            lang: ctx.lang,
-            file_id: ctx.file_id,
-            out: &mut ctx.result.entities,
-            enclosing: ctx.enclosing.last().map(|s| s.as_str()),
-            type_scope: ctx.type_scope.last().map(|s| s.as_str()),
-            in_type,
-        };
-        langs::visit(node, kind, &mut ectx);
-    }
-
-    // Symbols: identifier classification (Binding / Reference / neither). The
-    // identifier-leaf gate is language-aware (e.g. PHP names variables
-    // `variable_name`, not `identifier`) — see `symbol::is_symbol_ident`.
-    if symbol::is_symbol_ident(ctx.lang, kind)
-        && let Some((kind, name)) = symbol::classify(node, ctx.lang, in_type)
-    {
-        ctx.result.symbols.push(Symbol {
-            kind,
-            name: name.to_owned(),
-            file_id: ctx.file_id,
-            span: span_of(node),
-        });
-    }
-
-    // Named functions/methods push onto the enclosing stack for children.
+    visit_node(node, kind, ctx, in_type);
     let is_scope = langs::is_function_scope(ctx.lang, node, kind);
     if is_scope {
         ctx.enclosing
             .push(langs::function_scope_name(ctx.lang, node).unwrap_or_default());
     }
-    // Named classes/interfaces/impl-blocks push onto the type-scope stack so
-    // methods nested inside record their owning type (`Entity::owner_type`).
     let is_type_scope = langs::type_scopes(ctx.lang).contains(&kind);
     if is_type_scope {
         ctx.type_scope
             .push(langs::type_scope_name(ctx.lang, node).unwrap_or_default());
     }
-    // Children are "in a type context" when the current node *or higher* is a
-    // type kind (i.e. `in_type_context` of the child); the child's own parent
-    // is the current node, so propagate `parent_is_type` as `is_type_kind(node)`.
     let node_is_type = is_type_kind(ctx.lang, kind);
     if depth >= MAX_WALK_DEPTH {
-        // Bail before recursing deeper: mark the file as incompletely
-        // processed rather than overflowing the stack. Scope pushes above are
-        // still balanced by the pops below.
         ctx.result.has_error = true;
     } else {
         for child in node.children() {
@@ -194,6 +150,34 @@ fn walk(
     }
     if is_scope {
         ctx.enclosing.pop();
+    }
+}
+
+/// Extract entities and symbols for one already-classified node.
+fn visit_node(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut WalkCtx<'_>,
+    in_type: bool,
+) {
+    let mut ectx = entity::ExtractCtx {
+        lang: ctx.lang,
+        file_id: ctx.file_id,
+        out: &mut ctx.result.entities,
+        enclosing: ctx.enclosing.last().map(String::as_str),
+        type_scope: ctx.type_scope.last().map(String::as_str),
+        in_type,
+    };
+    langs::visit(node, kind, &mut ectx);
+    if symbol::is_symbol_ident(ctx.lang, kind)
+        && let Some((symbol_kind, name)) = symbol::classify(node, ctx.lang, in_type)
+    {
+        ctx.result.symbols.push(Symbol {
+            kind: symbol_kind,
+            name: name.to_owned(),
+            file_id: ctx.file_id,
+            span: span_of(node),
+        });
     }
 }
 

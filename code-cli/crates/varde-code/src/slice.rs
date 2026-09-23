@@ -97,12 +97,32 @@ fn ensure_fresh_once(slices: &[Slice], repo_root: &str, scope: &Scope) -> Result
     let t0 = std::time::Instant::now();
     let profile = std::env::var_os("VARDE_PROFILE").is_some();
     let mut rebuilt: Vec<&str> = Vec::new();
-
     let conn = open_or_build(repo_root, scope)?;
-
-    // Raw reconcile: reparse changed/new files in scope (bumping `files.rev`)
-    // and remove rows for files deleted on disk.
     let (changed, deleted, file_set_changed) = changed_files(&conn, repo_root, scope)?;
+    reconcile_raw(&conn, &changed, &deleted, profile, &mut rebuilt)?;
+    refresh_churn(&conn, slices, repo_root)?;
+    if slices.contains(&Slice::Imports) && freshen_imports(&conn)? {
+        rebuilt.push("imports");
+    }
+    if slices.contains(&Slice::Edges) && freshen_edges(&conn, file_set_changed)? {
+        rebuilt.push("edges");
+    }
+    if slices.contains(&Slice::Global) && freshen_global(&conn, file_set_changed)? {
+        rebuilt.push("global");
+    }
+    if profile {
+        report_fresh_profile(slices, scope, &rebuilt, t0.elapsed());
+    }
+    Ok(())
+}
+
+fn reconcile_raw(
+    conn: &rusqlite::Connection,
+    changed: &[String],
+    deleted: &[String],
+    profile: bool,
+    rebuilt: &mut Vec<&'static str>,
+) -> Result<()> {
     if profile && (!changed.is_empty() || !deleted.is_empty()) {
         eprintln!(
             "VARDE_PROFILE ensure_fresh: raw reconcile changed={} deleted={}",
@@ -110,55 +130,45 @@ fn ensure_fresh_once(slices: &[Slice], repo_root: &str, scope: &Scope) -> Result
             deleted.len()
         );
     }
-    for path in &changed {
-        let output = crate::scan::run(path)?;
-        crate::persist::refresh_file_slice(&conn, &output)?;
+    for path in changed {
+        crate::persist::refresh_file_slice(conn, &crate::scan::run(path)?)?;
     }
     if !changed.is_empty() {
         rebuilt.push("raw");
     }
     if !deleted.is_empty() {
-        delete_files(&conn, &deleted)?;
+        delete_files(conn, deleted)?;
         rebuilt.push("deleted");
     }
-    // Churn: recompute commit counts for the changed files (folded into the
-    // raw refresh, so a no-op stays warm).
-    if slices.contains(&Slice::Churn) && !changed.is_empty() {
-        let counts = crate::churn::commit_counts_batch(&changed, Path::new(repo_root));
-        crate::persist::set_churn_batch(&conn, &counts)?;
-    }
-
-    // Imports: a derived slice, rebuilt when the raw reconcile advanced `rev`
-    // past its `built_through_rev` (or it was never ledgered).
-    if slices.contains(&Slice::Imports) && freshen_imports(&conn)? {
-        rebuilt.push("imports");
-    }
-
-    // Edges: rebuilt when stale (see [`freshen_edges`]). Runs after the raw
-    // reconcile so the edge resolve reads current entities.
-    if slices.contains(&Slice::Edges) && freshen_edges(&conn, file_set_changed)? {
-        rebuilt.push("edges");
-    }
-
-    // Global: rebuilt when stale (see [`freshen_global`]) — the only slice
-    // that still recomputes the whole graph (Louvain/MinHash are whole-graph),
-    // but only when a global-slice consumer runs and only when dirty.
-    if slices.contains(&Slice::Global) && freshen_global(&conn, file_set_changed)? {
-        rebuilt.push("global");
-    }
-
-    if profile {
-        let path = if rebuilt.is_empty() {
-            "no-op".to_string()
-        } else {
-            rebuilt.join("+")
-        };
-        eprintln!(
-            "VARDE_PROFILE ensure_fresh: slices={slices:?} scope={scope:?} rebuilt={path} total={:?}",
-            t0.elapsed()
-        );
-    }
     Ok(())
+}
+
+fn refresh_churn(conn: &rusqlite::Connection, slices: &[Slice], repo_root: &str) -> Result<()> {
+    if !slices.contains(&Slice::Churn) {
+        return Ok(());
+    }
+    let files = crate::persist::load_file_states(conn)?
+        .into_iter()
+        .map(|state| state.path)
+        .collect::<Vec<_>>();
+    let counts = crate::churn::commit_counts_batch(&files, Path::new(repo_root));
+    crate::persist::set_churn_batch(conn, &counts)
+}
+
+fn report_fresh_profile(
+    slices: &[Slice],
+    scope: &Scope,
+    rebuilt: &[&str],
+    elapsed: std::time::Duration,
+) {
+    let path = if rebuilt.is_empty() {
+        "no-op".to_string()
+    } else {
+        rebuilt.join("+")
+    };
+    eprintln!(
+        "VARDE_PROFILE ensure_fresh: slices={slices:?} scope={scope:?} rebuilt={path} total={elapsed:?}"
+    );
 }
 
 /// Retry `op` with exponential backoff when SQLite reports `SQLITE_BUSY`
@@ -300,42 +310,29 @@ fn freshen_edges(conn: &rusqlite::Connection, file_set_changed: bool) -> Result<
         rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
 
-    let full = |state: &crate::persist::PersistedState| -> Result<bool> {
-        let (nodes, edges) = crate::resolve::resolve_edges_only(&state.entities, &state.files);
-        crate::persist::rewrite_edges(conn, state, &edges, &nodes)?;
-        crate::persist::set_slice_state(conn, "imports", max)?;
-        crate::persist::set_slice_state(conn, "edges", max)?;
-        // Full re-resolve invalidates any per-file cache patch assumption
-        // (the file set may have changed), so rebuild the graph_cache from
-        // scratch rather than patching it.
-        //
-        // Unlike the scoped path (`rewrite_edges_for_files` patches the
-        // cache inside the same transaction as the `resolved_edges`
-        // rewrite), the three calls above/below each run as their own
-        // transaction/autocommit statement — this write is intentionally
-        // best-effort/self-healing rather than atomic with the edges
-        // rewrite. `write_graph_cache` stamps `rev = max_rev(conn)`, and
-        // nothing here bumps `files.rev`, so an interruption between the
-        // `rewrite_edges` commit and this call simply leaves the cache
-        // looking stale to `read_graph_cache_if_fresh`'s rev comparison —
-        // the next `Graph::load` safely falls back to a full rebuild rather
-        // than serving stale data (ARCHITECTURE-001).
-        crate::persist::rebuild_graph_cache_full(conn)?;
-        Ok(true)
-    };
     if full_path || stale_ids.len() > MAX_SCOPED_FILES {
-        return full(&state);
+        return refresh_all_edges(conn, &state, max);
     }
 
     let scope_ids = match reverse_dependent_scope(conn, &stale_ids)? {
         Some(scope) => scope,
-        None => {
-            // Reverse-dependents blew the scope past the cap — full path.
-            return full(&state);
-        }
+        None => return refresh_all_edges(conn, &state, max),
     };
 
     run_scoped_edge_refresh(conn, &state, &scope_ids, max)
+}
+
+fn refresh_all_edges(
+    conn: &rusqlite::Connection,
+    state: &crate::persist::PersistedState,
+    max_rev: i64,
+) -> Result<bool> {
+    let (nodes, edges) = crate::resolve::resolve_edges_only(&state.entities, &state.files);
+    crate::persist::rewrite_edges(conn, state, &edges, &nodes)?;
+    crate::persist::set_slice_state(conn, "imports", max_rev)?;
+    crate::persist::set_slice_state(conn, "edges", max_rev)?;
+    crate::persist::rebuild_graph_cache_full(conn)?;
+    Ok(true)
 }
 
 /// CORRECTNESS-104: the scoped path builds one `?` placeholder per scoped
@@ -666,79 +663,85 @@ fn changed_files(
     scope: &Scope,
 ) -> Result<(Vec<String>, Vec<String>, bool)> {
     match scope {
-        Scope::File(path) => {
-            let stored: Vec<StoredFileState> = crate::persist::load_file_state(conn, path)?
-                .into_iter()
-                .collect();
-            if !Path::new(path).exists() {
-                // Deleted on disk: remove its rows if it was ever indexed.
-                return Ok((
-                    Vec::new(),
-                    if stored.is_empty() {
-                        Vec::new()
-                    } else {
-                        vec![path.clone()]
-                    },
-                    !stored.is_empty(),
-                ));
+        Scope::File(path) => changed_file(conn, path),
+        Scope::Repo => changed_repo_files(conn, repo_root),
+    }
+}
+
+fn changed_file(
+    conn: &rusqlite::Connection,
+    path: &str,
+) -> Result<(Vec<String>, Vec<String>, bool)> {
+    let stored: Vec<StoredFileState> = crate::persist::load_file_state(conn, path)?
+        .into_iter()
+        .collect();
+    if !Path::new(path).exists() {
+        let deleted = (!stored.is_empty())
+            .then(|| path.to_string())
+            .into_iter()
+            .collect();
+        return Ok((Vec::new(), deleted, !stored.is_empty()));
+    }
+    let current = crate::scan::list_source_files(path)?;
+    if current.is_empty() {
+        return Ok((Vec::new(), Vec::new(), false));
+    }
+    let classifications = classify_files(&stored, &current);
+    let stale = classifications
+        .iter()
+        .any(|item| !matches!(item, FileClassification::Unchanged { .. }));
+    let file_set_changed = classifications.iter().any(|item| {
+        matches!(
+            item,
+            FileClassification::New { .. } | FileClassification::Deleted { .. }
+        )
+    });
+    Ok(if stale {
+        (vec![path.to_string()], Vec::new(), file_set_changed)
+    } else {
+        (Vec::new(), Vec::new(), false)
+    })
+}
+
+fn changed_repo_files(
+    conn: &rusqlite::Connection,
+    repo_root: &str,
+) -> Result<(Vec<String>, Vec<String>, bool)> {
+    if git_fast_path_enabled()
+        && let Some(result) = git_changed_files(conn, repo_root)
+    {
+        return Ok(result);
+    }
+    let current = crate::scan::list_source_files(repo_root)?;
+    let stored = crate::persist::load_file_states(conn)?;
+    let result = collect_classifications(classify_files(&stored, &current));
+    if let Some(head) = crate::git::run_git(&["rev-parse", "HEAD"], Path::new(repo_root)) {
+        crate::persist::set_slice_meta_value(conn, "git_head", head_fingerprint(&head))?;
+    }
+    Ok(result)
+}
+
+fn collect_classifications(
+    classifications: Vec<FileClassification>,
+) -> (Vec<String>, Vec<String>, bool) {
+    let mut changed = Vec::new();
+    let mut deleted = Vec::new();
+    let mut file_set_changed = false;
+    for classification in classifications {
+        match classification {
+            FileClassification::Changed { path } => changed.push(path),
+            FileClassification::New { path } => {
+                changed.push(path);
+                file_set_changed = true;
             }
-            let current = crate::scan::list_source_files(path)?;
-            if current.is_empty() {
-                return Ok((Vec::new(), Vec::new(), false));
+            FileClassification::Deleted { path } => {
+                deleted.push(path);
+                file_set_changed = true;
             }
-            let classifications = classify_files(&stored, &current);
-            let stale = classifications
-                .iter()
-                .any(|c| !matches!(c, FileClassification::Unchanged { .. }));
-            Ok(if stale {
-                (
-                    vec![path.clone()],
-                    Vec::new(),
-                    classifications.iter().any(|c| {
-                        matches!(
-                            c,
-                            FileClassification::New { .. } | FileClassification::Deleted { .. }
-                        )
-                    }),
-                )
-            } else {
-                (Vec::new(), Vec::new(), false)
-            })
-        }
-        Scope::Repo => {
-            if git_fast_path_enabled()
-                && let Some(result) = git_changed_files(conn, repo_root)
-            {
-                return Ok(result);
-            }
-            let current = crate::scan::list_source_files(repo_root)?;
-            let stored = crate::persist::load_file_states(conn)?;
-            let mut changed = Vec::new();
-            let mut deleted = Vec::new();
-            let mut file_set_changed = false;
-            for c in classify_files(&stored, &current) {
-                match c {
-                    FileClassification::Changed { path } => changed.push(path),
-                    FileClassification::New { path } => {
-                        changed.push(path);
-                        file_set_changed = true;
-                    }
-                    FileClassification::Deleted { path } => {
-                        deleted.push(path);
-                        file_set_changed = true;
-                    }
-                    FileClassification::Unchanged { .. } => {}
-                }
-            }
-            // The walk path just absorbed whatever committed content changes
-            // the HEAD-move fallback was protecting against — record the
-            // current HEAD so the next call can use the git fast path again.
-            if let Some(head) = crate::git::run_git(&["rev-parse", "HEAD"], Path::new(repo_root)) {
-                crate::persist::set_slice_meta_value(conn, "git_head", head_fingerprint(&head))?;
-            }
-            Ok((changed, deleted, file_set_changed))
+            FileClassification::Unchanged { .. } => {}
         }
     }
+    (changed, deleted, file_set_changed)
 }
 
 /// The changed/new/deleted set for a repo scope from `git status`, or `None`
@@ -805,23 +808,9 @@ fn git_changed_files(
 ) -> Option<(Vec<String>, Vec<String>, bool)> {
     let head = crate::git::run_git(&["rev-parse", "HEAD"], Path::new(repo_root))?;
     let head_fp = head_fingerprint(&head);
-    let stored = crate::persist::slice_meta_value(conn, "git_head").ok()?;
-    if stored.is_some_and(|s| s != head_fp) {
-        // HEAD moved since the last recorded build → committed content changes
-        // are invisible to `git status` (worktree == HEAD); fall back to the
-        // mtime walk. The caller records the new HEAD after it runs.
+    if !git_metadata_allows_fast_path(conn, head_fp)? {
         return None;
     }
-    if crate::persist::slice_meta_value(conn, "git_clean_at_build").ok()? == Some(0) {
-        // The DB was built from a dirty worktree (CORRECTNESS-102): git
-        // status compares the worktree against HEAD, so a file reverted to
-        // its committed content reports *clean* while the DB still serves the
-        // dirty content. The mtime walk sees the revert; force it until a
-        // build observes a clean worktree (`record_git_head` flips the flag).
-        return None;
-    }
-    // `status.renames=false` renders a rename as separate `D old` / `A new`
-    // records — the parser never sees the two-record `R new\0old\0` form.
     let text = crate::git::run_git(
         &[
             "-c",
@@ -834,103 +823,135 @@ fn git_changed_files(
         Path::new(repo_root),
     )?;
     let root = Path::new(repo_root);
+    let (changed, mut deleted, mut file_set_changed) = parse_git_status(&text, root)?;
+    reconcile_newly_ignored(conn, root, &changed, &mut deleted, &mut file_set_changed);
+    crate::persist::set_slice_meta_value(conn, "git_head", head_fp).ok()?;
+    Some((changed, deleted, file_set_changed))
+}
+
+fn git_metadata_allows_fast_path(conn: &rusqlite::Connection, head_fp: i64) -> Option<bool> {
+    let stored = crate::persist::slice_meta_value(conn, "git_head").ok()?;
+    if stored.is_some_and(|value| value != head_fp) {
+        return Some(false);
+    }
+    let clean = crate::persist::slice_meta_value(conn, "git_clean_at_build").ok()?;
+    Some(clean != Some(0))
+}
+
+fn parse_git_status(text: &str, root: &Path) -> Option<(Vec<String>, Vec<String>, bool)> {
     let mut changed = Vec::new();
     let mut deleted = Vec::new();
     let mut file_set_changed = false;
-    let is_status_letter = |b: u8| {
-        matches!(
-            b,
-            b' ' | b'M' | b'T' | b'A' | b'D' | b'R' | b'C' | b'U' | b'?'
-        )
-    };
     for entry in text.split('\0') {
         if entry.is_empty() {
             continue;
         }
-        let bytes = entry.as_bytes();
-        // Defensive shape check: anything that isn't exactly `XY path` means
-        // the wire format surprised us (e.g. a two-record rename if
-        // `status.renames` were ever re-enabled) — fall back to the walk
-        // rather than feed a mangled path to `scan::run`.
-        if bytes.len() < 4
-            || !is_status_letter(bytes[0])
-            || !is_status_letter(bytes[1])
-            || bytes[2] != b' '
-        {
-            return None;
-        }
-        let (x, y) = (bytes[0], bytes[1]);
-        let path = &entry[3..];
-        let is_deleted = x == b'D' || y == b'D';
-        let is_untracked = x == b'?' && y == b'?';
-        let is_change = !is_deleted && !is_untracked && (x != b' ' || y != b' ');
+        let (kind, path) = parse_git_status_entry(entry)?;
         let abs = root.join(path).to_string_lossy().into_owned();
-        if is_deleted {
-            deleted.push(abs);
-            file_set_changed = true;
-        } else if is_untracked || is_change {
-            changed.push(abs);
-            if is_untracked {
+        match kind {
+            GitStatusKind::Deleted => {
+                deleted.push(abs);
                 file_set_changed = true;
             }
+            GitStatusKind::Untracked => {
+                changed.push(abs);
+                file_set_changed = true;
+            }
+            GitStatusKind::Changed => changed.push(abs),
+            GitStatusKind::Unchanged => {}
         }
     }
+    Some((changed, deleted, file_set_changed))
+}
 
-    // Gitignore cross-check (CORRECTNESS-103): a stored file that is now
-    // ignored is invisible to `git status` and would keep its rows forever.
-    // A stored file is git-visible when it's tracked and not ignored
-    // (`git ls-files` minus `git ls-files --ignored`), or appears in the
-    // status output above; anything else is now ignored → deleted, matching
-    // the walk's classification. Best-effort: any failure skips the check.
-    // Gated on a `.gitignore` file showing in the status set — the only
-    // uncommitted way a stored file can newly become ignored (committed
-    // rule changes already fell back to the walk via the HEAD-move gate).
-    // See the fn doc for the full rationale and the accepted hole.
+enum GitStatusKind {
+    Deleted,
+    Untracked,
+    Changed,
+    Unchanged,
+}
+
+fn parse_git_status_entry(entry: &str) -> Option<(GitStatusKind, &str)> {
+    let bytes = entry.as_bytes();
+    if bytes.len() < 4
+        || !is_status_letter(bytes[0])
+        || !is_status_letter(bytes[1])
+        || bytes[2] != b' '
+    {
+        return None;
+    }
+    let (left, right) = (bytes[0], bytes[1]);
+    let kind = if left == b'D' || right == b'D' {
+        GitStatusKind::Deleted
+    } else if left == b'?' && right == b'?' {
+        GitStatusKind::Untracked
+    } else if left != b' ' || right != b' ' {
+        GitStatusKind::Changed
+    } else {
+        GitStatusKind::Unchanged
+    };
+    Some((kind, &entry[3..]))
+}
+
+fn is_status_letter(byte: u8) -> bool {
+    matches!(
+        byte,
+        b' ' | b'M' | b'T' | b'A' | b'D' | b'R' | b'C' | b'U' | b'?'
+    )
+}
+
+fn reconcile_newly_ignored(
+    conn: &rusqlite::Connection,
+    root: &Path,
+    changed: &[String],
+    deleted: &mut Vec<String>,
+    file_set_changed: &mut bool,
+) {
     let ignore_relevant = changed
         .iter()
         .chain(deleted.iter())
         .any(|p| Path::new(p).file_name().is_some_and(|n| n == ".gitignore"));
-    if ignore_relevant
-        && let (Some(tracked), Some(tracked_ignored)) = (
-            crate::git::run_git(&["ls-files", "-z"], root),
-            crate::git::run_git(&["ls-files", "-ci", "--exclude-standard", "-z"], root),
-        )
-    {
-        let mut visible: std::collections::HashSet<String> = std::collections::HashSet::new();
-        visible.extend(changed.iter().cloned());
-        visible.extend(deleted.iter().cloned());
-        let ignored_set: std::collections::HashSet<&str> = tracked_ignored.split('\0').collect();
-        for p in tracked.split('\0') {
-            if !p.is_empty() && !ignored_set.contains(p) {
-                visible.insert(root.join(p).to_string_lossy().into_owned());
-            }
-        }
-        let stored_paths: Vec<String> = {
-            let mut stmt = conn.prepare("SELECT path FROM files").ok()?;
-            let rows = stmt.query_map([], |r| r.get::<_, String>(0)).ok()?;
-            let mut v = Vec::new();
-            for row in rows {
-                v.push(row.ok()?);
-            }
-            v
-        };
-        for stored in stored_paths {
-            // `.git` internals are a pre-existing walk quirk, never source
-            // files and never reported by git — leave them alone.
-            if Path::new(&stored)
-                .components()
-                .any(|c| c.as_os_str() == ".git")
-            {
-                continue;
-            }
-            if !visible.contains(&stored) {
-                deleted.push(stored);
-                file_set_changed = true;
-            }
+    if !ignore_relevant {
+        return;
+    }
+    let Some(visible) = git_visible_paths(root, changed, deleted) else {
+        return;
+    };
+    let Ok(mut stmt) = conn.prepare("SELECT path FROM files") else {
+        return;
+    };
+    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) else {
+        return;
+    };
+    for stored in rows.filter_map(Result::ok) {
+        let inside_git = Path::new(&stored)
+            .components()
+            .any(|component| component.as_os_str() == ".git");
+        if !inside_git && !visible.contains(&stored) {
+            deleted.push(stored);
+            *file_set_changed = true;
         }
     }
-    crate::persist::set_slice_meta_value(conn, "git_head", head_fp).ok()?;
-    Some((changed, deleted, file_set_changed))
+}
+
+fn git_visible_paths(
+    root: &Path,
+    changed: &[String],
+    deleted: &[String],
+) -> Option<std::collections::HashSet<String>> {
+    let tracked = crate::git::run_git(&["ls-files", "-z"], root)?;
+    let ignored = crate::git::run_git(&["ls-files", "-ci", "--exclude-standard", "-z"], root)?;
+    let ignored: std::collections::HashSet<&str> = ignored.split('\0').collect();
+    let mut visible = std::collections::HashSet::new();
+    visible.extend(changed.iter().cloned());
+    visible.extend(deleted.iter().cloned());
+    visible.extend(
+        tracked
+            .split('\0')
+            .filter(|path| !path.is_empty() && !ignored.contains(path))
+            .map(|path| root.join(path).to_string_lossy().into_owned()),
+    );
+    Some(visible)
 }
 
 /// A stable integer fingerprint of a `git rev-parse HEAD` output line. Used to

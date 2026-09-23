@@ -24,8 +24,8 @@
 //!   exclude).
 //! - Catch/Throw: `rescue` (named after the exception variable) and
 //!   `raise`/`fail` calls (named after the raised expression).
-//! - ControlFlow: if/unless/while/until/for/case/begin + their statement
-//!   modifiers, return/break/next/redo/retry/yield, and the ternary.
+//! - ControlFlow: decisions, boolean sequences, case arms, statement
+//!   modifiers, transfers, and the ternary.
 //! - Route/Response: narrow Sinatra shape — an HTTP-verb call with a string
 //!   path and a block (`get "/x" do … end`) -> Route; calls to Sinatra's
 //!   response helpers (`json`, `erb`, `redirect`, `halt`, …) -> Response with
@@ -95,6 +95,23 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_4(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- structural ----
         "method" | "singleton_method" => {
@@ -124,7 +141,17 @@ pub fn visit(
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Interface, name, node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- variables ----
         "assignment" | "operator_assignment" => {
             if let Some(left) = node.field("left") {
@@ -133,33 +160,82 @@ pub fn visit(
                 }
             }
         }
-
         // ---- parameters ----
         "method_parameters" | "block_parameters" | "lambda_parameters" => {
             for name in parameter_names(node) {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
-
         // ---- calls (imports / mixins / routes / raises / responses) ----
         "call" => visit_call(node, ctx),
-
         // ---- literals ----
         "integer" | "float" | "string" | "true" | "false" | "nil" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- control-flow / error ----
         "rescue" => {
             ctx.push(EntityKind::Catch, rescue_var(node), node);
         }
+        "binary" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "elsif" => {
+            if node.get_inner_node().is_named() {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "elseif_statement".to_string(),
+                    node,
+                );
+            }
+        }
+        "when" => {
+            if node.get_inner_node().is_named() {
+                ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "if" | "unless" | "while" | "until" | "for" | "case" | "begin" | "return" | "break"
         | "next" | "redo" | "retry" | "yield" | "if_modifier" | "unless_modifier"
-        | "while_modifier" | "until_modifier" | "rescue_modifier" | "conditional" => {
+        | "while_modifier" | "until_modifier" | "rescue_modifier" | "conditional"
+            if node.get_inner_node().is_named() =>
+        {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
+        _ => return false,
+    }
+    true
+}
 
-        _ => {}
+fn boolean_operator_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<&'static str> {
+    match node.field("operator")?.text().as_ref() {
+        "&&" | "and" => Some("logical_and"),
+        "||" | "or" => Some("logical_or"),
+        _ => None,
     }
 }
 
@@ -167,40 +243,49 @@ pub fn visit(
 /// member access, and the plain call itself.
 fn visit_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
     let callee = call_name(node);
+    if visit_special_call(node, ctx, &callee) {
+        return;
+    }
+    visit_mixin(node, ctx, &callee);
+    if node.field("receiver").is_some() {
+        ctx.push(EntityKind::MemberAccess, callee.clone(), node);
+    }
+    if RESPONSE_FUNCTIONS.contains(&callee.as_str()) {
+        push_response(node, ctx, &callee);
+    }
+    ctx.push(EntityKind::Call, callee, node);
+}
 
+/// Handle call forms which replace the ordinary Call entity.
+fn visit_special_call(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+    callee: &str,
+) -> bool {
     // `require "json"` / `require_relative "helper"` -> Import (not a Call).
-    if REQUIRE_FUNCTIONS.contains(&callee.as_str()) {
+    if REQUIRE_FUNCTIONS.contains(&callee) {
         if let Some(spec) = first_string_arg(node) {
             ctx.push(EntityKind::Import, spec, node);
         }
-        return;
+        return true;
     }
-
-    // `attr_accessor :a, :b` / `attr_reader :c` / `attr_writer :d` -> one
-    // Variable per attribute (the declared instance state a Ruby reader most
-    // wants), owned by the enclosing class via `ctx.push`. Previously dropped
-    // entirely (audit S3). Not a plain Call.
-    if ATTR_FUNCTIONS.contains(&callee.as_str()) {
+    if ATTR_FUNCTIONS.contains(&callee) {
         for name in symbol_arg_names(node) {
             ctx.push(EntityKind::Variable, name, node);
         }
-        return;
+        return true;
     }
-
-    // `raise ArgumentError, "empty"` / `fail "boom"` -> Throw (not a Call).
     if callee == "raise" || callee == "fail" {
         let name = first_arg(node)
             .map(|a| a.text().into_owned())
             .unwrap_or_default();
         ctx.push(EntityKind::Throw, name, node);
-        return;
+        return true;
     }
-
-    // `get "/users" do … end` -> Sinatra Route (not a plain Call).
-    if let Some((method, path)) = sinatra_route(node, &callee) {
+    if let Some((method, path)) = sinatra_route(node, callee) {
         ctx.out.push(Entity {
             kind: EntityKind::Route,
-            name: callee,
+            name: callee.to_string(),
             file_id: ctx.file_id,
             span: crate::extract::span_of(node),
             enclosing_function: ctx.enclosing.map(|s| s.to_owned()),
@@ -213,11 +298,19 @@ fn visit_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ext
             is_test: false,
             owner_type: ctx.type_scope.map(|s| s.to_owned()),
         });
-        return;
+        return true;
     }
+    false
+}
 
+/// Emit Ruby mixin relationships for class-scoped calls.
+fn visit_mixin(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+    callee: &str,
+) {
     // `include Comparable` / `prepend M` / `extend M` -> Implements.
-    if MIXIN_FUNCTIONS.contains(&callee.as_str())
+    if MIXIN_FUNCTIONS.contains(&callee)
         && let Some(arg) = first_arg(node)
         && matches!(arg.kind().as_ref(), "constant" | "scope_resolution")
         && let Some(owner) = ctx.type_scope
@@ -231,32 +324,29 @@ fn visit_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ext
             &arg,
         );
     }
+}
 
-    // `msg.upcase` -> MemberAccess for the accessed member.
-    if node.field("receiver").is_some() {
-        ctx.push(EntityKind::MemberAccess, callee.clone(), node);
-    }
-
-    // Sinatra response helpers (`json(...)`, `erb :view`, …).
-    if RESPONSE_FUNCTIONS.contains(&callee.as_str()) {
-        ctx.out.push(Entity {
-            kind: EntityKind::Response,
-            name: callee.clone(),
-            file_id: ctx.file_id,
-            span: crate::extract::span_of(node),
-            enclosing_function: ctx.enclosing.map(|s| s.to_owned()),
-            method: None,
-            path: None,
-            status: None,
-            body_shape: Some(callee.clone()),
-            body_minhash: None,
-            is_async: None,
-            is_test: false,
-            owner_type: ctx.type_scope.map(|s| s.to_owned()),
-        });
-    }
-
-    ctx.push(EntityKind::Call, callee, node);
+/// Emit one response helper call with its shape metadata.
+fn push_response(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+    callee: &str,
+) {
+    ctx.out.push(Entity {
+        kind: EntityKind::Response,
+        name: callee.to_string(),
+        file_id: ctx.file_id,
+        span: crate::extract::span_of(node),
+        enclosing_function: ctx.enclosing.map(|s| s.to_owned()),
+        method: None,
+        path: None,
+        status: None,
+        body_shape: Some(callee.to_string()),
+        body_minhash: None,
+        is_async: None,
+        is_test: false,
+        owner_type: ctx.type_scope.map(|s| s.to_owned()),
+    });
 }
 
 /// Push a type-reference entity (`Extends`/`Implements`) owned by `owner`.
@@ -534,6 +624,30 @@ mod tests {
                 .count(),
             2,
             "{es:?}"
+        );
+    }
+
+    #[test]
+    fn complexity_events_cover_ruby_decisions() {
+        let es = entities(
+            "def f(a, b, value)\n  if a && b || a\n    1\n  elsif b\n    2\n  end\n  case value\n  when 1 then 1\n  when 2 then 2\n  else 0\n  end\nend\n",
+        );
+        let flows: Vec<&str> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(flows.contains(&"logical_and"), "entities: {es:?}");
+        assert!(flows.contains(&"logical_or"), "entities: {es:?}");
+        assert!(flows.contains(&"elseif_statement"), "entities: {es:?}");
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| **name == "case_statement")
+                .count(),
+            2,
+            "entities: {es:?}"
         );
     }
 }

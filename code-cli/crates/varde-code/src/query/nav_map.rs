@@ -67,6 +67,53 @@ const SECTION_RESERVE_TOKENS: usize = 200;
 const FLOW_SUMMARY_MAX_DEPTH: usize = 4;
 const FLOW_SUMMARY_MAX_NODES: usize = 30;
 
+#[derive(Clone, Copy)]
+struct BudgetSection {
+    name: &'static str,
+    more: &'static str,
+}
+
+const BUDGET_SECTIONS: [BudgetSection; 6] = [
+    BudgetSection {
+        name: "entrypoints",
+        more: "raise maxTokensEstimate to list more entrypoints",
+    },
+    BudgetSection {
+        name: "foundational_files",
+        more: "code_query dependents on a specific file, or raise maxTokensEstimate",
+    },
+    BudgetSection {
+        name: "subsystems",
+        more: "raise maxTokensEstimate to list more subsystems",
+    },
+    BudgetSection {
+        name: "flows",
+        more: "code_query mode=explore on an entrypoint symbol (direction=outgoing) for its full call tree, or raise maxTokensEstimate to list more flows",
+    },
+    BudgetSection {
+        name: "symbols",
+        more: "code_query mode=filter_symbols for the full symbol list",
+    },
+    BudgetSection {
+        name: "hotspots",
+        more: "code_query mode=hotspots for the full ranked list",
+    },
+];
+
+const MODULE_LAYERS_MORE: &str =
+    "raise maxTokensEstimate; module_layers holds the resolved module-dependency graph";
+
+struct NavMapBudget {
+    max_tokens: usize,
+    remaining: usize,
+    section_totals: [usize; BUDGET_SECTIONS.len()],
+    module_edges_total: usize,
+    cycles_total: usize,
+    kept: [usize; BUDGET_SECTIONS.len()],
+    kept_edges: usize,
+    truncated: serde_json::Map<String, serde_json::Value>,
+}
+
 /// Assemble the full nav_map output: all 7 sections in one JSON object.
 ///
 /// Inputs: `repoRoot`/`dbPath` only (same convention as every other mode).
@@ -75,84 +122,19 @@ const FLOW_SUMMARY_MAX_NODES: usize = 30;
 pub fn nav_map(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
     super::freshen_for_mode("nav_map", input)?;
     let conn = open_db(input)?;
-
-    // Role-tagged handlers (decorators/base classes) feed the flow trees —
-    // they are the callable roots. Call-based routes (Go/Express/Laravel/...)
-    // are registration sites with no outgoing calls, so they enrich the
-    // entrypoint listing and subsystem role map but are excluded from flows.
-    let entrypoints = super::entrypoints::detect(&conn)?;
-    let routes = super::entrypoints::detect_routes(&conn)?;
-    // Language process mains (`fn main`, `func main`, `static void Main`, ...) —
-    // the CLI/binary entry points `detect` deliberately excludes as bootstrap.
-    // They are flow roots, so they also seed the flow trees below.
-    let process_mains = super::entrypoints::detect_process_mains(&conn)?;
-    let listed: Vec<super::entrypoints::Entrypoint> = entrypoints
-        .iter()
-        .chain(routes.iter())
-        .chain(process_mains.iter())
-        .cloned()
-        .collect();
-    // The detector's ranking remains the semantic source of truth for flows
-    // and subsystems. Only the orientation list alternates languages, so a
-    // monorepo's first budgeted entries do not all come from one extension.
-    let displayed_entrypoints = round_robin_entrypoints(&listed);
-    let entrypoints_json: Vec<serde_json::Value> = displayed_entrypoints
-        .iter()
-        .map(|entrypoint| entrypoint.to_json())
-        .collect();
-
+    let (listed, entrypoints_json) = entrypoint_sections(&conn)?;
     let foundational_files =
         super::foundational_files::leaderboard(&conn, Some(FOUNDATIONAL_FILES_SECTION_LIMIT))?;
-
     let module_layers_json = module_layers_section(&conn)?;
-
     let subsystems_json = subsystems_section(&conn, &listed)?;
-
-    // Reuse the entrypoint set already computed above — the symbols
-    // leaderboard only needs it to dedup entrypoint symbols out, and
-    // recomputing `entrypoints::detect` here was doubling nav_map's cost.
-    let entrypoint_ids: std::collections::HashSet<i64> =
-        listed.iter().map(|e| e.entity_id).collect();
+    let entrypoint_ids: std::collections::HashSet<i64> = listed
+        .iter()
+        .map(|entrypoint| entrypoint.entity_id)
+        .collect();
     let symbols =
         super::symbols_section::leaderboard(&conn, &entrypoint_ids, Some(SYMBOLS_SECTION_LIMIT))?;
-
-    // Flow roots: role-tagged handlers plus any call-based route that resolved
-    // to a real handler function (`flow_root`). Path-only routes (no resolvable
-    // handler) are excluded — they have no outgoing call edges.
-    let flow_roots: Vec<super::entrypoints::Entrypoint> =
-        listed.iter().filter(|e| e.flow_root).cloned().collect();
-    let flows = super::flows::build_flows(&conn, &flow_roots)?;
-    // F7: a flow tree whose root has no children is a pure restatement of the
-    // entrypoint it wraps — it adds nothing over the `entrypoints` section.
-    // Real call trees are sparse in most repos (call resolution rarely
-    // produces outgoing edges for a detected handler), so unfiltered this
-    // section was mostly single-node wrappers that duplicated `entrypoints`
-    // at up to ~130 KB. Keep only genuine multi-node trees.
-    //
-    // Rank the surviving flows biggest-first (by total node count) so the most
-    // architecturally significant call trees lead the section, then embed a
-    // *bounded summary* of each (see [`summarize_flow`]) rather than the full
-    // uncapped tree — a single full flow can be thousands of nodes, far more
-    // than the whole nav_map token budget, so unsummarized every flow was
-    // dropped by [`budget_nav_map`]. Each summary carries the full `nodeCount`
-    // and an `explore` follow-up handle for the complete tree.
-    let mut flow_trees: Vec<&super::flows::FlowTree> = flows
-        .iter()
-        .filter(|t| !t.root.children.is_empty())
-        .collect();
-    flow_trees.sort_by_key(|t| std::cmp::Reverse(count_flow_nodes(&t.root)));
-    // Collapse duplicate roots: an overloaded handler (C# MVC GET/POST action
-    // pair, `EnableAuthenticator()` + `EnableAuthenticator(model)`) is two
-    // distinct entities sharing one (file, symbol), so it produced two
-    // near-identical flow trees that read as noise. Keep only the largest per
-    // (file, symbol) — `sort_by_key` above is stable and descending, so the
-    // first occurrence retained is the biggest tree.
-    let mut seen_roots: std::collections::HashSet<(&str, &str)> = std::collections::HashSet::new();
-    flow_trees.retain(|t| seen_roots.insert((t.root.file.as_str(), t.root.symbol.as_str())));
-    let flows_json: Vec<serde_json::Value> = flow_trees.iter().map(|t| summarize_flow(t)).collect();
-
+    let flows_json = flow_section(&conn, &listed)?;
     let hotspots = super::mapping::hotspots_on(&conn, Some(HOTSPOTS_SECTION_LIMIT))?;
-
     let mut data = serde_json::json!({
         "entrypoints": entrypoints_json,
         "foundational_files": foundational_files,
@@ -165,14 +147,50 @@ pub fn nav_map(input: &serde_json::Value) -> Result<serde_json::Value, ApiError>
 
     let max_tokens = input
         .get("maxTokensEstimate")
-        .and_then(|v| v.as_u64())
-        .map(|n| n as usize)
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
         .unwrap_or(NAV_MAP_DEFAULT_MAX_TOKENS);
-    // Trim to the token budget in priority order and attach a `guide` that
-    // tells the agent exactly what was cut and how to fetch the rest (F1).
     let guide = budget_nav_map(&mut data, max_tokens);
     data["guide"] = guide;
     Ok(data)
+}
+
+fn entrypoint_sections(
+    conn: &rusqlite::Connection,
+) -> Result<(Vec<super::entrypoints::Entrypoint>, Vec<serde_json::Value>), ApiError> {
+    let entrypoints = super::entrypoints::detect(conn)?;
+    let routes = super::entrypoints::detect_routes(conn)?;
+    let process_mains = super::entrypoints::detect_process_mains(conn)?;
+    let listed = entrypoints
+        .into_iter()
+        .chain(routes)
+        .chain(process_mains)
+        .collect::<Vec<_>>();
+    let displayed = round_robin_entrypoints(&listed)
+        .into_iter()
+        .map(|entrypoint| entrypoint.to_json())
+        .collect();
+    Ok((listed, displayed))
+}
+
+fn flow_section(
+    conn: &rusqlite::Connection,
+    entrypoints: &[super::entrypoints::Entrypoint],
+) -> Result<Vec<serde_json::Value>, ApiError> {
+    let roots = entrypoints
+        .iter()
+        .filter(|entrypoint| entrypoint.flow_root)
+        .cloned()
+        .collect::<Vec<_>>();
+    let flows = super::flows::build_flows(conn, &roots)?;
+    let mut trees = flows
+        .iter()
+        .filter(|tree| !tree.root.children.is_empty())
+        .collect::<Vec<_>>();
+    trees.sort_by_key(|tree| std::cmp::Reverse(count_flow_nodes(&tree.root)));
+    let mut seen_roots = std::collections::HashSet::new();
+    trees.retain(|tree| seen_roots.insert((tree.root.file.as_str(), tree.root.symbol.as_str())));
+    Ok(trees.into_iter().map(summarize_flow).collect())
 }
 
 /// Rough token estimate (`chars / 4`), the same convention `context_pack`'s
@@ -241,300 +259,273 @@ fn round_robin_entrypoints(
 /// nav_map with a larger `maxTokensEstimate`. Per-subsystem member truncation
 /// is reported inline as `membersOmitted` on the subsystem.
 fn budget_nav_map(data: &mut serde_json::Value, max_tokens: usize) -> serde_json::Value {
-    let mut truncated = serde_json::Map::new();
+    cap_subsystem_members(data);
+    let (module_edges_total, cycles_total) = cap_module_layers(data);
+    let mut budget = NavMapBudget::new(data, max_tokens, module_edges_total, cycles_total);
 
-    // 1. Cap each subsystem's member list (independent of the token budget:
-    //    one community can list hundreds of files).
-    if let Some(subs) = data["subsystems"].as_array_mut() {
-        for s in subs.iter_mut() {
-            let total = s["members"].as_array().map(|m| m.len()).unwrap_or(0);
-            if total > SUBSYSTEM_MEMBER_CAP {
-                if let Some(members) = s["members"].as_array_mut() {
-                    members.truncate(SUBSYSTEM_MEMBER_CAP);
-                }
-                s["membersOmitted"] = serde_json::json!(total - SUBSYSTEM_MEMBER_CAP);
-            }
+    budget.reserve_first_items(data);
+    budget.spend_section_items(data);
+    budget.spend_module_edges(data);
+    budget.spend_cycles(data);
+    budget.enforce_rendered_limit(data)
+}
+
+fn cap_subsystem_members(data: &mut serde_json::Value) {
+    let Some(subsystems) = data["subsystems"].as_array_mut() else {
+        return;
+    };
+    for subsystem in subsystems {
+        let total = subsystem["members"].as_array().map_or(0, Vec::len);
+        if total <= SUBSYSTEM_MEMBER_CAP {
+            continue;
         }
+        if let Some(members) = subsystem["members"].as_array_mut() {
+            members.truncate(SUBSYSTEM_MEMBER_CAP);
+        }
+        subsystem["membersOmitted"] = serde_json::json!(total - SUBSYSTEM_MEMBER_CAP);
     }
+}
 
-    // 2. Cap the module_layers inner arrays (edges = the whole resolved import
-    //    graph; cycles). `edges` is *not* reported as truncated here — the
-    //    reserved-budget pass in step 4 owns edge truncation reporting so the
-    //    `shown` count reflects what actually survived the token budget, not
-    //    just this hard cap. Cycles participate in the later budget pass, so
-    //    their disclosure is also deferred until their final shown count is
-    //    known.
-    let module_layers_total_edges = data["module_layers"]
-        .get("edges")
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-    if let Some(edges) = data["module_layers"]
-        .get_mut("edges")
-        .and_then(|v| v.as_array_mut())
-    {
+fn cap_module_layers(data: &mut serde_json::Value) -> (usize, usize) {
+    let edges_total = data["module_layers"]["edges"]
+        .as_array()
+        .map_or(0, Vec::len);
+    if let Some(edges) = data["module_layers"]["edges"].as_array_mut() {
         edges.truncate(MODULE_LAYERS_EDGE_CAP);
     }
-    let cycles_total = data["module_layers"]
-        .get("cycles")
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-    if cycles_total > MODULE_LAYERS_CYCLE_CAP
-        && let Some(arr) = data["module_layers"]
-            .get_mut("cycles")
-            .and_then(|v| v.as_array_mut())
-    {
-        arr.truncate(MODULE_LAYERS_CYCLE_CAP);
-    }
 
-    // 3. Spend the token budget across the array sections in priority order.
-    //    `module_layers.edges` participates in the first reserve pass, then
-    //    receives priority overflow after the top-level array sections.
-    let order: [(&str, usize, &str); 6] = [
-        (
-            "entrypoints",
-            40,
-            "raise maxTokensEstimate to list more entrypoints",
-        ),
-        (
-            "foundational_files",
-            25,
-            "code_query dependents on a specific file, or raise maxTokensEstimate",
-        ),
-        (
-            "subsystems",
-            20,
-            "raise maxTokensEstimate to list more subsystems",
-        ),
-        // flows ranks above symbols/hotspots: the biggest call trees are prime
-        // orientation. Each item is a bounded summary (fixed cost), so a small
-        // item cap surfaces the top few whole. Per-flow `more` handles point at
-        // `explore` for the full tree; the section-level hint does too.
-        (
-            "flows",
-            5,
-            "code_query mode=explore on an entrypoint symbol (direction=outgoing) for its full call tree, or raise maxTokensEstimate to list more flows",
-        ),
-        (
-            "symbols",
-            40,
-            "code_query mode=filter_symbols for the full symbol list",
-        ),
-        (
-            "hotspots",
-            25,
-            "code_query mode=hotspots for the full ranked list",
-        ),
-    ];
-    let section_totals: [usize; 6] =
-        std::array::from_fn(|index| data[order[index].0].as_array().map_or(0, Vec::len));
-
-    // Charge only the module-layer object's structural overhead before
-    // allocating items. Cycles are optional detail, so including their whole
-    // payload here would let them consume every orientation-section reserve.
-    let ml_more =
-        "raise maxTokensEstimate; module_layers holds the resolved module-dependency graph";
-    let fixed_cost = est_tokens(&serde_json::json!({ "edges": [], "cycles": [] }));
-    let mut remaining = max_tokens.saturating_sub(fixed_cost);
-
-    // First pass: each populated orientation section receives a bounded share.
-    // A section only keeps its first item when that item fits the share. This
-    // protects later sections without making them mandatory at tiny budgets.
-    let populated = order
-        .iter()
-        .filter(|(name, _, _)| {
-            data[*name]
-                .as_array()
-                .is_some_and(|items| !items.is_empty())
-        })
-        .count()
-        + usize::from(
-            data["module_layers"]["edges"]
-                .as_array()
-                .is_some_and(|edges| !edges.is_empty()),
-        );
-    let section_reserve = remaining
-        .checked_div(populated)
-        .unwrap_or(0)
-        .min(SECTION_RESERVE_TOKENS);
-    let mut kept = [0usize; 6];
-    for (index, (name, _, _)) in order.iter().enumerate() {
-        if let Some(item) = data[*name].as_array().and_then(|items| items.first()) {
-            let cost = est_tokens(item).max(1);
-            if cost <= section_reserve {
-                kept[index] = 1;
-                remaining -= cost;
-            }
-        }
-    }
-    let mut kept_edges = 0usize;
-    if let Some(edge) = data["module_layers"]["edges"]
+    let cycles_total = data["module_layers"]["cycles"]
         .as_array()
-        .and_then(|edges| edges.first())
-    {
-        let cost = est_tokens(edge).max(1);
-        if cost <= section_reserve {
-            kept_edges = 1;
-            remaining -= cost;
+        .map_or(0, Vec::len);
+    if let Some(cycles) = data["module_layers"]["cycles"].as_array_mut() {
+        cycles.truncate(MODULE_LAYERS_CYCLE_CAP);
+    }
+    (edges_total, cycles_total)
+}
+
+impl NavMapBudget {
+    fn new(
+        data: &serde_json::Value,
+        max_tokens: usize,
+        module_edges_total: usize,
+        cycles_total: usize,
+    ) -> Self {
+        let section_totals = std::array::from_fn(|index| {
+            data[BUDGET_SECTIONS[index].name]
+                .as_array()
+                .map_or(0, Vec::len)
+        });
+        let fixed_cost = est_tokens(&serde_json::json!({ "edges": [], "cycles": [] }));
+        Self {
+            max_tokens,
+            remaining: max_tokens.saturating_sub(fixed_cost),
+            section_totals,
+            module_edges_total,
+            cycles_total,
+            kept: [0; BUDGET_SECTIONS.len()],
+            kept_edges: 0,
+            truncated: serde_json::Map::new(),
         }
     }
 
-    // Priority overflow: retain the existing ranking and hard caps once every
-    // populated section had its bounded opportunity.
-    for (index, (name, item_cap, more)) in order.iter().enumerate() {
-        if let Some(arr) = data[*name].as_array_mut() {
-            let total = arr.len();
-            while kept[index] < total && kept[index] < *item_cap {
-                let cost = est_tokens(&arr[kept[index]]).max(1);
-                if cost > remaining {
-                    break;
-                }
-                remaining -= cost;
-                kept[index] += 1;
-            }
-            if kept[index] < total {
-                arr.truncate(kept[index]);
-                truncated.insert(
-                    (*name).to_string(),
-                    serde_json::json!({ "shown": kept[index], "total": total, "more": *more }),
-                );
-            }
-        }
-    }
+    fn reserve_first_items(&mut self, data: &serde_json::Value) {
+        let populated_sections = BUDGET_SECTIONS
+            .iter()
+            .filter(|section| {
+                data[section.name]
+                    .as_array()
+                    .is_some_and(|items| !items.is_empty())
+            })
+            .count();
+        let has_edges = data["module_layers"]["edges"]
+            .as_array()
+            .is_some_and(|edges| !edges.is_empty());
+        let reserve = self
+            .remaining
+            .checked_div(populated_sections + usize::from(has_edges))
+            .unwrap_or(0)
+            .min(SECTION_RESERVE_TOKENS);
 
-    // 4. Spend any remaining overflow on module edges after the established
-    // priority order. Its fixed object overhead was already charged above.
-    if let Some(edges) = data["module_layers"]
-        .get("edges")
-        .and_then(|v| v.as_array())
-    {
-        while kept_edges < edges.len() && kept_edges < MODULE_LAYERS_EDGE_CAP {
-            let cost = est_tokens(&edges[kept_edges]).max(1);
-            if cost > remaining {
-                break;
-            }
-            remaining -= cost;
-            kept_edges += 1;
-        }
-    }
-    if let Some(edges) = data["module_layers"]
-        .get_mut("edges")
-        .and_then(|v| v.as_array_mut())
-    {
-        edges.truncate(kept_edges);
-    }
-    if kept_edges < module_layers_total_edges {
-        truncated.insert(
-            "module_layers.edges".to_string(),
-            serde_json::json!({
-                "shown": kept_edges,
-                "total": module_layers_total_edges,
-                "more": ml_more,
-            }),
-        );
-    }
-
-    // 5. Cycles are optional module-layer detail. Spend only overflow after
-    // every orientation section and module edge received its reserve.
-    let mut kept_cycles = 0usize;
-    if let Some(cycles) = data["module_layers"]
-        .get("cycles")
-        .and_then(|v| v.as_array())
-    {
-        while kept_cycles < cycles.len() {
-            let cost = est_tokens(&cycles[kept_cycles]).max(1);
-            if cost > remaining {
-                break;
-            }
-            remaining -= cost;
-            kept_cycles += 1;
-        }
-    }
-    if let Some(cycles) = data["module_layers"]
-        .get_mut("cycles")
-        .and_then(|v| v.as_array_mut())
-    {
-        cycles.truncate(kept_cycles);
-    }
-    if kept_cycles < cycles_total {
-        truncated.insert(
-            "module_layers.cycles".to_string(),
-            serde_json::json!({
-                "shown": kept_cycles,
-                "total": cycles_total,
-                "more": ml_more,
-            }),
-        );
-    }
-
-    // Item estimates omit JSON keys, arrays, and the guide itself. Enforce the
-    // requested limit against the final rendered envelope by shedding the
-    // lowest-priority retained item until it fits. If even the all-empty shape
-    // plus its honest truncation guide cannot fit, report that structural lower
-    // bound explicitly instead of claiming a false budget guarantee.
-    let mut guide = nav_map_guide(max_tokens, &truncated, None);
-    loop {
-        let mut rendered = data.clone();
-        rendered["guide"] = guide.clone();
-        if est_tokens(&rendered) <= max_tokens {
-            return guide;
-        }
-
-        let mut removed = false;
-        for (path, total, more) in [
-            ("cycles", cycles_total, ml_more),
-            ("edges", module_layers_total_edges, ml_more),
-        ] {
-            let shown = {
-                let items = data["module_layers"]
-                    .get_mut(path)
-                    .and_then(|v| v.as_array_mut());
-                items.and_then(|items| items.pop().map(|_| items.len()))
+        for (index, section) in BUDGET_SECTIONS.iter().enumerate() {
+            let Some(item) = data[section.name]
+                .as_array()
+                .and_then(|items| items.first())
+            else {
+                continue;
             };
-            if let Some(shown) = shown {
-                truncated.insert(
-                    format!("module_layers.{path}"),
-                    serde_json::json!({ "shown": shown, "total": total, "more": more }),
-                );
-                removed = true;
-                break;
+            let cost = est_tokens(item).max(1);
+            if cost <= reserve {
+                self.kept[index] = 1;
+                self.remaining -= cost;
             }
         }
-        if !removed {
-            for index in (0..order.len()).rev() {
-                let (name, _, more) = order[index];
-                let shown = data[name]
-                    .as_array_mut()
-                    .and_then(|items| items.pop().map(|_| items.len()));
-                if let Some(shown) = shown {
-                    truncated.insert(
-                        name.to_string(),
-                        serde_json::json!({
-                            "shown": shown,
-                            "total": section_totals[index],
-                            "more": more,
-                        }),
-                    );
-                    removed = true;
+
+        let edge = data["module_layers"]["edges"]
+            .as_array()
+            .and_then(|edges| edges.first());
+        if let Some(cost) = edge.map(|edge| est_tokens(edge).max(1))
+            && cost <= reserve
+        {
+            self.kept_edges = 1;
+            self.remaining -= cost;
+        }
+    }
+
+    fn spend_section_items(&mut self, data: &mut serde_json::Value) {
+        for (index, section) in BUDGET_SECTIONS.iter().enumerate() {
+            let Some(items) = data[section.name].as_array_mut() else {
+                continue;
+            };
+            let total = items.len();
+            while self.kept[index] < total {
+                let cost = est_tokens(&items[self.kept[index]]).max(1);
+                if cost > self.remaining {
                     break;
                 }
+                self.remaining -= cost;
+                self.kept[index] += 1;
+            }
+            if self.kept[index] < total {
+                items.truncate(self.kept[index]);
+                self.record_truncation(section.name, self.kept[index], total, section.more);
             }
         }
-        if !removed {
-            let mut minimum = est_tokens(&rendered);
-            loop {
-                guide = nav_map_guide(max_tokens, &truncated, Some(minimum));
-                let mut minimum_rendered = data.clone();
-                minimum_rendered["guide"] = guide.clone();
-                let actual = est_tokens(&minimum_rendered);
-                if actual == minimum {
-                    return guide;
+    }
+
+    fn spend_module_edges(&mut self, data: &mut serde_json::Value) {
+        if let Some(edges) = data["module_layers"]["edges"].as_array() {
+            while self.kept_edges < edges.len() && self.kept_edges < MODULE_LAYERS_EDGE_CAP {
+                let cost = est_tokens(&edges[self.kept_edges]).max(1);
+                if cost > self.remaining {
+                    break;
                 }
-                minimum = actual;
+                self.remaining -= cost;
+                self.kept_edges += 1;
             }
         }
-        guide = nav_map_guide(max_tokens, &truncated, None);
+        if let Some(edges) = data["module_layers"]["edges"].as_array_mut() {
+            edges.truncate(self.kept_edges);
+        }
+        if self.kept_edges < self.module_edges_total {
+            self.record_truncation(
+                "module_layers.edges",
+                self.kept_edges,
+                self.module_edges_total,
+                MODULE_LAYERS_MORE,
+            );
+        }
+    }
+
+    fn spend_cycles(&mut self, data: &mut serde_json::Value) {
+        let mut kept_cycles = 0;
+        if let Some(cycles) = data["module_layers"]["cycles"].as_array() {
+            while kept_cycles < cycles.len() {
+                let cost = est_tokens(&cycles[kept_cycles]).max(1);
+                if cost > self.remaining {
+                    break;
+                }
+                self.remaining -= cost;
+                kept_cycles += 1;
+            }
+        }
+        if let Some(cycles) = data["module_layers"]["cycles"].as_array_mut() {
+            cycles.truncate(kept_cycles);
+        }
+        if kept_cycles < self.cycles_total {
+            self.record_truncation(
+                "module_layers.cycles",
+                kept_cycles,
+                self.cycles_total,
+                MODULE_LAYERS_MORE,
+            );
+        }
+    }
+
+    fn enforce_rendered_limit(&mut self, data: &mut serde_json::Value) -> serde_json::Value {
+        let mut guide = nav_map_guide(self.max_tokens, &self.truncated, None);
+        loop {
+            let mut rendered = data.clone();
+            rendered["guide"] = guide.clone();
+            if est_tokens(&rendered) <= self.max_tokens {
+                return guide;
+            }
+            if !self.remove_lowest_priority_item(data) {
+                return self.minimum_budget_guide(data, est_tokens(&rendered));
+            }
+            guide = nav_map_guide(self.max_tokens, &self.truncated, None);
+        }
+    }
+
+    fn remove_lowest_priority_item(&mut self, data: &mut serde_json::Value) -> bool {
+        let shown = data["module_layers"]["cycles"]
+            .as_array_mut()
+            .and_then(|items| items.pop().map(|_| items.len()));
+        if let Some(shown) = shown {
+            self.record_truncation(
+                "module_layers.cycles",
+                shown,
+                self.cycles_total,
+                MODULE_LAYERS_MORE,
+            );
+            return true;
+        }
+
+        for index in (0..BUDGET_SECTIONS.len()).rev() {
+            let section = BUDGET_SECTIONS[index];
+            let shown = data[section.name]
+                .as_array_mut()
+                .and_then(|items| items.pop().map(|_| items.len()));
+            if let Some(shown) = shown {
+                self.record_truncation(
+                    section.name,
+                    shown,
+                    self.section_totals[index],
+                    section.more,
+                );
+                return true;
+            }
+        }
+
+        // Keep the reserved top edge while lower-priority detail can shrink.
+        // Only drop module edges after all section items are exhausted.
+        let shown = data["module_layers"]["edges"]
+            .as_array_mut()
+            .and_then(|items| items.pop().map(|_| items.len()));
+        if let Some(shown) = shown {
+            self.record_truncation(
+                "module_layers.edges",
+                shown,
+                self.module_edges_total,
+                MODULE_LAYERS_MORE,
+            );
+            return true;
+        }
+        false
+    }
+
+    fn minimum_budget_guide(
+        &self,
+        data: &serde_json::Value,
+        initial_minimum: usize,
+    ) -> serde_json::Value {
+        let mut minimum = initial_minimum;
+        loop {
+            let guide = nav_map_guide(self.max_tokens, &self.truncated, Some(minimum));
+            let mut rendered = data.clone();
+            rendered["guide"] = guide.clone();
+            let actual = est_tokens(&rendered);
+            if actual == minimum {
+                return guide;
+            }
+            minimum = actual;
+        }
+    }
+
+    fn record_truncation(&mut self, name: &str, shown: usize, total: usize, more: &str) {
+        self.truncated.insert(
+            name.to_string(),
+            serde_json::json!({ "shown": shown, "total": total, "more": more }),
+        );
     }
 }
 
@@ -1267,6 +1258,16 @@ mod nav_map_tests {
              }\n",
         )
         .expect("write ASP.NET controller");
+        std::fs::write(
+            root.join("routes.swift"),
+            "import Vapor\nfunc routes(_ app: Application) throws {\n    app.get(\"/swift\") { req in \"ok\" }\n}\n",
+        )
+        .expect("write Vapor routes");
+        std::fs::write(
+            root.join("app.py"),
+            "from flask import Flask\napp = Flask(__name__)\n@app.route(\"/flask\")\ndef flask_handler():\n    return \"ok\"\n",
+        )
+        .expect("write Flask handler");
 
         crate::build::run_with_force(root.to_str().unwrap(), true).expect("full build");
         let data = nav_map(&serde_json::json!({ "repoRoot": root.to_str().unwrap() }))
@@ -1277,6 +1278,8 @@ mod nav_map_tests {
             ("aFindOne", "GET", "/cats/:id"),
             ("getUser", "GET", "/users/{id}"),
             ("GetById", "GET", "/api/catalog/{id}"),
+            ("GET /swift", "GET", "/swift"),
+            ("flask_handler", "GET", "/flask"),
         ] {
             assert!(
                 entrypoints.iter().any(|entrypoint| {
@@ -1299,16 +1302,10 @@ mod nav_map_tests {
                 .any(|entrypoint| entrypoint["symbol"] == "resolveCatFromCache"),
             "ordinary Nest service method must not be an entrypoint: {entrypoints:?}"
         );
-        let entrypoints_truncation = &data["guide"]["truncated"]["entrypoints"];
-        let shown = entrypoints_truncation["shown"]
-            .as_u64()
-            .expect("default map must truncate entrypoints") as usize;
-        let total = entrypoints_truncation["total"]
-            .as_u64()
-            .expect("entrypoint truncation must include total") as usize;
         assert!(
-            shown <= 40 && shown < total,
-            "entrypoints must be capped and truncated: {entrypoints_truncation:?}"
+            data["guide"]["truncated"].get("entrypoints").is_none(),
+            "default budget should retain all ranked entrypoints: {}",
+            data["guide"]
         );
 
         let db = crate::db::path::repo_db_path(&root);
@@ -1631,6 +1628,50 @@ mod nav_map_tests {
             as usize;
         assert!(minimum > 1);
         assert_eq!(minimum, est_tokens(&data));
+    }
+
+    #[test]
+    fn budget_spends_past_old_section_caps_and_reports_ranked_truncation() {
+        let symbols: Vec<_> = (0..300)
+            .map(|i| {
+                serde_json::json!({
+                    "symbol": format!("RankedSymbol{i}"),
+                    "file": format!("src/features/feature_{i}/module.rs"),
+                    "references": i,
+                })
+            })
+            .collect();
+        let mut data = serde_json::json!({
+            "entrypoints": [],
+            "foundational_files": [],
+            "module_layers": {"edges": [], "cycles": []},
+            "subsystems": [],
+            "flows": [],
+            "symbols": symbols,
+            "hotspots": [],
+        });
+
+        let guide = budget_nav_map(&mut data, 2_000);
+        let shown = data["symbols"].as_array().unwrap().len();
+
+        assert!(
+            shown > 40,
+            "budget should exceed the former symbols cap: {shown}"
+        );
+        assert!(
+            shown < 300,
+            "fixture should exercise budget truncation: {shown}"
+        );
+        assert_eq!(
+            guide["truncated"]["symbols"]["shown"],
+            serde_json::json!(shown)
+        );
+        assert_eq!(
+            guide["truncated"]["symbols"]["total"],
+            serde_json::json!(300)
+        );
+        data["guide"] = guide;
+        assert!(est_tokens(&data) <= 2_000, "rendered output exceeds budget");
     }
 
     /// The subsystems section drops test-file community members via the

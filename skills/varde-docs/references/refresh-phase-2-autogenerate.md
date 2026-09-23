@@ -1,24 +1,22 @@
 ## Phase 2: Auto-generate spec-declared sections
 
 For each doc identified in Phase 1 as having stale marker-declared sections,
-regenerate documents one at a time by default. Delegate only documents whose
+regenerate each document one at a time by default. Delegate only documents whose
 source and output paths do not overlap, with at most three delegates active.
 
-Each agent receives only:
+Give each agent only:
 
 - the document's current content;
 - its docs marker (format: `references/refresh-marker-format.md`);
 - the list of stale sources/sections to regenerate for that doc.
 
 Rewrite only the listed marker-declared blocks. When `varde-code` was detected,
-pass it
-into the agent's prompt along with the stale section's source files — the
-agent reads that content primarily via `symbols_in_file`/`get_symbol`
-(`includeBody: true`), falling back to Read/Grep/Glob only for what the
-CLI can't supply. Without `varde-code`, it reads the source files directly
-(Read/Grep/Glob, delegating only when fresh context is useful). Either
-way, write the replacement Markdown by hand. Preserve other marker blocks and
-all hand-authored content. Then write the full document.
+include its CLI path in the agent's prompt. Read short, known sources directly.
+Batch Varde Code lookups for several files or relationships. Use `get_symbol`
+only for exact symbols inside large files. Without `varde-code`, read directly
+(Read/Grep/Glob, delegating only when another agent provides needed context).
+Either way, write the replacement Markdown by hand. Preserve other marker
+blocks and all hand-authored content. Then write the full document.
 
 Map source content to Markdown as follows:
 

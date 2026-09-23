@@ -68,25 +68,19 @@ pub fn leaderboard(
     entrypoint_ids: &HashSet<i64>,
     limit: Option<usize>,
 ) -> Result<serde_json::Value, ApiError> {
+    let mut entries = symbol_candidates(conn, entrypoint_ids)?;
+    if let Some(limit) = limit {
+        entries.truncate(limit);
+    }
+    Ok(serde_json::json!(entries))
+}
+
+fn symbol_candidates(
+    conn: &Connection,
+    entrypoint_ids: &HashSet<i64>,
+) -> Result<Vec<serde_json::Value>, ApiError> {
     let call_kind = EdgeKind::Call.as_i64();
-    let mut stmt = conn
-        .prepare(
-            "SELECT e.id, f.path, e.name, e.owner_type,
-                    COUNT(DISTINCT re.from_file_id) AS breadth,
-                    COUNT(re.id) AS total
-             FROM entities e
-             JOIN files f ON f.id = e.file_id
-             JOIN resolved_edges re
-                 ON re.to_entity_id = e.id
-                AND re.resolved = 1
-                AND re.kind = ?1
-                AND re.from_file_id != e.file_id
-             WHERE e.kind IN (?2, ?3) AND f.is_test_path = 0
-             GROUP BY e.id
-             HAVING COUNT(DISTINCT re.from_file_id) > 0
-             ORDER BY breadth DESC, total DESC, f.path ASC, e.name ASC",
-        )
-        .map_err(db_err)?;
+    let mut stmt = conn.prepare(SYMBOL_CANDIDATES_SQL).map_err(db_err)?;
     let rows = stmt
         .query_map(
             rusqlite::params![
@@ -128,11 +122,17 @@ pub fn leaderboard(
             "callers": breadth,
         }));
     }
-    if let Some(limit) = limit {
-        entries.truncate(limit);
-    }
-    Ok(serde_json::json!(entries))
+    Ok(entries)
 }
+
+const SYMBOL_CANDIDATES_SQL: &str = "SELECT e.id, f.path, e.name, e.owner_type,
+            COUNT(DISTINCT re.from_file_id) AS breadth, COUNT(re.id) AS total
+     FROM entities e JOIN files f ON f.id = e.file_id
+     JOIN resolved_edges re ON re.to_entity_id = e.id AND re.resolved = 1
+        AND re.kind = ?1 AND re.from_file_id != e.file_id
+     WHERE e.kind IN (?2, ?3) AND f.is_test_path = 0 GROUP BY e.id
+     HAVING COUNT(DISTINCT re.from_file_id) > 0
+     ORDER BY breadth DESC, total DESC, f.path ASC, e.name ASC";
 
 /// Accessor / stdlib / framework names that top a raw fan-in board but carry
 /// ~zero orientation value — an agent learns nothing about a repo's

@@ -19,37 +19,40 @@ use crate::resolve::CloneBand;
 /// by band signature. A bucket with two or more members becomes a `CloneBand`
 /// (members = entity ids).
 pub fn detect_bands(entities: &[Entity]) -> Vec<CloneBand> {
-    // entity id -> band signatures (one per band).
-    let mut by_entity: Vec<(u32, &[u64])> = Vec::new();
-    for (i, e) in entities.iter().enumerate() {
-        if e.kind != EntityKind::Function {
-            continue;
-        }
-        let Some(signatures) = e.body_minhash.as_deref() else {
-            continue;
-        };
-        by_entity.push((i as u32, signatures));
-    }
+    let by_entity = function_signatures(entities);
+    let buckets = bucket_signatures(&by_entity);
+    collect_bands(buckets)
+}
 
-    // band -> signature -> entity ids. Bucketing is a commutative reduction:
-    // member order within a bucket is irrelevant (members are sorted and
-    // deduped below), so a parallel fold + merge is deterministic.
-    let mut buckets: HashMap<usize, HashMap<u64, Vec<u32>>> = by_entity
+fn function_signatures(entities: &[Entity]) -> Vec<(u32, &[u64])> {
+    entities
+        .iter()
+        .enumerate()
+        .filter_map(|(id, entity)| {
+            (entity.kind == EntityKind::Function)
+                .then_some(entity.body_minhash.as_deref())
+                .flatten()
+                .map(|signatures| (id as u32, signatures))
+        })
+        .collect()
+}
+
+type SignatureBuckets = HashMap<usize, HashMap<u64, Vec<u32>>>;
+
+fn bucket_signatures(by_entity: &[(u32, &[u64])]) -> SignatureBuckets {
+    by_entity
         .par_iter()
-        .fold(
-            HashMap::<usize, HashMap<u64, Vec<u32>>>::new,
-            |mut acc, (entity_id, signatures)| {
-                for (band, sig) in signatures.iter().enumerate() {
-                    acc.entry(band)
-                        .or_default()
-                        .entry(*sig)
-                        .or_default()
-                        .push(*entity_id);
-                }
-                acc
-            },
-        )
-        .reduce(HashMap::new, |mut a, b| {
+        .fold(SignatureBuckets::new, |mut acc, (entity_id, signatures)| {
+            for (band, sig) in signatures.iter().enumerate() {
+                acc.entry(band)
+                    .or_default()
+                    .entry(*sig)
+                    .or_default()
+                    .push(*entity_id);
+            }
+            acc
+        })
+        .reduce(SignatureBuckets::new, |mut a, b| {
             for (band, m) in b {
                 let dst = a.entry(band).or_default();
                 for (sig, mut members) in m {
@@ -57,40 +60,30 @@ pub fn detect_bands(entities: &[Entity]) -> Vec<CloneBand> {
                 }
             }
             a
-        });
+        })
+}
 
-    // Groups with >= 2 members become clone bands (deterministic order:
-    // band index, then signature).
+fn collect_bands(mut buckets: SignatureBuckets) -> Vec<CloneBand> {
     let mut bands: Vec<CloneBand> = Vec::new();
-    let mut next_id = 0u32;
     for band in 0..BANDS {
-        // `buckets` is consumed here, so move each band's inner map out rather
-        // than cloning its member `Vec`s.
         let Some(mut m) = buckets.remove(&band) else {
             continue;
         };
         let mut sigs: Vec<u64> = m.keys().copied().collect();
         sigs.sort_unstable();
         for sig in sigs {
-            // `sig` was collected from this same `band`'s keys above, so the
-            // lookup always hits — `.remove()` instead of indexing avoids a
-            // panic path if that invariant is ever broken by a future edit.
             let Some(mut members) = m.remove(&sig) else {
                 continue;
             };
-            if members.len() < 2 {
-                continue;
-            }
             members.sort_unstable();
             members.dedup();
             if members.len() < 2 {
                 continue;
             }
             bands.push(CloneBand {
-                id: next_id,
+                id: bands.len() as u32,
                 members,
             });
-            next_id += 1;
         }
     }
     bands

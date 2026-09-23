@@ -49,78 +49,95 @@ pub fn commit_counts_batch(files: &[String], known_root: &Path) -> HashMap<Strin
         .unwrap_or_else(|_| known_root.to_path_buf());
     let toplevel = repo_root(&known_root);
 
-    // Partition files: those under the known top-level use the single walk
-    // below; the rest (rare) use per-directory discovery.
-    let mut under: Vec<(&String, PathBuf)> = Vec::new();
-    let mut other: Vec<&String> = Vec::new();
+    let (under, other) = partition_files(files, toplevel.as_deref());
+    count_known_root(&mut result, toplevel.as_deref(), under);
+    count_other_roots(&mut result, other);
 
+    result
+}
+
+fn partition_files<'a>(
+    files: &'a [String],
+    toplevel: Option<&Path>,
+) -> (Vec<(&'a String, PathBuf)>, Vec<&'a String>) {
+    let mut under = Vec::new();
+    let mut other = Vec::new();
     for file in files {
-        let path = Path::new(file);
-        let rel = toplevel.as_deref().and_then(|top| {
-            // Fast path: the file is already an absolute path under `top`
-            // (the common case — no syscall). Fall back to canonicalize for
-            // relative / non-canonical roots.
-            if let Ok(rel) = path.strip_prefix(top) {
-                return Some(rel.to_path_buf());
-            }
-            let abs = path.canonicalize().ok()?;
-            abs.strip_prefix(top).ok().map(|rel| rel.to_path_buf())
-        });
-        match rel {
-            Some(rel) => under.push((file, rel)),
+        match relative_to_root(Path::new(file), toplevel) {
+            Some(relative) => under.push((file, relative)),
             None => other.push(file),
         }
     }
+    (under, other)
+}
 
-    if let Some(top) = toplevel.as_deref().filter(|_| !under.is_empty()) {
-        let counts = commit_counts_for_root(top);
-        for (file, rel) in under {
-            let count = counts
-                .get(&rel.to_string_lossy().into_owned())
-                .copied()
-                .unwrap_or(0);
-            result.insert(file.clone(), count);
-        }
+fn relative_to_root(path: &Path, toplevel: Option<&Path>) -> Option<PathBuf> {
+    let top = toplevel?;
+    if let Ok(relative) = path.strip_prefix(top) {
+        return Some(relative.to_path_buf());
     }
+    let absolute = path.canonicalize().ok()?;
+    absolute.strip_prefix(top).ok().map(Path::to_path_buf)
+}
 
-    // Per-directory discovery for the remainder (nested repos, symlinks
-    // escaping the root, or a non-repo build root).
-    if !other.is_empty() {
-        let mut by_root: HashMap<PathBuf, Vec<&String>> = HashMap::new();
-        let mut root_cache: HashMap<PathBuf, Option<PathBuf>> = HashMap::new();
-        for file in other {
-            let dir = Path::new(file)
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| Path::new(".").to_path_buf());
-            let root = root_cache
-                .entry(dir.clone())
-                .or_insert_with(|| repo_root(&dir))
-                .clone();
-            match root {
-                Some(root) => by_root.entry(root).or_default().push(file),
-                None => {
-                    result.insert(file.clone(), 0);
-                }
-            }
-        }
+fn count_known_root(
+    result: &mut HashMap<String, u32>,
+    toplevel: Option<&Path>,
+    files: Vec<(&String, PathBuf)>,
+) {
+    let Some(top) = toplevel.filter(|_| !files.is_empty()) else {
+        return;
+    };
+    let counts = commit_counts_for_root(top);
+    for (file, relative) in files {
+        let count = counts
+            .get(relative.to_string_lossy().as_ref())
+            .copied()
+            .unwrap_or(0);
+        result.insert(file.clone(), count);
+    }
+}
 
-        for (root, root_files) in by_root {
-            let counts = commit_counts_for_root(&root);
-            for file in root_files {
-                let count = Path::new(file)
-                    .canonicalize()
-                    .ok()
-                    .and_then(|abs| abs.strip_prefix(&root).ok().map(|p| p.to_path_buf()))
-                    .and_then(|rel| counts.get(&rel.to_string_lossy().into_owned()).copied())
-                    .unwrap_or(0);
-                result.insert(file.clone(), count);
+fn count_other_roots(result: &mut HashMap<String, u32>, files: Vec<&String>) {
+    let mut by_root: HashMap<PathBuf, Vec<&String>> = HashMap::new();
+    let mut root_cache: HashMap<PathBuf, Option<PathBuf>> = HashMap::new();
+    for file in files {
+        let directory = file_directory(file);
+        match root_cache
+            .entry(directory.clone())
+            .or_insert_with(|| repo_root(&directory))
+            .clone()
+        {
+            Some(root) => by_root.entry(root).or_default().push(file),
+            None => {
+                result.insert(file.clone(), 0);
             }
         }
     }
+    for (root, root_files) in by_root {
+        count_root_files(result, &root, root_files);
+    }
+}
 
-    result
+fn file_directory(file: &str) -> PathBuf {
+    Path::new(file)
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn count_root_files(result: &mut HashMap<String, u32>, root: &Path, files: Vec<&String>) {
+    let counts = commit_counts_for_root(root);
+    for file in files {
+        let count = Path::new(file)
+            .canonicalize()
+            .ok()
+            .and_then(|absolute| absolute.strip_prefix(root).ok().map(Path::to_path_buf))
+            .and_then(|relative| counts.get(relative.to_string_lossy().as_ref()).copied())
+            .unwrap_or(0);
+        result.insert(file.clone(), count);
+    }
 }
 
 /// Resolve `dir`'s git top-level root, or `None` if it's not inside a repo.

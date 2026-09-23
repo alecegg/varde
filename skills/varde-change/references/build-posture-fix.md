@@ -1,6 +1,8 @@
 # Fix Posture
 
-Targeted feature addition or behavior change with explicit scope. The agent makes deliberate, verified changes within a well-defined boundary, checkpointing after each verification check instead of committing once at the end.
+Targeted feature addition or behavior change with explicit scope. Make verified
+changes within that boundary. Commit after each verification check instead of
+waiting until the end.
 
 ## Cadence
 

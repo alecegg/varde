@@ -113,32 +113,8 @@ pub fn map_symbol(input: &serde_json::Value) -> Result<serde_json::Value, ApiErr
     let name = req_str(input, "name")?;
     let source_file = opt_str(input, "sourceFile");
 
-    let sql = "SELECT e.kind, e.name, e.file_id, e.start_byte, e.end_byte, e.start_line, e.start_col, e.end_line, e.end_col,
-               e.enclosing_function, e.method, e.path, e.status, e.body_shape, f.path
-               FROM entities e JOIN files f ON f.id = e.file_id
-               WHERE e.name = ?1 ORDER BY e.id";
-    let mut stmt = conn.prepare(sql).map_err(db_err)?;
-    let rows = stmt
-        .query_map([name], |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, i64>(2)?,
-                r.get::<_, i64>(3)?,
-                r.get::<_, i64>(4)?,
-                r.get::<_, i64>(5)?,
-                r.get::<_, i64>(6)?,
-                r.get::<_, i64>(7)?,
-                r.get::<_, i64>(8)?,
-                r.get::<_, Option<String>>(9)?,
-                r.get::<_, Option<String>>(10)?,
-                r.get::<_, Option<String>>(11)?,
-                r.get::<_, Option<String>>(12)?,
-                r.get::<_, Option<String>>(13)?,
-                r.get::<_, String>(14)?,
-            ))
-        })
-        .map_err(db_err)?;
+    let mut stmt = conn.prepare(MAP_SYMBOL_SQL).map_err(db_err)?;
+    let rows = stmt.query_map([name], read_mapped_symbol).map_err(db_err)?;
     let mut matches = Vec::new();
     for row in rows {
         let (kind, n, fid, sb, eb, sl, sc, el, ec, enclosing, method, path, status, body, file) =
@@ -172,6 +148,50 @@ pub fn map_symbol(input: &serde_json::Value) -> Result<serde_json::Value, ApiErr
         .into_iter()
         .next()
         .ok_or_else(|| ApiError::not_found(format!("symbol {name:?}")))
+}
+
+const MAP_SYMBOL_SQL: &str = "SELECT e.kind, e.name, e.file_id, e.start_byte, e.end_byte,
+            e.start_line, e.start_col, e.end_line, e.end_col,
+            e.enclosing_function, e.method, e.path, e.status, e.body_shape, f.path
+     FROM entities e JOIN files f ON f.id = e.file_id
+     WHERE e.name = ?1 ORDER BY e.id";
+
+type MappedSymbolRow = (
+    i64,
+    String,
+    i64,
+    i64,
+    i64,
+    i64,
+    i64,
+    i64,
+    i64,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+);
+
+fn read_mapped_symbol(row: &rusqlite::Row<'_>) -> rusqlite::Result<MappedSymbolRow> {
+    Ok((
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+        row.get(7)?,
+        row.get(8)?,
+        row.get(9)?,
+        row.get(10)?,
+        row.get(11)?,
+        row.get(12)?,
+        row.get(13)?,
+        row.get(14)?,
+    ))
 }
 
 /// map_path — shortest dependency path between two files.
@@ -278,19 +298,7 @@ fn persisted_symbols(
 pub fn detect_changes(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
     let diff_mode = opt_str(input, "diffMode").unwrap_or("working_tree");
     let range = opt_str(input, "range");
-
-    // Repo root: prefer repoRoot, else the db's parent chain's repo.
-    let repo_root = match input.get("repoRoot").and_then(|v| v.as_str()) {
-        Some(r) => std::path::PathBuf::from(r),
-        None => {
-            let db_path = input
-                .get("dbPath")
-                .and_then(|v| v.as_str())
-                .map(std::path::PathBuf::from)
-                .unwrap_or_default();
-            repo_root_of(&db_path).unwrap_or_default()
-        }
-    };
+    let repo_root = detect_changes_root(input);
 
     // Build-on-miss only (not raw-freshen): `detect_changes` diffs the
     // persisted store against the current source, so freshening the raw slice
@@ -316,25 +324,36 @@ pub fn detect_changes(input: &serde_json::Value) -> Result<serde_json::Value, Ap
 
     let mut out = Vec::new();
     for (status, rel) in changed {
-        let abs = repo_root.join(&rel);
-        // Symbols currently on disk (re-extract the changed file).
-        let current: Vec<(String, String, i64, i64)> = extract_symbol_signatures(&abs);
-        // Symbols persisted for the file (best-effort: the file may not be
-        // in the store yet).
-        let persisted: Vec<(String, String, i64, i64)> =
-            match file_id(&conn, &abs.to_string_lossy()) {
-                Ok(fid) => persisted_symbols(&conn, fid).unwrap_or_default(),
-                Err(_) => Vec::new(),
-            };
-
-        let changes = classify_symbol_changes(&current, &persisted);
-        out.push(serde_json::json!({
-            "file": rel,
-            "status": status,
-            "symbols": changes,
-        }));
+        out.push(changed_file_entry(&conn, &repo_root, status, rel));
     }
     Ok(serde_json::json!(out))
+}
+
+fn detect_changes_root(input: &serde_json::Value) -> std::path::PathBuf {
+    opt_str(input, "repoRoot")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            opt_str(input, "dbPath")
+                .map(std::path::PathBuf::from)
+                .and_then(|path| repo_root_of(&path))
+        })
+        .unwrap_or_default()
+}
+
+fn changed_file_entry(
+    conn: &Connection,
+    repo_root: &std::path::Path,
+    status: String,
+    rel: String,
+) -> serde_json::Value {
+    let abs = repo_root.join(&rel);
+    let current = extract_symbol_signatures(&abs);
+    let persisted = file_id(conn, &abs.to_string_lossy())
+        .ok()
+        .and_then(|fid| persisted_symbols(conn, fid).ok())
+        .unwrap_or_default();
+    let symbols = classify_symbol_changes(&current, &persisted);
+    serde_json::json!({ "file": rel, "status": status, "symbols": symbols })
 }
 
 fn classify_symbol_changes(
@@ -445,6 +464,39 @@ pub fn hotspots(input: &serde_json::Value) -> Result<serde_json::Value, ApiError
 /// standalone `hotspots` mode passes `None`; nav_map passes a cap so its
 /// orientation summary stays bounded on large repos.
 pub fn hotspots_on(conn: &Connection, limit: Option<usize>) -> Result<serde_json::Value, ApiError> {
+    let files = hotspot_files(conn)?;
+    let churn_varies = files
+        .iter()
+        .map(|(_, _, churn)| churn)
+        .collect::<HashSet<_>>()
+        .len()
+        > 1;
+    let mut hotspots: Vec<_> = files
+        .into_iter()
+        .map(|(path, complexity, churn)| {
+            let score = if churn_varies {
+                complexity * churn
+            } else {
+                complexity
+            };
+            (path, complexity, churn, score)
+        })
+        .collect();
+    hotspots.sort_by(|a, b| b.3.cmp(&a.3).then_with(|| a.0.cmp(&b.0)));
+    if let Some(limit) = limit {
+        hotspots.truncate(limit);
+    }
+    Ok(serde_json::json!(
+        hotspots
+            .into_iter()
+            .map(|(file, complexity, churn, score)| serde_json::json!({
+                "file": file, "complexity": complexity, "churn": churn, "score": score,
+            }))
+            .collect::<Vec<_>>()
+    ))
+}
+
+fn hotspot_files(conn: &Connection) -> Result<Vec<(String, i64, i64)>, ApiError> {
     let mut stmt = conn
         .prepare("SELECT f.path, f.complexity, f.churn FROM files f WHERE f.is_test_path = 0")
         .map_err(db_err)?;
@@ -465,53 +517,7 @@ pub fn hotspots_on(conn: &Connection, limit: Option<usize>) -> Result<serde_json
         }
         files.push((path, complexity.unwrap_or(0), churn.unwrap_or(0)));
     }
-    // Multiplicative score (Tornhill): a hotspot is a file that is *both*
-    // complex and frequently changed, so a complex-but-stable file (churn 0)
-    // scores 0 and a churny-but-simple file scores low. An additive
-    // `complexity + churn` is dominated by whichever term is larger — with
-    // complexity in the hundreds and churn a handful, churn barely moved the
-    // ranking, collapsing it to a plain complexity sort.
-    //
-    // Fallback: churn is only a ranking signal when it *varies* across files.
-    // Two degenerate cases produce a single distinct churn value and make the
-    // multiplicative score misleading: a non-git repo / empty churn window
-    // (every churn 0), and a shallow clone or single-commit window (every
-    // churn 1 — observed as all 917 files scoring `complexity * 1` on a
-    // reference repo). In both, `complexity * k` just rescales complexity (or
-    // zeroes it), so rank by complexity alone — the best signal still
-    // available — rather than presenting a churn-weighted score that carries no
-    // information.
-    let churn_varies = {
-        let mut seen = std::collections::HashSet::new();
-        files.iter().for_each(|(_, _, ch)| {
-            seen.insert(*ch);
-        });
-        seen.len() > 1
-    };
-    let mut hotspots: Vec<(String, i64, i64, i64)> = files
-        .into_iter()
-        .map(|(path, c, ch)| {
-            let score = if churn_varies { c * ch } else { c };
-            (path, c, ch, score)
-        })
-        .collect();
-    hotspots.sort_by(|a, b| {
-        b.3.cmp(&a.3).then_with(|| a.0.cmp(&b.0)) // score desc, path asc
-    });
-    if let Some(limit) = limit {
-        hotspots.truncate(limit);
-    }
-    Ok(serde_json::json!(
-        hotspots
-            .into_iter()
-            .map(|(file, complexity, churn, score)| serde_json::json!({
-                "file": file,
-                "complexity": complexity,
-                "churn": churn,
-                "score": score,
-            }))
-            .collect::<Vec<_>>()
-    ))
+    Ok(files)
 }
 
 /// clusters — community-detection partition over the resolution graph.
@@ -558,91 +564,22 @@ pub fn clusters(input: &serde_json::Value) -> Result<serde_json::Value, ApiError
         .map(|n| n as usize);
     let seed_path = opt_str(input, "seedPath");
 
-    // file_id -> community_id, for the single edge-scan cohesion pass below.
-    let mut community_of: HashMap<i64, i64> = HashMap::new();
-    // community_id -> member (file_id, path) pairs.
-    let mut members: HashMap<i64, Vec<(i64, String)>> = HashMap::new();
-    {
-        let mut stmt = conn
-            .prepare(
-                "SELECT cm.community_id, f.id, f.path
-                 FROM community_members cm JOIN files f ON f.id = cm.file_id",
-            )
-            .map_err(db_err)?;
-        let rows = stmt
-            .query_map([], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, i64>(1)?,
-                    r.get::<_, String>(2)?,
-                ))
-            })
-            .map_err(db_err)?;
-        for row in rows {
-            let (cid, fid, path) = row.map_err(db_err)?;
-            community_of.insert(fid, cid);
-            members.entry(cid).or_default().push((fid, path));
-        }
-    }
-
-    // One pass over resolved edges: tally internal/external edge counts per
-    // community for cohesion scoring.
-    let mut internal: HashMap<i64, u64> = HashMap::new();
-    let mut external: HashMap<i64, u64> = HashMap::new();
-    {
-        let mut stmt = conn
-            .prepare(
-                "SELECT from_file_id, to_file_id FROM resolved_edges
-                 WHERE resolved = 1 AND to_file_id IS NOT NULL",
-            )
-            .map_err(db_err)?;
-        let rows = stmt
-            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
-            .map_err(db_err)?;
-        for row in rows {
-            let (from, to) = row.map_err(db_err)?;
-            let (Some(&cf), Some(&ct)) = (community_of.get(&from), community_of.get(&to)) else {
-                continue;
-            };
-            if cf == ct {
-                *internal.entry(cf).or_default() += 1;
-            } else {
-                *external.entry(cf).or_default() += 1;
-                *external.entry(ct).or_default() += 1;
-            }
-        }
-    }
-
-    let build_cluster = |cid: i64, m: &[(i64, String)]| -> serde_json::Value {
-        let ins = internal.get(&cid).copied().unwrap_or(0);
-        let ext = external.get(&cid).copied().unwrap_or(0);
-        let cohesion = if ins + ext == 0 {
-            0.0
-        } else {
-            ins as f64 / (ins + ext) as f64
-        };
-        let mut paths: Vec<String> = m.iter().map(|(_, p)| p.clone()).collect();
-        paths.sort();
-        serde_json::json!({
-            "id": cid,
-            "files": paths,
-            "label": serde_json::Value::Null,
-            "cohesion": cohesion,
-        })
-    };
+    let (community_of, members) = load_community_members(&conn)?;
+    let (internal, external) = community_edge_counts(&conn, &community_of)?;
 
     if let Some(seed) = seed_path {
         let fid = file_id(&conn, seed)?;
         let Some(&cid) = community_of.get(&fid) else {
             return Ok(serde_json::json!({ "clusters": [] }));
         };
-        return Ok(serde_json::json!({ "clusters": [build_cluster(cid, &members[&cid])] }));
+        let cluster = build_cluster(cid, &members[&cid], &internal, &external);
+        return Ok(serde_json::json!({ "clusters": [cluster] }));
     }
 
     let mut result: Vec<serde_json::Value> = members
         .iter()
         .filter(|(_, m)| m.len() >= min_size)
-        .map(|(cid, m)| build_cluster(*cid, m))
+        .map(|(cid, m)| build_cluster(*cid, m, &internal, &external))
         .filter(|c| c["cohesion"].as_f64().unwrap_or(0.0) >= min_cohesion)
         .collect();
 
@@ -661,6 +598,80 @@ pub fn clusters(input: &serde_json::Value) -> Result<serde_json::Value, ApiError
         result.truncate(cap);
     }
     Ok(serde_json::json!({ "clusters": result }))
+}
+
+type CommunityMembers = HashMap<i64, Vec<(i64, String)>>;
+type CommunityCounts = HashMap<i64, u64>;
+
+fn load_community_members(
+    conn: &Connection,
+) -> Result<(HashMap<i64, i64>, CommunityMembers), ApiError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT cm.community_id, f.id, f.path
+             FROM community_members cm JOIN files f ON f.id = cm.file_id",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .map_err(db_err)?;
+    let mut community_of = HashMap::new();
+    let mut members: CommunityMembers = HashMap::new();
+    for row in rows {
+        let (community, file, path) = row.map_err(db_err)?;
+        community_of.insert(file, community);
+        members.entry(community).or_default().push((file, path));
+    }
+    Ok((community_of, members))
+}
+
+fn community_edge_counts(
+    conn: &Connection,
+    community_of: &HashMap<i64, i64>,
+) -> Result<(CommunityCounts, CommunityCounts), ApiError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT from_file_id, to_file_id FROM resolved_edges
+             WHERE resolved = 1 AND to_file_id IS NOT NULL",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(db_err)?;
+    let mut internal = HashMap::new();
+    let mut external = HashMap::new();
+    for row in rows {
+        let (from, to) = row.map_err(db_err)?;
+        let (Some(&left), Some(&right)) = (community_of.get(&from), community_of.get(&to)) else {
+            continue;
+        };
+        if left == right {
+            *internal.entry(left).or_default() += 1;
+        } else {
+            *external.entry(left).or_default() += 1;
+            *external.entry(right).or_default() += 1;
+        }
+    }
+    Ok((internal, external))
+}
+
+fn build_cluster(
+    id: i64,
+    members: &[(i64, String)],
+    internal: &HashMap<i64, u64>,
+    external: &HashMap<i64, u64>,
+) -> serde_json::Value {
+    let inside = internal.get(&id).copied().unwrap_or(0);
+    let outside = external.get(&id).copied().unwrap_or(0);
+    let cohesion = match inside + outside {
+        0 => 0.0,
+        total => inside as f64 / total as f64,
+    };
+    let mut files: Vec<String> = members.iter().map(|(_, path)| path.clone()).collect();
+    files.sort();
+    serde_json::json!({
+        "id": id, "files": files, "label": serde_json::Value::Null, "cohesion": cohesion,
+    })
 }
 
 /// context_pack — keyword-driven context bundle over the code graph, no doc
@@ -698,65 +709,9 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     // are unioned. A single-word query yields one token and behaves exactly as
     // before. An all-whitespace query falls back to the raw string (→ no match →
     // the same `not_found` as before).
-    let tokens: Vec<&str> = {
-        let split: Vec<&str> = query.split_whitespace().collect();
-        if split.is_empty() { vec![query] } else { split }
-    };
-
-    // Step 1: file/directory-path substring match (case-insensitive; a path
-    // already contains its directory components, so no separate dir query).
-    let mut stmt = conn
-        .prepare("SELECT id FROM files WHERE lower(path) LIKE '%' || lower(?1) || '%'")
-        .map_err(db_err)?;
-    let mut seed_ids: HashSet<i64> = HashSet::new();
-    for tok in &tokens {
-        for id in stmt
-            .query_map([tok], |r| r.get::<_, i64>(0))
-            .map_err(db_err)?
-        {
-            seed_ids.insert(id.map_err(db_err)?);
-        }
-    }
-
-    // Step 1 (symbols): exact name match wins; substring fallback only when the
-    // exact pass finds nothing for *any* token — same tiering as `explore`'s
-    // `resolve_seeds`, applied per token then unioned.
-    let mut stmt = conn
-        .prepare("SELECT name, kind, file_id FROM entities WHERE name = ?1 ORDER BY id")
-        .map_err(db_err)?;
-    let mut symbol_rows: Vec<(String, i64, i64)> = Vec::new();
-    for tok in &tokens {
-        for row in stmt
-            .query_map([tok], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
-            .map_err(db_err)?
-        {
-            symbol_rows.push(row.map_err(db_err)?);
-        }
-    }
-    if symbol_rows.is_empty() {
-        let mut stmt = conn
-            .prepare(
-                "SELECT name, kind, file_id FROM entities
-                 WHERE lower(name) LIKE '%' || lower(?1) || '%' ORDER BY id LIMIT 200",
-            )
-            .map_err(db_err)?;
-        for tok in &tokens {
-            for row in stmt
-                .query_map([tok], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
-                .map_err(db_err)?
-            {
-                symbol_rows.push(row.map_err(db_err)?);
-            }
-        }
-    }
-
-    // Distinct tokens can match the same symbol (e.g. "http"/"handler" both
-    // substring-match `httpHandler`); dedup so it appears once, keeping first
-    // occurrence (which preserves the by-id order for a single-token query).
-    {
-        let mut seen: HashSet<(String, i64, i64)> = HashSet::new();
-        symbol_rows.retain(|row| seen.insert(row.clone()));
-    }
+    let tokens = query_tokens(query);
+    let mut seed_ids = matching_file_ids(&conn, &tokens)?;
+    let symbol_rows = matching_symbols(&conn, &tokens)?;
 
     // Step 2: every direct match becomes a seed.
     for (_, _, fid) in &symbol_rows {
@@ -770,41 +725,24 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
 
     // Step 3: expand — each seed's immediate dependencies/dependents.
     let graph = Graph::load(&conn)?;
-    let mut neighbor_ids: HashSet<i64> = HashSet::new();
-    for &fid in &seed_ids {
-        for n in graph.neighbors(fid) {
-            if !seed_ids.contains(&n) {
-                neighbor_ids.insert(n);
-            }
-        }
-    }
+    let neighbor_ids = neighbors_of(&graph, &seed_ids);
 
-    // Step 4: rank — seed tier before neighbor tier; within a tier, by
-    // hotspots-style complexity+churn score desc, then path asc.
-    let mut stmt = conn
-        .prepare("SELECT id, COALESCE(complexity, 0) + COALESCE(churn, 0) FROM files")
-        .map_err(db_err)?;
-    let scores: HashMap<i64, i64> = stmt
-        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))
-        .map_err(db_err)?
-        .collect::<std::result::Result<_, _>>()
-        .map_err(db_err)?;
+    // Step 4: topical seed matches first, then complexity+churn. Neighbors
+    // retain complexity+churn ranking because they lack direct query matches.
+    let scores = context_scores(&conn)?;
+    let topical_scores = context_topicality(&conn, &tokens)?;
+    let seed_ranked = rank_context_files(&graph, &scores, &seed_ids, Some(&topical_scores));
+    let neighbor_ranked = rank_context_files(&graph, &scores, &neighbor_ids, None);
+    context_pack_output(&conn, &graph, &symbol_rows, &seed_ranked, &neighbor_ranked)
+}
 
-    let rank = |ids: &HashSet<i64>| -> Vec<(i64, String)> {
-        let mut ranked: Vec<(i64, String)> = ids
-            .iter()
-            .filter_map(|&id| graph.paths_of(&[id]).into_iter().next().map(|p| (id, p)))
-            .collect();
-        ranked.sort_by(|a, b| {
-            let sa = scores.get(&a.0).copied().unwrap_or(0);
-            let sb = scores.get(&b.0).copied().unwrap_or(0);
-            sb.cmp(&sa).then_with(|| a.1.cmp(&b.1))
-        });
-        ranked
-    };
-    let seed_ranked = rank(&seed_ids);
-    let neighbor_ranked = rank(&neighbor_ids);
-
+fn context_pack_output(
+    conn: &Connection,
+    graph: &Graph,
+    symbol_rows: &[ContextSymbol],
+    seed_ranked: &[(i64, String)],
+    neighbor_ranked: &[(i64, String)],
+) -> Result<serde_json::Value, ApiError> {
     let mut files = Vec::with_capacity(seed_ranked.len() + neighbor_ranked.len());
     let mut reading_order = Vec::with_capacity(files.capacity());
     for (_, path) in seed_ranked.iter().chain(neighbor_ranked.iter()) {
@@ -837,9 +775,9 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     // neighbors aren't probed, to keep the query count bounded. Loaded once
     // and reused across seeds (not `covering_tests` per seed) so this stays
     // O(repo_size) instead of O(seeds * repo_size).
-    let coverage = crate::query::simple::TestCoverage::load(&conn)?;
+    let coverage = crate::query::simple::TestCoverage::load(conn)?;
     let mut tests = Vec::new();
-    for (fid, path) in &seed_ranked {
+    for (fid, path) in seed_ranked {
         for t in coverage.covering(*fid) {
             tests.push(serde_json::json!({ "path": t, "coversFile": path }));
         }
@@ -851,6 +789,192 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
         "tests": tests,
         "readingOrder": reading_order,
     }))
+}
+
+fn query_tokens(query: &str) -> Vec<&str> {
+    let tokens: Vec<_> = query.split_whitespace().collect();
+    if tokens.is_empty() {
+        vec![query]
+    } else {
+        tokens
+    }
+}
+
+fn matching_file_ids(conn: &Connection, tokens: &[&str]) -> Result<HashSet<i64>, ApiError> {
+    let mut stmt = conn
+        .prepare("SELECT id FROM files WHERE lower(path) LIKE ?1 ESCAPE '\\'")
+        .map_err(db_err)?;
+    let mut ids = HashSet::new();
+    for token in tokens {
+        let pattern = format!("%{}%", escape_like(token.to_lowercase().as_str()));
+        let rows = stmt
+            .query_map([pattern], |row| row.get(0))
+            .map_err(db_err)?;
+        for id in rows {
+            ids.insert(id.map_err(db_err)?);
+        }
+    }
+    Ok(ids)
+}
+
+type ContextSymbol = (String, i64, i64);
+
+fn matching_symbols(conn: &Connection, tokens: &[&str]) -> Result<Vec<ContextSymbol>, ApiError> {
+    let exact =
+        "SELECT name, kind, file_id FROM entities WHERE lower(name) = lower(?1) ORDER BY id";
+    let fuzzy = "SELECT name, kind, file_id FROM entities
+                 WHERE lower(name) LIKE ?1 ESCAPE '\\'
+                 ORDER BY CASE kind
+                    WHEN 0 THEN 0 WHEN 1 THEN 0 WHEN 2 THEN 0 WHEN 13 THEN 0
+                    WHEN 5 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 3 WHEN 6 THEN 5
+                    ELSE 4 END, id LIMIT 200";
+    // Search each tier for every token. An exact match for one token must
+    // not hide useful substring matches for the others.
+    let mut rows = matching_symbol_query(conn, tokens, exact, false)?;
+    rows.extend(matching_symbol_query(conn, tokens, fuzzy, true)?);
+    let mut seen = HashSet::new();
+    rows.retain(|row| seen.insert(row.clone()));
+    rows.sort_by_key(|(name, kind, _)| {
+        let declaration_rank = match crate::model::EntityKind::from_i64(*kind) {
+            Some(
+                crate::model::EntityKind::Function
+                | crate::model::EntityKind::Class
+                | crate::model::EntityKind::Interface
+                | crate::model::EntityKind::Route,
+            ) => 0,
+            Some(crate::model::EntityKind::Export) => 1,
+            Some(crate::model::EntityKind::Variable) => 2,
+            Some(crate::model::EntityKind::Parameter) => 3,
+            Some(crate::model::EntityKind::Call) => 5,
+            _ => 4,
+        };
+        let exact_rank = i32::from(!tokens.iter().any(|token| name.eq_ignore_ascii_case(token)));
+        (declaration_rank, exact_rank, name.to_lowercase(), *kind)
+    });
+    Ok(rows)
+}
+
+fn matching_symbol_query(
+    conn: &Connection,
+    tokens: &[&str],
+    sql: &str,
+    fuzzy: bool,
+) -> Result<Vec<ContextSymbol>, ApiError> {
+    let mut stmt = conn.prepare(sql).map_err(db_err)?;
+    let mut found = Vec::new();
+    for token in tokens {
+        let pattern = fuzzy.then(|| format!("%{}%", escape_like(token)));
+        let value = pattern.as_deref().unwrap_or(token);
+        let rows = stmt
+            .query_map([value], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .map_err(db_err)?;
+        for row in rows {
+            found.push(row.map_err(db_err)?);
+        }
+    }
+    Ok(found)
+}
+
+fn escape_like(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(|ch| match ch {
+            '%' | '_' | '\\' => vec!['\\', ch],
+            _ => vec![ch],
+        })
+        .collect()
+}
+
+/// Count how many distinct query tokens match each file's path or symbols.
+/// This score orders direct matches before the complexity/churn tie-breaker.
+fn context_topicality(conn: &Connection, tokens: &[&str]) -> Result<HashMap<i64, usize>, ApiError> {
+    let mut path_stmt = conn
+        .prepare("SELECT id FROM files WHERE lower(path) LIKE ?1 ESCAPE '\\'")
+        .map_err(db_err)?;
+    let mut symbol_stmt = conn
+        .prepare(
+            "SELECT file_id FROM entities WHERE lower(name) LIKE ?1 ESCAPE '\\'
+                  ORDER BY CASE kind
+                    WHEN 0 THEN 0 WHEN 1 THEN 0 WHEN 2 THEN 0 WHEN 13 THEN 0
+                    WHEN 5 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 3 WHEN 6 THEN 5
+                    ELSE 4 END, id LIMIT 200",
+        )
+        .map_err(db_err)?;
+    let mut scores = HashMap::new();
+    for token in tokens {
+        let pattern = format!("%{}%", escape_like(&token.to_lowercase()));
+        let mut matched_files = HashSet::new();
+        for id in path_stmt
+            .query_map([&pattern], |row| row.get::<_, i64>(0))
+            .map_err(db_err)?
+        {
+            matched_files.insert(id.map_err(db_err)?);
+        }
+        for id in symbol_stmt
+            .query_map([&pattern], |row| row.get::<_, i64>(0))
+            .map_err(db_err)?
+        {
+            matched_files.insert(id.map_err(db_err)?);
+        }
+        for id in matched_files {
+            *scores.entry(id).or_insert(0) += 1;
+        }
+    }
+    Ok(scores)
+}
+
+fn neighbors_of(graph: &Graph, seeds: &HashSet<i64>) -> HashSet<i64> {
+    seeds
+        .iter()
+        .flat_map(|id| graph.neighbors(*id))
+        .filter(|id| !seeds.contains(id))
+        .collect()
+}
+
+fn context_scores(conn: &Connection) -> Result<HashMap<i64, i64>, ApiError> {
+    let mut stmt = conn
+        .prepare("SELECT id, COALESCE(complexity, 0) + COALESCE(churn, 0) FROM files")
+        .map_err(db_err)?;
+    stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(db_err)?
+        .collect::<std::result::Result<_, _>>()
+        .map_err(db_err)
+}
+
+fn rank_context_files(
+    graph: &Graph,
+    scores: &HashMap<i64, i64>,
+    ids: &HashSet<i64>,
+    topical_scores: Option<&HashMap<i64, usize>>,
+) -> Vec<(i64, String)> {
+    let mut ranked: Vec<_> = ids
+        .iter()
+        .filter_map(|id| {
+            graph
+                .paths_of(&[*id])
+                .into_iter()
+                .next()
+                .map(|path| (*id, path))
+        })
+        .collect();
+    ranked.sort_by(|a, b| {
+        topical_scores
+            .and_then(|topical| topical.get(&b.0))
+            .unwrap_or(&0)
+            .cmp(
+                topical_scores
+                    .and_then(|topical| topical.get(&a.0))
+                    .unwrap_or(&0),
+            )
+            .then_with(|| {
+                scores
+                    .get(&b.0)
+                    .unwrap_or(&0)
+                    .cmp(scores.get(&a.0).unwrap_or(&0))
+            })
+            .then_with(|| a.1.cmp(&b.1))
+    });
+    ranked
 }
 
 #[cfg(test)]

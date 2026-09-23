@@ -41,8 +41,10 @@ fn extract_control_error_each_construct_has_correct_kind() {
         (EntityKind::ControlFlow, "return_statement"),
         (EntityKind::ControlFlow, "break_statement"), // inside while
         (EntityKind::ControlFlow, "switch_statement"),
+        (EntityKind::ControlFlow, "case_statement"),
+        (EntityKind::ControlFlow, "case_statement"),
         (EntityKind::ControlFlow, "break_statement"), // inside switch case
-        (EntityKind::ControlFlow, "do_statement"),
+        (EntityKind::ControlFlow, "do_while_statement"),
     ];
     for entity in &entities {
         if let Some(pos) = expected

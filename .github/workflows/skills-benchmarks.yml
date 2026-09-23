@@ -1,0 +1,26 @@
+name: Skills benchmarks
+
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - ".github/workflows/skills-benchmarks.yml"
+  push:
+    paths:
+      - "skills/**"
+      - ".github/workflows/skills-benchmarks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: skills
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run deterministic benchmark checks
+        run: tests/benchmark-foundation.sh

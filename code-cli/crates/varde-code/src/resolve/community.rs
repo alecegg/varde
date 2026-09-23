@@ -39,131 +39,161 @@ pub fn detect(
     if n == 0 {
         return Vec::new();
     }
-
-    // Weighted undirected adjacency between file ids.
-    let mut adj: Vec<HashMap<usize, f64>> = vec![HashMap::new(); n];
-    let mut total_edges = 0.0;
-    for edge in edges {
-        if !edge.resolved {
-            continue;
-        }
-        let to = match edge.to {
-            EdgeTarget::File(to) => to as usize,
-            EdgeTarget::Entity(entity_id) => match entities.get(entity_id as usize) {
-                Some(e) => e.file_id as usize,
-                None => continue,
-            },
-            EdgeTarget::Unknown => continue,
-        };
-        let (u, v) = (edge.from as usize, to);
-        if u == v {
-            continue;
-        }
-        *adj[u].entry(v).or_insert(0.0) += 1.0;
-        *adj[v].entry(u).or_insert(0.0) += 1.0;
-        total_edges += 1.0;
-    }
-
+    let (adj, total_edges) = build_adjacency(n, edges, entities);
     if total_edges == 0.0 {
-        // No connections: every file is its own community.
-        let communities: Vec<Community> = nodes
-            .iter()
-            .enumerate()
-            .map(|(i, node)| Community {
-                id: i as u32,
-                members: vec![node.path.clone()],
-            })
-            .collect();
-        for (i, node) in nodes.iter_mut().enumerate() {
-            node.community_id = Some(i as u32);
-        }
-        return communities;
+        return singleton_communities(nodes);
     }
-
-    let m = total_edges;
-    let two_m_sq = 2.0 * m * m;
-
-    // degree[i] = sum of incident edge weights.
     let degree: Vec<f64> = adj
         .iter()
         .map(|neighbors| neighbors.values().sum())
         .collect();
-
-    // community[i] = current community of node i (starts as its own).
-    let mut community: Vec<usize> = (0..n).collect();
-    // sigma_in[c] = 2 × internal edge weight of community c.
-    let mut sigma_in = vec![0.0f64; n];
-    // sigma_tot[c] = sum of degrees in community c.
-    let mut sigma_tot = degree.clone();
-
-    let mut changed = true;
-    let mut pass = 0usize;
-    while changed && pass < MAX_PASSES {
-        changed = false;
-        pass += 1;
-
-        for i in 0..n {
-            let curr_comm = community[i];
-            let ki = degree[i];
-            let curr_sigma_tot = sigma_tot[curr_comm];
-
-            // Accumulate edge weights from i to each neighbouring community.
-            // `BTreeMap` (not `HashMap`) so the selection loop below iterates
-            // in deterministic ascending-community-id order across runs.
-            let mut edges_to_comm: BTreeMap<usize, f64> = BTreeMap::new();
-            for (j, w) in &adj[i] {
-                let jc = community[*j];
-                *edges_to_comm.entry(jc).or_insert(0.0) += w;
-            }
-
-            let ki_in_curr = edges_to_comm.get(&curr_comm).copied().unwrap_or(0.0);
-
-            // Gain from removing i from curr_comm.
-            let gain_removal = -ki_in_curr / m + ki * (curr_sigma_tot - ki) / two_m_sq;
-
-            let mut best_gain = 0.0;
-            let mut best_comm = curr_comm;
-
-            for (target_comm, ki_in_target) in &edges_to_comm {
-                if *target_comm == curr_comm {
-                    continue;
-                }
-                let target_sigma_tot = sigma_tot.get(*target_comm).copied().unwrap_or(0.0);
-                let total_gain = gain_removal + ki_in_target / m - ki * target_sigma_tot / two_m_sq;
-                if total_gain > best_gain + GAIN_EPSILON
-                    || ((total_gain - best_gain).abs() <= GAIN_EPSILON && *target_comm < best_comm)
-                {
-                    best_gain = total_gain;
-                    best_comm = *target_comm;
-                }
-            }
-
-            if best_comm != curr_comm {
-                sigma_in[curr_comm] -= 2.0 * ki_in_curr;
-                sigma_tot[curr_comm] -= ki;
-
-                let ki_in_best = edges_to_comm.get(&best_comm).copied().unwrap_or(0.0);
-                sigma_in[best_comm] += 2.0 * ki_in_best;
-                sigma_tot[best_comm] += ki;
-
-                community[i] = best_comm;
-                changed = true;
-            }
-        }
-    }
-
-    // Stable labels: lex-smallest member path per community.
-    let mut comm_label: HashMap<usize, String> = HashMap::new();
-    for (i, node) in nodes.iter().enumerate() {
-        let c = community[i];
-        let entry = comm_label.entry(c).or_insert_with(|| node.path.clone());
-        if node.path < *entry {
-            *entry = node.path.clone();
-        }
-    }
-
-    // Renumber communities by sorted label; assign ids.
+    let community = optimize_communities(&adj, &degree, total_edges);
+    let comm_label = community_labels(nodes, &community);
     assign_communities(nodes, &community, &comm_label)
+}
+
+fn build_adjacency(
+    count: usize,
+    edges: &[ResolvedEdge],
+    entities: &[Entity],
+) -> (Vec<HashMap<usize, f64>>, f64) {
+    let mut adj = vec![HashMap::new(); count];
+    let mut total_edges = 0.0;
+    for edge in edges.iter().filter(|edge| edge.resolved) {
+        let Some(to) = edge_target_file(edge, entities) else {
+            continue;
+        };
+        let from = edge.from as usize;
+        if from == to {
+            continue;
+        }
+        *adj[from].entry(to).or_insert(0.0) += 1.0;
+        *adj[to].entry(from).or_insert(0.0) += 1.0;
+        total_edges += 1.0;
+    }
+    (adj, total_edges)
+}
+
+fn edge_target_file(edge: &ResolvedEdge, entities: &[Entity]) -> Option<usize> {
+    match edge.to {
+        EdgeTarget::File(file_id) => Some(file_id as usize),
+        EdgeTarget::Entity(entity_id) => entities
+            .get(entity_id as usize)
+            .map(|entity| entity.file_id as usize),
+        EdgeTarget::Unknown => None,
+    }
+}
+
+fn singleton_communities(nodes: &mut [FileNode]) -> Vec<Community> {
+    nodes
+        .iter_mut()
+        .enumerate()
+        .map(|(id, node)| {
+            node.community_id = Some(id as u32);
+            Community {
+                id: id as u32,
+                members: vec![node.path.clone()],
+            }
+        })
+        .collect()
+}
+
+fn optimize_communities(
+    adjacency: &[HashMap<usize, f64>],
+    degree: &[f64],
+    edge_weight: f64,
+) -> Vec<usize> {
+    let mut community: Vec<usize> = (0..adjacency.len()).collect();
+    let mut sigma_tot = degree.to_vec();
+    for _ in 0..MAX_PASSES {
+        if !move_community_pass(
+            adjacency,
+            degree,
+            edge_weight,
+            &mut community,
+            &mut sigma_tot,
+        ) {
+            break;
+        }
+    }
+    community
+}
+
+fn move_community_pass(
+    adjacency: &[HashMap<usize, f64>],
+    degree: &[f64],
+    edge_weight: f64,
+    community: &mut [usize],
+    sigma_tot: &mut [f64],
+) -> bool {
+    let mut changed = false;
+    for node in 0..adjacency.len() {
+        let weights = neighboring_community_weights(node, adjacency, community);
+        let current = community[node];
+        let best = best_community(current, degree[node], edge_weight, sigma_tot, &weights);
+        if best == current {
+            continue;
+        }
+        sigma_tot[current] -= degree[node];
+        sigma_tot[best] += degree[node];
+        community[node] = best;
+        changed = true;
+    }
+    changed
+}
+
+fn neighboring_community_weights(
+    node: usize,
+    adjacency: &[HashMap<usize, f64>],
+    community: &[usize],
+) -> BTreeMap<usize, f64> {
+    let mut weights = BTreeMap::new();
+    for (neighbor, weight) in &adjacency[node] {
+        *weights.entry(community[*neighbor]).or_insert(0.0) += weight;
+    }
+    weights
+}
+
+fn best_community(
+    current: usize,
+    degree: f64,
+    edge_weight: f64,
+    sigma_tot: &[f64],
+    weights: &BTreeMap<usize, f64>,
+) -> usize {
+    let current_weight = weights.get(&current).copied().unwrap_or(0.0);
+    let denominator = 2.0 * edge_weight * edge_weight;
+    let removal =
+        -current_weight / edge_weight + degree * (sigma_tot[current] - degree) / denominator;
+    let mut best = (current, 0.0);
+    for (&candidate, &candidate_weight) in weights {
+        if candidate == current {
+            continue;
+        }
+        let gain =
+            removal + candidate_weight / edge_weight - degree * sigma_tot[candidate] / denominator;
+        if better_gain(candidate, gain, best) {
+            best = (candidate, gain);
+        }
+    }
+    best.0
+}
+
+fn better_gain(candidate: usize, gain: f64, best: (usize, f64)) -> bool {
+    gain > best.1 + GAIN_EPSILON || ((gain - best.1).abs() <= GAIN_EPSILON && candidate < best.0)
+}
+
+fn community_labels(nodes: &[FileNode], community: &[usize]) -> HashMap<usize, String> {
+    let mut labels = HashMap::new();
+    for (node, &community_id) in nodes.iter().zip(community) {
+        let label = labels
+            .entry(community_id)
+            .or_insert_with(|| node.path.clone());
+        if node.path < *label {
+            *label = node.path.clone();
+        }
+    }
+    labels
 }
 
 /// Renumber the raw community assignment into stable `Community`s and set

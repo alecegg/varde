@@ -6,12 +6,33 @@ them, and lock the fix down with a regression test. Skip a phase only with a
 stated justification. Minimal isolated changes, verified aggressively between
 each.
 
+## Evidence contract
+
+The debugging entry carries two fields alongside normal task state:
+
+- `debug_mode`: `diagnose` or `fix`.
+- `route_source`: `automatic` for a named bug or regression, or `explicit` for
+  a diagnosis-only request.
+
+It also carries `debug_evidence` with these fields:
+
+- `reproduction`: the deterministic command, fixture, and observed symptom.
+- `hypotheses`: three to five ranked, falsifiable hypotheses.
+- `experiments`: the result of testing each selected hypothesis.
+- `cause`: the root-cause explanation supported by the experiments.
+- `verification`: the regression check and the final verification result.
+
+For `fix`, `reproduction`, `hypotheses`, and `experiments` must be non-empty
+before any production edit. A completed fix must add `cause` and `verification`.
+For `diagnose`, production source is read-only. The report may leave `cause`
+uncertain, but must state the evidence limit and preserve the reproduction.
+
 ## Phase 1 — Build a feedback loop
 
-**This is the posture.** Everything else is mechanical. With a tight pass/fail
-indicator — one that goes red on _this_ bug — bisection, hypothesis-testing, and
-instrumentation all just consume it. Without one, no amount of staring at code
-will save you. Spend disproportionate effort here.
+**This is the posture.** Everything else follows from it. Build a tight
+pass/fail check that fails on _this_ bug. Use that check for bisection,
+hypothesis testing, and instrumentation. Without it, code inspection alone is
+not enough. Spend most of this phase building the check.
 
 Reach for a failing test first, then a CLI or curl invocation diffed against a
 known-good snapshot, a headless browser script, a replayed trace, a throwaway
@@ -23,8 +44,8 @@ the same red/green check rather than debugging from memory of what they said.
 
 **Tighten the loop** once you have one — faster, sharper (assert the specific
 symptom, not "didn't crash"), and deterministic (pin time, seed RNG, isolate
-filesystem, freeze network). A 30-second flaky loop is barely better than none;
-a 2-second deterministic one is a superpower.
+filesystem, freeze network). A 30-second flaky loop is barely better than none.
+Prefer a 2-second deterministic loop.
 
 **Non-deterministic bugs:** aim for a higher reproduction rate, not a clean
 repro. A 50%-flake bug is debuggable; 1% is not — raise the rate until it is.
@@ -53,6 +74,9 @@ regression test.
 
 Do not proceed until you have reproduced and minimized.
 
+Record the `reproduction` field before ranking hypotheses. Do not infer a
+reproduction from source inspection or a command that only exits cleanly.
+
 ## Phase 3 — Hypothesize
 
 Generate 3–5 ranked hypotheses before testing any of them — generating one
@@ -63,6 +87,9 @@ prediction is a vibe; sharpen it or discard it.
 Show the ranked list to the user before testing. They often re-rank it instantly
 or know what has already been ruled out. Proceed with your own ranking if they
 are unavailable.
+
+Record one `experiments` result per tested hypothesis. A hypothesis without a
+test result is not evidence for a fix.
 
 ## Phase 4 — Instrument
 
@@ -77,7 +104,17 @@ single grep.
 **Perf branch:** for performance regressions, logs are usually the wrong tool.
 Establish a baseline (timing harness, profiler, query plan) first, then bisect.
 
+## Diagnose completion boundary
+
+When `debug_mode` is `diagnose`, stop after the hypothesis experiments and
+report the evidence. Do not enter the fix or cleanup phases, write a regression
+test, edit production source, or commit a fix. Any instrumentation must stay
+outside production source. The report may leave `cause` uncertain, but must
+state the evidence limit and preserve the reproduction command.
+
 ## Phase 5 — Fix and regression test
+
+Run this phase only when `debug_mode` is `fix`.
 
 Write the regression test **before** the fix, but only where a correct seam
 exists — one that exercises the real bug pattern as it occurs at the call site.
@@ -93,7 +130,13 @@ With a correct seam: turn the minimized repro into a failing test there, watch
 it fail, apply the fix, watch it pass, then re-run the Phase 1 loop against the
 original un-minimized scenario.
 
+Populate `cause` from the experiment that explains the symptom. Populate
+`verification` only after the regression check and original reproduction both
+pass.
+
 ## Phase 6 — Cleanup and post-mortem
+
+Run this phase only when `debug_mode` is `fix`.
 
 Required before declaring done:
 
@@ -103,6 +146,7 @@ Required before declaring done:
 - [ ] Throwaway prototypes deleted.
 - [ ] The hypothesis that proved correct is stated in the commit message, so the
       next debugger learns.
+- [ ] `debug_evidence` contains the required fields for the selected mode.
 
 Then ask what would have prevented this bug. If the answer is structural — no
 good test seam, tangled callers, hidden coupling — note it as a `refactor`

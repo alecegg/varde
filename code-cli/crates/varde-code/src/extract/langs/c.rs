@@ -68,7 +68,24 @@ pub const REQUIRED_KINDS: [EntityKind; 8] = [
     EntityKind::ControlFlow,
 ];
 
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_5(node, kind, ctx);
+}
+
+fn visit_part_1(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
     match kind {
         // ---- structural ----
         "function_definition" => {
@@ -98,7 +115,6 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Class, name, node);
             }
         }
-
         // ---- imports ----
         "preproc_include" => {
             if let Some(path) = node.field("path") {
@@ -108,7 +124,17 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_2(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    visit_part_2_a(node, kind, ctx) || visit_part_2_b(node, kind, ctx)
+}
+
+fn visit_part_2_a(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         // ---- variables ----
         "declaration" => {
             // A `declaration` can declare several names (`int a, b;`). Each
@@ -134,7 +160,13 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_2_b(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         // ---- preprocessor macros ----
         // `#define MAX 100` — object-like macro, a named compile-time constant;
         // mapped to Variable. `#define SQUARE(x) ((x)*(x))` — function-like
@@ -150,7 +182,13 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Function, name.text().into_owned(), node);
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_3(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         // ---- parameters ----
         "parameter_declaration" => {
             if let Some(name) = node
@@ -160,7 +198,6 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
-
         // ---- expression-level ----
         "call_expression" => {
             let name = node
@@ -176,17 +213,33 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
                 ctx.push(EntityKind::MemberAccess, field.text().into_owned(), node);
             }
         }
-
         // ---- literals ----
         "number_literal" | "string_literal" | "char_literal" | "true" | "false" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_4(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
         // ---- control flow ----
-        "if_statement"
-        | "for_statement"
+        "if_statement" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "for_statement"
         | "while_statement"
-        | "do_statement"
         | "switch_statement"
         | "case_statement"
         | "return_statement"
@@ -196,9 +249,49 @@ pub fn visit(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) {
         | "conditional_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
-        _ => {}
+        "do_statement" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "do_while_statement".to_string(),
+                node,
+            );
+        }
+        _ => return false,
     }
+    true
+}
+
+fn visit_part_5(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
+    match kind {
+        "seh_try_statement" | "seh_except_clause" | "seh_finally_clause" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "unknown_seh_region".to_string(),
+                node,
+            );
+        }
+        _ => return false,
+    }
+    true
+}
+
+/// Stable complexity name for C's short-circuit boolean operators.
+fn boolean_operator_name(node: &Node<'_>) -> Option<&'static str> {
+    match node.field("operator")?.text().as_ref() {
+        "&&" => Some("logical_and"),
+        "||" => Some("logical_or"),
+        _ => None,
+    }
+}
+
+/// Whether this `if` is the direct branch of an `else` clause.
+fn is_else_if(node: &Node<'_>) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent.kind() == "else_clause"
+            && parent
+                .parent()
+                .is_some_and(|outer| outer.kind() == "if_statement")
+    })
 }
 
 /// C/C++ reserved keywords that must never surface as an entity name. Under
@@ -480,5 +573,43 @@ mod tests {
         let lits = names(&e, EntityKind::Literal);
         assert!(lits.iter().any(|l| l == "'x'"));
         assert!(lits.iter().any(|l| l == "\"hi\""));
+    }
+
+    #[test]
+    fn complexity_events_cover_boolean_switch_else_if_and_seh() {
+        let src = "int f(int x, int a, int b, int c) {\n\
+                     if (a && b || c) {} else if (b) {}\n\
+                     do { x++; } while (a);\n\
+                     switch (x) { case 0: break; case 1: break; default: break; }\n\
+                     __try { x++; } __except (1) { x--; }\n\
+                     return x;\n\
+                   }\n";
+        let e = extract(src);
+        let cf = names(&e, EntityKind::ControlFlow);
+
+        assert_eq!(cf.iter().filter(|name| *name == "if_statement").count(), 1);
+        assert_eq!(
+            cf.iter().filter(|name| *name == "elseif_statement").count(),
+            1
+        );
+        assert!(cf.contains(&"logical_and".to_string()), "events: {cf:?}");
+        assert!(cf.contains(&"logical_or".to_string()), "events: {cf:?}");
+        assert!(
+            cf.contains(&"do_while_statement".to_string()),
+            "events: {cf:?}"
+        );
+        assert_eq!(
+            cf.iter().filter(|name| *name == "case_statement").count(),
+            3
+        );
+        assert!(
+            cf.contains(&"unknown_seh_region".to_string()),
+            "events: {cf:?}"
+        );
+        let metrics = crate::complexity::function_complexities(&e);
+        assert_eq!(
+            metrics[0].confidence,
+            crate::complexity::ComplexityConfidence::Low
+        );
     }
 }

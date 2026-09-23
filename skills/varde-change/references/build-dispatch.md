@@ -1,17 +1,34 @@
-# Sequential Task Execution
+# Task Execution
 
-Load this before running a plan's tasks. Tasks run one at a time, in dependency
-order, committing into the shared build location — no batching, no parallel
-dispatch, no cross-task integration stage.
+Read this before running a plan's tasks. Sequential strategies run one task at a
+time, in dependency order. `parallel` runs one dependency-ready wave only
+when task ownership and verification resources prove independence.
+Sequential runs execute one task at a time.
 
-## Deriving the next ready task
+## Choose the next ready task or wave
 
-A `backlog` task is ready when every task in its `depends_on` is `done`.
-Re-derive after each task completes and walk them in dependency order; treat a
-cycle as a hard failure. Continue until every remaining task is `done` or
-`blocked`.
+A `todo` task is ready when every task in its `depends_on` is `done`.
+Recalculate after each task or verified wave completes. Treat a cycle as a hard
+failure. Continue until every task is `done` or `blocked`.
 
-## Executing one task
+For `parallel`, call `scripts/resolve-execution-wave.py <manifest>`. It emits
+one ordered wave, conflict reasons, and the bounded worker count. Missing
+`modifies`, `creates`, `renames`, or `verification_resources` keeps `auto`
+sequential. Each parallel candidate also needs at least one exact
+`impact:<repo-relative-path>` resource. Shared impact resources serialize
+conflicting tasks. Scheduling consumes these resources from the manifest and
+does not rebuild a code index per wave. A configured limit above harness
+capacity fails before dispatch.
+
+Task states are `todo` → `in_progress` → `done`, with `blocked` reachable from
+either of the first two. They are fixed by the workflow schema, not by this
+skill (`references/varde-workflow-cli.md`). Move a task to `in_progress` when
+its executor starts — with `varde-workflow` on PATH,
+`varde-workflow transition <task.md> in_progress --json`. Skipping this step
+leaves the task in `todo`, and the `done` move at completion is then rejected
+as an illegal transition.
+
+## Executing one task or wave
 
 Execute directly in the selected location by default. Delegate one task only
 when unfamiliar code, independent research, or a large bounded investigation
@@ -19,7 +36,18 @@ benefits from fresh context; a delegated task gets its briefing,
 `#### Verification` checks, change scope (`modifies`/`creates`), and bounded
 context. Acceptance criteria remain plan-level.
 
-Every executor loads `references/build-execution.md` before its first tool call,
+The `inline` strategy keeps each task in the current executor. The `fresh`
+strategy uses a fresh executor for every task. `auto` preserves those choices
+unless a complete, conflict-free manifest selects `parallel`.
+The fresh strategy uses fresh executors for multi-task plans.
+
+The `parallel` strategy dispatches one wave through
+`scripts/run-parallel-wave.sh`. Each worker gets a distinct worktree and branch.
+The orchestrator remains the only plan-state writer. Worker commits merge on a
+temporary integration branch. The target ref advances only after wave checks
+pass. Failed integration keeps recovery refs and leaves the target unchanged.
+
+Every executor reads `references/build-execution.md` before its first tool call,
 then runs `execute → varde-review simplify → verify` against its uncommitted
 changes.
 
@@ -44,10 +72,9 @@ the current diff, the task's `#### Verification` checks, and prior progress — 
 a fresh subagent only when fresh context could change the investigation, never a
 blind rerun.
 
-Once exhausted, mark the task `blocked` with the reason in its `#### Progress`,
-then **halt the run**. A sequential run has no parallel work to continue with:
-leave the working state as-is, including the failed task's partial changes,
-report where and why it stopped, and do not merge or clean up a worktree.
+Once exhausted, mark the task or wave `blocked` with the reason in its
+`#### Progress`, then **halt the run**. Leave partial worker changes and
+recovery refs for diagnosis. Report where and why it stopped.
 
 ## Resume check
 

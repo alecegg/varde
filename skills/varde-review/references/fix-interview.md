@@ -5,27 +5,26 @@ Shared rules for skills that ask the user questions.
 ## Core rules
 
 - **One question per turn:** End your turn and wait before asking the next.
-- **Every option carries a recommendation.** Say which you recommend and why in
-  one sentence — severity, confidence, blast radius, or the context clue that
-  points to it.
-- **Wait for an explicit answer.** Silence and surrounding context leave the
-  decision open.
-- **Name unresolved dependencies.** When an answer depends on an open question,
+- **Recommend an option:** State which option you recommend and why in one
+  sentence. Use severity, confidence, blast radius, or a relevant context clue.
+- **Wait for an explicit answer:** Do not treat silence or surrounding context
+  as the user's decision.
+- **Name unresolved dependencies:** If an answer depends on an open question,
   defer it and say what is missing.
-- **Re-scan for gaps before ending.** An empty queue means the *known* frontier
-  is resolved, not that nothing was missed. Sweep for placeholders, conflicting
+- **Re-scan for gaps before ending:** An empty queue means you resolved the
+  known items, not that you found every gap. Check for placeholders, conflicting
   decisions, and unclear scope before closing the round.
-- **Watch for context saturation.** Re-asking something already resolved, losing
-  track of earlier decisions, or your own questions getting vaguer all mean the
-  context window is degrading question quality — round count alone does not. Say
-  so directly and suggest `varde-knowledge reflect` to compact progress into a
-  resumable handoff, then continue in a fresh session.
+- **Watch for context saturation:** Re-asking a resolved question, losing track
+  of earlier decisions, or asking vaguer questions signals declining context
+  quality. Round count alone does not. Say so directly, suggest
+  `varde-knowledge reflect` to compact progress into a resumable handoff, and
+  continue in a fresh session.
 
 ## Question format
 
-Ask inline, in your message text, using a numbered menu. Your own text keeps the
-question and its answer together in one readable record, which a harness question
-tool renders outside.
+Ask inline in your message text, using a numbered menu. Keep the question and
+answer together in one readable record. The harness question tool renders this
+text separately.
 
 ```
 <Question>

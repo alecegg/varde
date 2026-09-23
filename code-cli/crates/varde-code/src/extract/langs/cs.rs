@@ -23,7 +23,9 @@
 
 use crate::extract::entity::{EntityMeta, ExtractCtx, entity};
 use crate::extract::field_name;
-use crate::extract::langs::{first_arg_text, push_type_ref, strip_generic_args};
+use crate::extract::langs::{
+    boolean_operator_name, first_arg_text, push_type_ref, strip_generic_args,
+};
 use crate::model::{Entity, EntityKind};
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
@@ -70,6 +72,38 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    if visit_part_6(node, kind, ctx) {
+        return;
+    }
+    if visit_part_7(node, kind, ctx) {
+        return;
+    }
+    if visit_part_8(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_9(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- imports ----
         // `using System;` / `using static System.Console;` /
@@ -92,7 +126,6 @@ pub fn visit(
                 ctx.push(EntityKind::Import, spec, node);
             }
         }
-
         // ---- structural ----
         "method_declaration" | "constructor_declaration" | "local_function_statement" => {
             ctx.push(
@@ -115,50 +148,83 @@ pub fn visit(
                 node,
             );
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    visit_part_2_a(node, kind, ctx) || visit_part_2_b(node, kind, ctx)
+}
+
+fn visit_part_2_a(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "lambda_expression" | "anonymous_method_expression" => ctx.push_callable_boundary(node),
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2_b(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // `record`/`record class`/`record struct` share class semantics: a
         // record can inherit one base record plus interfaces, so it reuses the
         // class heritage heuristic. Previously dropped entirely (audit S3: a
         // `public record` produced no type symbol, only its constructor).
-        "class_declaration" | "record_declaration" => {
-            let name = field_name(node).unwrap_or_default();
-            ctx.push(EntityKind::Class, name.clone(), node);
-            maybe_export(node, &name, ctx);
-            // `class Foo : Base, IFoo, IBar` — the grammar's `base_list` does
-            // not distinguish a base class from interfaces (C# allows at most
-            // one base class and requires it listed first when both are
-            // present), so *if* the first entry looks like a base class it is
-            // Extends and the rest Implements. There is no syntactic signal
-            // in the grammar to tell a base class from an interface, so this
-            // falls back to the C# ecosystem's `I`-prefix-plus-uppercase
-            // naming convention (e.g. `IFoo`) as a heuristic: known
-            // limitation — a base class named e.g. `IState` following that
-            // convention by coincidence would be wrongly treated as an
-            // interface and reclassified as Implements. See CORRECTNESS-001.
-            if let Some(base_list) = node.children().find(|c| c.kind() == "base_list") {
-                for (i, ty) in base_list_types(&base_list).into_iter().enumerate() {
-                    let kind = if i == 0 && !looks_like_interface_name(&ty) {
-                        EntityKind::Extends
-                    } else {
-                        EntityKind::Implements
-                    };
-                    push_type_ref(ctx, kind, ty, &name, &base_list);
-                }
-            }
-        }
-        "interface_declaration" => {
-            let name = field_name(node).unwrap_or_default();
-            ctx.push(EntityKind::Interface, name.clone(), node);
-            maybe_export(node, &name, ctx);
-            // `interface IFoo : IBar, IBaz` — interfaces can only extend other
-            // interfaces, so every base_list entry here is Extends.
-            if let Some(base_list) = node.children().find(|c| c.kind() == "base_list") {
-                for ty in base_list_types(&base_list) {
-                    push_type_ref(ctx, EntityKind::Extends, ty, &name, &base_list);
-                }
-            }
-        }
+        "class_declaration" | "record_declaration" => visit_class(node, ctx),
+        "interface_declaration" => visit_interface(node, ctx),
+        _ => return false,
+    }
+    true
+}
 
+fn visit_class(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    let name = field_name(node).unwrap_or_default();
+    ctx.push(EntityKind::Class, name.clone(), node);
+    maybe_export(node, &name, ctx);
+    let Some(base_list) = node.children().find(|child| child.kind() == "base_list") else {
+        return;
+    };
+    for (index, ty) in base_list_types(&base_list).into_iter().enumerate() {
+        let kind = if index == 0 && !looks_like_interface_name(&ty) {
+            EntityKind::Extends
+        } else {
+            EntityKind::Implements
+        };
+        push_type_ref(ctx, kind, ty, &name, &base_list);
+    }
+}
+
+fn visit_interface(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    let name = field_name(node).unwrap_or_default();
+    ctx.push(EntityKind::Interface, name.clone(), node);
+    maybe_export(node, &name, ctx);
+    let Some(base_list) = node.children().find(|child| child.kind() == "base_list") else {
+        return;
+    };
+    for ty in base_list_types(&base_list) {
+        push_type_ref(ctx, EntityKind::Extends, ty, &name, &base_list);
+    }
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // `struct Foo : IBar` — structs cannot inherit a base class, so every
         // base_list entry is an interface (Implements). Previously dropped
         // entirely (audit S3: a `readonly struct` produced no type symbol).
@@ -180,7 +246,6 @@ pub fn visit(
             ctx.push(EntityKind::Class, name.clone(), node);
             maybe_export(node, &name, ctx);
         }
-
         // ---- properties ----
         // `public int Foo { get; set; }` — a property is declared state, the
         // C# analog of a field; mapped to Variable with its owning type (via
@@ -201,7 +266,17 @@ pub fn visit(
                 );
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- variables / parameters ----
         "field_declaration" | "local_declaration_statement" => {
             let ty = declared_type(node);
@@ -219,7 +294,17 @@ pub fn visit(
             }
             ctx.push(EntityKind::Parameter, name, node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- expression-level ----
         "invocation_expression" => {
             let name = node
@@ -263,6 +348,17 @@ pub fn visit(
                 });
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_6(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "object_creation_expression" => {
             let name = node
                 .field("type")
@@ -288,7 +384,6 @@ pub fn visit(
                 ctx.push(EntityKind::Literal, node.text().into_owned(), node);
             }
         }
-
         // ---- error handling / control flow ----
         "catch_clause" => {
             let name = node
@@ -298,6 +393,17 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Catch, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_7(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "throw_statement" => {
             let name = node
                 .children()
@@ -307,12 +413,46 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Throw, name, node);
         }
-        "if_statement"
-        | "for_statement"
+        "if_statement" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "switch_section" => {
+            for _ in 0..switch_section_arm_count(node) {
+                ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_8(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "switch_expression_arm" => {
+            ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+        }
+        "when_clause" | "catch_filter_clause" => {
+            ctx.push(EntityKind::ControlFlow, "guard_statement".to_string(), node);
+        }
+        "for_statement"
         | "foreach_statement"
         | "while_statement"
-        | "do_statement"
         | "switch_statement"
+        | "switch_expression"
         | "return_statement"
         | "break_statement"
         | "continue_statement"
@@ -320,7 +460,24 @@ pub fn visit(
         | "conditional_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
+        "do_statement" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "do_while_statement".to_string(),
+                node,
+            );
+        }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_9(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- decorators (attributes) ----
         // `[ApiController] class Foo { ... }` / `[Override] void Bar() {}` —
         // `attribute_list` is a direct child of the declaration it decorates,
@@ -350,9 +507,28 @@ pub fn visit(
                 }
             }
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
+}
+
+/// Whether this `if` occupies its parent's alternative branch.
+fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    parent.kind() == "if_statement"
+        && parent
+            .field("alternative")
+            .is_some_and(|alternative| alternative.range() == node.range())
+}
+
+/// Count labels sharing one C# switch section body.
+fn switch_section_arm_count(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> usize {
+    node.children()
+        .filter(|child| matches!(child.kind().as_ref(), "case" | "default"))
+        .count()
+        .max(1)
 }
 
 /// Stable display and scope name for a C# function declaration.
@@ -802,5 +978,92 @@ mod tests {
         assert_eq!(decorators.len(), 1, "entities: {entities:?}");
         assert_eq!(decorators[0].name, "ApiController");
         assert_eq!(decorators[0].enclosing_function.as_deref(), Some("Foo"));
+    }
+
+    #[test]
+    fn complexity_events_cover_boolean_switch_else_if_catch_and_lambda() {
+        let src = r#"
+class Demo {
+    int F(int x, bool a, bool b, bool c) {
+        if (a && b || c) { x++; } else if (b) { x--; }
+        do { x++; } while (a);
+        try { Work(); } catch (Exception error) when (a && b) { Recover(error); }
+        Func<int, int> callback = value => value + 1;
+        switch (x) {
+            case 0:
+            case 1: break;
+            default: break;
+        }
+        return x switch {
+            0 => 0,
+            1 when a => 1,
+            _ => 2
+        };
+    }
+}
+"#;
+        let parsed = parse_source(&SupportLang::CSharp, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let control_flow: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "if_statement")
+                .count(),
+            1
+        );
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "elseif_statement")
+                .count(),
+            1
+        );
+        assert!(
+            control_flow.contains(&"logical_and"),
+            "events: {control_flow:?}"
+        );
+        assert!(
+            control_flow.contains(&"logical_or"),
+            "events: {control_flow:?}"
+        );
+        assert!(
+            control_flow.contains(&"do_while_statement"),
+            "events: {control_flow:?}"
+        );
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "case_statement")
+                .count(),
+            6
+        );
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "guard_statement")
+                .count(),
+            2
+        );
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::Catch)
+                .count(),
+            1
+        );
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            1
+        );
     }
 }

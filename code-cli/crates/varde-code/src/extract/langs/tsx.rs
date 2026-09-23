@@ -121,4 +121,36 @@ mod tests {
             .count();
         assert_eq!(boundaries, 2, "{entities:?}");
     }
+
+    #[test]
+    fn jsx_remains_neutral_while_script_decisions_emit() {
+        let src = r#"
+            function View({ready, fallback}: Props) {
+                if (ready && fallback) return <Panel active={ready || fallback} />;
+                return <Empty />;
+            }
+        "#;
+        let parsed = parse_source(&SupportLang::Tsx, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flows: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert_eq!(
+            flows.iter().filter(|name| **name == "if_statement").count(),
+            1
+        );
+        assert_eq!(
+            flows.iter().filter(|name| **name == "logical_and").count(),
+            1
+        );
+        assert_eq!(
+            flows.iter().filter(|name| **name == "logical_or").count(),
+            1
+        );
+        assert!(flows.iter().all(|name| !name.starts_with("jsx_")));
+    }
 }

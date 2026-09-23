@@ -157,6 +157,33 @@ test_multi_harness_legacy_prompt_is_batched() {
   assert_contains "codex custom" "$home/.codex/skills/varde-plan/local.txt"
 }
 
+test_install_preserves_harness_startup_config() {
+  local home="$TEMP_DIR/startup-config-home"
+  local output="$TEMP_DIR/startup-config.out"
+  mkdir -p "$home/.claude" "$home/.codex" "$home/.config/opencode/plugin"
+  printf '{"custom": true}\n' >"$home/.claude/settings.json"
+  printf 'custom = true\n' >"$home/.codex/config.toml"
+  printf 'export const custom = true;\n' >"$home/.config/opencode/plugin/custom.js"
+
+  local claude_before
+  local codex_before
+  local opencode_before
+  claude_before="$(shasum "$home/.claude/settings.json" | awk '{print $1}')"
+  codex_before="$(shasum "$home/.codex/config.toml" | awk '{print $1}')"
+  opencode_before="$(shasum "$home/.config/opencode/plugin/custom.js" | awk '{print $1}')"
+
+  HOME="$home" "$ROOT_DIR/varde" init --agents claude,codex,opencode >"$output"
+
+  [ "$claude_before" = "$(shasum "$home/.claude/settings.json" | awk '{print $1}')" ] ||
+    fail "Claude startup configuration changed"
+  [ "$codex_before" = "$(shasum "$home/.codex/config.toml" | awk '{print $1}')" ] ||
+    fail "Codex startup configuration changed"
+  [ "$opencode_before" = "$(shasum "$home/.config/opencode/plugin/custom.js" | awk '{print $1}')" ] ||
+    fail "OpenCode startup configuration changed"
+  [ ! -e "$home/.config/opencode/plugin/varde-advisory-bootstrap.js" ] ||
+    fail "OpenCode advisory bootstrap was installed"
+}
+
 test_dry_run
 test_skill_dry_run_parity
 test_no_tty
@@ -165,5 +192,6 @@ test_repeated_install_and_foreign_file
 test_list_agents
 test_listed_agents_are_valid
 test_multi_harness_legacy_prompt_is_batched
+test_install_preserves_harness_startup_config
 
 echo "varde init tests passed"

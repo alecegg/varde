@@ -16,7 +16,7 @@ skill-name/
 | Field           | Required | Constraints |
 | --------------- | -------- | ----------- |
 | `name`          | Yes      | Max 64 chars. Lowercase unicode alphanumeric + hyphens only. Must not start/end with hyphen or contain `--`. Must match the parent directory name. |
-| `description`   | Yes      | Max 1024 chars, non-empty. What the skill does *and* when to use it, with keywords the agent will match against. |
+| `description`   | Yes      | Max 1024 chars, non-empty. Describe what the skill does, when to use it, and the keywords that trigger it. |
 | `license`       | No       | License name or reference to a bundled license file. |
 | `compatibility` | No       | Max 500 chars. Environment requirements (product, system packages, network access). Most skills don't need it. |
 | `metadata`      | No       | Arbitrary string->string map for client-specific properties. Use reasonably unique keys. |

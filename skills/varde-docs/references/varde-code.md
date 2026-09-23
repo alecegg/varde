@@ -1,8 +1,9 @@
 # Optional `varde-code` CLI
 
-An optional Rust CLI on PATH. If `command -v varde-code` finds nothing, ignore
-this file and use Read/Grep/Glob — not an error, and never build or install it
-yourself. Index once per session first:
+`varde-code` is an optional Rust CLI on PATH. If
+`command -v varde-code` finds nothing, use Read/Grep/Glob. Its absence is not
+an error. Never build or install it yourself. When the decision below selects
+the CLI, build its index once before other commands:
 
 ```bash
 varde-code build --repo-root "$(pwd)"   # full rebuild each time
@@ -10,9 +11,19 @@ varde-code build --repo-root "$(pwd)"   # full rebuild each time
 
 Every command prints `{"ok": true, "data": ...}` or `{"ok": false, "error": {...}}`.
 
+## Decision rule
+
+- **Discovery and relationships:** Use Varde Code for unknown scope,
+  dependencies, changed symbols, tests, and provenance.
+- **Known content:** Read one short, known source file directly.
+- **Large known files:** Use `get_symbol` for one exact symbol.
+- **Batch related lookups:** Build once, then batch related queries.
+- **New or trivial targets:** Skip indexing.
+- **Confirmation:** Confirm important CLI results against focused source reads.
+
 ## Diffing since the last run
 
-Work from a watermark instead of rescanning. For a refresh, the watermark is a
+Use a watermark instead of rescanning. For a refresh, the watermark is a
 marker's `source_hash` (`references/refresh-marker-format.md`); for spec
 generation, it is the `source_commit` recorded in `specs/index.md` frontmatter.
 
@@ -34,7 +45,7 @@ string rather than a sha — skip this and fall back to a full comparison.
 
 ## Reading symbol content
 
-This replaces `Read` when rewriting a stale marker-declared block or authoring a
+Use this instead of `Read` when rewriting a stale marker-declared block or authoring a
 domain document's Key Operations, Key Types, and Invariants sections.
 
 ```bash
@@ -46,8 +57,8 @@ varde-code get_symbol       --json '{"repoRoot": "'"$(pwd)"'", "name": "createUs
 varde-code tests_for_file   --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
 ```
 
-`includeBody: true` returns the actual source text per symbol — that is what
-makes CLI-first generation possible, not just discovery. Reach for `Read` only
+`includeBody: true` returns the actual source text per symbol. That enables
+CLI-first generation, not just discovery. Use `Read` only
 when the CLI errors, the content is not a symbol, or the symbol list does not
 resolve what is needed.
 
@@ -80,7 +91,7 @@ retry that call once with escalated filesystem access, keeping the command
 unchanged. If approval is unavailable, denied, or the retry fails, use Read/Grep
 for that lookup and name the degraded capability in your next message.
 
-On any other failure, fall back to Read/Grep for that one lookup and carry on
-using the CLI for the rest of the run. A call that *succeeds* but looks
-implausible — zero dependents for a symbol you know is exported — is not a
-failure; spot-check with a targeted grep before trusting it.
+On any other failure, use Read/Grep for that lookup and keep using the CLI for
+the rest of the run. If a successful result looks implausible, such as zero
+dependents for an exported symbol, spot-check it with targeted grep before
+trusting it.

@@ -22,16 +22,18 @@ require_role_text() {
 }
 
 require_role_text plan "varde-change plan" "Do not implement"
-require_role_text build "varde-change build" "varde-review fix"
-require_role_text review "varde-review report" "never source edits"
+require_role_text executor "varde-change build" "varde-review fix"
+require_role_text review "varde-review report" "never edit production source"
 require_role_text explore "varde-explore" "Do not implement"
 
 grep -F "skills: varde-change" "$AGENTS_DIR/plan/claude.md" >/dev/null
-grep -F "skills: varde-change, varde-review" "$AGENTS_DIR/build/claude.md" >/dev/null
+grep -F "skills: varde-change, varde-review" "$AGENTS_DIR/executor/claude.md" >/dev/null
 grep -F "skills: varde-review" "$AGENTS_DIR/review/claude.md" >/dev/null
 grep -F "skills: varde-explore" "$AGENTS_DIR/explore/claude.md" >/dev/null
 
 if rg -n 'varde-(dashboard|explain|plan|build|orchestrate|review-fix|simplify|spec|reflect|friction|handoff|worktree|code-)' \
-  "$AGENTS_DIR"/{plan,build,review,explore}; then
+  "$AGENTS_DIR"/{plan,executor,review,explore}; then
   fail "agent definitions reference retired skills"
 fi
+
+"$AGENTS_DIR/tests/generated-adapters.sh"

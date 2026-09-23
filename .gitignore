@@ -1,9 +1,11 @@
 # Rust build output (per-folder .gitignores also cover this)
 **/target/
 
-# Agent working memory — local, high-churn, never committed
-# (per-folder .gitignores also cover this; enforced repo-wide here)
-**/memory-bank/
+# Durable project knowledge is committed.
+# Working state (including working/friction/) remains local.
+**/memory-bank/working/
+# Legacy friction location, kept ignored so stale local copies never get committed.
+**/memory-bank/friction/
 
 # macOS
 .DS_Store

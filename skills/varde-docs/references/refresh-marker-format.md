@@ -6,12 +6,11 @@ Each tracked document starts with:
 <!-- docs:v1 {"specs":{"specs/<concept>":"<source_hash>"}} -->
 ```
 
-The marker lists every source for the document, and a new marker carries the
+Use the marker to list every source for the document. A new marker carries the
 generated spec's current `source_hash`.
 
-Three cases resolve **stale without failure** — the doc gets regenerated, nothing
-errors: a legacy path-style value (still parseable), a missing declared spec, and
-an unmatched `source_hash`.
+Treat these three cases as **stale without failure**: regenerate the document
+and report no error. The cases are a legacy path-style value (still parseable),
+a missing declared spec, and an unmatched `source_hash`.
 
-This skill owns the marker. On a later run, read it and rewrite only its managed
-sections.
+On a later run, read the marker and rewrite only its managed sections.

@@ -7,7 +7,7 @@ model as [`../skills/`](../skills/).
 
 ## Layout
 
-Each agent is a folder holding one variant file per harness:
+Each agent is a folder holding one generated variant per harness:
 
 ```
 agents/
@@ -17,17 +17,42 @@ agents/
     opencode.md    # opencode — YAML frontmatter (mode: subagent, per-tool permissions)
 ```
 
-The four agents map onto the plan → build → review lifecycle:
+The four agents map onto the plan → execute → review lifecycle:
 
 | Agent | Purpose | Backing skill(s) |
 |---|---|---|
 | `plan` | Collaboratively scope a change | `varde-change plan` |
-| `build` | Implement plans and apply review fixes | `varde-change build`, `varde-review fix` |
+| `executor` | Implement one bounded task and apply review fixes | `varde-change build`, `varde-review fix` |
 | `review` | Report-only structured review | `varde-review report` |
 | `explore` | Read-only repository navigation | `varde-explore` |
 
 The agents reference the `varde-*` skills by name, so install the skills too
 (see [`../skills/install.sh`](../skills/install.sh)).
+
+## Generation
+
+`capabilities.json` is the semantic source of truth.
+It defines profiles, skills, commands, and harness adapters.
+Files under each profile directory are generated outputs.
+
+Harness templates live under `templates/`.
+They encode syntax without repeating profile instructions.
+
+Regenerate committed variants:
+
+```bash
+./generate.py
+```
+
+Verify committed output byte-for-byte:
+
+```bash
+./generate.py --check
+./test-consolidated-skills.sh
+```
+
+Verification regenerates into a temporary directory.
+Every missing, unexpected, or stale path is reported exactly.
 
 The default installed catalogue contains seven packages:
 
@@ -56,6 +81,9 @@ ownership marker and preserves same-named files created elsewhere. Use `-f`
 only when every selected destination may be replaced explicitly.
 
 On install each variant is renamed to the agent's canonical name for that
-harness — `build/claude.md` → `build.md`, `build/codex.toml` → `build.toml`,
-`build/opencode.md` → `build.md` — matching how each harness discovers agents
+harness — `executor/claude.md` → `executor.md`, `executor/codex.toml` →
+`executor.toml`, `executor/opencode.md` → `executor.md` — matching how each harness discovers agents
 (Claude/Codex by the `name` field, opencode by filename).
+
+Managed upgrades remove stale `build.<ext>` files from earlier releases.
+Unmanaged files remain byte-identical.

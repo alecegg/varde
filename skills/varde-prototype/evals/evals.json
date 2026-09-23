@@ -1,9 +1,9 @@
 {
-  "skill_name": "prototype",
+  "skill_name": "varde-prototype",
   "evals": [
     {
       "id": 1,
-      "prompt": "I'm not sure what the new dashboard landing page should look like — can you prototype a few directions for the layout and hierarchy?",
+      "prompt": "I'm not sure what the new dashboard landing page should look like \u2014 can you prototype a few directions for the layout and hierarchy?",
       "expected_output": "Standalone visual-track invocation. The skill agrees a kebab-case slug and presents the resolved storage path cwd/memory-bank/working/prototypes/<slug>/, confirming before building. It classifies the question (narrow vs wide) and states the variant-count target. It runs a Round 1 variants pass producing structurally different standalone full-page mockups at variant-a.html, variant-b.html, etc., each carrying an identical fixed switcher bar that links to its siblings via real <a href> navigation with no JavaScript. It reports the first variant's file path first, then asks one question at a time with a stated recommendation, inline in the transcript.",
       "assertions": [
         "Storage root is under cwd/memory-bank/working/prototypes/<slug>/ (standalone, not the plan= path)",
@@ -15,7 +15,7 @@
     },
     {
       "id": 2,
-      "prompt": "This prototype looks great. Ship it — write the plan and start implementing the real component so we don't lose the momentum.",
+      "prompt": "This prototype looks great. Ship it \u2014 write the plan and start implementing the real component so we don't lose the momentum.",
       "expected_output": "The skill refuses to cross into production work: it does not create a plan, write tasks, or implement production code, and it does not write to the Decisions Store or modify plan files. It stays within the prototype boundary, points the user to /varde-plan and /varde-build for planning and implementation, and on close records only the final file path and key decisions in the session output.",
       "assertions": [
         "No plan is created, no tasks are written, and no production code is implemented within this skill",
@@ -31,7 +31,7 @@
         "Deliverable is a single logic.html file with no framework, bundler, or dev server",
         "The pure logic module never reaches into the DOM or button handlers",
         "The visible page states the specific question being tested in domain language, not a generic restatement",
-        "No tests and no real database/API are introduced — in-memory state only",
+        "No tests and no real database/API are introduced \u2014 in-memory state only",
         "On close, the validated module is called out as the codebase-liftable part, distinct from the page shell"
       ]
     }

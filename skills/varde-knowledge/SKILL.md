@@ -12,9 +12,14 @@ description: "Record or find durable project memory: a decision, pattern, defini
 | Find or record a durable fact — a decision, pattern, definition, finding, or an obstacle hit during work | `references/note.md` |
 | Wrap up finished work, capture what was learned, or write a handoff before stopping | `references/reflect.md` |
 
-Load only the reference the request needs.
+Read only the reference for the request.
 Then load its explicitly required supporting files.
 
-Handoffs require a stopping boundary.
-Mid-session reflection creates no handoff.
-Preserve every existing artifact path and format.
+## Gotchas
+
+- Paths written `<working>/…` and `<knowledge>/…` resolve per
+  `references/memory-locations.md`. Read it before the first memory read or write.
+- Handoffs require a stopping boundary. Create one only when the session stops
+  or pauses.
+- Mid-session reflection creates no handoff.
+- Preserve every existing artifact path and format.

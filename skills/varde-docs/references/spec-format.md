@@ -1,7 +1,7 @@
 # Specification document format
 
 Format and generation-contract reference for the domain documents, architecture
-document, and index written under `memory-bank/knowledge/specs/`.
+document, and index written under `<knowledge>/specs/`.
 
 ## Document frontmatter
 
@@ -39,9 +39,10 @@ It ends with this closing sentinel:
 <!-- varde-spec:generated:end -->
 ```
 
-Generation may replace only the bytes between the paired sentinels. Everything
-below the closing sentinel is the hand-authored `## Notes` tail. Preserve that
-Notes tail byte-identically across regeneration, including whitespace and
+During generation, replace only the bytes between the paired sentinels. Keep
+everything below the closing sentinel as the hand-authored `## Notes` tail.
+Preserve that Notes tail byte-identically across regeneration, including
+whitespace and
 trailing newlines. A new document ends its generated block, then starts an
 empty `## Notes` tail for later hand-authored content.
 
@@ -60,10 +61,10 @@ hand-authored boundary: leave it unchanged and report generated-boundary drift.
 A document with a missing, duplicated, reversed, or unpaired sentinel is boundary
 drift too, not a migration candidate.
 
-A document counts as migrated only once this holds: take the exact byte slice
-from the first `## Notes` line through EOF *before* regeneration, take the same
-slice *after*, and assert their SHA-256 digests are equal. Trailing whitespace
-is part of the slice.
+Mark a document migrated only after this check: take the exact byte slice from
+the first `## Notes` line through EOF *before* regeneration, take the same slice
+after, and assert that the SHA-256 digests match. Include trailing whitespace in
+the slice.
 
 The generated block contains exactly one document-level `## Summary` section.
 Its plain-English text says what the domain does and how it connects. Related
@@ -91,10 +92,10 @@ from the flow's source body, and appears inside `## Flow:` sections alone.
 
 ## Section provenance note
 
-Each generated section notes, in prose or a short list, which source files and
-symbols it was derived from — e.g. "Derived from `path/to/file.ts` (operations
-`foo`, `bar`)" — so a reader can trace it back to the code. Flow sections may
-also note their entry point or trigger.
+In each generated section, name the source files and symbols it uses, in prose
+or a short list. For example: "Derived from `path/to/file.ts` (operations
+`foo`, `bar`)". This lets readers trace the section to code. In flow sections,
+also name the entry point or trigger when known.
 
 ## Section categories
 
@@ -129,11 +130,10 @@ Flow and feature acceptance criteria use this form:
 
 `Given <condition>, When <event>, Then <observable result>.`
 
-When `varde-code` is available (`references/varde-code.md`), run `tests_for_file` on
-the domain's source files and note the covering test file(s) alongside the
-AC list (e.g. "Verified by: `tests/foo.test.ts`") — a reader can then trace
-a claimed behavior to a real, running check rather than trusting prose
-alone. Where no covering test exists, omit the note.
+When `varde-code` is available (`references/varde-code.md`), run `tests_for_file`
+on the domain's source files. Note the covering test file(s) beside the AC list,
+for example, "Verified by: `tests/foo.test.ts`". This lets readers trace a
+claimed behavior to a running check. If no covering test exists, omit the note.
 
 ## Rule table format
 
@@ -150,17 +150,17 @@ and the list of changed symbols/files scoped to this domain.
 
 Content source, in order:
 
-1. If `varde-code` was passed in, call `symbols_in_files`/`get_symbol` with
-   `includeBody: true` for this domain's files first — this is the primary
-   way to read the domain's code for this run, not a supplement to Read.
-2. Fall back to `Read`/`Grep`/`Glob` only for what the CLI can't supply:
+1. Read short, known files directly.
+2. Batch Varde Code queries across several files or relationships.
+3. Use `get_symbol` for exact symbols inside large files.
+4. Use `Read`/`Grep`/`Glob` when Varde Code cannot supply content:
    module-level prose/comments outside a symbol body, non-code config, or
    any file where the CLI call errors.
 
-Writes exactly one document: `memory-bank/knowledge/specs/<domain>.md` (the
-architecture domain writes `memory-bank/knowledge/specs/architecture.md`).
+Writes exactly one document: `<knowledge>/specs/<domain>.md` (the
+architecture domain writes `<knowledge>/specs/architecture.md`).
 
-Constraints on each agent:
+Apply these constraints to each agent:
 
 - Base the document only on what you read directly from this domain's source
   files during this run, staying inside the domain's boundary.
@@ -173,12 +173,12 @@ Constraints on each agent:
 
 ## Index format
 
-`memory-bank/knowledge/specs/index.md` lists domain names from each domain
+`<knowledge>/specs/index.md` lists domain names from each domain
 document's frontmatter, includes architecture, and links to every domain
 document. It contains no generated prose requiring an agent — write it
 deterministically after domain generation finishes.
 
-`index.md` carries exactly one frontmatter field, `source_commit: <sha>`
+`index.md` must carry exactly one frontmatter field, `source_commit: <sha>`
 (the `git rev-parse HEAD` at the end of this run) — used by the next run's
 `detect_changes` diff (see `references/varde-code.md`). Write/overwrite it every
 run, even when `varde-code` wasn't available this time, so the next run can

@@ -24,9 +24,9 @@ and possible improvement. Keep unrelated events separate.
 ## Creating a new item
 
 If no matching open item exists, create a file under
-`memory-bank/friction/`. Use a short kebab-case name.
+`<working>/friction/`. Use a short kebab-case name.
 
-Example: `memory-bank/friction/stale-build-command.md`.
+Example: `<working>/friction/stale-build-command.md`.
 
 ## Appending to an existing item
 

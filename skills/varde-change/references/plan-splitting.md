@@ -1,22 +1,22 @@
 # Plan splitting into multiple candidates
 
-Used when splitting a completed plan (`references/plan-fundamentals.md` Step 4, run once the full
-spec is known) — the only point a plan gets split, so boundaries are judged from
-real information instead of a pre-spec guess.
+Use this when splitting a completed plan at `references/plan-fundamentals.md`
+Step 4, after the full spec is known. This is the only split point, so judge
+boundaries from real information instead of a pre-spec guess.
 
 ## Steps
 
 - **Data-backed boundaries:** When `varde-code` is available
-  (`references/varde-code.md`), run `clusters` on the affected files —
-  densely interconnected files suggest one candidate rather than several.
-  Confirm or override it; it is a starting point, not a verdict.
+  (`references/varde-code.md`), run `clusters` on the affected files. Densely
+  interconnected files suggest one candidate rather than several. Confirm or
+  override the result; it is a starting point, not a verdict.
 - **Confirm with the user first.** Before creating child plans, list each
-  candidate title and the dependency order in a brief message, then ask: "Does
-  this decomposition look right, or should any of these be combined or split
+  candidate title and dependency order in a brief message. Ask: "Does this
+  decomposition look right, or should any of these be combined or split
   differently?" Wait for acknowledgment.
 - **Create nested child plans.** Once confirmed, create one new **nested** child
   plan directory per candidate under the current plan's directory:
-  `memory-bank/working/plans/<plan-id>/<child-slug>/plan.md`. This nesting gives
+  `<working>/plans/<plan-id>/<child-slug>/plan.md`. This nesting gives
   the child its compound Concept ID (`<plan-id>/<child-slug>`) and is how group
   membership is derived — do not add `children:` or `parent:` frontmatter fields
   (`children:`/`parent:` are for tasks linking to their plan, not plan grouping).

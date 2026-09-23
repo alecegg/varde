@@ -7,8 +7,9 @@ usage() {
 Usage: merge.sh <id> [into]
 
 Merges worktree/<id> into <into> (default: the branch currently checked out
-in this checkout). Commits any uncommitted changes left in the worktree
-first, using a placeholder message if the caller made no commit.
+in this checkout). An explicit <into> must name that checked-out branch.
+Commits any uncommitted changes left in the worktree first, using a
+placeholder message if the caller made no commit.
 
 Exit codes:
   0  merged cleanly, worktree/<id> is now in <into>
@@ -16,6 +17,7 @@ Exit codes:
   2  worktree/<id> has no commits ahead of its base — nothing to merge
   3  merge conflict — resolve via references/RESOLVE.md, then finish the
      merge manually; do NOT run cleanup.sh until it's resolved
+  4  target does not name the currently checked-out branch
 EOF
 }
 
@@ -32,6 +34,15 @@ fi
 id="$1"
 branch="worktree/${id}"
 into="${2:-$(git rev-parse --abbrev-ref HEAD)}"
+current_ref="$(git symbolic-ref --quiet HEAD 2>/dev/null || true)"
+
+if [[ $# -eq 2 ]]; then
+  target_ref="$(git rev-parse --symbolic-full-name "${into}" 2>/dev/null || true)"
+  if [[ -z "${current_ref}" || ( "${into}" != "HEAD" && "${target_ref}" != "${current_ref}" ) ]]; then
+    echo "error: target ${into} is not the currently checked-out branch" >&2
+    exit 4
+  fi
+fi
 
 repo_name="$(basename "$(git rev-parse --show-toplevel)")"
 repo_root="$(git rev-parse --show-toplevel)"

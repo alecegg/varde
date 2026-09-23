@@ -4,6 +4,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+CORE_SKILLS=(
+  varde-agent-doc-authoring
+  varde-change
+  varde-docs
+  varde-explore
+  varde-knowledge
+  varde-prototype
+  varde-review
+)
+
 fail() {
   echo "FAIL: $*" >&2
   exit 1
@@ -21,17 +31,30 @@ require_text() {
 MODES_varde_change="status plan build verify orchestrate"
 MODES_varde_review="report fix simplify scan"
 MODES_varde_docs="refresh spec"
-MODES_varde_explore="explore explain"
+MODES_varde_explore="explain"
 MODES_varde_knowledge="note reflect"
 
+# A mode short enough that a reference file would be a hop to nothing lives in
+# SKILL.md as a `## <Title>` section instead. It is still a mode — it must be
+# present and must not also have a reference file shadowing it. See the two
+# SKILL.md shapes in README.md.
+INLINE_varde_explore="Explore"
+
 check_modes() {
-  local skill="$1" expected="$2" total=0
+  local skill="$1" expected="$2" inline="${3:-}" total=0
   local manifest="$SKILLS_DIR/$skill/SKILL.md"
   for mode in $expected; do
     require_text "$manifest" "\`references/$mode.md\`"
     test -f "$SKILLS_DIR/$skill/references/$mode.md" ||
       fail "$skill routes to a missing references/$mode.md"
     total=$((total + 1))
+  done
+  for mode in $inline; do
+    require_text "$manifest" "## $mode"
+    local lower
+    lower="$(printf '%s' "$mode" | tr 'A-Z' 'a-z')"
+    test ! -f "$SKILLS_DIR/$skill/references/$lower.md" ||
+      fail "$skill keeps $mode inline but references/$lower.md also exists"
   done
   # No extra routing rows: count the distinct references/<x>.md targets named in
   # the routing table, and require they match the manifest exactly. The table is
@@ -44,23 +67,32 @@ check_modes() {
 }
 
 check_flat_layout() {
-  local deep dirs
-  deep="$(find "$SKILLS_DIR"/varde-* -mindepth 3 -type f |
+  local deep dirs manifest
+  local skill_roots=()
+  for manifest in "$SKILLS_DIR"/varde-*/SKILL.md; do
+    skill_roots+=("${manifest%/SKILL.md}")
+  done
+
+  deep="$(find "${skill_roots[@]}" -mindepth 3 -type f |
     grep -v '/\(references\|scripts\|assets\|evals\)/[^/]*$' || true)"
   [ -z "$deep" ] || fail "content nested below one reference level: $deep"
 
   # Directories too, not just files. An emptied-out `references/modes/...` tree
   # survives a files-only check while still being the layout a reader sees.
-  dirs="$(find "$SKILLS_DIR"/varde-* -mindepth 2 -type d || true)"
+  dirs="$(find "${skill_roots[@]}" -mindepth 2 -type d || true)"
   [ -z "$dirs" ] || fail "directory nested below the reference level: $dirs"
 
-  dirs="$(find "$SKILLS_DIR"/varde-* -mindepth 1 -maxdepth 1 -type d |
+  dirs="$(find "${skill_roots[@]}" -mindepth 1 -maxdepth 1 -type d |
     grep -vE '/(references|scripts|assets|evals)$' || true)"
   [ -z "$dirs" ] || fail "unexpected top-level directory in a skill: $dirs"
 
-  local manifests
-  manifests="$(find "$SKILLS_DIR" -name SKILL.md -not -path '*/memory-bank/*' | wc -l | tr -d ' ')"
-  [ "$manifests" = 7 ] || fail "expected 7 skill manifests, found $manifests"
+  local skill manifests
+  for skill in "${CORE_SKILLS[@]}"; do
+    test -f "$SKILLS_DIR/$skill/SKILL.md" ||
+      fail "core skill manifest missing: $skill"
+  done
+  manifests="${#CORE_SKILLS[@]}"
+  [ "$manifests" = 7 ] || fail "expected 7 core skill manifests, found $manifests"
 }
 
 check_no_vendoring() {
@@ -87,7 +119,7 @@ check_invariants() {
   require_text "$SKILLS_DIR/varde-review/SKILL.md" "Report mode never changes source files."
   require_text "$SKILLS_DIR/varde-review/SKILL.md" "Mutation requires fix or simplify mode."
   require_text "$SKILLS_DIR/varde-knowledge/SKILL.md" "Handoffs require a stopping boundary."
-  require_text "$SKILLS_DIR/varde-explore/SKILL.md" "Create no plan or production code by default."
+  require_text "$SKILLS_DIR/varde-explore/SKILL.md" "Do not create a plan or production code unless the user asks."
 }
 
 check_mapping() {
@@ -122,7 +154,7 @@ check_mapping() {
 }
 
 case "${1:-all}" in
-  explore) check_modes varde-explore "$MODES_varde_explore" ;;
+  explore) check_modes varde-explore "$MODES_varde_explore" "$INLINE_varde_explore" ;;
   change) check_modes varde-change "$MODES_varde_change" ;;
   review) check_modes varde-review "$MODES_varde_review" ;;
   docs-knowledge)
@@ -130,7 +162,7 @@ case "${1:-all}" in
     check_modes varde-knowledge "$MODES_varde_knowledge"
     ;;
   all)
-    check_modes varde-explore "$MODES_varde_explore"
+    check_modes varde-explore "$MODES_varde_explore" "$INLINE_varde_explore"
     check_modes varde-change "$MODES_varde_change"
     check_modes varde-review "$MODES_varde_review"
     check_modes varde-docs "$MODES_varde_docs"

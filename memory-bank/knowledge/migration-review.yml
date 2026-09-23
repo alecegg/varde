@@ -1,0 +1,34 @@
+version: 1
+reviewed_at: 2026-09-19
+purpose: Review knowledge stores before repository tracking begins.
+scopes:
+  - path: memory-bank/knowledge
+    disposition: track
+    classification: project
+    reviewed_file_count: 2
+    reviewed_tree_sha1: 44bbc4e4652464aa39f7e05535825bce5a50f52c
+    notes: Shared repository workflow knowledge.
+  - path: code-cli/memory-bank/knowledge
+    disposition: track
+    classification: project
+    reviewed_file_count: 58
+    reviewed_tree_sha1: 77faa258f32616b1efc7fa82ed72ec297cbb4f83
+    notes: Shared code intelligence knowledge.
+  - path: workflow-cli/memory-bank/knowledge
+    disposition: track
+    classification: project
+    reviewed_file_count: 18
+    reviewed_tree_sha1: 24053a0376cd36a9d76b849f6abf49145e82d251
+    notes: Shared document and knowledge tooling guidance.
+  - path: workflow-cli/memory-bank/config
+    disposition: track
+    classification: project
+    reviewed_file_count: 3
+    reviewed_tree_sha1: 9e77ddab2768295e2102726ebee63cd70363750f
+    notes: Shared workflow configuration awaiting schema migration.
+  - path: workflow-cli/memory-bank/README.md
+    disposition: track
+    classification: project
+    reviewed_file_count: 1
+    reviewed_tree_sha1: a2ec2d0dcd2d0f651ead78c4e443a086a1d75f47
+    notes: Shared memory-bank layout documentation.

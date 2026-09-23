@@ -70,11 +70,41 @@ pub const REQUIRED_KINDS: [EntityKind; 14] = [
 ];
 
 /// Emit entities for one node (called for every node in the tree).
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    if visit_part_6(node, kind, ctx) {
+        return;
+    }
+    if visit_part_7(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_8(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- imports ----
         // `import Foundation` / `import class Foundation.NSString` / `@testable
@@ -97,7 +127,6 @@ pub fn visit(
                 .replace('.', "/");
             ctx.push(EntityKind::Import, spec, node);
         }
-
         // ---- structural ----
         "function_declaration"
         | "init_declaration"
@@ -109,6 +138,17 @@ pub fn visit(
             maybe_export(node, &name, ctx);
         }
         "lambda_literal" => ctx.push_callable_boundary(node),
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "class_declaration" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Class, name.clone(), node);
@@ -140,6 +180,17 @@ pub fn visit(
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "protocol_declaration" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Interface, name.clone(), node);
@@ -161,7 +212,6 @@ pub fn visit(
                 }
             }
         }
-
         // ---- variables ----
         // let/var declarations: name lives in the `name` field as a pattern
         // (`let x = 5` -> pattern "x"). One Entity per declaration.
@@ -176,13 +226,22 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Variable, name, node);
         }
-
         // ---- parameters ----
         "parameter" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Parameter, name, node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- expression-level ----
         "call_expression" => {
             let name = node
@@ -226,6 +285,17 @@ pub fn visit(
                 });
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // Member accesses: the identifier inside the trailing navigation_suffix
         // (`app.get` -> "get").
         "navigation_expression" => {
@@ -244,7 +314,6 @@ pub fn visit(
                 ctx.push(EntityKind::Literal, node.text().into_owned(), node);
             }
         }
-
         // ---- error handling ----
         // do { } catch [let err] { } — named after the bound error pattern.
         "catch_block" => {
@@ -262,44 +331,90 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Catch, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_6(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    visit_part_6_a(node, kind, ctx)
+}
+
+fn visit_part_6_a(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // return/break/continue/fallthrough/throw all parse as
         // control_transfer_statement; a throw_keyword child distinguishes
         // Throw from control flow.
-        "control_transfer_statement" => {
-            let has_throw = node.children().any(|c| c.kind() == "throw_keyword");
-            if has_throw {
-                // `throw <expr>` has no `result` field in this grammar; take the
-                // first named child other than the throw_keyword itself.
-                let name = node
-                    .field("result")
-                    .map(|n| n.text().into_owned())
-                    .or_else(|| {
-                        node.children()
-                            .find(|c| c.is_named() && c.kind() != "throw_keyword")
-                            .map(|n| n.text().into_owned())
-                    })
-                    .unwrap_or_default();
-                ctx.push(EntityKind::Throw, name, node);
-            } else {
-                let text = node.text().into_owned();
-                let name = if text.starts_with("return") {
-                    "return_statement"
-                } else if text.starts_with("break") {
-                    "break_statement"
-                } else if text.starts_with("continue") {
-                    "continue_statement"
-                } else if text.starts_with("fallthrough") {
-                    "fallthrough_statement"
-                } else {
-                    "control_transfer_statement"
-                };
-                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
-            }
-        }
+        "control_transfer_statement" => visit_control_transfer(node, ctx),
+        _ => return false,
+    }
+    true
+}
 
+fn visit_control_transfer(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+) {
+    if node.children().any(|child| child.kind() == "throw_keyword") {
+        ctx.push(EntityKind::Throw, thrown_name(node), node);
+        return;
+    }
+    ctx.push(
+        EntityKind::ControlFlow,
+        transfer_name(node.text().as_ref()).to_string(),
+        node,
+    );
+}
+
+fn thrown_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> String {
+    node.field("result")
+        .or_else(|| {
+            node.children()
+                .find(|child| child.is_named() && child.kind() != "throw_keyword")
+        })
+        .map(|result| result.text().into_owned())
+        .unwrap_or_default()
+}
+
+fn transfer_name(text: &str) -> &'static str {
+    [
+        ("return", "return_statement"),
+        ("break", "break_statement"),
+        ("continue", "continue_statement"),
+        ("fallthrough", "fallthrough_statement"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, name)| text.starts_with(prefix).then_some(name))
+    .unwrap_or("control_transfer_statement")
+}
+
+fn visit_part_7(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- control flow ----
-        "if_statement"
-        | "for_statement"
+        "if_statement" => {
+            let name = if node
+                .parent()
+                .is_some_and(|parent| parent.kind() == "if_statement")
+            {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        "for_statement"
         | "while_statement"
         | "repeat_while_statement"
         | "switch_statement"
@@ -308,9 +423,29 @@ pub fn visit(
         | "ternary_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
-
-        _ => {}
+        "switch_entry" => {
+            ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+        }
+        "conjunction_expression" => {
+            ctx.push(EntityKind::ControlFlow, "logical_and".to_string(), node);
+        }
+        _ => return false,
     }
+    true
+}
+
+fn visit_part_8(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "disjunction_expression" => {
+            ctx.push(EntityKind::ControlFlow, "logical_or".to_string(), node);
+        }
+        _ => return false,
+    }
+    true
 }
 
 /// Member name of a navigation_expression: the identifier inside its trailing
@@ -563,5 +698,71 @@ mod tests {
                 .any(|entity| entity.kind == EntityKind::CallableBoundary),
             "closure boundary: {entities:?}"
         );
+    }
+
+    #[test]
+    fn complexity_events_cover_swift_decisions_and_closures() {
+        let src = r#"
+            func outer(_ a: Bool, _ b: Bool, _ value: Int) {
+                if a && b || a {} else if b {}
+                switch value { case 1: consume(1); default: consume(0) }
+                repeat {} while a
+                let choice = a ? 1 : 0
+                let local = { (n: Int) in
+                    if n > 0 { return n }
+                    return 0
+                }
+                do {} catch let error { consume(error) }
+            }
+        "#;
+        let parsed = parse_source(&SupportLang::Swift, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flow_names: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(
+            flow_names.contains(&"logical_and"),
+            "entities: {entities:?}"
+        );
+        assert!(flow_names.contains(&"logical_or"), "entities: {entities:?}");
+        assert!(
+            flow_names.contains(&"elseif_statement"),
+            "entities: {entities:?}"
+        );
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "case_statement")
+                .count(),
+            2,
+            "entities: {entities:?}"
+        );
+        assert!(
+            flow_names.contains(&"ternary_expression"),
+            "entities: {entities:?}"
+        );
+        assert!(
+            entities
+                .iter()
+                .any(|entity| entity.kind == EntityKind::Catch && entity.name == "error"),
+            "entities: {entities:?}"
+        );
+        assert!(
+            entities
+                .iter()
+                .any(|entity| entity.kind == EntityKind::CallableBoundary),
+            "entities: {entities:?}"
+        );
+
+        let metrics = crate::complexity::function_complexities(&entities);
+        let outer = metrics
+            .iter()
+            .find(|metric| metric.name == "outer")
+            .expect("outer metric");
+        assert_eq!(outer.cyclomatic, 10, "metric: {outer:?}");
     }
 }

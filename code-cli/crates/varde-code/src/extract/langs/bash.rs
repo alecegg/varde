@@ -99,13 +99,23 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_2(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- functions ----
         // `foo() { … }` and `function bar { … }` both -> `function_definition`.
         "function_definition" => {
             ctx.push(EntityKind::Function, function_name(node), node);
         }
-
         // ---- variables / exports ----
         // `export FOO=…` / `export FOO` -> Export; `local`/`declare`/`readonly`
         // just wrap an inner `variable_assignment` the walk visits as a child.
@@ -124,19 +134,27 @@ pub fn visit(
                 .parent()
                 .is_some_and(|p| p.kind() == "declaration_command" && is_export(&p))
             {
-                return;
+                return true;
             }
             ctx.push(EntityKind::Variable, assignment_name(node), node);
         }
-
         // ---- commands (imports / control-flow builtins / calls) ----
         "command" => visit_command(node, ctx),
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- literals ----
         "string" | "raw_string" | "number" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
-
         // ---- control-flow ----
         // `until` reuses `while_statement`. `return`/`break`/`continue` are
         // commands (handled in `visit_command`), not distinct nodes here.
@@ -144,8 +162,35 @@ pub fn visit(
         | "case_statement" | "case_item" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
+        "c_style_for_statement" => {
+            ctx.push(EntityKind::ControlFlow, "for_statement".to_string(), node);
+        }
+        "binary_expression" | "list" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        _ => return false,
+    }
+    true
+}
 
-        _ => {}
+/// Stable complexity name for Bash boolean operators.
+fn boolean_operator_name(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<&'static str> {
+    let operator = node
+        .field("operator")
+        .map(|operator| operator.text().into_owned())
+        .or_else(|| {
+            node.children()
+                .map(|child| child.text().into_owned())
+                .find(|text| text == "&&" || text == "||")
+        })?;
+    match operator.as_str() {
+        "&&" => Some("logical_and"),
+        "||" => Some("logical_or"),
+        _ => None,
     }
 }
 
@@ -313,5 +358,56 @@ mod tests {
         assert!(find(&es, EntityKind::ControlFlow, "break").is_some());
         assert!(find(&es, EntityKind::ControlFlow, "continue").is_some());
         assert!(find(&es, EntityKind::Call, "return").is_none());
+    }
+
+    #[test]
+    fn complexity_events_cover_c_style_loops_and_boolean_lists() {
+        let es = entities(
+            r#"f() {
+  for ((i=0; i<3; i++)); do echo "$i"; done
+  if [[ -f a && -f b || -f c ]]; then echo found; fi
+  test -f a && echo yes || echo no
+}
+"#,
+        );
+        let flow_names: Vec<&str> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "for_statement")
+                .count(),
+            1,
+            "entities: {es:?}"
+        );
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "logical_and")
+                .count(),
+            2,
+            "entities: {es:?}"
+        );
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "logical_or")
+                .count(),
+            2,
+            "entities: {es:?}"
+        );
+
+        let metrics = crate::complexity::function_complexities(&es);
+        let function = metrics
+            .iter()
+            .find(|metric| metric.name == "f")
+            .expect("f metric");
+        assert_eq!(function.cyclomatic, 7, "metric: {function:?}");
+        assert_eq!(function.cognitive, 6, "metric: {function:?}");
+        assert_eq!(function.max_nesting, 0, "metric: {function:?}");
     }
 }

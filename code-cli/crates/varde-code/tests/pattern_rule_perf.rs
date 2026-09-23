@@ -38,6 +38,7 @@ fn bench_rule() -> Rule {
     Rule {
         id: "bench-ok-pattern".to_string(),
         kind: RuleKind::Pattern,
+        verification: None,
         severity: varde_code::rules::Severity::Warning,
         message: "benchmark rule".to_string(),
         name: None,

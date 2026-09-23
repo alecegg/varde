@@ -1,6 +1,6 @@
 # Triage pass
 
-Read exactly one review folder per pass.
+Read one review folder per pass.
 
 ## Preconditions
 
@@ -8,11 +8,11 @@ Before processing findings:
 
 1. Confirm `review.md` and generated nav-only `index.md` exist.
 2. Load the category order from the generated `index.md`.
-3. Confirm each active category completed or was intentionally skipped.
+3. Confirm that each active category completed or was intentionally skipped.
 4. Validate every finding's required fields.
 5. Confirm deferred findings use `Disposition: blank`.
 
-Malformed findings stop the pass. Report the category and identifier.
+If a finding is malformed, stop the pass. Report its category and identifier.
 
 ## Parsing
 
@@ -30,40 +30,39 @@ Read `### Summary` and `### Solutions` as structured sections. Labels are
 
 ## Order
 
-Process categories in the order from the generated `index.md`. Process findings in file
-order. Run the automated pass before the human pass. Skip any finding with a
-nonblank disposition.
+Process categories in the order from the generated `index.md`. Process findings
+in file order. Run the automated pass before the human pass. Skip findings with
+nonblank dispositions.
 
-Under a build (see `references/fix.md`), the automated pass attempts
-every finding, gated by the escalation check. Only findings that trip the gate
-— an `Escalated:` note is present — reach the human pass. Everything else was
-already applied and verified.
+In build mode, as described in `references/fix.md`, the automated pass attempts
+every finding and uses the escalation check. Only findings that trip the gate,
+shown by an `Escalated:` note, reach the human pass. The pass already applied
+and verified every other finding.
 
 ## Human interaction
 
-Show one finding at a time. Include severity, location, summary, and all
-solutions. If an `Escalated:` note is present, lead with it — it is why this
-finding, unlike most in a build-mode pass, needed a human. Wait for a clear
-choice before presenting the next.
+Show one finding at a time. Include its severity, location, summary, and all
+solutions. If an `Escalated:` note is present, show it first. It explains why
+this finding needed a human in build mode. Wait for a clear choice before
+showing the next finding.
 
 - `fix` applies the selected solution and verifies it.
 - `dismiss` records the user's reason.
 - `action-item` creates or updates the companion plan.
 - `discuss` leaves the finding open.
 
-After listing the options, state your recommendation and a one-sentence reason.
-Base it on:
+After listing the options, state your recommendation and one-sentence reason.
+Base the recommendation on:
 
-- **Severity** — high-severity findings generally warrant `fix` over deferral
-- **Solution confidence** — prefer `fix` when confidence is high and the change
-  is contained; prefer `action-item` when the fix is large or affects a hot path
-- **Blast radius** — a fix confined to one call site is safer to apply now than
-  one that fans across packages
-- **Blocking** — a finding that blocks the build warrants discussion before any
-  dismissal
+- **Severity:** prefer `fix` for high-severity findings over deferral
+- **Solution confidence:** prefer `fix` when confidence is high and the change
+  is contained. Prefer `action-item` when the fix is large or affects a hot path
+- **Blast radius:** a fix limited to one call site is safer than a change
+  across packages
+- **Blocking:** discuss a finding that blocks the build before dismissing it
 
 ## Completion
 
-Follow `references/fix-companion-plan.md` to emit companion plans for action-item
-findings, then `references/fix-closing-summary.md` for the disposition re-scan,
-status update, and archive step.
+Use `references/fix-companion-plan.md` to create companion plans for action-item
+findings. Then use `references/fix-closing-summary.md` to rescan dispositions,
+update status, and archive the review.

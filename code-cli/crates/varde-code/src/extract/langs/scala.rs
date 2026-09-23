@@ -59,7 +59,7 @@
 
 use crate::extract::entity::ExtractCtx;
 use crate::extract::field_name;
-use crate::extract::langs::push_type_ref;
+use crate::extract::langs::{boolean_operator_name, push_type_ref};
 use crate::model::EntityKind;
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
@@ -91,23 +91,58 @@ pub const REQUIRED_KINDS: [EntityKind; 12] = [
 ];
 
 /// Emit entities for one node (called for every node in the tree).
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_6(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- imports ----
         "import_declaration" => {
             ctx.push(EntityKind::Import, import_path(node), node);
         }
-
         // ---- structural ----
         "function_definition" | "function_declaration" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Function, name, node);
         }
         "lambda_expression" => ctx.push_callable_boundary(node),
+        "case_block" if is_partial_function(node) => ctx.push_callable_boundary(node),
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "class_definition" | "object_definition" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Class, name.clone(), node);
@@ -132,7 +167,17 @@ pub fn visit(
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Variable, name, node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- variables ----
         "val_definition" | "var_definition" => {
             if let Some(pat) = node.field("pattern")
@@ -144,14 +189,12 @@ pub fn visit(
                 }
             }
         }
-
         // ---- parameters ----
         "parameter" | "class_parameter" => {
             if let Some(name) = field_name(node).filter(|n| n != "_") {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
-
         // ---- expression-level ----
         "call_expression" => {
             let name = call_name(node);
@@ -162,6 +205,17 @@ pub fn visit(
                 ctx.push(EntityKind::MemberAccess, field.text().into_owned(), node);
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "integer_literal"
         | "floating_point_literal"
         | "string"
@@ -172,7 +226,6 @@ pub fn visit(
                 ctx.push(EntityKind::Literal, node.text().into_owned(), node);
             }
         }
-
         // ---- error handling ----
         "throw_expression" => {
             ctx.push(EntityKind::Throw, thrown_name(node), node);
@@ -180,13 +233,59 @@ pub fn visit(
         "catch_clause" => {
             ctx.push(EntityKind::Catch, catch_var(node), node);
         }
-
         // ---- control flow ----
-        "if_expression" | "while_expression" | "for_expression" | "match_expression"
-        | "try_expression" | "return_expression" => {
+        "if_expression" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_expression"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "while_expression" | "for_expression" | "match_expression" | "try_expression"
+        | "return_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
+        "do_while_expression" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "do_while_statement".to_string(),
+                node,
+            );
+        }
+        "case_clause" if !inside_catch(node) => {
+            ctx.push(EntityKind::ControlFlow, "match_arm".to_string(), node);
+        }
+        "guard" => {
+            ctx.push(EntityKind::ControlFlow, "guards".to_string(), node);
+        }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_6(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "infix_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
         // ---- annotations ----
         // `@Controller` / `@cask.get("/x")` -> a Decorator entity owned by the
         // annotated definition. The grammar exposes the annotation type as a
@@ -198,11 +297,41 @@ pub fn visit(
                 push_type_ref(ctx, EntityKind::Decorator, name, &owner, node);
             }
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
 }
 
+/// True for a case block used as a partial function value.
+fn is_partial_function(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    !node.ancestors().any(|ancestor| {
+        matches!(
+            ancestor.kind().as_ref(),
+            "match_expression" | "catch_clause"
+        )
+    })
+}
+
+/// True for cases belonging to a catch expression.
+fn inside_catch(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.ancestors()
+        .any(|ancestor| ancestor.kind() == "catch_clause")
+}
+
+/// True for the nested expression representing `else if`.
+fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(parent) = node
+        .parent()
+        .filter(|parent| parent.kind() == "if_expression")
+    else {
+        return false;
+    };
+    parent
+        .field("alternative")
+        .is_some_and(|alternative| alternative.range() == node.range())
+}
+
+/// Stable complexity name for short-circuit boolean operators.
 /// Nearest enclosing definition's own name for an `annotation` node — the
 /// class/object/trait/function this annotation is attached to.
 fn annotation_owner_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
@@ -492,5 +621,54 @@ mod tests {
             1,
             "{es:?}"
         );
+    }
+
+    #[test]
+    fn complexity_events_cover_scala_decisions_and_partial_functions() {
+        let es = entities(
+            r#"object O {
+  def f(a: Boolean, b: Boolean, value: Int): Unit = {
+    if (a && b || a) () else if (b) ()
+    value match {
+      case 1 if a => ()
+      case _ => ()
+    }
+    do {} while (a)
+    val partial: PartialFunction[Int, Int] = {
+      case n if n > 0 => n
+    }
+  }
+}
+"#,
+        );
+        let flow_names: Vec<&str> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(flow_names.contains(&"logical_and"), "entities: {es:?}");
+        assert!(flow_names.contains(&"logical_or"), "entities: {es:?}");
+        assert!(flow_names.contains(&"elseif_statement"), "entities: {es:?}");
+        assert!(
+            flow_names.contains(&"do_while_statement"),
+            "entities: {es:?}"
+        );
+        assert_eq!(
+            es.iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            1,
+            "entities: {es:?}"
+        );
+
+        let metrics = crate::complexity::function_complexities(&es);
+        let function = metrics
+            .iter()
+            .find(|metric| metric.name == "f")
+            .expect("f metric");
+        assert_eq!(function.cyclomatic, 9, "metric: {function:?}");
+        assert_eq!(function.cognitive, 8, "metric: {function:?}");
+        assert_eq!(function.max_nesting, 1, "metric: {function:?}");
     }
 }

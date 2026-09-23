@@ -13,7 +13,8 @@ pub mod graph;
 
 use anyhow::Result;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::model::{Entity, Symbol};
 use crate::parse::language_for_path;
@@ -166,9 +167,6 @@ pub fn resolve(entities: &[Entity], symbols: &[Symbol], files: &[String]) -> Res
     // no path->id map needs rebuilding here (previously the dominant cost of
     // this stage, run on top of an identical dedup scan already done once
     // upstream).
-    let mut nodes = graph::build_nodes(files);
-    checkpoint!("build_nodes");
-
     let mut edges = {
         let _span = tracing::info_span!("import_resolution").entered();
         resolve_imports(entities, files, None)
@@ -184,28 +182,55 @@ pub fn resolve(entities: &[Entity], symbols: &[Symbol], files: &[String]) -> Res
         resolve_type_hierarchy(entities, None)
     });
     checkpoint!("type_hierarchy_resolution");
+    Ok(resolve_global_from_edges_with_checkpoints(
+        entities,
+        files,
+        edges,
+        |label| checkpoint!(label),
+    ))
+}
+
+/// Compute global graph products from an authoritative edge layer.
+///
+/// Incremental builds call this after their scoped edge refresh. That avoids
+/// repeating repository-wide import, call, and type-hierarchy resolution.
+pub(crate) fn resolve_global_from_edges(
+    entities: &[Entity],
+    files: &[String],
+    edges: Vec<ResolvedEdge>,
+) -> ResolvedGraph {
+    resolve_global_from_edges_with_checkpoints(entities, files, edges, |_| {})
+}
+
+fn resolve_global_from_edges_with_checkpoints(
+    entities: &[Entity],
+    files: &[String],
+    edges: Vec<ResolvedEdge>,
+    mut checkpoint: impl FnMut(&str),
+) -> ResolvedGraph {
+    let mut nodes = graph::build_nodes(files);
+    checkpoint("build_nodes");
     {
         let _span = tracing::info_span!("graph_construction").entered();
         graph::compute_fan_metrics(&mut nodes, &edges, entities);
     }
-    checkpoint!("graph_construction");
+    checkpoint("graph_construction");
     let communities = {
         let _span = tracing::info_span!("community_detection").entered();
         community::detect(&mut nodes, &edges, entities)
     };
-    checkpoint!("community_detection");
+    checkpoint("community_detection");
     let clone_bands = {
         let _span = tracing::info_span!("clone_detection").entered();
         clones::detect_bands(entities)
     };
-    checkpoint!("clone_detection");
-
-    Ok(ResolvedGraph {
+    checkpoint("clone_detection");
+    ResolvedGraph {
         nodes,
         edges,
         communities,
         clone_bands,
-    })
+    }
 }
 
 /// Resolve only the edge layer of the graph — import edges + call edges plus
@@ -265,7 +290,8 @@ pub(crate) fn resolve_edges_only_scoped(
 /// a time (so `use crate::b::helper;` matches `b.rs`, and `import ... from
 /// './util'` matches `util.ts`). Relative paths are resolved against the
 /// importing file's directory first. Ambiguous matches (multiple candidates)
-/// stay unresolved.
+/// stay unresolved. Rust candidates are then constrained by Cargo package
+/// boundaries and local module paths, so external crates cannot match files.
 pub(crate) fn resolve_imports(
     entities: &[Entity],
     files: &[String],
@@ -284,6 +310,7 @@ pub(crate) fn resolve_imports(
         .iter()
         .map(|p| crate::parse::language_for_path(std::path::Path::new(p)))
         .collect();
+    let rust_packages = build_rust_package_index(files, &file_lang);
     let module_index = build_module_def_index(entities, &file_lang);
     // Go packages are directories, mapped through go.mod's module path — a
     // resolution model distinct from the file-stem matcher below. Only paid for
@@ -295,96 +322,95 @@ pub(crate) fn resolve_imports(
         build_go_package_index(files)
     };
     let indexes = ImportIndexes {
+        files,
         by_path: &by_path,
         stem: &stem_index,
         relative: &relative_path_index,
         path_suffix: &path_suffix_index,
         package: &package_index,
         module: &module_index,
+        rust_packages: &rust_packages,
     };
 
     let mut edges = Vec::new();
     for (i, entity) in entities.iter().enumerate() {
-        if entity.kind != crate::model::EntityKind::Import {
-            continue;
-        }
-        if emit.is_some_and(|s| !s.contains(&entity.file_id)) {
-            continue;
-        }
-        let from_id = entity.file_id;
-        let Some(from_file) = files.get(from_id as usize) else {
-            // `entity.file_id` should always be a valid index into `files`
-            // (both come from the same extraction pass); skip rather than
-            // panic if a caller ever passes a truncated/scoped slice.
-            tracing::debug!(
-                file_id = from_id,
-                "import entity references an out-of-range file id; skipping"
-            );
-            continue;
-        };
-        // Go imports name a package (a directory of `.go` files) via go.mod's
-        // module path, not a single file — resolve them separately, emitting one
-        // edge per file in the target package. Skip the file-stem matcher for Go
-        // so a stdlib import (`fmt`, `os`) can't accidentally stem-match a local
-        // file.
-        if file_lang.get(from_id as usize).copied().flatten()
-            == Some(ast_grep_language::SupportLang::Go)
-        {
-            match resolve_go_import(&entity.name, from_id, &go_modules, &go_pkg_index) {
-                Some(targets) => {
-                    for t in targets {
-                        edges.push(ResolvedEdge {
-                            from: from_id,
-                            to: EdgeTarget::File(t),
-                            kind: EdgeKind::Import,
-                            resolved: true,
-                            from_entity: Some(i as u32),
-                        });
-                    }
-                }
-                None => {
-                    tracing::debug!(
-                        file = %from_file,
-                        kind = "import",
-                        specifier = %entity.name,
-                        "unresolved reference"
-                    );
-                    edges.push(ResolvedEdge {
-                        from: from_id,
-                        to: EdgeTarget::Unknown,
-                        kind: EdgeKind::Import,
-                        resolved: false,
-                        from_entity: Some(i as u32),
-                    });
-                }
-            }
-            continue;
-        }
-        let target = match_import_target(&entity.name, from_file, &indexes);
-        if target.is_none() {
-            // debug, not warn: on a large repo this fires per-unresolved-import
-            // (often tens of thousands of times) — warn-level volume made
-            // `build`'s log output balloon to 100+MB and dominate wall time
-            // writing it.
-            tracing::debug!(
-                file = %from_file,
-                kind = "import",
-                specifier = %entity.name,
-                "unresolved reference"
-            );
-        }
-        edges.push(ResolvedEdge {
-            from: from_id,
-            to: match target {
-                Some(t) => EdgeTarget::File(t),
-                None => EdgeTarget::Unknown,
-            },
-            kind: EdgeKind::Import,
-            resolved: target.is_some(),
-            from_entity: Some(i as u32),
-        });
+        resolve_import_entity(
+            i,
+            entity,
+            files,
+            emit,
+            &file_lang,
+            &go_modules,
+            &go_pkg_index,
+            &indexes,
+            &mut edges,
+        );
     }
     edges
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_import_entity(
+    index: usize,
+    entity: &Entity,
+    files: &[String],
+    emit: Option<&std::collections::HashSet<u32>>,
+    file_lang: &[Option<ast_grep_language::SupportLang>],
+    go_modules: &[GoModule],
+    go_packages: &std::collections::HashMap<String, Vec<u32>>,
+    indexes: &ImportIndexes<'_>,
+    edges: &mut Vec<ResolvedEdge>,
+) {
+    if entity.kind != crate::model::EntityKind::Import
+        || emit.is_some_and(|scope| !scope.contains(&entity.file_id))
+    {
+        return;
+    }
+    let Some(from_file) = files.get(entity.file_id as usize) else {
+        tracing::debug!(file_id = entity.file_id, "import file id is out-of-range");
+        return;
+    };
+    if file_lang.get(entity.file_id as usize).copied().flatten()
+        == Some(ast_grep_language::SupportLang::Go)
+    {
+        push_go_import_edges(index, entity, from_file, go_modules, go_packages, edges);
+        return;
+    }
+    let target = match_import_target(&entity.name, from_file, indexes);
+    if target.is_none() {
+        tracing::debug!(file = %from_file, kind = "import", specifier = %entity.name, "unresolved reference");
+    }
+    edges.push(import_edge(index, entity.file_id, target));
+}
+
+fn push_go_import_edges(
+    index: usize,
+    entity: &Entity,
+    from_file: &str,
+    modules: &[GoModule],
+    packages: &std::collections::HashMap<String, Vec<u32>>,
+    edges: &mut Vec<ResolvedEdge>,
+) {
+    let Some(targets) = resolve_go_import(&entity.name, entity.file_id, modules, packages) else {
+        tracing::debug!(file = %from_file, kind = "import", specifier = %entity.name, "unresolved reference");
+        edges.push(import_edge(index, entity.file_id, None));
+        return;
+    };
+    edges.extend(
+        targets
+            .into_iter()
+            .map(|target| import_edge(index, entity.file_id, Some(target))),
+    );
+}
+
+fn import_edge(index: usize, from: u32, target: Option<u32>) -> ResolvedEdge {
+    ResolvedEdge {
+        from,
+        to: target.map_or(EdgeTarget::Unknown, EdgeTarget::File),
+        kind: EdgeKind::Import,
+        resolved: target.is_some(),
+        from_entity: Some(index as u32),
+    }
 }
 
 /// `stem -> (file id, language)` index, used by [`match_import_target`] to
@@ -697,140 +723,375 @@ fn resolve_go_import(
     None
 }
 
+/// Cargo package metadata used to keep Rust imports inside their crate.
+///
+/// Rust's `use` paths can name local modules or external crates. The generic
+/// suffix matcher cannot tell those cases apart, so it must not connect files
+/// from unrelated Cargo packages. Path dependencies are the one intentional
+/// cross-package exception and are read from the importing manifest.
+#[derive(Clone)]
+struct RustPackageInfo {
+    root: std::path::PathBuf,
+    path_dependencies: Vec<std::path::PathBuf>,
+    external_crates: HashSet<String>,
+}
+
+type RustPackageIndex = Vec<Option<Arc<RustPackageInfo>>>;
+
+fn build_rust_package_index(
+    files: &[String],
+    file_lang: &[Option<ast_grep_language::SupportLang>],
+) -> RustPackageIndex {
+    let mut packages = HashMap::<std::path::PathBuf, Arc<RustPackageInfo>>::new();
+    let mut roots = Vec::with_capacity(files.len());
+    for (file_id, file) in files.iter().enumerate() {
+        if file_lang.get(file_id).copied().flatten() != Some(ast_grep_language::SupportLang::Rust) {
+            roots.push(None);
+            continue;
+        }
+        let root = discover_cargo_package_root(std::path::Path::new(file));
+        if let Some(root) = root {
+            let info = packages
+                .entry(root.clone())
+                .or_insert_with(|| Arc::new(parse_rust_package_info(root.clone())));
+            roots.push(Some(Arc::clone(info)));
+        } else {
+            roots.push(None);
+        }
+    }
+    roots
+}
+
+fn discover_cargo_package_root(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut dir = path.parent()?;
+    loop {
+        let manifest = dir.join("Cargo.toml");
+        if let Ok(contents) = std::fs::read_to_string(&manifest)
+            && let Ok(doc) = contents.parse::<toml::Value>()
+            && doc.get("package").is_some()
+        {
+            return Some(normalize_path(dir));
+        }
+        dir = dir.parent()?;
+    }
+}
+
+fn parse_rust_package_info(root: std::path::PathBuf) -> RustPackageInfo {
+    let mut path_dependencies = Vec::new();
+    let mut external_crates = HashSet::new();
+    let manifest = root.join("Cargo.toml");
+    let doc = std::fs::read_to_string(manifest)
+        .ok()
+        .and_then(|contents| contents.parse::<toml::Value>().ok());
+
+    for table_name in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        let Some(table) = doc
+            .as_ref()
+            .and_then(|doc| doc.get(table_name))
+            .and_then(toml::Value::as_table)
+        else {
+            continue;
+        };
+        for (crate_name, spec) in table {
+            let normalized_name = crate_name.replace('-', "_");
+            let Some(spec_table) = spec.as_table() else {
+                external_crates.insert(normalized_name);
+                continue;
+            };
+            if let Some(path) = spec_table.get("path").and_then(toml::Value::as_str) {
+                path_dependencies.push(normalize_path(&root.join(path)));
+            } else {
+                external_crates.insert(normalized_name);
+            }
+        }
+    }
+
+    RustPackageInfo {
+        root,
+        path_dependencies,
+        external_crates,
+    }
+}
+
 /// The set of per-pass indexes [`match_import_target`] consults, built once in
 /// [`resolve_imports`]. Bundled so the matcher takes one reference instead of
 /// six positional arguments.
 struct ImportIndexes<'a> {
+    files: &'a [String],
     by_path: &'a std::collections::HashMap<&'a str, u32>,
     stem: &'a StemIndex,
     relative: &'a RelativePathIndex,
     path_suffix: &'a PathSuffixIndex,
     package: &'a PackageIndex,
     module: &'a ModuleDefIndex,
+    rust_packages: &'a RustPackageIndex,
+}
+
+enum CandidateMatch {
+    None,
+    Unique(u32),
+    Ambiguous,
+}
+
+fn compatible_candidate(
+    candidates: Option<&Vec<(u32, Option<ast_grep_language::SupportLang>)>>,
+    from_lang: Option<ast_grep_language::SupportLang>,
+) -> CandidateMatch {
+    let mut matches = candidates
+        .into_iter()
+        .flatten()
+        .filter(|(_, lang)| from_lang.is_none_or(|from| compatible_import_language(from, *lang)));
+    let Some((first, _)) = matches.next() else {
+        return CandidateMatch::None;
+    };
+    if matches.next().is_some() {
+        CandidateMatch::Ambiguous
+    } else {
+        CandidateMatch::Unique(*first)
+    }
 }
 
 /// Find the file an import specifier points at, or `None`.
 fn match_import_target(spec: &str, from_file: &str, idx: &ImportIndexes<'_>) -> Option<u32> {
     let from_lang = crate::parse::language_for_path(std::path::Path::new(from_file));
-
-    // 1. Relative-path resolution against the importing file's directory,
-    //    using the unquoted specifier BEFORE prefix stripping (so `../x`
-    //    and `./x` resolve from the importing file, not globally).
-    if let Some(rel) = resolve_relative(spec, from_file) {
-        if let Some(&pos) = idx.by_path.get(rel.as_str()) {
-            return Some(pos);
-        }
-
-        let relative_stem = normalize_path(std::path::Path::new(&rel)).with_extension("");
-        let matches: Vec<u32> = idx
-            .relative
-            .get(relative_stem.to_string_lossy().as_ref())
-            .into_iter()
-            .flatten()
-            .filter(|(_, lang)| from_lang.is_none() || *lang == from_lang)
-            .map(|(i, _)| *i)
-            .collect();
-        if matches.len() == 1 {
-            return Some(matches[0]);
-        }
+    let target = match_import_target_unchecked(spec, from_file, idx, from_lang);
+    if from_lang == Some(ast_grep_language::SupportLang::Rust) {
+        target.filter(|&target| rust_import_target_allowed(spec, from_file, target, idx))
+    } else {
+        target
     }
+}
 
-    // 2. Namespaced module-name resolution (e.g. Elixir `alias Foo.Bar`): the
-    //    raw, quote-stripped specifier names a module declared somewhere in the
-    //    repo. Uses the RAW spec — `normalize_spec` below would strip the
-    //    trailing `.Bar` as if it were a file extension — and requires a single
-    //    same-language declaring file.
+fn match_import_target_unchecked(
+    spec: &str,
+    from_file: &str,
+    idx: &ImportIndexes<'_>,
+    from_lang: Option<ast_grep_language::SupportLang>,
+) -> Option<u32> {
+    if let Some(target) = match_relative_import(spec, from_file, idx, from_lang) {
+        return Some(target);
+    }
     let raw = strip_quotes(spec);
-    if raw.contains('.') {
-        let matches: Vec<u32> = idx
-            .module
-            .get(raw)
-            .into_iter()
-            .flatten()
-            .filter(|(_, lang)| from_lang.is_none() || *lang == from_lang)
-            .map(|(i, _)| *i)
-            .collect();
-        if matches.len() == 1 {
-            return Some(matches[0]);
-        }
+    if raw.contains('.')
+        && let CandidateMatch::Unique(target) = compatible_candidate(idx.module.get(raw), from_lang)
+    {
+        return Some(target);
     }
 
     let norm = normalize_spec(spec);
     if norm.is_empty() {
         return None;
     }
-
     let segments = split_keep_segments(&norm);
+    match_path_suffix(&segments, idx, from_lang)
+        .or_else(|| match_stem(&segments, idx, from_lang))
+        .or_else(|| match_package(&segments, idx, from_lang))
+}
 
-    // 3. Full-path-suffix matching: match the specifier's trailing segments
-    //    against whole file-path suffixes, longest first, so a multi-segment
-    //    module path resolves the *specific* file (`crewai/agent/core` ->
-    //    `.../crewai/agent/core.py`) instead of colliding on the bare `core`
-    //    stem. Only a unique same-language match resolves; an ambiguous suffix
-    //    is skipped (a shorter suffix or the stem step below may still decide),
-    //    never producing a wrong edge.
-    let n = segments.len();
-    let max = n.min(MAX_PATH_SUFFIX);
-    for len in (2..=max).rev() {
-        let key = segments[n - len..].join("/");
-        let matches: Vec<u32> = idx
-            .path_suffix
-            .get(&key)
-            .into_iter()
-            .flatten()
-            .filter(|(_, lang)| from_lang.is_none() || *lang == from_lang)
-            .map(|(i, _)| *i)
-            .collect();
-        if matches.len() == 1 {
-            return Some(matches[0]);
+const RUST_STANDARD_CRATE_ROOTS: &[&str] = &[
+    "alloc",
+    "compiler_builtins",
+    "core",
+    "panic_abort",
+    "panic_unwind",
+    "proc_macro",
+    "rustc_std_workspace_alloc",
+    "rustc_std_workspace_core",
+    "rustc_std_workspace_std",
+    "std",
+    "test",
+];
+
+fn rust_import_target_allowed(
+    spec: &str,
+    from_file: &str,
+    target: u32,
+    idx: &ImportIndexes<'_>,
+) -> bool {
+    let raw = strip_quotes(spec).trim_start_matches("::");
+    let root = raw.split("::").next().unwrap_or_default();
+    if RUST_STANDARD_CRATE_ROOTS.contains(&root) {
+        return false;
+    }
+
+    let Some(&from_id) = idx.by_path.get(from_file) else {
+        return true;
+    };
+    let from_package = idx
+        .rust_packages
+        .get(from_id as usize)
+        .and_then(Option::as_ref);
+    let target_package = idx
+        .rust_packages
+        .get(target as usize)
+        .and_then(Option::as_ref);
+    if let (Some(from_package), Some(target_package)) = (from_package, target_package) {
+        if from_package.root != target_package.root
+            && !from_package
+                .path_dependencies
+                .iter()
+                .any(|root| root == &target_package.root)
+        {
+            return false;
+        }
+        if from_package.root == target_package.root && from_package.external_crates.contains(root) {
+            return false;
         }
     }
 
-    // 4. Segment-wise stem matching: try the full path first, then drop
-    //    trailing segments one at a time. A single same-language candidate
-    //    wins; ambiguity stays unresolved (deterministic).
-    for keep in (1..=segments.len()).rev() {
-        let last = &segments[keep - 1];
-        let matches: Vec<u32> = idx
-            .stem
-            .get(last.as_str())
-            .into_iter()
-            .flatten()
-            .filter(|(_, lang)| from_lang.is_none() || *lang == from_lang)
-            .map(|(i, _)| *i)
-            .collect();
-        if matches.len() == 1 {
-            return Some(matches[0]);
-        }
-        if matches.len() > 1 {
-            // ambiguous — deterministic unresolved
-            return None;
-        }
-    }
+    let Some(target_path) = idx.files.get(target as usize).map(String::as_str) else {
+        return true;
+    };
+    rust_import_matches_module_path(
+        spec,
+        std::path::Path::new(target_path),
+        target_package.map(|package| package.root.as_path()),
+        from_package
+            .is_some_and(|from| target_package.is_some_and(|target| from.root != target.root)),
+    )
+}
 
-    // 5. Package-directory resolution: the specifier names a package/module
-    //    directory whose index file (`__init__.py`, `index.ts`, `init.lua`) is
-    //    the imported module. Try the full segment path first, then drop
-    //    leading segments (so `import a.b.c` matches `.../a/b/c/__init__.py`
-    //    and a bare `from pkg import X` matches `.../pkg/__init__.py`).
-    for start in 0..segments.len() {
-        let key = segments[start..].join("/");
-        let matches: Vec<u32> = idx
-            .package
-            .get(&key)
-            .into_iter()
-            .flatten()
-            .filter(|(_, lang)| from_lang.is_none() || *lang == from_lang)
-            .map(|(i, _)| *i)
-            .collect();
-        if matches.len() == 1 {
-            return Some(matches[0]);
+fn rust_import_matches_module_path(
+    spec: &str,
+    target_path: &std::path::Path,
+    package_root: Option<&std::path::Path>,
+    cross_package: bool,
+) -> bool {
+    let mut segments = split_keep_segments(&normalize_spec(spec));
+    if cross_package && !segments.is_empty() {
+        segments.remove(0);
+    }
+    let Some(stem) = target_path.file_stem().and_then(|stem| stem.to_str()) else {
+        return false;
+    };
+    let Some(stem_index) = segments.iter().rposition(|segment| segment == stem) else {
+        return true;
+    };
+    let target_modules = rust_module_segments(target_path, package_root);
+    let target_parent = target_modules
+        .get(..target_modules.len().saturating_sub(1))
+        .unwrap_or_default();
+    let import_parent = &segments[..stem_index];
+    import_parent.is_empty()
+        || (target_parent.len() >= import_parent.len()
+            && target_parent[target_parent.len() - import_parent.len()..] == *import_parent)
+}
+
+fn rust_module_segments(
+    target_path: &std::path::Path,
+    package_root: Option<&std::path::Path>,
+) -> Vec<String> {
+    let module_path = package_root
+        .and_then(|root| target_path.strip_prefix(root).ok())
+        .and_then(|relative| relative.strip_prefix("src").ok())
+        .unwrap_or(target_path);
+    let mut modules: Vec<String> = module_path
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .map(str::to_owned)
+        .collect();
+    if let Some(last) = modules.last_mut()
+        && let Some((stem, _)) = last.rsplit_once('.')
+    {
+        *last = stem.to_owned();
+    }
+    if modules
+        .last()
+        .is_some_and(|module| matches!(module.as_str(), "lib" | "main" | "mod"))
+    {
+        modules.pop();
+    }
+    modules
+}
+
+fn match_relative_import(
+    spec: &str,
+    from_file: &str,
+    idx: &ImportIndexes<'_>,
+    from_lang: Option<ast_grep_language::SupportLang>,
+) -> Option<u32> {
+    let relative = resolve_relative(spec, from_file)?;
+    if let Some(&target) = idx.by_path.get(relative.as_str()) {
+        return Some(target);
+    }
+    let stem = normalize_path(std::path::Path::new(&relative)).with_extension("");
+    if let CandidateMatch::Unique(target) =
+        compatible_candidate(idx.relative.get(stem.to_string_lossy().as_ref()), from_lang)
+    {
+        return Some(target);
+    }
+    let package = normalize_path(std::path::Path::new(&relative))
+        .to_string_lossy()
+        .into_owned();
+    match compatible_candidate(idx.package.get(&package), from_lang) {
+        CandidateMatch::Unique(target) => Some(target),
+        CandidateMatch::None | CandidateMatch::Ambiguous => None,
+    }
+}
+
+fn match_path_suffix(
+    segments: &[String],
+    idx: &ImportIndexes<'_>,
+    from_lang: Option<ast_grep_language::SupportLang>,
+) -> Option<u32> {
+    let max = segments.len().min(MAX_PATH_SUFFIX);
+    (2..=max).rev().find_map(|len| {
+        let key = segments[segments.len() - len..].join("/");
+        match compatible_candidate(idx.path_suffix.get(&key), from_lang) {
+            CandidateMatch::Unique(target) => Some(target),
+            CandidateMatch::None | CandidateMatch::Ambiguous => None,
         }
-        if matches.len() > 1 {
-            return None;
+    })
+}
+
+fn match_stem(
+    segments: &[String],
+    idx: &ImportIndexes<'_>,
+    from_lang: Option<ast_grep_language::SupportLang>,
+) -> Option<u32> {
+    for segment in segments.iter().rev() {
+        match compatible_candidate(idx.stem.get(segment), from_lang) {
+            CandidateMatch::Unique(target) => return Some(target),
+            CandidateMatch::Ambiguous => return None,
+            CandidateMatch::None => {}
         }
     }
     None
+}
+
+fn match_package(
+    segments: &[String],
+    idx: &ImportIndexes<'_>,
+    from_lang: Option<ast_grep_language::SupportLang>,
+) -> Option<u32> {
+    for start in 0..segments.len() {
+        let key = segments[start..].join("/");
+        match compatible_candidate(idx.package.get(&key), from_lang) {
+            CandidateMatch::Unique(target) => return Some(target),
+            CandidateMatch::Ambiguous => return None,
+            CandidateMatch::None => {}
+        }
+    }
+    None
+}
+
+fn compatible_import_language(
+    left: ast_grep_language::SupportLang,
+    right: Option<ast_grep_language::SupportLang>,
+) -> bool {
+    right.is_none_or(|right| {
+        left == right
+            || matches!(
+                (left, right),
+                (
+                    ast_grep_language::SupportLang::TypeScript,
+                    ast_grep_language::SupportLang::Tsx
+                ) | (
+                    ast_grep_language::SupportLang::Tsx,
+                    ast_grep_language::SupportLang::TypeScript
+                )
+            )
+    })
 }
 
 fn split_keep_segments(s: &str) -> Vec<String> {
@@ -1031,6 +1292,25 @@ mod import_resolution {
     }
 
     #[test]
+    fn rust_external_and_cross_package_imports_stay_unresolved() {
+        let (entities, symbols, files) = load_project("rust/package_boundaries");
+        let graph = resolve(&entities, &symbols, &files).expect("resolve succeeds");
+        let main = file_id(&graph, "/workspace_a/src/main.rs");
+        let imports: Vec<&ResolvedEdge> = graph
+            .edges
+            .iter()
+            .filter(|edge| edge.kind == EdgeKind::Import && edge.from == main)
+            .collect();
+
+        assert_eq!(imports.len(), 2);
+        assert!(imports.iter().any(|edge| !edge.resolved));
+        assert!(imports.iter().any(|edge| {
+            edge.resolved
+                && edge.to == EdgeTarget::File(file_id(&graph, "/workspace_b/src/path.rs"))
+        }));
+    }
+
+    #[test]
     fn relative_imports_resolve_before_duplicate_global_stems() {
         let (entities, symbols, files) = load_project("typescript/relative_imports");
         let graph = resolve(&entities, &symbols, &files).expect("resolve succeeds");
@@ -1200,8 +1480,8 @@ mod import_resolution {
 /// Exact and normalized name indexes of callable entities, with name keys
 /// borrowed from `entities` (no `String` clones).
 struct CallableIndex<'a> {
-    exact: HashMap<&'a str, usize>,
-    normalized: HashMap<&'a str, usize>,
+    exact: HashMap<&'a str, Vec<usize>>,
+    normalized: HashMap<&'a str, Vec<usize>>,
 }
 
 /// Exported-name index keyed by file id, with name keys borrowed from
@@ -1240,8 +1520,12 @@ fn build_call_and_export_indexes<'a>(
                 exact: HashMap::new(),
                 normalized: HashMap::new(),
             });
-            index.exact.entry(e.name.as_str()).or_insert(i);
-            index.normalized.entry(callee_key(&e.name)).or_insert(i);
+            index.exact.entry(e.name.as_str()).or_default().push(i);
+            index
+                .normalized
+                .entry(callee_key(&e.name))
+                .or_default()
+                .push(i);
         }
 
         if callable || e.kind == crate::model::EntityKind::Export {
@@ -1475,30 +1759,31 @@ impl<'a> TypeResolveCtx<'a> {
     /// entity, or `None` if the receiver type is unknown or the match is
     /// absent/ambiguous.
     fn resolve(&self, from: u32, call_name: &str) -> Option<u32> {
-        let recv = call_receiver_var(call_name)?;
-        let method_key = callee_key(call_name);
+        let receiver = call_receiver_var(call_name)?;
+        let owners = self.candidate_owners(from, receiver);
+        self.unique_method_target(&owners, callee_key(call_name))
+    }
 
-        // Candidate owning types: the receiver's declared type and its
-        // concrete subtypes; or, for a `Type.StaticMethod()` form, the
-        // receiver treated as a type name directly.
-        let mut owners: Vec<&str> = Vec::new();
-        if let Some(&ty) = self.var_type.get(&(from, recv)) {
-            owners.push(ty);
-            if let Some(subs) = self.subtypes_of.get(ty) {
-                owners.extend(subs.iter().copied());
-            }
+    fn candidate_owners<'b>(&'b self, from: u32, receiver: &'b str) -> Vec<&'b str> {
+        let mut owners = Vec::new();
+        if let Some(&owner) = self.var_type.get(&(from, receiver)) {
+            owners.push(owner);
+            owners.extend(self.subtypes_of.get(owner).into_iter().flatten().copied());
         }
-        if self.type_names.contains(recv) {
-            owners.push(recv);
-            if let Some(subs) = self.subtypes_of.get(recv) {
-                owners.extend(subs.iter().copied());
-            }
+        if self.type_names.contains(receiver) {
+            owners.push(receiver);
+            owners.extend(
+                self.subtypes_of
+                    .get(receiver)
+                    .into_iter()
+                    .flatten()
+                    .copied(),
+            );
         }
-        if owners.is_empty() {
-            return None;
-        }
+        owners
+    }
 
-        // Require exactly one distinct target across all candidate owners.
+    fn unique_method_target(&self, owners: &[&str], method_key: &str) -> Option<u32> {
         let mut found: Option<u32> = None;
         for owner in owners {
             if let Some(cands) = self.method_index.get(&(owner, method_key)) {
@@ -1582,163 +1867,143 @@ fn resolve_calls(
 
     let (callables, exports) = build_call_and_export_indexes(entities);
     let imports_by = build_import_targets(import_edges);
-    // Per-file-id test/fixture flag (the pure-path `db::path_is_test` mirror,
-    // since resolution runs pre-persist). Drives two guards: test-file defs are
-    // kept out of the repo-wide uniqueness index, and a production caller is
-    // never allowed to resolve to a test-file definition (see the post-filter
-    // below).
     let test_file: Vec<bool> = files.iter().map(|p| crate::db::path_is_test(p)).collect();
     let repo_wide = build_repo_wide_unique_index(entities, &test_file);
     let type_ctx = TypeResolveCtx::build(entities);
-    // Receiver-aware module-binding resolution (Python `import x` /
-    // `from pkg import x`): per file, the local module-binding names the
-    // extractor stashed on `Import.owner_type`; and a stem→files index so a
-    // call `x.method()` resolves to the sibling module `x` that defines it.
     let module_bindings = build_module_bindings(entities);
     let stem_files = build_stem_to_files(files);
-
-    // Files whose language needs the repo-wide single-definition fallback
-    // because the path-based cross-file import pass can't fire: imports name a
-    // namespace, not a file (C#/Java/Kotlin/Scala), or there are no cross-file
-    // import statements at all because same-module symbols are implicitly
-    // visible (Swift). Both fall back to the repo-wide single-definition index
-    // (Pass 3 below). Precomputed per file id so the per-call closure is a
-    // cheap lookup, not a path re-parse.
-    let namespace_import_file: Vec<bool> = files
-        .iter()
-        .map(|p| {
-            language_for_path(std::path::Path::new(p))
-                .is_some_and(resolves_calls_by_repo_wide_fallback)
-        })
-        .collect();
-
-    // Call entity indices, in entity order. Parallelizing over these and
-    // collecting via indexed `map` preserves the deterministic edge order.
-    let call_indices: Vec<usize> = entities
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| e.kind == crate::model::EntityKind::Call)
-        .filter(|(_, e)| emit.is_none_or(|s| s.contains(&e.file_id)))
-        .map(|(i, _)| i)
-        .collect();
-
+    let namespace_import_file = namespace_import_files(files);
+    let call_indices = call_entity_indices(entities, emit);
+    let context = CallResolveContext {
+        entities,
+        files,
+        callables: &callables,
+        exports: &exports,
+        imports_by: &imports_by,
+        test_file: &test_file,
+        repo_wide: &repo_wide,
+        type_ctx: &type_ctx,
+        module_bindings: &module_bindings,
+        stem_files: &stem_files,
+        namespace_import_file: &namespace_import_file,
+    };
     call_indices
         .par_iter()
-        .map(|&i| {
-            let e = &entities[i];
-            let from = e.file_id;
-            let key = callee_key(&e.name);
+        .map(|&index| resolve_call_edge(index, &context))
+        .collect()
+}
 
-            // Pass 1: same-file.
-            let same = callables.get(&e.file_id).and_then(|index| {
-                index
-                    .exact
-                    .get(key)
-                    .or_else(|| index.normalized.get(key))
-                    .copied()
-                    .map(|idx| idx as u32)
-            });
-
-            // Pass 2: cross-file via resolved imports.
-            let cross = if same.is_none() {
-                cross_file_call_target(&imports_by, &exports, from, key)
-            } else {
-                None
-            };
-
-            // Pass 2.5: receiver-aware module-binding call. A qualified call
-            // `recv.method()` where `recv` is a module the file imported
-            // (`import recv` / `from pkg import recv`) resolves to the sibling
-            // module `recv` that defines `method` — disambiguating cases the
-            // last-segment cross-file pass drops as ambiguous (`users.create`
-            // vs `items.create`). Only fires when Pass 1/2 found nothing.
-            let recv = if same.is_none() && cross.is_none() {
-                resolve_receiver_module_call(
-                    &e.name,
-                    from,
-                    &module_bindings,
-                    &stem_files,
-                    &exports,
-                )
-            } else {
-                None
-            };
-
-            // Pass 3: repo-wide single-definition fallback, only for files
-            // whose imports name namespaces rather than files (C#), where
-            // Pass 2 cannot fire. Resolves only when the callee name has
-            // exactly one definition in the whole repo — ambiguous names stay
-            // unresolved, so no false edge is invented.
-            let namespace_import = namespace_import_file
-                .get(from as usize)
-                .copied()
-                .unwrap_or(false);
-            let repo = if same.is_none()
-                && cross.is_none()
-                && recv.is_none()
-                && namespace_import
-                // A call on a receiver positively typed as a library object must
-                // not bind to a coincidentally same-named in-repo definition
-                // (`_repo.FindOne()` -> unrelated `FindOne`). Unknown-type
-                // receivers still fall through, so inherited `obj.getId()`
-                // resolves as before.
-                && !type_ctx.receiver_is_known_external(from, &e.name)
-            {
-                repo_wide.get(key).copied().flatten()
-            } else {
-                None
-            };
-
-            // Pass 4: type-directed resolution. When the name-uniqueness
-            // fallback can't decide (an ambiguous method name), use the
-            // receiver's declared type to pick the one matching method.
-            let typed = if same.is_none()
-                && cross.is_none()
-                && recv.is_none()
-                && repo.is_none()
-                && namespace_import
-            {
-                type_ctx.resolve(from, &e.name)
-            } else {
-                None
-            };
-
-            let target = same.or(cross).or(recv).or(repo).or(typed);
-            // A production caller must never resolve to a definition that lives
-            // in a test/fixture file: production code depending on test code is
-            // almost always a coincidental name/type collision (e.g. the
-            // type-directed pass reaching a test-only subtype override of an
-            // external base — `TimeProvider`'s only in-repo `GetUtcNow` being a
-            // unit-test fake), never a real edge. Caller-aware so a test caller
-            // still resolves to test code; only ever drops a false edge.
-            let caller_is_test = test_file.get(from as usize).copied().unwrap_or(false);
-            let target = target.filter(|&t| {
-                caller_is_test
-                    || !test_file
-                        .get(entities[t as usize].file_id as usize)
-                        .copied()
-                        .unwrap_or(false)
-            });
-            if target.is_none() {
-                // debug, not warn — see the import-resolution
-                // unresolved-reference comment above; calls are the
-                // higher-volume case. Log line order may vary under
-                // parallelism (stderr only).
-                tracing::debug!(
-                    file = %files.get(e.file_id as usize).map(String::as_str).unwrap_or("<unknown>"),
-                    callee = %e.name,
-                    "unresolved reference"
-                );
-            }
-            ResolvedEdge {
-                from,
-                to: target.map_or(EdgeTarget::Unknown, EdgeTarget::Entity),
-                kind: EdgeKind::Call,
-                resolved: target.is_some(),
-                from_entity: Some(i as u32),
-            }
+fn namespace_import_files(files: &[String]) -> Vec<bool> {
+    files
+        .iter()
+        .map(|path| {
+            language_for_path(std::path::Path::new(path))
+                .is_some_and(resolves_calls_by_repo_wide_fallback)
         })
         .collect()
+}
+
+fn call_entity_indices(
+    entities: &[Entity],
+    emit: Option<&std::collections::HashSet<u32>>,
+) -> Vec<usize> {
+    entities
+        .iter()
+        .enumerate()
+        .filter(|(_, entity)| entity.kind == crate::model::EntityKind::Call)
+        .filter(|(_, entity)| emit.is_none_or(|scope| scope.contains(&entity.file_id)))
+        .map(|(index, _)| index)
+        .collect()
+}
+
+struct CallResolveContext<'a> {
+    entities: &'a [Entity],
+    files: &'a [String],
+    callables: &'a HashMap<u32, CallableIndex<'a>>,
+    exports: &'a ExportIndex<'a>,
+    imports_by: &'a HashMap<u32, Vec<u32>>,
+    test_file: &'a [bool],
+    repo_wide: &'a HashMap<&'a str, Option<u32>>,
+    type_ctx: &'a TypeResolveCtx<'a>,
+    module_bindings: &'a HashMap<u32, std::collections::HashSet<String>>,
+    stem_files: &'a HashMap<String, Vec<u32>>,
+    namespace_import_file: &'a [bool],
+}
+
+fn resolve_call_edge(index: usize, context: &CallResolveContext<'_>) -> ResolvedEdge {
+    let entity = &context.entities[index];
+    let target = resolve_call_target(entity, context).filter(|&target| {
+        call_target_allowed(entity.file_id, target, context.entities, context.test_file)
+    });
+    if target.is_none() {
+        tracing::debug!(
+            file = %context.files.get(entity.file_id as usize).map(String::as_str).unwrap_or("<unknown>"),
+            callee = %entity.name,
+            "unresolved reference"
+        );
+    }
+    ResolvedEdge {
+        from: entity.file_id,
+        to: target.map_or(EdgeTarget::Unknown, EdgeTarget::Entity),
+        kind: EdgeKind::Call,
+        resolved: target.is_some(),
+        from_entity: Some(index as u32),
+    }
+}
+
+fn resolve_call_target(entity: &Entity, context: &CallResolveContext<'_>) -> Option<u32> {
+    let from = entity.file_id;
+    let key = callee_key(&entity.name);
+    let same = context.callables.get(&from).and_then(|index| {
+        index
+            .exact
+            .get(key)
+            .or_else(|| index.normalized.get(key))
+            .filter(|matches| matches.len() == 1)
+            .map(|matches| matches[0] as u32)
+    });
+    let cross = same
+        .is_none()
+        .then(|| cross_file_call_target(context.imports_by, context.exports, from, key))
+        .flatten();
+    let receiver = (same.is_none() && cross.is_none())
+        .then(|| {
+            resolve_receiver_module_call(
+                &entity.name,
+                from,
+                context.module_bindings,
+                context.stem_files,
+                context.exports,
+            )
+        })
+        .flatten();
+    let namespace = context
+        .namespace_import_file
+        .get(from as usize)
+        .copied()
+        .unwrap_or(false);
+    let repo = (same.is_none()
+        && cross.is_none()
+        && receiver.is_none()
+        && namespace
+        && !context
+            .type_ctx
+            .receiver_is_known_external(from, &entity.name))
+    .then(|| context.repo_wide.get(key).copied().flatten())
+    .flatten();
+    let typed =
+        (same.is_none() && cross.is_none() && receiver.is_none() && repo.is_none() && namespace)
+            .then(|| context.type_ctx.resolve(from, &entity.name))
+            .flatten();
+    same.or(cross).or(receiver).or(repo).or(typed)
+}
+
+fn call_target_allowed(from: u32, target: u32, entities: &[Entity], tests: &[bool]) -> bool {
+    tests.get(from as usize).copied().unwrap_or(false)
+        || !tests
+            .get(entities[target as usize].file_id as usize)
+            .copied()
+            .unwrap_or(false)
 }
 /// Cross-file call resolution: find the single (module, entity) candidate
 /// across the calling file's resolved imports whose exported name matches
@@ -1751,33 +2016,35 @@ fn cross_file_call_target<'a>(
     from: u32,
     key: &str,
 ) -> Option<u32> {
-    // Order never affects the result: a single match wins regardless of
-    // visitation order, and ambiguity (more than one distinct target) always
-    // resolves to `None`. Track the first distinct target in an `Option`
-    // accumulator and early-exit on a second distinct target, avoiding a
-    // per-call `HashSet` allocation.
     let mut first: Option<u32> = None;
-    if let Some(targets) = imports_by.get(&from) {
-        for t in targets {
-            if let Some(idx) = exports.exact.get(t).and_then(|names| names.get(key)) {
-                match first {
-                    Some(seen) if seen != *idx => return None,
-                    None => first = Some(*idx),
-                    _ => {}
-                }
-            }
-            if let Some(indices) = exports.normalized.get(t).and_then(|names| names.get(key)) {
-                for &idx in indices {
-                    match first {
-                        Some(seen) if seen != idx => return None,
-                        None => first = Some(idx),
-                        _ => {}
-                    }
-                }
+    for target in imports_by.get(&from).into_iter().flatten() {
+        let exact = exports.exact.get(target).and_then(|names| names.get(key));
+        if exact.is_some_and(|&candidate| !merge_unique_target(&mut first, candidate)) {
+            return None;
+        }
+        for &candidate in exports
+            .normalized
+            .get(target)
+            .and_then(|names| names.get(key))
+            .into_iter()
+            .flatten()
+        {
+            if !merge_unique_target(&mut first, candidate) {
+                return None;
             }
         }
     }
     first
+}
+
+fn merge_unique_target(first: &mut Option<u32>, candidate: u32) -> bool {
+    match *first {
+        Some(seen) => seen == candidate,
+        None => {
+            *first = Some(candidate);
+            true
+        }
+    }
 }
 
 /// Per-file set of local module-binding names — the receiver a
@@ -1881,76 +2148,76 @@ pub(crate) fn resolve_type_hierarchy(
     entities: &[Entity],
     emit: Option<&std::collections::HashSet<u32>>,
 ) -> Vec<ResolvedEdge> {
-    // Global name -> entity index of Class/Interface entities. A name that
-    // resolves to more than one entity anywhere in the repo is ambiguous and
-    // stays unresolved (`None`), matching the deterministic-ambiguity
-    // convention used elsewhere in this module.
-    let mut by_name: HashMap<&str, Option<u32>> = HashMap::new();
-    for (i, e) in entities.iter().enumerate() {
-        if matches!(
-            e.kind,
-            crate::model::EntityKind::Class | crate::model::EntityKind::Interface
-        ) {
-            by_name
-                .entry(e.name.as_str())
-                .and_modify(|v| *v = None)
-                .or_insert(Some(i as u32));
-        }
+    let by_name = hierarchy_targets(entities);
+    let owners = hierarchy_owners(entities);
+    entities
+        .iter()
+        .filter(|entity| emit.is_none_or(|scope| scope.contains(&entity.file_id)))
+        .filter_map(|entity| hierarchy_edge(entity, &by_name, &owners))
+        .collect()
+}
+
+fn is_hierarchy_owner(entity: &Entity) -> bool {
+    matches!(
+        entity.kind,
+        crate::model::EntityKind::Class | crate::model::EntityKind::Interface
+    )
+}
+
+fn hierarchy_targets(entities: &[Entity]) -> HashMap<&str, Option<u32>> {
+    let mut targets = HashMap::new();
+    for (index, entity) in entities
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| is_hierarchy_owner(e))
+    {
+        targets
+            .entry(entity.name.as_str())
+            .and_modify(|target| *target = None)
+            .or_insert(Some(index as u32));
     }
+    targets
+}
 
-    // (file_id, class/interface name) -> entity index, so finding the owner
-    // of an Extends/Implements entity below is an O(1) lookup instead of a
-    // full linear scan over every entity in the repo. On a name collision
-    // within the same file, keep the first — matches the old scan's
-    // first-match `position()` semantics.
-    let mut owner_by_file_and_name: HashMap<(u32, &str), u32> = HashMap::new();
-    for (i, e) in entities.iter().enumerate() {
-        if matches!(
-            e.kind,
-            crate::model::EntityKind::Class | crate::model::EntityKind::Interface
-        ) {
-            owner_by_file_and_name
-                .entry((e.file_id, e.name.as_str()))
-                .or_insert(i as u32);
-        }
+fn hierarchy_owners(entities: &[Entity]) -> HashMap<(u32, &str), u32> {
+    let mut owners = HashMap::new();
+    for (index, entity) in entities
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| is_hierarchy_owner(e))
+    {
+        owners
+            .entry((entity.file_id, entity.name.as_str()))
+            .or_insert(index as u32);
     }
+    owners
+}
 
-    let mut edges = Vec::new();
-    for entity in entities {
-        let kind = match entity.kind {
-            crate::model::EntityKind::Extends => EdgeKind::Extends,
-            crate::model::EntityKind::Implements => EdgeKind::Implements,
-            _ => continue,
-        };
-        if emit.is_some_and(|s| !s.contains(&entity.file_id)) {
-            continue;
-        }
-
-        let from_entity = entity.enclosing_function.as_deref().and_then(|owner_name| {
-            owner_by_file_and_name
-                .get(&(entity.file_id, owner_name))
-                .copied()
-        });
-
-        let target = by_name.get(entity.name.as_str()).copied().flatten();
-        if target.is_none() {
-            tracing::debug!(
-                file_id = entity.file_id,
-                kind = kind.as_str(),
-                supertype = %entity.name,
-                "unresolved reference"
-            );
-        }
-
-        edges.push(ResolvedEdge {
-            from: entity.file_id,
-            to: target.map_or(EdgeTarget::Unknown, EdgeTarget::Entity),
-            kind,
-            resolved: target.is_some(),
-            from_entity,
-        });
+fn hierarchy_edge(
+    entity: &Entity,
+    targets: &HashMap<&str, Option<u32>>,
+    owners: &HashMap<(u32, &str), u32>,
+) -> Option<ResolvedEdge> {
+    let kind = match entity.kind {
+        crate::model::EntityKind::Extends => EdgeKind::Extends,
+        crate::model::EntityKind::Implements => EdgeKind::Implements,
+        _ => return None,
+    };
+    let from_entity = entity
+        .enclosing_function
+        .as_deref()
+        .and_then(|name| owners.get(&(entity.file_id, name)).copied());
+    let target = targets.get(entity.name.as_str()).copied().flatten();
+    if target.is_none() {
+        tracing::debug!(file_id = entity.file_id, kind = kind.as_str(), supertype = %entity.name, "unresolved reference");
     }
-    edges
+    Some(ResolvedEdge {
+        from: entity.file_id,
+        to: target.map_or(EdgeTarget::Unknown, EdgeTarget::Entity),
+        kind,
+        resolved: target.is_some(),
+        from_entity,
+    })
 }
 
 /// Normalize a callee name for matching: drop a trailing `()`, then take the

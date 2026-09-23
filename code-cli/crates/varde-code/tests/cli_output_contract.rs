@@ -34,6 +34,8 @@ fn assert_envelope(output: &Output, args: &[&str]) {
             .and_then(serde_json::Value::as_bool)
             .is_some()
     );
+    assert_eq!(value["schema_version"], 1, "{args:?}: {stdout}");
+    assert!(value["outcome"].is_string(), "{args:?}: {stdout}");
     assert!(value.get("data").is_some(), "{args:?}: {stdout}");
     assert!(value.get("meta").is_some(), "{args:?}: {stdout}");
 }

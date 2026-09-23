@@ -23,7 +23,9 @@
 
 use crate::extract::entity::{EntityMeta, ExtractCtx, entity};
 use crate::extract::field_name;
-use crate::extract::langs::{first_arg_text, push_type_ref, strip_generic_args};
+use crate::extract::langs::{
+    boolean_operator_name, first_arg_text, push_type_ref, strip_generic_args, visit_do_statement,
+};
 use crate::model::{Entity, EntityKind};
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
@@ -60,6 +62,32 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    if visit_do_statement(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_7(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- imports ----
         // `import com.foo.Bar;` / `import static com.foo.Bar.baz;` /
@@ -74,7 +102,6 @@ pub fn visit(
             let spec = java_import_path(node);
             ctx.push(EntityKind::Import, spec, node);
         }
-
         // ---- structural ----
         "method_declaration" | "constructor_declaration" | "compact_constructor_declaration" => {
             ctx.push(
@@ -105,6 +132,17 @@ pub fn visit(
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "interface_declaration" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Interface, name.clone(), node);
@@ -118,7 +156,6 @@ pub fn visit(
                 }
             }
         }
-
         // ---- variables / parameters ----
         "field_declaration" | "local_variable_declaration" | "constant_declaration" => {
             for n in declarator_names(node) {
@@ -132,7 +169,17 @@ pub fn visit(
                 node,
             );
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- expression-level ----
         "method_invocation" => {
             let name = field_name(node).unwrap_or_default();
@@ -170,6 +217,17 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::MemberAccess, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "decimal_integer_literal"
         | "hex_integer_literal"
         | "octal_integer_literal"
@@ -185,7 +243,6 @@ pub fn visit(
                 ctx.push(EntityKind::Literal, node.text().into_owned(), node);
             }
         }
-
         // ---- error handling / control flow ----
         "catch_clause" => {
             let name = node
@@ -203,11 +260,39 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Throw, name, node);
         }
-        "if_statement"
-        | "for_statement"
+        "if_statement" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "binary_expression" => {
+            if let Some(name) = boolean_operator_name(node) {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+        }
+        "switch_label" => {
+            ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+        }
+        "guard" => {
+            ctx.push(EntityKind::ControlFlow, "guard_statement".to_string(), node);
+        }
+        "for_statement"
         | "enhanced_for_statement"
         | "while_statement"
-        | "do_statement"
         | "switch_expression"
         | "return_statement"
         | "break_statement"
@@ -217,7 +302,17 @@ pub fn visit(
         | "ternary_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_7(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- domain-specific (Spring route annotations) ----
         "annotation" | "marker_annotation" => {
             if let Some((method, path)) = spring_route_of(node) {
@@ -261,9 +356,21 @@ pub fn visit(
                 });
             }
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
+}
+
+/// Stable complexity name for Java short-circuit operators.
+/// Whether this `if` occupies its parent's alternative branch.
+fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    parent.kind() == "if_statement"
+        && parent
+            .field("alternative")
+            .is_some_and(|alternative| alternative.range() == node.range())
 }
 
 /// Names of the `declarator` field(s) of a field/local/constant declaration:
@@ -551,6 +658,104 @@ mod tests {
                 .iter()
                 .any(|entity| entity.kind == EntityKind::CallableBoundary),
             "lambda boundary: {entities:?}"
+        );
+    }
+
+    #[test]
+    fn complexity_events_cover_boolean_switch_else_if_catch_and_lambda() {
+        let src = r#"
+class Demo {
+    int f(int x, boolean a, boolean b, boolean c) {
+        if (a && b || c) { x++; } else if (b) { x--; }
+        do { x++; } while (a);
+        try { work(); } catch (RuntimeException error) { recover(error); }
+        Runnable callback = () -> deferred();
+        return switch (x) {
+            case 0 -> 0;
+            case 1 -> 1;
+            default -> 2;
+        };
+    }
+}
+"#;
+        let parsed = parse_source(&SupportLang::Java, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let control_flow: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "if_statement")
+                .count(),
+            1
+        );
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "elseif_statement")
+                .count(),
+            1
+        );
+        assert!(
+            control_flow.contains(&"logical_and"),
+            "events: {control_flow:?}"
+        );
+        assert!(
+            control_flow.contains(&"logical_or"),
+            "events: {control_flow:?}"
+        );
+        assert!(
+            control_flow.contains(&"do_while_statement"),
+            "events: {control_flow:?}"
+        );
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "case_statement")
+                .count(),
+            3
+        );
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::Catch)
+                .count(),
+            1
+        );
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn guarded_switch_labels_emit_guard_events() {
+        let src = r#"
+class Demo {
+    int classify(Object value) {
+        return switch (value) {
+            case String text when !text.isEmpty() -> 1;
+            default -> 0;
+        };
+    }
+}
+"#;
+        let parsed = parse_source(&SupportLang::Java, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        assert!(
+            entities.iter().any(|entity| {
+                entity.kind == EntityKind::ControlFlow && entity.name == "guard_statement"
+            }),
+            "entities: {entities:?}"
         );
     }
 }

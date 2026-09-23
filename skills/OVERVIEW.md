@@ -1,6 +1,6 @@
 # The varde skills, in plain terms
 
-A human-readable tour of the seven skills in this directory: what each one is
+A human-readable tour of the seven core skills in this directory: what each one is
 for, what it actually does, and what it leaves behind on disk.
 
 Skills are markdown instruction sets an agent loads on demand. Each is a
@@ -8,15 +8,23 @@ Skills are markdown instruction sets an agent loads on demand. Each is a
 the entry point pulls from selectively. You never name a mode — the agent reads
 your request and picks the right reference.
 
-| Skill | One line | Refs | Size |
-|---|---|---:|---:|
-| `varde-explore` | Understand something before committing to it | 5 | 10 KB |
-| `varde-change` | The change lifecycle: status → plan → build → verify | 34 | 123 KB |
-| `varde-review` | Find problems in code, and optionally fix them | 19 | 87 KB |
-| `varde-docs` | Keep README/docs and generated specs true to the code | 14 | 45 KB |
-| `varde-knowledge` | Durable project memory, friction, and handoffs | 7 | 37 KB |
-| `varde-prototype` | Throwaway mockups that answer a design question | 5 | 15 KB |
-| `varde-agent-doc-authoring` | Write and audit the skills themselves | 8 | 35 KB |
+| Skill | One line |
+|---|---|
+| `varde-explore` | Understand something before committing to it |
+| `varde-change` | The change lifecycle: status → plan → build → verify |
+| `varde-review` | Find problems in code, and optionally fix them |
+| `varde-docs` | Keep README/docs and generated specs true to the code |
+| `varde-knowledge` | Durable project memory, friction, and handoffs |
+| `varde-prototype` | Throwaway mockups that answer a design question |
+| `varde-agent-doc-authoring` | Write and audit agent-facing documents |
+
+Optional packs add independent capabilities:
+
+| Pack | Skill | Purpose |
+|---|---|---|
+| `diagnostics` | `varde-diagnose` | Analyze consent-bounded session transcripts |
+| `browser` | `varde-browser` | Validate browser-backed workflows |
+| `shipping` | `varde-release` | Prepare and verify authorized releases |
 
 ---
 
@@ -30,17 +38,22 @@ is X, read `references/y.md`" — and nothing else that isn't always true. The
 reference it names is the whole procedure. References never chain more than one
 level deep.
 
-**Artifacts live under `memory-bank/`.** Work in flight goes in
-`memory-bank/working/` (plans, reviews, prototypes, handoffs). Durable knowledge
-goes in `memory-bank/knowledge/` (notes, specs). Whether that directory is
-gitignored changes behaviour in several skills — a gitignored plan can't travel
-through a git worktree, so those runs stay in the current checkout.
+**Artifacts live under `memory-bank/` by default.** Work in flight goes in
+`memory-bank/working/` (plans, reviews, prototypes, handoffs, friction). Durable knowledge
+goes in `memory-bank/knowledge/` (notes, specs). Either directory can be
+redirected per user — for one project or all of them — with
+`varde-workflow paths set`; the setting lives in `~/.config/varde/paths.toml`,
+never in the repo. Skill references therefore write these as `<working>/…` and
+`<knowledge>/…`, resolved once per session via `varde-workflow paths --json`
+(or `$VARDE_WORKING_DIR` / `$VARDE_KNOWLEDGE_DIR`, else the defaults). Whether
+the directory is gitignored — or outside the repo entirely — changes behaviour
+in several skills: a plan that isn't tracked can't travel through a git
+worktree, so those runs stay in the current checkout.
 
 **Optional CLIs, never required.** Two sibling tools sharpen several skills when
-they're on `PATH`: `varde-code` for structural queries (call graphs, symbol
-bodies, blast radius, scan rules) and `varde-docs` for conflict-safe markdown
-writes and search. Every skill that mentions them also says what to do when
-they're absent — plain Read/Grep/Write.
+they're on `PATH`: `varde-code` for structural queries and `varde-workflow`
+for knowledge and workflow artifacts. Skills describe fallback behavior when
+either tool is unavailable.
 
 **Worktree isolation is opt-in.** The default is always the current checkout, so
 you can watch the diff and intervene. Isolation happens on request, or when a
@@ -295,7 +308,7 @@ pattern shape are all judgment calls to confirm with you. It picks between
 `pattern` rules (a syntactic shape in one file, matched per-file at scan time)
 and `sql` rules (aggregates, thresholds, and graph relationships queried against
 the persisted index), requires positive and negative `[[test]]` cases, and
-validates with `varde-code rules test` before shipping.
+validates with `varde-code test` before shipping.
 
 If the same false positive keeps recurring, that's a rule problem — the skill
 says to cross over to authoring rather than re-deciding the same finding forever.
@@ -472,12 +485,12 @@ It ships a frontmatter validator: `uv run scripts/validate-frontmatter.py <dir>`
 
 ## Installing
 
-`./install.sh` copies every skill into `~/.claude/skills/`. Flags: `-d` for
+`./install.sh` copies the seven core skills into `~/.claude/skills/`. Flags: `-d` for
 another runtime directory (opencode, codex, and pi all keep their own), `-s` for
 an explicit subset, `-f` to force, `--yes` to approve removal of retired
-directories without prompting.
+directories without prompting, and `--pack` for optional packs.
 
-Three guards run against this directory:
+Documentation and install checks run against this directory:
 
 - `check-refs.sh` — enforces the one-flat-level layout, single-line
   descriptions, and that every backticked reference path resolves to a real file

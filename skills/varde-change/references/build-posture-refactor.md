@@ -4,11 +4,11 @@ Behavior-preserving structural changes — restructuring or simplifying code wit
 
 ## Bootstrap
 
-1. If `memory-bank/knowledge/pattern/` exists, read it.
+1. If `<knowledge>/pattern/` exists, read it.
 2. Determine the target in priority order:
    a. An explicit argument (file glob, directory, or free-text direction such as "simplify the auth module") — use it as-is.
-   b. Otherwise, grep/glob the repo's findings directory (e.g. `memory-bank/knowledge/findings/`, if the repo has one) for the latest open review findings.
-      - Findings found: read them and use as the target. Confirm the finding's `locations` still carries the complexity it claims — with `varde-code` available, check `hotspots` for each location; otherwise read the file and judge complexity by eye. If a location doesn't show up, re-check the finding's `locations` field before proceeding — it may point somewhere more specific than assumed.
+   b. Otherwise, grep/glob the repo's findings directory (e.g. `<knowledge>/findings/`, if the repo has one) for the latest open review findings.
+      - If findings exist, read them and use them as targets. Confirm that each finding still applies to its listed `locations`. With `varde-code` available, check `hotspots` for each location. Otherwise read the file and judge the complexity directly. If a location is missing, re-check the finding's `locations` field before proceeding; it may name a more specific path.
       - No findings found: ask the user for direction, or fall back to the structural goal stated by the task if one was given.
 3. For each target file, find its exact covering tests — with `varde-code` available, run `tests_for_file`; otherwise check for a sibling test by naming convention or grep for imports of the target file in test directories. If tests are found, read them in full before making any edits. If none are found, write a characterization test at the seam (see `references/build-execution.md`'s seam definition) before making any structural edit, so behavior preservation still has a baseline to verify against. Only treat the target as blocked if it genuinely cannot be exercised at all (e.g. no reachable entry point).
 
@@ -16,7 +16,7 @@ Behavior-preserving structural changes — restructuring or simplifying code wit
 
 1. Run the full test suite (or, when working against a scoped target, the relevant subset) to establish a baseline. Record any pre-existing failures.
 2. For each structural change or complexity finding, one at a time:
-   a. **Read** — re-use the test list from Bootstrap step 3; read the target code and those tests in full.
+   a. **Read** — use the test list from Bootstrap step 3. Read the target code and those tests in full.
    b. **Plan** — state the change and confirm it preserves exact behavior. If it would alter a public API, output format, or any other observable behavior, reject the plan and find an alternative.
    c. **Edit** — apply the one change.
    d. **Verify** — run the full test suite (or relevant subset, build, typecheck, or lint — see priority order below). If anything regresses, revert immediately.

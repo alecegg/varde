@@ -1,41 +1,44 @@
 # Review categories
 
-Read the section for each relevant category. Each names when it applies, what to
-look for, how to calibrate severity, and the check specific to it.
+Read the section for each relevant category. Each explains when it applies,
+what to look for, how to calibrate severity, and its specific check.
 
 ## Rules for every category
 
-**How to check:** Read the full function or file under review, not the diff hunk
-— most findings hinge on context outside the changed lines. Grep the call sites
-of anything the change touches before judging blast radius. Each category below
-adds the check particular to it.
+**How to check:** Read the full function or file, not just the diff hunk. Most
+findings depend on context outside changed lines. Grep call sites before
+judging blast radius. Each category adds its own specific check.
 
-**What counts as a finding:** A defect confirmed by reading the actual code, not
-inferred from the diff hunk. `references/report-format.md`'s finding discipline
-sets the evidence bar.
+**What counts as a finding:** Confirm a defect by reading actual code. Do not
+infer it from the diff hunk. `references/report-format.md` sets the evidence
+bar in its finding discipline.
 
-**What a fix pass may auto-resolve:** A change that mirrors a pattern already
-present in the file or its siblings — adding the guard, log, constant, or
-validation the neighbours already use. Anything requiring a judgment about
-intended semantics, module boundaries, or a system's concurrency model
-escalates. Categories note their own exceptions.
+**What a fix pass may auto-resolve:** Auto-resolve only changes that mirror a
+pattern already present in the file or its siblings. Examples include adding a
+guard, log, constant, or validation already used nearby. Escalate anything
+requiring judgment about intended semantics, module boundaries, or concurrency.
+Categories list their own exceptions.
 
 ## CORRECTNESS
 
 **When relevant:** Any change with logic branches, arithmetic, comparisons, or state mutation. Nearly every implementation change; skip only for formatting- or comment-only diffs.
 
-**Look for:** off-by-one bounds, unhandled boundary values, a wrong operator
-relative to the stated intent, async misuse causing an unhandled promise or a
-race, and a happy path that breaks an edge case covered elsewhere. The one that
-hides: a value the change writes — field, flag, status, column, artifact — that
-no runtime reader consumes. Not "the write returned 200", but "the runtime reads
-this new value".
+**Look for:** off-by-one bounds, unhandled boundary values, wrong operators,
+async misuse causing an unhandled promise or race, and happy paths that break
+covered edge cases. Also check every value the change writes, such as a field,
+flag, status, column, or artifact. Confirm that runtime code reads it.
 
-**Severity calibration:** A bug that silently produces wrong output is critical — it is hard to catch later. A visible crash is high. An unreachable edge case is low. If a file has no covering tests, raise a suspected bug by one severity level.
+**Severity calibration:** A bug that silently produces wrong output is critical
+because it is hard to catch later. A visible crash is high. An unreachable edge
+case is low. If a file has no covering tests, raise a suspected bug one level.
 
-**How to check:** Trace every runtime reader of a value the change writes before trusting it as consumed. A green test proves nothing if it hand-builds the exact state the production code is supposed to produce — check which production code creates the state under test before counting the test as coverage. Nor if its assertion recomputes the expected value the way the code does: that passes by construction and can never disagree with the code.
+**How to check:** Trace every runtime reader of each value the change writes.
+A green test is not coverage if it hand-builds the state production code should
+create. Check which production code creates that state. An assertion is not
+coverage if it recomputes the expected value using the same code logic.
 
-**Auto-fix:** Business-rule arithmetic and operators that change program behavior need human confirmation of the intended semantics.
+**Auto-fix:** Confirm business-rule arithmetic and behavior-changing operators
+with a human before fixing them.
 
 ## CODE
 
@@ -64,18 +67,27 @@ abstraction duplicating one that already exists.
 
 **How to check:** For a suspected cycle, grep both ends for imports of each other and read both files to confirm it is real.
 
-**Auto-fix:** Nothing here, save a mechanical import reordering that resolves a false-positive cycle without moving code. Module boundaries are a human call.
+**Auto-fix:** Do not auto-fix architecture findings. The only exception is a
+mechanical import reorder that resolves a false-positive cycle without moving
+code. A human must decide module boundaries.
 
 ## SECURITY
 
-**When relevant:** A change that handles user input, constructs a shell/SQL/file-system command, touches authentication or authorization, or reads/writes secrets. Low relevance for internal-only pure-computation changes with no external input.
+**When relevant:** A change that handles user input, constructs a shell, SQL,
+or file-system command, touches authentication or authorization, or reads or
+writes secrets. Low relevance means internal pure computation with no external
+input.
 
-**Look for:** untrusted input reaching a shell, SQL, or path sink unsanitized; a
-previously guarded path losing its authn/authz check; secrets hardcoded or
-logged in plaintext; unsafe deserialization; and permissions, CORS, or network
-bindings loosened by the change.
+**Look for:** unsanitized input reaching a shell, SQL, or path sink; a
+previously guarded path losing authentication or authorization checks; secrets
+hardcoded or logged in plaintext; unsafe deserialization; and permissions,
+CORS, or network bindings loosened by the change.
 
-**Severity calibration:** Any confirmed injection vector (command, SQL, path traversal) reachable from untrusted input is critical. A missing authz check on a sensitive endpoint is critical to high depending on exposure. Logged secrets or overly permissive defaults are high. Theoretical issues with no realistic untrusted-input path are low — note them, don't escalate.
+**Severity calibration:** A confirmed command, SQL, or path-traversal injection
+reachable from untrusted input is critical. A missing authorization check on a
+sensitive endpoint is critical or high, depending on exposure. Logged secrets
+or overly permissive defaults are high. Issues without a realistic untrusted
+input path are low. Note them without escalating.
 
 **How to check:** Trace whether untrusted input can actually reach the suspect sink; a vulnerability with no reachable caller is lower severity. Read the sink itself to check whether sanitization or parameterization is already applied.
 

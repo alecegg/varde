@@ -48,17 +48,21 @@ pub mod path;
 /// - v17: `diagnostics` gains a required `path` and a nullable `file_id`, so
 ///   directory-traversal failures (which produce no `files` row) persist
 ///   alongside per-file diagnostics; old DBs must rebuild to backfill `path`.
-pub const SCHEMA_VERSION: i64 = 17;
+/// - v18: clone signatures use complete four-row LSH bands. Rebuild every
+///   index so existing clone bands cannot retain loose single-row collisions.
+/// - v19: function-level complexity metrics gain durable, versioned storage.
+pub const SCHEMA_VERSION: i64 = 19;
 
 /// All tables in the schema, in a deterministic drop order (junction tables
 /// before the tables they reference, so `DROP TABLE IF EXISTS` never trips a
 /// foreign-key constraint even if FK enforcement were enabled).
-pub const TABLES: [&str; 12] = [
+pub const TABLES: [&str; 13] = [
     "graph_cache",
     "slice_state",
     "slice_meta",
     "community_members",
     "clone_band_members",
+    "function_metrics",
     "resolved_edges",
     "diagnostics",
     "symbols",
@@ -78,8 +82,7 @@ pub const TABLES: [&str; 12] = [
 /// including generated columns like `is_test_path` — in an in-memory
 /// connection instead of hand-rolling a partial `files` table that drifts
 /// from production.
-pub(crate) fn schema_ddl() -> &'static str {
-    r#"
+const SCHEMA_DDL: &str = r#"
 CREATE TABLE files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
@@ -222,6 +225,28 @@ CREATE TABLE diagnostics (
     severity TEXT NOT NULL
 );
 
+CREATE TABLE function_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id INTEGER NOT NULL,
+    identity TEXT NOT NULL,
+    name TEXT NOT NULL,
+    owner_type TEXT,
+    start_byte INTEGER NOT NULL,
+    end_byte INTEGER NOT NULL,
+    start_line INTEGER NOT NULL,
+    start_col INTEGER NOT NULL,
+    end_line INTEGER NOT NULL,
+    end_col INTEGER NOT NULL,
+    cyclomatic INTEGER NOT NULL,
+    cognitive INTEGER NOT NULL,
+    max_nesting INTEGER NOT NULL,
+    line_span INTEGER NOT NULL,
+    byte_size INTEGER NOT NULL,
+    confidence TEXT NOT NULL,
+    confidence_reasons TEXT NOT NULL,
+    metric_version INTEGER NOT NULL
+);
+
 CREATE TABLE resolved_edges (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_file_id INTEGER NOT NULL,
@@ -268,7 +293,10 @@ CREATE TABLE graph_cache (
     blob BLOB NOT NULL,
     rev INTEGER NOT NULL
 );
-    "#
+    "#;
+
+pub(crate) fn schema_ddl() -> &'static str {
+    SCHEMA_DDL
 }
 
 /// Indexes covering `query-surface`'s O(1)/O(log N)-per-traversal
@@ -284,6 +312,8 @@ CREATE INDEX idx_resolved_edges_from_entity ON resolved_edges(from_entity_id);
 CREATE INDEX idx_resolved_edges_to_entity ON resolved_edges(to_entity_id);
 CREATE INDEX idx_entities_file ON entities(file_id);
 CREATE INDEX idx_symbols_file ON symbols(file_id);
+CREATE INDEX idx_function_metrics_file ON function_metrics(file_id);
+CREATE INDEX idx_function_metrics_identity ON function_metrics(identity);
 CREATE INDEX idx_entities_name ON entities(name);
 CREATE INDEX idx_symbols_name ON symbols(name);
 "#;
@@ -302,8 +332,10 @@ CREATE INDEX idx_symbols_name ON symbols(name);
 /// — every real path convention here is canonically cased, and case-sensitive
 /// matching is if anything less prone to false positives (`MyTEST.java`).
 pub(crate) fn path_is_test(path: &str) -> bool {
-    // Directory-segment conventions (test/tests/spec/fixtures under any depth,
-    // or at the repo root).
+    has_test_directory(path) || has_language_test_filename(path) || has_dotnet_test_path(path)
+}
+
+fn has_test_directory(path: &str) -> bool {
     path.contains("/test/")
         || path.contains("/tests/")
         || path.contains("/__tests__/")
@@ -315,40 +347,46 @@ pub(crate) fn path_is_test(path: &str) -> bool {
         || path.contains(".spec.")
         || path.starts_with("test/")
         || path.starts_with("tests/")
-        // Go: `foo_test.go` beside the code it tests.
-        || path.ends_with("_test.go")
-        // Python: `test_foo.py` / `foo_test.py` at any depth.
-        || (path.ends_with(".py") && (path.contains("/test_") || path.starts_with("test_")))
-        || path.ends_with("_test.py")
-        // Java/Kotlin: `FooTest(s).java` / `.kt` in flat layouts.
-        || path.ends_with("Test.java")
-        || path.ends_with("Tests.java")
-        || path.ends_with("Test.kt")
-        || path.ends_with("Tests.kt")
-        // C#/.NET: `FooTests.cs` plus the `<Project>.Tests/` project layout.
-        || path.ends_with("Test.cs")
-        || path.ends_with("Tests.cs")
-        || path.contains(".Test/")
-        || path.contains(".Tests/")
-        || path.contains(".UnitTests/")
-        || path.contains(".IntegrationTests/")
-        || path.contains(".FunctionalTests/")
-        || path.contains(".AcceptanceTests/")
-        // C++ GoogleTest: `foo_test.cc/.cpp/.cxx` beside the code.
-        || path.ends_with("_test.cc")
-        || path.ends_with("_test.cpp")
-        || path.ends_with("_test.cxx")
-        // Solidity Foundry `.t.sol`; Bash Bats `.bats`.
-        || path.ends_with(".t.sol")
-        || path.ends_with(".bats")
-        // Ruby RSpec/Minitest flat files.
-        || path.ends_with("_spec.rb")
-        || path.ends_with("_test.rb")
-        // Rust file-based unit-test submodule (`mod test(s);` -> sibling file).
-        || path.ends_with("/test.rs")
-        || path.ends_with("/tests.rs")
-        || path == "test.rs"
-        || path == "tests.rs"
+}
+
+fn has_language_test_filename(path: &str) -> bool {
+    const SUFFIXES: &[&str] = &[
+        "_test.go",
+        "_test.py",
+        "Test.java",
+        "Tests.java",
+        "Test.kt",
+        "Tests.kt",
+        "Test.cs",
+        "Tests.cs",
+        "_test.cc",
+        "_test.cpp",
+        "_test.cxx",
+        ".t.sol",
+        ".bats",
+        "_spec.rb",
+        "_test.rb",
+        "/test.rs",
+        "/tests.rs",
+    ];
+    let python_prefix =
+        path.ends_with(".py") && (path.contains("/test_") || path.starts_with("test_"));
+    python_prefix
+        || SUFFIXES.iter().any(|suffix| path.ends_with(suffix))
+        || matches!(path, "test.rs" | "tests.rs")
+}
+
+fn has_dotnet_test_path(path: &str) -> bool {
+    [
+        ".Test/",
+        ".Tests/",
+        ".UnitTests/",
+        ".IntegrationTests/",
+        ".FunctionalTests/",
+        ".AcceptanceTests/",
+    ]
+    .iter()
+    .any(|segment| path.contains(segment))
 }
 
 /// Open the database at `path` without touching the schema.
@@ -788,6 +826,7 @@ mod schema_scaffold {
             "entities",
             "symbols",
             "diagnostics",
+            "function_metrics",
             "resolved_edges",
             "communities",
             "community_members",
@@ -809,6 +848,8 @@ mod schema_scaffold {
             "idx_resolved_edges_to",
             "idx_entities_file",
             "idx_symbols_file",
+            "idx_function_metrics_file",
+            "idx_function_metrics_identity",
             "idx_entities_name",
             "idx_symbols_name",
         ] {
@@ -861,10 +902,58 @@ mod schema_scaffold {
             SCHEMA_VERSION
         );
         assert_eq!(
-            SCHEMA_VERSION, 17,
-            "schema version bumped for path-based traversal diagnostics"
+            SCHEMA_VERSION, 19,
+            "schema version bumped for function complexity metrics"
         );
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn function_metrics_schema_preserves_evidence_and_version() {
+        let dir = std::env::temp_dir().join(format!(
+            "varde-schema-{}-function-metrics",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir creates");
+        let db_path = dir.join("function_metrics.db");
+        let _ = std::fs::remove_file(&db_path);
+        let conn = open_or_rebuild(&db_path).expect("db opens");
+
+        let columns: Vec<String> = {
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(function_metrics)")
+                .expect("table info prepares");
+            stmt.query_map([], |row| row.get(1))
+                .expect("columns map")
+                .map(|row| row.expect("column reads"))
+                .collect()
+        };
+        for expected in [
+            "file_id",
+            "identity",
+            "name",
+            "owner_type",
+            "start_byte",
+            "end_byte",
+            "start_line",
+            "start_col",
+            "end_line",
+            "end_col",
+            "cyclomatic",
+            "cognitive",
+            "max_nesting",
+            "line_span",
+            "byte_size",
+            "confidence",
+            "confidence_reasons",
+            "metric_version",
+        ] {
+            assert!(
+                columns.contains(&expected.to_string()),
+                "missing {expected}"
+            );
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

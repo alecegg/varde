@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs varde agents into a Claude / Codex / opencode agents directory.
 #
-# Each agent lives in its own folder here (build/, explore/, plan/, review/)
+# Each agent lives in its own folder here (executor/, explore/, plan/, review/)
 # with one variant file per harness:
 #   claude.md    -> installed as <name>.md   in a Claude agents dir
 #   codex.toml   -> installed as <name>.toml in a Codex agents dir
@@ -71,7 +71,15 @@ esac
 ALL_AGENTS=()
 while IFS= read -r line; do
   ALL_AGENTS+=("$line")
-done < <(find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+done < <(
+  for agent_dir in "$SCRIPT_DIR"/*/; do
+    if [ -f "$agent_dir/claude.md" ] ||
+      [ -f "$agent_dir/codex.toml" ] ||
+      [ -f "$agent_dir/opencode.md" ]; then
+      basename "$agent_dir"
+    fi
+  done | sort
+)
 
 if [ -n "$AGENTS" ]; then
   SELECTED=()
@@ -102,6 +110,18 @@ mark_varde_managed() {
   esac
 }
 
+remove_stale_build() {
+  local stale="$TARGET/build.$EXT"
+  if [ -e "$stale" ] && is_varde_managed "$stale"; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf 'Would remove stale managed %s\n' "$stale"
+    else
+      rm "$stale"
+      printf 'Removed stale managed %s\n' "$stale"
+    fi
+  fi
+}
+
 for agent in "${SELECTED[@]}"; do
   src="$SCRIPT_DIR/$agent/$VARIANT"
   dest="$TARGET/$agent.$EXT"
@@ -115,6 +135,10 @@ for agent in "${SELECTED[@]}"; do
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
     printf 'Would install %s -> %s\n' "$src" "$dest"
+    if [ "$agent" = "executor" ] &&
+      { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; }; then
+      remove_stale_build
+    fi
     continue
   fi
   if [ -e "$dest" ] && [ "$FORCE" -ne 1 ] && [ "$MANAGED" -ne 1 ]; then
@@ -129,6 +153,10 @@ for agent in "${SELECTED[@]}"; do
     mark_varde_managed "$dest"
   fi
   echo "Installed $agent -> $dest"
+  if [ "$agent" = "executor" ] &&
+    { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; }; then
+    remove_stale_build
+  fi
 done
 
 if [ "$DRY_RUN" -eq 1 ]; then

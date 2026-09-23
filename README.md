@@ -18,10 +18,10 @@ and coding agents.
 
 | Module | Use it when | Main deliverable |
 |---|---|---|
-| [`skills/`](skills/README.md) | You want agent workflows for planning, building, reviewing, documenting, and related work. | `varde-*` skills for Claude and opencode. |
-| [`agents/`](agents/README.md) | You want ready-made plan, build, review, and exploration subagents. | Harness-specific agent definitions for Claude, Codex, and opencode. |
+| [`skills/`](skills/README.md) | You want agent workflows for planning, building, reviewing, documenting, and related work. | `varde-*` skills for Claude, Codex, and opencode. |
+| [`agents/`](agents/README.md) | You want ready-made plan, execution, review, and exploration subagents. | Harness-specific agent definitions for Claude, Codex, and opencode. |
 | [`code-cli/`](code-cli/README.md) | You need local symbol extraction, code queries, structural search, or scans. | The `varde-code` CLI. |
-| [`docs-cli/`](docs-cli/README.md) | You need a generic markdown knowledge store or document-triggered agent orchestration. | The `varde-docs`, `okf-core`, and `docwatch` workspace. |
+| [`workflow-cli/`](workflow-cli/README.md) | You need a generic markdown knowledge store or document-triggered agent orchestration. | The `varde-workflow`, `okf-core`, and `docwatch` workspace. |
 
 The modules are intentionally independent. Do not add cross-folder source
 imports, path dependencies, or a root `Cargo.toml`. Skills can use the CLIs
@@ -51,7 +51,8 @@ choose harnesses explicitly, or `--list-agents` to print their identifiers:
 ```
 
 The command only delegates installation. Module READMEs remain authoritative
-for installer options and module development.
+for installer options and development. Installed skill descriptions remain the
+authoritative routing surface.
 
 Varde installs seven user-facing skills by default:
 
@@ -73,6 +74,11 @@ Use building after scope and acceptance criteria settle.
 Request review for report-only findings across changed code.
 Record knowledge when decisions must outlive one session.
 
+Project knowledge lives under each module's `memory-bank/knowledge/` folder.
+It is reviewed and committed like source. Plans, reviews, journals, and task
+evidence stay local under `memory-bank/working/`. Personal knowledge remains
+outside this repository.
+
 ### Workflow skills
 
 Install all skills for Claude, or select a different skills directory:
@@ -83,6 +89,18 @@ cd skills
 ./install.sh -d ~/.config/opencode/skills
 ./install.sh -s varde-change,varde-review
 ```
+
+Optional capability packs stay outside the seven-skill core:
+
+```sh
+./install.sh --pack browser
+./install.sh --pack shipping
+./install.sh --pack diagnostics
+```
+
+The browser pack adds report-only validation guidance. The shipping pack adds
+release guidance. The diagnostics pack analyzes Varde sessions. See the
+[skills README](skills/README.md) for their scope and installation options.
 
 Run `./install.sh -h` for every installer option. The skills cover the full
 workflow, including planning, implementation, review, documentation, and
@@ -100,8 +118,8 @@ cd agents
 ./install.sh -t opencode -a plan,review
 ```
 
-The available agents are `plan`, `build`, `review`, and `explore`. They use
-the installed `varde-*` skills, so install the skills first. See the
+The available agents are `plan`, `executor`, `review`, and `explore`. They use
+generated Claude, Codex, and OpenCode adapters. Install the skills first. See the
 [agents README](agents/README.md) for harness-specific installation details.
 
 ### Code intelligence
@@ -117,11 +135,11 @@ cargo test
 cargo install --path crates/varde-code
 ```
 
-After installation, build an index and query it:
+After installation, query a repository directly. Build remains optional:
 
 ```sh
-varde-code build --repo-root .
 varde-code hotspots --json '{"repoRoot":"."}'
+varde-code build --repo-root .
 ```
 
 See the [code CLI README](code-cli/README.md) for supported languages,
@@ -129,10 +147,10 @@ installation releases, query commands, and architecture documentation.
 
 ### Knowledge tools
 
-The `docs-cli` workspace provides three components:
+The `workflow-cli` workspace provides three components:
 
 - `okf-core`, the library for OKF concept and bundle operations.
-- `varde-docs`, the CLI for creating, reading, searching, updating, and
+- `varde-workflow`, the CLI for creating, reading, searching, updating, and
   linting markdown knowledge bundles.
 - `docwatch`, a macOS-oriented watcher that dispatches an agent for unresolved
   trigger tags in Markdown files.
@@ -140,12 +158,12 @@ The `docs-cli` workspace provides three components:
 Build and test this workspace locally:
 
 ```sh
-cd docs-cli
+cd workflow-cli
 cargo build
 cargo test
 ```
 
-`docs-cli` is pre-alpha. Its detailed [README](docs-cli/README.md) documents
+`workflow-cli` is pre-alpha. Its detailed [README](workflow-cli/README.md) documents
 the OKF workflow, command syntax, vault layering, and `docwatch` lifecycle.
 
 ## Development workflow
@@ -156,10 +174,10 @@ repository-level documentation update is needed.
 
 | Module | Build | Test | Install |
 |---|---|---|---|
-| `skills/` | Not applicable | `./install.sh -h` | `./install.sh` |
-| `agents/` | Not applicable | `./install.sh -h` | `./install.sh` |
+| `skills/` | Not applicable | `./check-refs.sh && for test_file in tests/*.sh; do "$test_file"; done` | `./install.sh` |
+| `agents/` | `./generate.py --check` | `./test-consolidated-skills.sh` | `./install.sh` |
 | `code-cli/` | `cargo build` | `cargo test` | `cargo install --path crates/varde-code` |
-| `docs-cli/` | `cargo build` | `cargo test` | Build outputs include `varde-docs` and `docwatch` |
+| `workflow-cli/` | `cargo build` | `cargo test` | Build outputs include `varde-workflow` and `docwatch` |
 
 The Rust modules are separate Cargo workspaces. Run `cargo build` and
 `cargo test` in the appropriate module, never from the repository root.
@@ -172,7 +190,7 @@ varde/
 ├── skills/      Reusable varde-* agent workflow skills
 ├── agents/      Installable harness-specific subagent definitions
 ├── code-cli/    Rust workspace for varde-code
-└── docs-cli/    Rust workspace for varde-docs, okf-core, and docwatch
+└── workflow-cli/    Rust workspace for varde-workflow, okf-core, and docwatch
 ```
 
 ## Documentation
@@ -182,7 +200,7 @@ Use the module documentation for implementation details:
 - [Skills guide](skills/README.md)
 - [Agents guide](agents/README.md)
 - [varde-code guide](code-cli/README.md)
-- [varde-docs guide](docs-cli/README.md)
+- [varde-workflow guide](workflow-cli/README.md)
 - [Repository contributor instructions](AGENTS.md)
 
 ## License

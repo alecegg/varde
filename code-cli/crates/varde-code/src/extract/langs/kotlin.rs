@@ -64,11 +64,41 @@ pub const REQUIRED_KINDS: [EntityKind; 14] = [
 ];
 
 /// Emit entities for one node (called for every node in the tree).
+// varde-ignore-next-line duplicate-code-clone -- visitor dispatch intentionally mirrors language peers
 pub fn visit(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if visit_part_1(node, kind, ctx) {
+        return;
+    }
+    if visit_part_2(node, kind, ctx) {
+        return;
+    }
+    if visit_part_3(node, kind, ctx) {
+        return;
+    }
+    if visit_part_4(node, kind, ctx) {
+        return;
+    }
+    if visit_part_5(node, kind, ctx) {
+        return;
+    }
+    if visit_part_6(node, kind, ctx) {
+        return;
+    }
+    if visit_part_7(node, kind, ctx) {
+        return;
+    }
+    let _ = visit_part_8(node, kind, ctx);
+}
+
+fn visit_part_1(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
     match kind {
         // ---- imports ----
         // `import com.foo.Bar` / `import com.foo.*` / `import com.foo.Bar as
@@ -81,7 +111,6 @@ pub fn visit(
             let spec = kotlin_import_path(node);
             ctx.push(EntityKind::Import, spec, node);
         }
-
         // ---- structural ----
         "function_declaration" => {
             let name = first_identifier(node).unwrap_or_default();
@@ -92,7 +121,18 @@ pub fn visit(
             let name = function_scope_name(node).unwrap_or_default();
             ctx.push(EntityKind::Function, name, node);
         }
-        "lambda_literal" => ctx.push_callable_boundary(node),
+        "lambda_literal" | "anonymous_function" => ctx.push_callable_boundary(node),
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_2(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         "class_declaration" => {
             let name = first_identifier(node).unwrap_or_default();
             let kind = if is_interface(node) {
@@ -115,6 +155,17 @@ pub fn visit(
                 }
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_3(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // `object Registry : Base` / `companion object Key` — Kotlin singleton
         // and companion declarations. Previously dropped entirely (audit S3:
         // top-level `object` and `companion object` were absent from
@@ -146,7 +197,6 @@ pub fn visit(
                 maybe_export(node, &name, ctx);
             }
         }
-
         // ---- variables ----
         // One Entity per declared name; also fires for the variable_declaration
         // nested under property_declaration (locals, properties, const val).
@@ -157,14 +207,34 @@ pub fn visit(
                 ctx.push(EntityKind::Variable, name, node);
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_4(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- parameters ----
         "parameter" => {
             if let Some(name) = first_identifier(node) {
                 ctx.push(EntityKind::Parameter, name, node);
             }
         }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_5(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // ---- expression-level ----
         "call_expression" => {
             let name = node
@@ -208,6 +278,17 @@ pub fn visit(
                 });
             }
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_6(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // Member accesses: the identifier inside the trailing navigation_suffix
         // (`call.respondText` -> "respondText").
         "navigation_expression" => {
@@ -221,7 +302,6 @@ pub fn visit(
                 ctx.push(EntityKind::Literal, node.text().into_owned(), node);
             }
         }
-
         // ---- error handling ----
         "catch_block" => {
             let name = node
@@ -231,39 +311,97 @@ pub fn visit(
                 .unwrap_or_default();
             ctx.push(EntityKind::Catch, name, node);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_part_7(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    visit_part_7_a(node, kind, ctx) || visit_part_7_b(node, kind, ctx)
+}
+
+fn visit_part_7_a(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
         // return/break/continue/throw all parse as jump_expression; the
         // leading keyword distinguishes Throw from control flow.
-        "jump_expression" => {
-            let text = node.text().into_owned();
-            if text.starts_with("throw") {
-                // The thrown expression is the first named child (the `throw`
-                // keyword is an anonymous token).
-                let name = node
-                    .children()
-                    .find(|c| c.is_named())
-                    .map(|n| n.text().into_owned())
-                    .unwrap_or_default();
-                ctx.push(EntityKind::Throw, name, node);
-            } else {
-                let name = if text.starts_with("return") {
-                    "return_statement"
-                } else if text.starts_with("break") {
-                    "break_statement"
-                } else if text.starts_with("continue") {
-                    "continue_statement"
-                } else {
-                    "jump_expression"
-                };
-                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
-            }
-        }
-
+        "jump_expression" => visit_jump_expression(node, ctx),
         // ---- control flow ----
-        "if_expression" | "when_expression" | "for_statement" | "while_statement"
-        | "do_while_statement" | "try_expression" => {
+        "if_expression" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_expression"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn visit_jump_expression(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+) {
+    let text = node.text();
+    if text.starts_with("throw") {
+        let name = node
+            .children()
+            .find(|child| child.is_named())
+            .map(|child| child.text().into_owned())
+            .unwrap_or_default();
+        ctx.push(EntityKind::Throw, name, node);
+        return;
+    }
+    let name = [
+        ("return", "return_statement"),
+        ("break", "break_statement"),
+        ("continue", "continue_statement"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, name)| text.starts_with(prefix).then_some(name))
+    .unwrap_or("jump_expression");
+    ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+}
+
+fn visit_part_7_b(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "when_expression" | "for_statement" | "while_statement" | "do_while_statement"
+        | "try_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
+        "when_entry" => {
+            ctx.push(EntityKind::ControlFlow, "match_arm".to_string(), node);
+        }
+        _ => return false,
+    }
+    true
+}
 
+fn visit_part_8(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    kind: &str,
+    ctx: &mut ExtractCtx,
+) -> bool {
+    match kind {
+        "conjunction_expression" => {
+            ctx.push(EntityKind::ControlFlow, "logical_and".to_string(), node);
+        }
+        "disjunction_expression" => {
+            ctx.push(EntityKind::ControlFlow, "logical_or".to_string(), node);
+        }
         // ---- annotations ----
         // Any annotation (`@RestController`, `@GetMapping("/x")`, ...) ->
         // a Decorator entity whose `name` is the annotation's type identifier
@@ -295,9 +433,28 @@ pub fn visit(
                 });
             }
         }
-
-        _ => {}
+        _ => return false,
     }
+    true
+}
+
+/// True for the nested `if_expression` representing `else if`.
+fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(body) = node
+        .parent()
+        .filter(|parent| parent.kind() == "control_structure_body")
+    else {
+        return false;
+    };
+    let Some(parent_if) = body
+        .parent()
+        .filter(|parent| parent.kind() == "if_expression")
+    else {
+        return false;
+    };
+    parent_if
+        .field("alternative")
+        .is_some_and(|alternative| alternative.range() == body.range())
 }
 
 /// Route `(method, path)` carried by a Kotlin Spring/Micronaut annotation, for
@@ -731,5 +888,69 @@ mod tests {
                 .any(|entity| entity.kind == EntityKind::CallableBoundary),
             "lambda boundary: {entities:?}"
         );
+    }
+
+    #[test]
+    fn complexity_events_cover_kotlin_decisions_and_boundaries() {
+        let src = r#"
+            fun outer(a: Boolean, b: Boolean, value: Int) {
+                if (a && b || a) {} else if (b) {}
+                when (value) { 1 -> consume(1); else -> consume(0) }
+                do {} while (a)
+                val local = fun(n: Int): Int {
+                    if (n > 0) return n
+                    return 0
+                }
+                listOf(1).map { n -> if (n > 0) n else 0 }
+                try {} catch (error: Exception) {}
+            }
+        "#;
+        let parsed = parse_source(&SupportLang::Kotlin, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flow_names: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+
+        assert!(
+            flow_names.contains(&"logical_and"),
+            "entities: {entities:?}"
+        );
+        assert!(flow_names.contains(&"logical_or"), "entities: {entities:?}");
+        assert!(
+            flow_names.contains(&"elseif_statement"),
+            "entities: {entities:?}"
+        );
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "match_arm")
+                .count(),
+            2,
+            "entities: {entities:?}"
+        );
+        assert!(
+            entities
+                .iter()
+                .any(|entity| entity.kind == EntityKind::Catch && entity.name == "error"),
+            "entities: {entities:?}"
+        );
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            2,
+            "entities: {entities:?}"
+        );
+
+        let metrics = crate::complexity::function_complexities(&entities);
+        let outer = metrics
+            .iter()
+            .find(|metric| metric.name == "outer")
+            .expect("outer metric");
+        assert_eq!(outer.cyclomatic, 9, "metric: {outer:?}");
     }
 }
