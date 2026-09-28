@@ -2,203 +2,95 @@
 
 ## Choose the breadth
 
-The ten category names are `code`, `architecture`, `security`, `readability`,
-`correctness`, `resilience`, `observability`, `performance`, `api-design`, and
-`data-integrity`.
-
 | The request is | Categories |
 |---|---|
 | A plain review, with no stated breadth | The default three: `CORRECTNESS`, `CODE`, `ARCHITECTURE` |
-| A thorough or full review | All 10, filtered by relevance |
-| A named concern — security, performance, tests, and so on | That single category |
+| A thorough or full review | All 10 categories in `references/report-categories.md`, filtered by relevance |
+| A named concern — security, performance, and so on (tests → `CORRECTNESS`) | That single category |
 
 If no category matches the named concern, list the ten categories and ask.
-Do not guess. If the user names a keyword, path, or area, filter the detected
-sections to it. State the resolved breadth and active category list first.
-
-## Choose the target
-
-| Working tree state | Review |
-|---|---|
-| Working tree has uncommitted or staged changes | Review those changes against `HEAD` |
-| User names a branch, range, or PR | Review exactly that target |
-| Repository is clean and no base is named | Review commits since the nearest merge or tag. Use `git describe --tags --abbrev=0` or `git log --merges -n1 --format=%H`, whichever is nearer `HEAD` |
-
-Tell the user which target you resolved and how before reading code. For the
-third row, also offer a whole-codebase pass in the same message. For "review
-this repo", send recent commits to one reader and every file to another. Do
-not guess silently. Repeated requests could review different code.
+Do not guess.
 
 ## Workflow
 
-1. **Load the instructions.** Read `references/report-recipes.md` for common
-   commands, `references/report-routing.md` for specialist routing, and
-   `references/report-candidates.md` for the coordinator candidate contract.
-   Read `references/varde-code.md` when that CLI is on PATH. It adds commands
-   with call-graph and structure details for step 4. If you have not read the
-   changed area this session, run its `nav_map` command before step 4. Section
-   detection uses directory heuristics. `nav_map` shows the subsystem layout.
-2. **Resolve the spec source.** When `CORRECTNESS` is active, resolve the
-   correctness spec source. Full procedure: `## Spec source` below.
-3. **Create the review folder.** Create it before reviewing categories.
-   Use its `reviewDir` for all later files. Full
-   procedure: `## Create the review folder` below.
-4. **Analyze the changed code.** Read the diff and changed files directly,
-   run the project's own lint/test/typecheck commands if any exist, and grep
-   for known anti-patterns. Write findings straight into the review folder.
-   Full procedure: `## Analyze the changed code` below.
-5. **Detect sections.** Load the configured sections or auto-detect them,
-   then narrow to the area the user named, if any. Full procedure:
-   `## Detect sections` below.
-6. **Review each changed section.** Check all active categories while
-   reading each section. Full procedure: `## Review each changed section`
-   below.
-7. **Count and report.** Count the findings, confirm the review
-   folder is complete, and report results to the user. Full procedure:
-   `## Roll up and report` below.
-8. **Record lessons.** Invoke `varde-knowledge reflect`, scoped to this run. It
-   records friction and durable lessons only — a handoff belongs at a
-   session boundary, which this is not.
+1. **Resolve scope and target.** For an explicit code area without a diff/ref
+   request, list all tracked files with `git ls-files -- <area>` and inspect
+   relevant consumers, even in a clean tree. For a diff/ref request, preserve
+   changed-file scope and narrow it to any named area and its consumption path.
+   Default diff target: working-tree changes vs `HEAD`, or the named ref;
+   clean tree → changes since the nearest release tag
+   (`git describe --tags --match 'v*' --abbrev=0 2>/dev/null`) or, if none,
+   the merge base with `origin/HEAD` (`git merge-base HEAD origin/HEAD`).
+   List changed files with `git diff --name-only <base>...HEAD` for a ref
+   target; for uncommitted changes, use `git diff --name-only HEAD` plus
+   `git ls-files --others --exclude-standard`. Skip generated files, lockfiles,
+   and vendored code. A whole-codebase pass lists every tracked file; offer it
+   only when those files fit within three 60k-token chunks
+   (`## Split a large review`); otherwise offer to narrow to a path or commit
+   range. Stop and say so when the resolved file list is empty. State area or
+   diff scope, the resolved target, and active categories before reading code.
+2. **Measure the read.** Before reading, total the bytes of the listed files
+   and, for diff scope, the diff (`wc -c`); divide by 4 for approximate tokens. The reading
+   budget is **60k tokens** (about 240 KB). Under it, review inline. Over it,
+   follow `## Split a large review`.
+3. **Resolve the spec source** when `CORRECTNESS` is active; the first found
+   wins: acceptance criteria passed in (from `varde-change build`, the plan
+   goal and plan-level criteria — verify every criterion), the active plan or
+   task on disk, a spec under `<knowledge>/specs/` for the area, issue bodies
+   that commits reference. With none, check internal consistency only. Pass the source to every delegated review.
+4. **Create the review folder** before category work, per
+   `references/report-format.md`, and pass the plan id to every delegate.
+5. **Gather signals.** Run the project's lint/test/typecheck commands if any
+   exist; file failures under matching categories. With `varde-code`, follow
+   `references/varde-code.md` (review scoping). Grep for anti-patterns
+   relevant to the active categories.
+6. **Review.** Read every scoped file in full; for diff scope, also read the
+   diff. For a deleted
+   path, read its pre-deletion contents with
+   `git show "$(git merge-base <base> HEAD):<path>"` for ref targets, using
+   the merge base from the step 1 comparison. For working-tree deletions, use
+   `git show HEAD:<path>`. Then inspect affected callers. In full mode, keep
+   only categories whose `When` conditions apply, and state each skipped one
+   once with its reason.
+   Read each active category's guidance in
+   `references/report-categories.md`, then apply all of them in one pass.
+   Verify every `high` or `critical` finding yourself, per
+   `### Finding discipline` in `references/report-format.md`.
+7. Once per review, search `<knowledge>/` for specs, decisions, and patterns
+   covering the reviewed area; when a finding breaks one, add its `Violates`
+   link. Append each finding to its category file (`references/report-format.md`)
+   as you find it.
+8. **Roll up and report.** Read each category file, confirm one exists for
+   every active category that ran, and update `review.md`. Tell the user:
+   "Review complete. <N> findings across <C> categories. Review folder:
+   `<path>`." Name skipped categories with their reasons. If complexity or
+   readability findings exist, suggest `varde-change build` with the refactor
+   posture.
+9. Record real obstacles through `varde-learn`; record reusable decisions
+   through `varde-knowledge`.
 
-Report only. Do not modify source files. If any step fails outright, report a
-hard error and stop.
+## Review-gate evidence
 
-## Spec source
+When the caller supplies a `varde-workflow` subject id for pre-edit or final
+implementation review, inspect that phase and base the verdict on the current
+contract, baseline, change fingerprint, and verification evidence. Write the
+reviewer's JSON evidence record and submit it directly with
+`varde-workflow review record`, using the exact `data.version` from inspect.
+The CLI stores the record in the subject's configured working store; this is
+the reviewer's only required write outside the active review folder. A report
+file or coordinator-entered verdict does not satisfy the gate. If the review
+CLI is unavailable, stop the gate review and report why.
 
-When `CORRECTNESS` is active, use these spec sources in order:
+## Split a large review
 
-- Acceptance criteria passed in the invocation prompt.
-- The active task or plan document, if one exists on disk.
-- Commit issue references and their issue bodies.
-- A matching specification document.
-- The user, if no source is available.
+Split the listed files into the fewest chunks that each fit the budget, at most
+three. If three chunks cannot fit, stop and ask the user to narrow the review
+to a path or commit range.
 
-If no source is found, check internal consistency only. Pass the resolved
-source as `{{spec_source}}` to any delegated correctness review.
-
-When spawned by `varde-change build`, treat the passed plan goal, plan-level
-acceptance criteria, Feature Impact, and verification evidence as the primary
-review specification. Verify every plan-level acceptance criterion.
-
-## Create the review folder
-
-Create the review folder before category work. Save its path as `reviewDir`.
-Use it for every later file. When `originating_plan_id` is present, create the
-folder under
-`<working>/plans/<originating_plan_id>/<review-id>/`. Use
-`<originating_plan_id>/<review-id>` as the compound id. Keep category files
-beside `review.md`. Without a plan id, use
-`<working>/reviews/<review-id>/`. Create the folder with `mkdir -p`.
-Write `review.md` and `index.md` directly. Generate sibling `index.md` as
-nav-only metadata.
-
-Pass `originating_plan_id` through every delegated review prompt. Treat a
-nested review as complete when its `triage_status` is `complete`. Keep its
-action-item plans as separate nested children of the same plan bundle.
-
-## Analyze the changed code
-
-After creating the review folder, read the changed code yourself. This manual
-review requires every finding to come from code you read:
-
-1. For the target resolved in `## Choose the target`, collect the diff with
-   `git diff <base>...HEAD`, or `git diff HEAD` for uncommitted changes. Read
-   every changed file in full, not just the hunk. For an approved whole-codebase
-   pass, no diff exists. Use the detected sections as the read list.
-2. If the project has lint, test, or typecheck commands, check `package.json`,
-   a `Makefile`, or similar. Run those commands and report failures as findings.
-3. If `varde-code` is available, read `references/varde-code.md`. Run its
-   scoping pass over changed files before the grep step. Include hotspots,
-   blast radius, dependents, `tests_for_file`, and a `scan` rule-pack pass.
-   Treat its output as another candidate list, not a review limit. A changed
-   file with no covering tests (`tests_for_file` returns empty) raises the
-   CORRECTNESS severity. See `references/report-categories.md`.
-4. Grep for anti-patterns relevant to the active categories. Examples include
-   empty catch blocks, string-concatenated queries, `TODO`/`FIXME` markers, and
-   duplicated blocks. Read shortlisted locations more closely.
-5. Use one subagent only when a section exceeds available context. Give it a
-   bounded file slice. Tell it to try to disprove candidates and verify its
-   own candidates, as required by `## Review each changed section`.
-
-Write findings straight into the review folder's category files as you find
-them (see `## Review each changed section` below), then move to the next
-section. Each section is analyzed once.
-
-## Detect sections
-
-First check for a project config declaring review sections, such as a
-`review.sections` array in repo settings. If none exists, auto-detect
-top-level directories. If the repository only has `src/`, group by
-subdirectory. If the structure is ambiguous, use `src` and `non-src`, and warn.
-
-If the request names an area, keyword, or path, filter sections to it. Warn and
-stop when filtering produces no sections.
-
-## Review each changed section
-
-For each changed section, review all relevant active categories together:
-
-1. Collect changed files with `git diff --name-only HEAD -- <section>`.
-   Fall back to `main...HEAD` when needed. Skip sections with no files.
-2. In full mode, keep only categories whose `## When relevant` conditions
-   apply. State any skipped category and its reason once per section.
-3. Read each remaining category's `## <NAME>` and `### How to check`
-   guidance. Also read relevant knowledge patterns and specification inputs.
-4. Read each changed file in full with its diff. Apply every remaining
-   category checklist in one pass. Confirm candidates in the actual code. Run
-   relevant project checks once, then assign failures to matching categories.
-5. Use a subagent only when the section exceeds available context. Tell it to
-   try to disprove candidates. Verify every `high` or `critical` candidate
-   yourself.
-6. Before each write, grep or glob project docs for the affected feature.
-   Link any matching concept.
-7. Append each finding to its category file by applying a targeted edit, or
-   by creating the file if it does not yet exist. Load the existing file
-   first to preserve prior findings. The file must have valid frontmatter
-   (`review-category` metadata, see the `## Category file format` section of
-   `references/report-format.md`) and the full updated body (required fields per the
-   `## Finding format` section of `references/report-format.md`).
-
-Use `auto-fix` only when the fix is precisely describable and follows an
-established project pattern. Otherwise use `triage`. Keep `disposition` blank
-until the follow-up pass.
-
-### Finding format
-
-Read the `## Finding format` section of `references/report-format.md` before
-writing findings. Every category file uses its exact field markers.
-
-Every finding summary must explain the issue, impact, and evidence. Link the
-review folder and relevant project docs when useful.
-
-## Roll up and report
-
-Read each category file and build the rollup. Confirm the review folder
-contains `review.md`, generated nav-only `index.md`, and one file for every
-active category that ran.
-Report skipped category-section pairs and their reasons.
-
-Tell the user: "Review complete. <N> findings (<A> scan advisories) across
-<S> sections and <C> categories. Review folder written to `<path>`."
-
-If complexity or readability findings exist, offer a refactor pass that
-preserves behavior. Wait for the user to accept it.
-
-## Gotchas
-
-- Use a subagent only for a section exceeding available context. Tell it to
-  try to disprove candidates. Verify its `high`/`critical` candidates before
-  persisting them. See `## Review each changed section` above.
-- Every finding needs code evidence. "This could break" is not enough. Read
-  `### Finding discipline` in `references/report-format.md`.
-- Apply every active category relevant to each changed section. Record skipped
-  categories with a short reason.
-- Append each finding immediately to its category file as it's found, not
-  batched at the end.
-- Use repository-relative paths in every finding location.
-- Keep one file per category. It makes follow-up clear.
-- A standalone `varde-review fix` run only processes findings labelled
-  `Label: auto-fix` — mislabeled findings are silently skipped, so set the label
-  carefully at review time.
-- `varde-review fix` reads this skill's category files for automated fixes and
-  triage.
+Give each chunk to one report-only `review` subagent with the active
+categories, the spec source, the chunk's files, and resolved absolute
+`<working>`/`<knowledge>` paths. Each uses those paths without re-resolving and
+returns findings in the finding format after trying to disprove its own candidates, and writes
+nothing. You write every category file, verify each returned `high` or
+`critical` finding in the code, then run one cross-chunk pass for
+`ARCHITECTURE` and `API-DESIGN` using dependents and the returned findings.

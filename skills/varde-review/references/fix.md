@@ -1,65 +1,108 @@
 # Fix mode
 
-## Invocation mode
+The parent owns review orchestration and user triage. An Executor applies
+findings only; it never prompts the user, changes a blank disposition based on
+its own judgment, or creates a companion plan. Read and edit the review's
+Markdown directly (format: `report-format.md`).
 
-Standalone mode is the default. A user asks to apply an existing review.
-The automated pass covers only `Label: auto-fix` findings. The human pass sees
-every `Label: triage` finding.
+Choose one route and pass the review folder explicitly:
 
-`varde-change build` uses build mode. It passes `mode=build` with
-`plan_context` containing the plan goal, plan-level acceptance criteria, and
-`creates`/`modifies` scope. In build mode, the automated pass covers **every**
-finding regardless of label. The human pass sees only findings rejected by the
-escalation gate. If `mode=build` arrives without `plan_context`, report a hard
-error and stop.
+| Route | Required context | Findings processed |
+|---|---|---|
+| Plan-owned review | `mode=build`, `plan_context`, `review_dir`, `repoRoot` | `Disposition: fix` findings regardless of label. Blank findings go to parent triage; skip `dismiss`, `action-item`, and `escalated`. Apply the plan gate and task assertions below. |
+| Standalone review folder | `mode=standalone`, `review_dir`, `repoRoot`; no `plan_context` | `Label: auto-fix` findings whose disposition is blank or `fix`. Skip `dismiss`, `action-item`, and `escalated`. |
 
-Before work starts, say whether this is standalone or build mode.
+Check eligibility before loading a complete finding, checking its location,
+running the plan gate, backing up files, or making an edit. In a standalone
+run, return non-eligible findings that still need a decision (including blank
+`Label: triage`) to the parent. In a plan-owned build, return blank findings
+to the parent for triage without applying them. In either route, return every
+unverified, rejected, unapplied, or otherwise unresolved finding to the parent
+with its identifier, reason, and any `Escalated:` note. The parent presents
+the triage table and records the user's decision.
+
+For a follow-up fix after triage, the parent creates a bounded build task with
+the selected `finding_ids`, the concrete approved solution for each ID, and
+traceable user decision evidence, then dispatches it through `varde-change
+build`. The Executor applies only those IDs and solutions; missing or
+mismatched approval returns to the parent.
+Do not rerun review-fix over the whole folder for a user-selected finding.
+
+## Source routing
+
+The parent resolves the review ID and supplies its `review_dir`. For a PR
+number or URL, the parent follows `references/fix-pr.md` to turn unresolved
+review threads and failing `gh pr` checks into a review folder before
+dispatching the Executor. PR conversation comments supply context but do not
+become thread findings. Missing `gh` or authentication stops before creating
+a partial review.
+
+Apply `references/review-gates.md` before edits and at completion; a
+caller-approved plan can cover this pass when its scope and assumptions hold.
 
 ## Workflow
 
-1. **Load the instructions.** Read `references/fix-recipes.md`,
-   `references/fix-interview.md`, and `references/fix-triage-pass.md`. The review
-   folder contains the authoritative files. Read and edit those Markdown files
-   directly.
-2. **Confirm a clean working tree.** Run `git status --porcelain` in
-   `repoRoot`. In build mode, the caller already runs this inside the build
-   worktree. The tree must be clean. A dirty result is an error, so stop at
-   once. In standalone mode with a non-empty result, leave the user's dirty
-   state unchanged. Offer to run the fix pass in a worktree using
-   `references/worktree.md`. Stop only if the user declines.
-   Full procedure: `references/fix-pass.md`.
-3. **Select the review folder.** Resolve `review_dir`, or use the newest review
-   folder. Confirm that `review.md` and generated nav-only `index.md` exist.
-   Before work starts, print the selected folder, category list, and finding
-   counts.
-4. **Run the automated fix pass.** Apply findings with per-finding diff
-   isolation and verification. In build mode, use the escalation check. Full
-   procedure: `references/fix-pass.md`.
-5. **Run the human triage pass.** Process remaining findings one at a time and
-   ask for a disposition. Full procedure: `references/fix-triage-pass.md`.
-6. **Simplify applied fixes.** If any finding was applied
-   (automated or human `Disposition: fix`) and left uncommitted changes, invoke
-   `references/simplify.md` on those changes in the working tree or staged diff.
-   Tighten names and remove redundancy only from what this pass touched. The
-   project's tests must verify the edits before this step reports back. Skip
-   silently if no finding was applied.
-7. **Create follow-up plans.** One plan per category that has action items.
-   Full procedure: `references/fix-companion-plan.md`.
-8. **Report the result.** Report fix and triage counts, update
-   `triage_status`, and archive a completed standalone review. Full
-   procedure: `references/fix-closing-summary.md`.
-9. **Record lessons.** Invoke `varde-knowledge reflect` for this run. Record
-   friction and durable lessons only. Record a handoff at a session boundary,
-   not during this run.
+1. **Check the tree.** Run `git status --porcelain` in `repoRoot`. In build
+   mode a dirty tree is an error; stop. In standalone mode, proceed in place
+   only when the parent authorized it; otherwise return the dirty-tree result
+   to the parent before editing. Per-finding isolation restores only the files
+   a failed fix touched.
+2. **Select the review.** Use the supplied `review_dir` and confirm
+   `review.md` exists. Load category order from its
+   `## Categories` table, confirm each active category completed or was
+   intentionally skipped, and validate every finding's required fields; on a
+   malformed finding, report its category and identifier and stop until a
+   human repairs it.
+3. **Automated pass.** Follow `references/fix-pass.md`.
+4. **Return unresolved findings.** Do not perform human triage or create a
+   companion plan in an Executor run. Return unresolved findings to the parent
+   as deferred, preserving their `Escalated:` notes.
+5. **Close.** See `## Closing`, below.
+   For a PR source, commit verified fixes on the local PR branch and return the
+   result to the parent. The parent handles any push choice; the Executor does
+   not push, post comments, or resolve threads on GitHub.
+6. Return obstacle evidence and reusable decisions to the parent for recording
+   through `varde-learn` or `varde-knowledge`.
 
-## Gotchas
+## Parent triage
 
-- Verify each finding before marking it fixed. See `references/fix-pass.md`.
-- Diff isolation is per-finding. Preserve successful fixes and revert only
-  the failed finding's own diff.
-- Report mode creates the review folder and category files this pass consumes.
-  After this pass creates a companion plan, `varde-change build` decomposes and
-  executes it. Invoke `varde-change build` directly unless the companion plan's
-  acceptance criteria are vague. In that case, use `varde-change plan` first.
-- If a review folder's markdown is malformed, report the category and finding
-  identifier and stop until a human repairs it.
+After the Executor returns, the parent shows every unresolved blank finding in
+one inline table, then waits for the user's decision:
+
+```
+| # | Severity | Location | Summary | Escalated | Recommended |
+|---|---|---|---|---|---|
+| 1 | high | src/auth/token.ts:42 | accepts expired tokens | — | fix: reject expired tokens |
+```
+
+The user may choose `fix`, `dismiss` with a reason, `action-item`, or `discuss`
+(leave `Disposition: blank`). The parent records dismissals and reasons or
+creates companion-plan tasks for action-items. For a chosen fix, the parent
+records `Disposition: fix` and the chosen concrete solution with user decision
+evidence, then creates a bounded `varde-change build` task carrying those
+approvals and selected `finding_ids`. Keep that decision history when a later
+scope/spec/verification blocker prevents application; a disposition alone is
+not approval of a particular solution.
+Recommend `fix` for high severity or a contained, high-confidence change at
+one call site; recommend `action-item` when the fix is large, crosses packages,
+or touches a hot path. Discuss a build-blocking finding before dismissing it.
+
+Create one companion plan per review at its first action item, and add each
+later action-item as another task. Standalone review:
+`<working>/plans/<YYYY-MM-DD>-review-fixes-<target>/plan.md`. Review nested in a
+plan bundle: `<working>/plans/<plan-id>/<fix-id>/plan.md`, with `type: plan`
+and `source_review: <plan-id>/<review-id>` as an extra traceability field in
+frontmatter; keep its tasks and child concepts inside the parent bundle, and
+complete it before the parent plan. Pre-fill each task's `#### Verification`
+from the finding title, location, summary, and chosen solution, and link the
+task from the finding block.
+
+## Closing
+
+Report `automated: fixed/skipped/reverted` and
+`triage: fix/dismiss/action-item/deferred` counts on one line each, counting
+only decisions already recorded in the review. Leave parent-owned choices
+blank. Set `triage_status` (`complete`, or `partial` when unresolved findings
+remain). In build mode, with plan storage tracked, commit the round's code
+edits once at round end. Return the review folder and deferred findings to the
+parent for triage and the next dispatch.

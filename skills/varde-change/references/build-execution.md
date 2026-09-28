@@ -1,178 +1,123 @@
 # Execution Reference
 
-Read at the start of every plan. It captures the execution discipline for
-implementing tasks.
+Every executor reads this before its first tool call. It is the task cycle
+every implementation task runs.
+
+Apply `references/review-gates.md` before implementation edits and at
+completion. Reuse an unchanged approved plan verdict supplied by the caller.
+For persisted work, the parent passes the plan subject id and resolved memory
+paths. Tasks inherit that subject; do not initialize or record approval for
+yourself. Before the first edit, run:
+
+```sh
+varde-workflow review check --subject <subject-id> --checkpoint start --json
+```
+
+On resume, run the same command with `--checkpoint resume` before continuing
+interrupted work. Stop on a typed blocker. A verified task may become `done` while the
+plan's required aggregate implementation review is pending; do not mark the
+plan complete on that basis.
+
+When the execution checkout differs from the approval checkout, use the
+caller-supplied registered binding. Add `--repository <approval-checkout>`,
+`--worktree <absolute-worker-path>`, and `--binding <task-binding-id>` together
+to start/resume checks. Load `references/worktree.md` for this contract. Stop
+if the context is missing or rejected; ordinary parent checks from the worker
+are not a substitute. Keep all isolated task state writes parent-owned.
 
 ## Choose the task kind
 
-A task with `kind: research` follows `references/build-research-task.md` instead
-of the cycle below — it produces a lasting external output (decision record,
-prototype, reference doc), so there is no failing test to write. Anything else
-is an implementation task.
+`kind: research`: write the `creates` doc from primary sources outside the
+repo, citing each claim (URL, spec section, file:line); a decision ends with
+one recommendation. Then run Completion. Anything else is an implementation
+task. A task from the debug path also keeps `debug_evidence` per
+`references/build-posture-debug.md`'s Evidence contract.
+
+## Load the posture
+
+Before the first edit, load the reference matching the task's posture: `debug`
+→ `references/build-posture-debug.md`; `refactor` →
+`references/build-posture-refactor.md`. `spike` posture reverts its own edits
+and skips the Completion commit step. `plan-execution` runs this cycle as
+written.
 
 ## Drift check
 
-Once per plan run, before the first task, check that the plan's
-assumptions still hold. Derive the baseline from git: for a tracked plan, its
-authoring commit (`git log -n1 --format=%H -- <plan-path>`); otherwise the HEAD
-the run started from. Skim the files named in the plan's scope for drift since
-then, with `detect_changes` for symbol-level precision or
-`git log --oneline -- <paths>`.
-
-Before each task's execution frame, check its `modifies` and
-`creates` against the working tree — uncommitted or unexpected changes, or a
-`creates` path that already exists, are drift.
-
-Benign drift (unrelated exports, cosmetic renames) gets a note and you proceed
-with current reality. Drift that invalidates the plan's assumptions is a
-blocker. This is a judgment call, not a mechanical check.
+Before editing, check the task's `modifies`, `creates`, and both paths in each
+`renames` entry against the working tree. Uncommitted or unexpected changes,
+or a `creates` path that already exists, are drift. Note benign drift
+(unrelated exports, cosmetic renames) and proceed; drift that invalidates the
+task's assumptions is a blocker.
 
 ## Profile-specific testing
 
-Use profile-specific testing from the task's declared profile.
+Use the independently approved verification approach from
+`references/review-gates.md`; record any alternative and its reason.
 
-- `tdd`: write or update a failing test, implement the smallest change, then
-  verify. Failing-pattern tests are valid for existing production code.
-- `regression`: reproduce the reported failure, add the regression assertion,
-  implement the fix, then verify the failure stays fixed.
-- `characterization`: pin current behavior at an existing seam, make the
-  scoped change, then verify the characterization still holds.
-- `smoke`: run the narrowest start, build, or load check first, then verify the
-  changed behavior with focused checks.
-- `not-applicable`: run the structural or retrieval checks named by the task.
-  Record why no executable test applies.
+`tdd` failing test first · `regression` reproduce, then assert · `characterization`
+pin current behavior before editing · `smoke` narrowest start/build check ·
+`not-applicable` run the named structural checks and say why.
 
-Strict TDD adds ordered evidence when selected. Add these fields below the
-task's profile and rationale:
+Except in `refactor` posture, refactoring stays outside this cycle, in the
+`varde-review simplify` stage.
 
-- `strict_tdd: required` with `profile_source: user` or `repository` requires
-  three `tdd_evidence` Progress markers in this order: `stage=red`,
-  `stage=green`, then `stage=verify`. Each marker must report `result=pass`
-  and a non-empty note.
-- `strict_tdd: waived` with `profile_source: user` records a direct waiver.
-- `strict_tdd: not-required` with `profile_source: decomposition` keeps the
-  decomposition-selected profile without strict evidence.
-- `strict_tdd: exception` requires `profile: not-applicable`,
-  `profile_source: exception`, and a non-empty `exception:` reason. Its
-  structural evidence still uses the `not-applicable` profile checks.
+Map each `#### Verification` check to a coverage area, then write the test that
+best expresses it. A check that resists any coverage is the real mis-scope
+indicator: mark the task blocked and stop.
 
-The validator rejects missing, reordered, or undeclared strict evidence.
+Expected values come from an independent source of truth — a known-good
+literal, a worked example, the spec. An assertion that recomputes its expected
+value the way the code does is tautological: it passes by construction and can
+never disagree with the code.
 
-Refactoring remains outside this cycle. Run it in the
-`varde-review simplify` stage that runs after implementation.
+Before editing a shared surface, check its dependents (`dependents` or
+`blast_radius` when `varde-code` is available, targeted grep otherwise). A file
+you must write outside `modifies`/`creates`/`renames` is a blocker: stop and
+report it rather than widening the task, because a sibling executor may own
+it.
 
-Record one concise marker in `#### Progress`:
-`- evidence: profile=<profile>; checks=<profile checks>; result=pass;
-note=<short result>`. The required profile checks are `red,green,verify` for
-`tdd`; `reproduce,fix,verify` for `regression`; `characterize,verify` for
-`characterization`; `smoke,verify` for `smoke`; and
-`not-applicable,structural` for `not-applicable`.
-
-Before writing a new test, find what already covers the file (`tests_for_file`,
-or the project's test-file convention). Use existing seams by default and follow
-nearby tests. Ask the user only when test placement would choose a new public
-contract or materially change the testing strategy.
-
-Before editing an existing surface, compare the discovered impact with the
-task's declared `verification_resources`. If a `dependents` or `blast_radius`
-result names a consumer outside that ownership and evidence set, stop and
-report the new path. Do not widen the task or continue execution silently.
-Narrow the task or update its impact evidence through planning first.
-
-Read short, known files directly. Use `get_symbol` only for exact symbols
-inside large files. Use Varde Code for relationships, test discovery, or
-several related targets. Batch those related lookups.
-
-Expected values come from an independent source of truth — a known-good literal,
-a worked example, the spec. An assertion that recomputes its expected value the
-way the code does is tautological: it passes by construction and can never
-disagree with the code.
-
-Map each of the task's `#### Verification` checks to a coverage area, then name
-and write the test that best expresses it — a check does not need a test-function
-name decided before you have seen the code. A check that resists any coverage at
-all is the real mis-scope indicator: mark the task blocked and stop.
-
-Plan-level acceptance criteria are the whole change's contract, verified once at
-the end (`references/build-plan-run.md` Section F), not per task.
-
-## Debug entry integration
-
-When a task comes from `references/debugging-entry.md`, preserve its evidence
-state separately from task progress:
-
-- `debug_mode: diagnose` never writes production source. It may write a report
-  or task-local evidence artifact when the request allows it.
-- `debug_mode: fix` cannot enter implementation until `debug_evidence`
-  contains non-empty `reproduction`, `hypotheses`, and `experiments` fields.
-- Completion requires non-empty `cause` and `verification` fields. Final
-  verification reruns the original reproduction and the regression check.
-- Record `route_source` as `automatic` or `explicit` so later review can tell
-  why the debugging entry was selected.
-
-If a required field is missing, stop before mutation and report the missing
-evidence. Do not replace it with a passing smoke check.
-
-## Given / Unknowns / Plan / Verification
-
-Before any tool call, write a short execution frame.
-
-- **Given** — the current state of the code and test baseline. Establish it by
-  reading the symbols in `modifies` before editing; that body is both your
-  evidence and the targeted edit's `old_string`. Files in `creates` don't exist
-  yet.
-- **Unknowns** — open questions blocking a confident next step. Cap at two. More
-  than two means the task is mis-scoped.
-- **Plan** — the ordered tool calls you intend to make. Revise after every call
-  that changes your mental model.
-- **Verification** — the command that will demonstrate the task's checks pass.
-
-Resolve one unknown fully before opening the next. Every tool call must either
-resolve an unknown, write a failing test, or verify completion. If it does none
-of these, revise the plan before continuing.
+A UI check needs a browser tool from your own tool list, else `unavailable`;
+never infer rendering from HTTP or source. Log in only with credentials the
+user supplied, and submit no form that changes real data.
 
 ## Blockers
 
-A blocker prevents the task's `#### Verification` from passing
-without out-of-scope work. Set `status: blocked` in the task's own file, append
-the reason to its `#### Progress`, and stop. Do not redesign inline or attempt
-pre-condition fixes — the planner decides how to unblock.
-
-When the plan's own assumptions no longer hold (found during the drift check,
-before any task is dispatched), that is plan-wide: move `plan.md` to `blocked`
-and stop. With `varde-workflow` on PATH, use
-`varde-workflow transition <plan.md> blocked --json` so the state machine
-validates the move and the write goes through the recoverable journal; edit the
-frontmatter directly only when the CLI is absent
-(`references/varde-workflow-cli.md`). A task worker reports on its own task file and lets the
-orchestrator decide whether it escalates.
-
-If the same approach fails repeatedly — a test that will not converge after
-three attempts — stop and reassess rather than trying again.
-
-## Static analysis
-
-Whatever lint or scan tooling the project has configured is a candidate list,
-never a completion gate. Run it after source edits outside `memory-bank/`, using
-the project's own scripts. Fix the real issues; skip a finding only when it is a
-genuine false positive or an over-aggressive rule flagging correct code — do not
-force-fix correct code to satisfy a rule.
+In any isolated execution worktree, report `blocked`, the reason and verification
+evidence without editing the task file; the parent records task state/Progress.
+In the owning approval checkout, serial or inline execution runs
+`varde-workflow transition <task.md> blocked --json`, logs the reason in the
+task's `#### Progress`, and stops. Parallel workers always return blockers to
+the parent.
 
 ## Completion
 
-Verify every task `#### Verification` check. Each `assert:` command must match
-its stated expectation, and each `retrieve:` command's output must be read.
-Only then move the task file to `done` — with `varde-workflow` on
-PATH, `varde-workflow transition <task.md> done --json`, which rejects the move
-if the task is not in `in_progress` and so catches a task that was never
-properly started. Then append a one-line entry to its `#### Progress`. Validate
-the profile and marker with `scripts/validate-task-evidence.sh <task.md>`. That
-marker is the task's execution evidence, which a resumed or checking run reads.
+In a parallel wave or any isolated execution worktree, report status and
+verification evidence; do not write the task file. The parent owns tracked,
+untracked and external task status/Progress updates after verified source
+integration. In the owning checkout, serial/inline tasks keep their normal
+bookkeeping ownership. A spike records question/approach/answer and restores
+its own exploratory source edits before reporting completion.
 
-Commit the task's source paths with a message referencing the task ID, including
-its `tasks/<task-id>.md` file when plan storage is tracked. Use `git revert` to
-undo a completed task.
-
-A verify-only run skips execution entirely: it loads the plan's tasks and runs
-each one's `#### Verification` checks, reporting pass or fail without dispatching
-work, deriving readiness, or enforcing dependency order.
+1. When the task's diff exceeds ~40 changed lines or adds a new abstraction,
+   run `varde-review simplify` scoped to its uncommitted changes.
+2. Run the project's configured lint or scan tooling after source edits outside
+   `<working>`/`<knowledge>`. Its findings are a candidate list, never a completion gate:
+   fix real issues; skip only false positives or rules flagging correct code.
+3. Verify every `#### Verification` check: each `assert:` command must match its
+   stated expectation, and each `retrieve:` command's output must be read.
+4. Only then move the task to `done` (from `in_progress`; move it there first
+   if still `todo`) (`varde-workflow transition <task.md> done
+   --json` when on PATH) and end its `#### Progress` with `- evidence: <what you
+   ran and what it showed>` — so a resumed or checking run finds where it
+   stopped. Name the checks you actually ran, not the profile's nominal stages.
+   For any isolated task, defer this transition and task Progress writes to
+   the parent until source integration succeeds, whether the task file is
+   tracked, untracked or external. Report the evidence instead.
+5. For a spike, commit no source changes; its reverted exploration and recorded
+   evidence establish completion. Otherwise commit the task's source paths
+   with a message referencing the task ID. Include its tracked task file only
+   in the owning checkout; isolated workers commit source only and leave task
+   bookkeeping to the parent after integration. Use `git revert` to undo a
+   completed implementation task.
+6. Report the result and any obstacle you hit (failed command, stale guidance,
+   workaround); the orchestrator records lessons at the finish.

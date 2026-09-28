@@ -5,7 +5,7 @@ actions:
   reflection: completed
 attempts: 0
 outputs:
-- memory-bank/friction/workflow-conclude-heading-level.md
+- working/friction/workflow-conclude-heading-level.md
 plan: executor-agent-adapter-migration
 status: completed
 type: reference

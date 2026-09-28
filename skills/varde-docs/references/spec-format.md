@@ -1,187 +1,110 @@
 # Specification document format
 
-Format and generation-contract reference for the domain documents, architecture
-document, and index written under `<knowledge>/specs/`.
+Format for the domain documents, architecture document, and index under
+`<knowledge>/specs/`.
 
-## Document frontmatter
-
-Each domain document uses this frontmatter:
+## Frontmatter and provenance
 
 ```yaml
 type: spec
 id: specs/<domain>
 domain: <domain>
-source_hash: <hash over the document's sources>
+source_roots:
+  - <repo-relative source file or directory>
+covered_paths:
+  - <repo-relative nonignored file beneath a source root>
+source_hash: <aggregate over sources>
 sources:
   - path: <repo-relative source path>
-    hash: <content hash of that source file>
+    hash: <git hash-object --no-filters <path>>
 ```
 
-`sources` lists every source file read for generated content. Compute each
-entry's `hash` with `git hash-object <path>`, so working-tree edits register.
-Compute `source_hash` deterministically: sort `sources` by `path`, concatenate
-each `path` and `hash` pair in that order, then hash the resulting bytes with
-`git hash-object --stdin`. The list and aggregate describe the exact inputs for
-this document, not the repository-wide `source_commit` watermark in `index.md`.
+`sources` is exactly the set of repo-relative files whose contents supplied
+generated output in this run: drop paths not read this time, add new ones.
+Each `hash` is the file's current blob hash, so working-tree edits register.
 
-## Generated block boundary and meaning layer
+`source_roots` declares the domain boundary as repo-relative files and
+directories, without globs. `covered_paths` is the byte-sorted, unique
+inventory of all existing tracked and untracked, nonignored files beneath
+those roots. Use `git ls-files --cached --others --exclude-standard -z` from
+the repository root, discard deleted paths, and include a file root itself.
+Choose roots that exclude generated specs and other output to avoid a spec
+covering itself.
+Record the inventory even when a file did not contribute to generated prose.
+Added or removed files make the spec stale. A legacy document missing either
+field is stale and must be regenerated. Report overlapping domain roots for
+classification rather than silently assigning files to one domain.
 
-Every generated domain document has exactly one generated block. It starts
-immediately after the frontmatter with this opening sentinel:
+### Computing `source_hash`
+
+Sort the entries by `path` in byte order, concatenate each `path` immediately
+followed by its `hash` (no separators, no trailing newline), and hash the
+result as a blob. From the repository root, with the document's paths on
+stdin:
+
+```bash
+source_hash=$(
+  set -o pipefail
+  LC_ALL=C sort | while IFS= read -r src_path; do
+    src_hash=$(git hash-object --no-filters -- "$src_path") || exit 1
+    printf '%s%s' "$src_path" "$src_hash"
+  done | git hash-object --stdin
+) || exit 1
+printf '%s\n' "$source_hash"
+```
+
+`varde-workflow` validates specs with this exact aggregate. A document is
+stale when any entry's hash, the aggregate, or the covered-path inventory
+differs from a fresh recompute.
+This per-document provenance is separate from the repository-wide
+`source_commit` in `index.md`.
+
+## Generated block
+
+Every domain document has exactly one generated block, opening immediately
+after the frontmatter:
 
 ```html
 <!-- varde-spec:generated:start -->
-```
-
-It ends with this closing sentinel:
-
-```html
+...
 <!-- varde-spec:generated:end -->
 ```
 
-During generation, replace only the bytes between the paired sentinels. Keep
-everything below the closing sentinel as the hand-authored `## Notes` tail.
-Preserve that Notes tail byte-identically across regeneration, including
-whitespace and
-trailing newlines. A new document ends its generated block, then starts an
-empty `## Notes` tail for later hand-authored content.
+Update frontmatter provenance as specified above. Regenerate body content only
+between the sentinels. Everything after the closing sentinel is the
+hand-authored `## Notes` tail: preserve it byte-identically,
+whitespace and trailing newlines included. A new document ends its generated
+block with an empty `## Notes` tail. A missing, duplicated, reversed, or
+unpaired sentinel is generated-boundary drift: leave the document unchanged
+and report it.
 
-## Legacy boundary migration
+## Document content
 
-A legacy document has neither generated sentinel. On its first regeneration,
-find the first top-level line whose complete content is `## Notes`. The exact
-byte slice beginning with that line and continuing through EOF is its Notes
-tail. Preserve that slice byte-for-byte, including its heading, whitespace,
-and trailing newlines. Replace only the post-frontmatter bytes before that
-slice with the new generated block and its paired sentinels. Later runs use
-the sentinels normally.
+Skeleton: `## Summary` / `## Overview` / `## Scope Boundary`
+(owns|does-not-own) / `## Key Operations` / `## Key Types` / `## Invariants` /
+`## Acceptance Criteria` / `## Flow: <name>`.
 
-A legacy document with no top-level `## Notes` heading has an ambiguous
-hand-authored boundary: leave it unchanged and report generated-boundary drift.
-A document with a missing, duplicated, reversed, or unpaired sentinel is boundary
-drift too, not a migration candidate.
+- Add an error-path table only when the flow has non-trivial failure handling
+  (retries, partial writes, user-visible errors).
+- Add flow-level GWT acceptance criteria only for behavior the domain-level
+  Acceptance Criteria section does not already cover.
+- The architecture document has only Overview, Components (each deployed or
+  packaged unit and the domain spec owning its code), Wiring, Dependency
+  Constraints, and Invariants; flows live in domain documents. A plan's
+  `observed_specs` may list `architecture`.
 
-Mark a document migrated only after this check: take the exact byte slice from
-the first `## Notes` line through EOF *before* regeneration, take the same slice
-after, and assert that the SHA-256 digests match. Include trailing whitespace in
-the slice.
+## Acceptance criteria
 
-The generated block contains exactly one document-level `## Summary` section.
-Its plain-English text says what the domain does and how it connects. Related
-domains use typed domain wikilinks in the form `[[domain:<domain>]]`. Each
-target `<domain>` must be the domain name of another generated spec document.
+Write `Given <condition>, When <event>, Then <observable result>.` With
+`varde-code`, run `tests_for_file` on the domain's sources and note covering
+tests beside the list ("Verified by: `tests/foo.test.ts`"); omit the note when
+none exist.
 
-Every `## Flow: <name>` section contains exactly one `### Crux` subsection.
-The subsection names one cited source path, then presents the crux in a fenced
-text block:
+## Index
 
-~~~~markdown
-### Crux
-
-Source: `<repo-relative path from sources>`
-
-```text
-<literal source substring>
-```
-~~~~
-
-The named path must appear in this document's frontmatter `sources` list, and
-the crux must be a literal, byte-for-byte substring of that file — copied out
-whole, from one source. A crux captures a guard, skip condition, or state change
-from the flow's source body, and appears inside `## Flow:` sections alone.
-
-## Section provenance note
-
-In each generated section, name the source files and symbols it uses, in prose
-or a short list. For example: "Derived from `path/to/file.ts` (operations
-`foo`, `bar`)". This lets readers trace the section to code. In flow sections,
-also name the entry point or trigger when known.
-
-## Section categories
-
-Use these section categories:
-
-- `scope-boundary`
-- `key-ops`
-- `invariants`
-- `ac`
-- `rules`
-
-Omit `rules` when the domain has no rules. Rules appear inside domain documents —
-they never get standalone files.
-
-## Domain document structure
-
-Domain documents contain Overview, Scope Boundary, Key Operations, Key Types,
-Invariants, and Acceptance Criteria sections. Scope Boundary includes an
-owns/does-not-own table. Key Operations and Key Types use tables. Acceptance
-Criteria uses GWT bullets.
-
-Each flow gets a `## Flow: <name>` section. Flow sections include the trigger,
-steps, error-path table, and GWT acceptance criteria. Cross-domain flows link to
-other domain docs.
-
-The architecture document contains Overview, Layer Model, Dependency
-Constraints, and Invariants only. Flows live in domain documents.
-
-## Acceptance criteria format (GWT)
-
-Flow and feature acceptance criteria use this form:
-
-`Given <condition>, When <event>, Then <observable result>.`
-
-When `varde-code` is available (`references/varde-code.md`), run `tests_for_file`
-on the domain's source files. Note the covering test file(s) beside the AC list,
-for example, "Verified by: `tests/foo.test.ts`". This lets readers trace a
-claimed behavior to a running check. If no covering test exists, omit the note.
-
-## Rule table format
-
-Each rule table uses these columns:
-
-`| Catches | Does not flag | Data source | Remediation |`
-
-## Per-agent generation contract
-
-Each domain agent receives the literal repository path, domain name, the
-list of source files/directories that belong to that domain (from the plan
-step), and — when the plan step detected `varde-code` — the CLI binary path
-and the list of changed symbols/files scoped to this domain.
-
-Content source, in order:
-
-1. Read short, known files directly.
-2. Batch Varde Code queries across several files or relationships.
-3. Use `get_symbol` for exact symbols inside large files.
-4. Use `Read`/`Grep`/`Glob` when Varde Code cannot supply content:
-   module-level prose/comments outside a symbol body, non-code config, or
-   any file where the CLI call errors.
-
-Writes exactly one document: `<knowledge>/specs/<domain>.md` (the
-architecture domain writes `<knowledge>/specs/architecture.md`).
-
-Apply these constraints to each agent:
-
-- Base the document only on what you read directly from this domain's source
-  files during this run, staying inside the domain's boundary.
-- Track every repo-relative source file whose contents supply generated
-  output. Write `sources` from exactly that set using current content hashes,
-  removing unread legacy paths and adding newly read paths before computing
-  `source_hash`.
-- For an existing document, read it first and apply a targeted edit to
-  changed sections, preserving hand-authored sections.
-
-## Index format
-
-`<knowledge>/specs/index.md` lists domain names from each domain
-document's frontmatter, includes architecture, and links to every domain
-document. It contains no generated prose requiring an agent — write it
-deterministically after domain generation finishes.
-
-`index.md` must carry exactly one frontmatter field, `source_commit: <sha>`
-(the `git rev-parse HEAD` at the end of this run) — used by the next run's
-`detect_changes` diff (see `references/varde-code.md`). Write/overwrite it every
-run, even when `varde-code` wasn't available this time, so the next run can
-resume incremental scoping. It does not replace each document's `source_hash`
-or `sources` provenance. No other frontmatter; it remains a directory listing
-otherwise. Preserve hand-authored domain entries.
+`<knowledge>/specs/index.md` lists every domain document by its frontmatter
+domain, including architecture, with a link to each. Write it
+deterministically after domain generation, preserving hand-authored entries.
+Its only frontmatter field is `source_commit: <git rev-parse HEAD at the end
+of this run>`; write it every run, with or without `varde-code`, so the next
+run can scope incrementally from it.

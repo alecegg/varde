@@ -1,147 +1,84 @@
 # Task decomposition
 
-Given a settled spec plus plan-level acceptance criteria — `plan.md`, or the
-minimal plan synthesized for ad-hoc work — break the work into `tasks/<task-id>.md`
-files before execution. Template: `assets/TASK-TEMPLATE.md`. Acceptance criteria
-stay **plan-level** and are never re-authored per task; a task's own check is its
-`#### Verification` block.
-
-Run once per plan run, after reading the plan and before choosing the first ready
-task. A plan authored by `varde-change plan` already had its scope indicators
-caught (`references/plan-acceptance-criteria.md`) — re-check anyway, since ad-hoc
-work never passed through planning.
+Break a settled spec and its plan-level acceptance criteria — `plan.md`, or the
+minimal plan synthesized for ad-hoc work — into `tasks/<task-id>.md` files from
+`assets/TASK-TEMPLATE.md`. Run once per plan run, before the first task.
 
 ## Check the edge cases first
 
-Check these three edge cases *before* decomposition, not during it. Read
-`references/build-edge-cases.md` when one applies, and only then:
+Before decomposing — even for a planned change, since ad-hoc work never passed
+through planning — check whether one of these applies:
 
-- The goal names a shared symbol, type, or interface, which may affect many files.
-  With `varde-code` available, run `symbol_blast_radius` rather than guessing
-  from package structure.
-- The work ports a native scan rule to TOML or SQL.
-- The work deletes a generated or intermediate file another task may read.
+- The goal names a shared symbol, type, or interface, which may affect many
+  files (with `varde-code` available, run `symbol_blast_radius` rather than
+  guessing from package structure): wide refactor = expand, N migrate batches,
+  contract, plus an integrate task if batches can't stay green.
+- The work deletes a generated or intermediate file another task may read:
+  deletion = the three greps — draft task bodies for the path, tests for
+  hardcoded paths under the deleted dir, and dependents/importers of the
+  deleted source.
 
-## Decide whether a doc task is needed
+## Doc tasks
 
-A new agent-visible capability needs a doc task writing
-`<knowledge>/reference/<slug>.md`; a new multi-step workflow needs one
-writing `<knowledge>/flows/<slug>.md`. Either depends on all
-implementation tasks, and its only output is an accurate, concise Concept — no
-implementation narrative. Refactor-only or bug-fix work with no agent-visible
-change skips it.
+Only when asked: a doc task writing `<knowledge>/reference/` or
+`<knowledge>/flows/`, depending on all implementation tasks.
 
 ## Build the breakdown
 
-Draft it directly by default. Delegate only when unfamiliar code or a large
-bounded investigation benefits from fresh context. Give that executor the
-confirmed spec, plan-level acceptance criteria, any prototype output, and the
-scope indicators.
-
 Require per task: an observable outcome; expected files touched *if already
-known* — otherwise say so and trust the executor to find them; dependencies;
-risks; the `assert:`/`retrieve:` checks proving this slice works; and
-`#### Test approach` with one supported profile and one-line rationale.
+known* — otherwise say so and let the executor find them; dependencies; risks;
+the `assert:`/`retrieve:` checks proving the slice works; and
+`#### Test approach` with one profile — `tdd`, `regression`,
+`characterization`, `smoke`, or `not-applicable` — and a one-line rationale.
+Do not require a step count or a named test function.
 
-For every task that touches existing code, record `#### Impact evidence` with
-the file or symbol query, its consumer summary, and focused source confirmation.
-Put each confirmed consumer in `verification_resources` as an exact
-`impact:<repo-relative-path>` identifier. Keep resources opaque after
-`impact:`. If the optional CLI is unavailable, record the manual consumers and
-relevant tests instead; unresolved impact keeps parallel eligibility disabled.
+Profile authority: direct user instructions outrank repository policy, which
+outranks the decomposition default; name a directive in the rationale when one
+set the profile. Default behavior changes to test-first. Have the independent reviewer approve
+any alternative with its reason and expected result per `references/review-gates.md`;
+fragile legacy code may need characterization, and packaging may need smoke checks.
 
-Supported profiles are `tdd`, `regression`, `characterization`, `smoke`, and
-`not-applicable`. The profile chooses the evidence expected in `#### Progress`.
-Each completed task records one concise `evidence` marker with its profile,
-profile-specific checks, passing result, and short note.
-
-Profile authority is explicit. Direct user instructions outrank repository policy.
-Repository policy outranks decomposition defaults. Resolve the result
-with `scripts/resolve-testing-profile.sh`, then record its `profile_source`
-and `strict_tdd` values in the task's `#### Test approach`. A user can
-`require` or `waive` strict TDD. Repository policy can `require` strict TDD or
-declare an exception. Without either directive, decomposition keeps selecting
-any existing profile.
-
-Do **not** require a fixed step count or a named test function at authoring time.
-The executor works those out, and over-specifying spends tokens re-deriving what
-execution re-derives while risking a stale guess.
-
-Set `test_approach`'s **direction** from what research found, not a bare
-command: fragile or legacy code with no coverage takes characterization tests
-first (pin behaviour, then change); mostly config, packaging, or wiring takes a
-smoke test first (does it still start, build, load). Use one line as direction,
-not as a full test plan.
+Declare every written path in `modifies`, `creates`, and `renames`; write each
+rename as `old/path -> new/path`. List shared databases, snapshots, and other
+external state the task or its checks use or change in
+`verification_resources`, using stable resource names. Use `[]` when a
+category is empty. If an ownership category is unknown, omit that field so
+automatic scheduling stays serial.
 
 ## Research and design
 
-Investigate directly by default; delegate a targeted question only when fresh
-context helps. Convert findings into a task's `Context`, `Design notes`, or
-`Test approach`. A codebase-answerable unknown must never become a research task.
+Investigate directly; codebase unknowns never become research tasks —
+`kind: research` is for lasting external output. Unsettled interface → Design
+It Twice (`references/plan-grow-doc.md`) first.
 
-For an open interface decision where multiple designs are valid, run "Design It Twice"
-(`references/plan-design-vocabulary.md`) before finalizing that task's
-`Design notes`. Skip it when an existing pattern or adjacent module dictates the
-interface.
+## Size check
 
-## What good tasks look like
+A task is the smallest execution-safe unit: apply this to every task, and
+rewrite and re-check any that fails.
 
-A task is the smallest execution-safe unit of code change: one testable outcome
-an executor can implement without making architecture decisions. Check every task
-against this whole section before finalizing.
+- Exactly one public behavior or workflow rule changes (one CLI subcommand
+  behavior; one skill rule or decision).
+- No architecture, product, or scope choice is left for execution.
+- Verification is one command or a small named set, and the task stops cleanly.
+- Prefer vertical slices through a public interface; use a layer slice only when
+  a foundation must exist before any behavior is testable. With `varde-code`,
+  narrow a task on a `hotspots` file.
+- A schema/persistence change names the file where the schema lives, found by
+  reading, not analogy.
 
-**Reject these shapes:** a bucket named "wire everything"; unrelated behavior
-contracts in one task; tests that can only pass after several later tasks; core
-behavior and multiple adapters changing together; an unknown first failing test;
-files touched that are mostly guesses; a restatement of shared project docs
-instead of relying on injected context.
-
-**Sizing heuristics:**
-
-- Start from outcomes, not file lists. Inventory them, then group only those that
-  must ship together to stay testable.
-- Optimize for the executor: constrain the problem, reduce ambiguity, make the
-  first test obvious.
-- Keep only task-specific facts, file pointers, and verification details in the
-  task — not shared terminology, standards, or architecture notes.
-- CLI work: one subcommand behavior per task. Skills and docs: one workflow rule
-  or decision per task.
-- Prefer vertical slices through a public interface — a good slice is demoable
-  or verifiable on its own. Use layer slices only when a foundation must exist
-  before any public behavior can be tested.
-- Resolve codebase unknowns before finalizing. Reserve `kind: research` for
-  lasting external outputs — a decision record, prototype, reference doc — which
-  build runs as a research pass rather than the TDD cycle, so the task body must
-  name the output file.
-- With `varde-code` available, check `hotspots`: a task landing on a high
-  complexity or churn file warrants a narrower slice and more scrutiny.
-
-**The task-size check:** Apply to every task; rewrite and re-check on failure.
-The run targets a Claude 5-class executor, so each task must have exactly one
-public behavior or workflow rule changing, no hidden architecture, product, or
-scope choice left for execution, verification that is one command or a small
-named set (point at the check, don't script its steps), and a clean stop
-condition. At executor granularity, key coverage areas per plan-level acceptance
-criterion stand in for a named test function, "the subsystem is identified"
-stands in for a specific path, and no step count is required.
-
-**Scope-consistency check:** Per task, check whether a design note describes a
-schema or persistence change — a new table, column, or migration, or words like
-"persist" or "backfill". If so, confirm the task body names the file(s) where
-that schema lives, found by reading the source or grepping, never by copying
-another task's scope by analogy.
+Failing shapes: "wire everything"; unrelated contracts together; tests that pass
+only after later tasks; core plus several adapters at once; guessed file lists.
 
 ## Present and record
 
-In interactive mode, show the settled breakdown as an informational table and
-pause once: "Here's the breakdown I'll execute — say now if any task is missing,
-wrong-scoped, or should be split differently." Wait one turn, then proceed. An
-unattended run skips the pause.
+Interactive: show the breakdown as a table and pause once for missing,
+wrong-scoped, or badly split tasks, then proceed. An unattended run skips the
+pause.
 
 Write each task from `assets/TASK-TEMPLATE.md` with populated `modifies`,
-`creates`, `depends_on`, and `status: todo`. Task IDs are
-kebab-case with no date prefix; ensure uniqueness by globbing every plan's
-`tasks/*.md`. Author them in the selected execution location, then commit the
-initial task files once so a crashed run's resume check finds them. Pass the
-ordered list to `references/build-dispatch.md`. Readiness is computed live from
-`depends_on`, never stored.
+`creates`, `depends_on`, and `status: todo`. Task IDs are kebab-case with no
+date prefix; ensure uniqueness by globbing every plan's `tasks/*.md`. Author
+them in the selected execution location. Commit the initial task files once
+when plan storage is tracked. Pass the ordered list to
+`references/build-dispatch.md`. Readiness is computed live from `depends_on`,
+never stored.

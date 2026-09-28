@@ -2,114 +2,16 @@
 
 ## Review folder layout
 
-Each review uses one dated folder:
-
-```text
-<working>/reviews/
-  <YYYY-MM-DD>-<branch>-<target>/
-    review.md
-    index.md
-    CORRECTNESS.md
-    CODE.md
-    ARCHITECTURE.md
-```
-
-Only active review categories need files. The reviewer writes separate
-files, so category work does not contend for one shared document.
-
-### Folder name
-
-Use the review start date, branch, and target. Replace path separators and
-spaces with hyphens. Keep the target short and recognizable.
-
-### review.md
-
-Create `review.md` before category reviews begin. It uses the review concept's
-YAML frontmatter:
-
-```yaml
----
-title: Review of feature/auth
-type: review
-date: 2026-08-04
-branch: feature/auth
-target: main
-status: in-progress
-categories:
-  - CORRECTNESS
-  - CODE
-triage_status: pending
----
-```
-
-The body records category progress and finding counts:
-
-```markdown
-# Review of feature/auth
-
-## Categories
-
-| Category | Status | Findings |
-|---|---|---:|
-| CORRECTNESS | complete | 2 |
-| CODE | in-progress | 0 |
-
-## Triage
-
-Status: pending
-```
-
-The coordinator updates `review.md` as category work completes. Generate the sibling `index.md` as nav-only metadata containing the category order and current counts. It does not carry the review concept frontmatter.
-
-### index.md
-
-The generated `index.md` is for navigation only. List active categories,
-their status, and finding counts.
-
-### Category files
-
-Each category file uses the `review-category` concept: YAML frontmatter (below)
-followed by a heading. Use the category name as the uppercase file name.
-Finding sections follow the `## Finding format` section below.
-
-```markdown
----
-title: CORRECTNESS findings
-type: review-category
-description: CORRECTNESS review findings
-resource: <working>/reviews/<review-folder>
-tags:
-  - review
-  - correctness
-timestamp: <ISO 8601>
-created_at: <ISO 8601>
-edited_at: <ISO 8601>
----
-
-# CORRECTNESS
-```
-
-Findings follow the frontmatter as level-two sections. See `## Finding format`
-below for the field structure. Identifiers are local to their category file.
-Use the category name and a one-based sequence number. Do not reuse an
-identifier after dismissal.
-
-### Review lifecycle
-
-1. Create the review folder and `review.md`.
-2. Generate the nav-only `index.md`.
-3. Run one review agent per active category.
-4. Append findings to each category file.
-5. Mark category status in `review.md`.
-6. Run the automated fix pass for labeled findings.
-7. Run the triage pass for deferred findings.
-8. Mark review and triage statuses complete in `review.md`.
-
-The review folder is the long-term, readable record.
-
-Specialist candidates are not category files. Keep them as coordinator-owned
-review input until the coordinator verifies their evidence, uniqueness,
-severity, and disposition under `references/report-candidates.md`.
+Standalone (no plan id passed): `<working>/reviews/<YYYY-MM-DD>-<slug>/`.
+Nested (the review runs for a plan build, a plan id was passed):
+`<working>/plans/<plan-id>/<review-id>/`, where `<review-id>` =
+`review-<YYYY-MM-DD>` (append `-2`, `-3`, ... on a same-day collision in that
+plan folder). `<fix-id>` = `<review-id>-fixes`. `review.md` frontmatter:
+`type: review`, date, branch, target, `status` (`in_progress` until roll-up,
+then `complete`), categories[], triage_status; body `## Categories` table
+(Category | Status [`complete` or `skipped`] | Findings). One file per
+category, `<CATEGORY>.md`; identifiers are category-local,
+`<CATEGORY>-<NNN>` from 001, never reused after dismissal.
 
 ## Finding format
 
@@ -140,6 +42,10 @@ The parser accepts expired tokens.
 
 A finding is a defect confirmed by reading the code, not speculation. "This
 could break" is not a finding. State when it breaks and show the code path.
+Imported PR feedback and scan candidates are pending triage; identify their
+source and keep the reported concern distinct from a verified code defect.
+Their initial severity is a routing priority, not a claim that the defect is
+confirmed.
 
 - Only a reproduced or code-confirmed defect earns `high` or `critical`. An
   unverified "might" is at most `low`/`info`, or omit it.
@@ -151,72 +57,36 @@ could break" is not a finding. State when it breaks and show the code path.
   sample a sample.
 - Numbers carry the boundary of their sample: "3 of 7 call sites", not "most
   call sites".
-- Calibration: if findings are repeatedly dismissed, raise the evidence bar.
-  Do not lower it. Scope the review to the change and its consumption path.
-
 ### Required fields
 
-| Field | Allowed values or shape | Meaning |
-|---|---|---|
-| Severity | `critical`, `high`, `medium`, `low`, `info` | Impact if unresolved. |
-| Label | `auto-fix` or `triage` | Post-review handling path. |
-| Disposition | `blank`, `fix`, `dismiss`, `action-item` | Human outcome. |
-| Location | File path and optional line or symbol | Affected code. |
-| Summary | Markdown paragraph | Concise issue explanation. |
-| Solutions | Ordered Markdown list | Concrete remediation options. |
+| Field | Allowed values |
+|---|---|
+| Severity | `critical`, `high`, `medium`, `low`, `info` |
+| Label | `auto-fix` or `triage` |
+| Disposition | `blank`, `fix`, `dismiss`, `action-item`, `escalated` |
 
-Use `blank` until a human chooses an outcome. An `auto-fix` finding still
-records its disposition after the automated pass.
+Use `blank` until a human chooses an outcome.
 
 ### Optional fields
 
 | Field | Allowed values or shape | Meaning |
 |---|---|---|
-| Escalated | `spec-conflict — <reason>` or `scope-creep — <reason>` | Set only by a fix pass running under `varde-change build`, when its escalation gate rejects an automatic fix. Place it directly after `Location`. Absent otherwise. |
+| Violates | `[<title>](/specs/<x>.md)` or a `/decision/`, `/pattern/` link | The knowledge note this finding breaks. Only when one exists; its rationale guides the fix. |
+| Escalated | `spec-conflict — <reason>`, `scope-creep — <reason>`, or `human-only — <category>` | Set only by the build-mode escalation gate in `references/fix-pass.md`. Absent otherwise. |
 
 ### Field rules
 
-- Keep severity lowercase and use one allowed value.
-- Use repository-relative paths in `Location`.
-- Include a line number when the location is stable.
-- Describe observed behavior in `Summary`.
-- Make each solution independently understandable.
-- Do not hide acceptance criteria inside a solution.
-- Preserve the identifier when editing its disposition.
-
-### Stable parsing markers
-
-Use the exact bold field names shown above. The triage workflow finds finding
-sections through level-two headings and reads fields until the next heading.
-Keep `Summary` and `Solutions` as level-three headings.
-
-### Disposition edits
-
-Update only the `Disposition` value during triage. Keep the original
-severity, label, location, summary, and solutions intact. Add a short
-decision note below the solutions when useful.
-
-## Category file format
-
-A new review category uses its own file,
-`CATEGORY-<KEBAB-NAME>.md`: an uppercase prefix and kebab-case descriptor, such
-as CATEGORY-API-DESIGN.md. Start with a `# Category: <Name>` heading. Add the
-sections below in this order. Follow the built-in categories in
-`references/report-categories.md` as examples.
-
-`references/report-categories.md` already defines the evidence bar, the generic
-full-body sweep, and the auto-fix principle. A new category states only its
-additional rules.
-
-### Section rules
-
-Each section opens with its name in bold followed by a colon, such as
-`**Look for:**`, not `**Look for.**`. Use periods for complete imperative steps.
-
-| Section | Contents |
-|---|---|
-| When relevant | 2–5 sentences: which file types, layers, or change shapes trigger this category, and when it can be safely skipped |
-| Look for | One short paragraph naming the checks, not explaining them. Name the concept and trust the reader to know it ("N+1 calls", "unbounded memory growth"). Spend the words instead on the check particular to this category that a reader would not think of unprompted. |
-| Severity calibration | What pushes a finding up or down in severity *for this category*; do not restate the generic scale |
-| How to check | The one check particular to this category, beyond the generic sweep |
-| Auto-fix | Optional. Only this category's exceptions to the general principle |
+- Keep exact bold field names, lowercase severity, and `###` Summary/Solutions
+  headings; fix mode reads them literally.
+- `Location` is repository-relative, with a line number when stable; a CI
+  finding without a local file may use its check URL, and a visual finding
+  without known source may use a screenshot path relative to its review folder.
+  `Summary`
+  describes observed behavior; each solution stands alone and hides no
+  acceptance criteria.
+- Triage edits only `Disposition`, optionally adding a decision note below the
+  solutions; identifier, severity, label, location, summary, and solutions stay
+  intact. A visual fix may append before/after verification evidence below the
+  solutions without changing those fields.
+- `escalated` marks a source finding copied into the standing deferred review;
+  the copy keeps `Disposition: blank` for future triage.

@@ -1,0 +1,93 @@
+# Built-in toz output profiles.
+#
+# Embedded via `include_str!` in profile.rs. Downstream plans add further
+# `[[profile]]` entries here (e.g. toz-backed-query-results).
+
+[[profile]]
+id = "varde-code-nav-map"
+match = { source = "varde-code nav_map*" }
+sections = { heading = "^## (.+)$" }
+merge_small = false
+preview = { kind = "toc", items_per_section = 3, item = "^- " }
+
+[[profile.test]]
+name = "nav_map preview lists every section"
+input = """
+## entrypoints
+- main src/main.rs
+
+## foundational_files
+- src/model.rs (3 dependents)
+- src/parse.rs (2 dependents)
+- src/resolve.rs (1 dependents)
+
+## module_layers
+- layer core
+
+## subsystems
+- subsystem parser
+
+## symbols
+- symbol Config
+
+## flows
+- flow build
+
+## hotspots
+- hotspot cache
+"""
+expect_preview_contains = [
+    "entrypoints",
+    "foundational_files",
+    "module_layers",
+    "subsystems",
+    "symbols",
+    "flows",
+    "hotspots",
+]
+
+[[profile]]
+id = "varde-code-context-pack-results"
+match = { source = "varde-code results context_pack" }
+sections = { jsonl_key = "path" }
+merge_small = false
+preview = { kind = "toc", items_per_section = 0 }
+
+[[profile.test]]
+name = "context_pack preview groups paths"
+input = """
+{"path":"src/a.rs","relevance":"seed"}
+{"path":"src/b.rs","relevance":"seed"}
+"""
+expect_preview_contains = ["src/a.rs", "src/b.rs"]
+
+[[profile]]
+id = "varde-code-findings-results"
+match = { source = "varde-code results scan" }
+sections = { jsonl_key = "location.file" }
+merge_small = false
+preview = { kind = "toc", items_per_section = 0 }
+
+[[profile.test]]
+name = "scan preview groups finding locations"
+input = """
+{"location":{"file":"src/a.rs","line":1},"rule_id":"one"}
+{"location":{"file":"src/b.rs","line":2},"rule_id":"one"}
+"""
+expect_preview_contains = ["src/a.rs", "src/b.rs"]
+
+[[profile]]
+id = "varde-code-results"
+match = { source = "varde-code results*" }
+sections = { jsonl_key = "file" }
+merge_small = false
+preview = { kind = "toc", items_per_section = 0 }
+
+[[profile.test]]
+name = "result preview groups files"
+input = """
+{"file":"src/a.rs","id":1}
+{"file":"src/a.rs","id":2}
+{"file":"src/b.rs","id":3}
+"""
+expect_preview_contains = ["src/a.rs", "src/b.rs"]

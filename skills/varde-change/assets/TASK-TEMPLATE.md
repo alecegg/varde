@@ -1,42 +1,29 @@
 ````
 ---
 type: task
-parent: <plan-id>
 status: todo
-depends_on: ["<dep-id>"]
+depends_on: []
 modifies: []
 creates: []
-# Parallel manifests require explicit ownership and resources:
-# modifies: []
-# creates: []
-# renames: []
-# verification_resources: []
-# Use impact:<repo-relative-path> for each confirmed consumer.
+renames: []
+verification_resources: []
+# requires_signoff: true  # plan-author opt-in; absent means false
+# Declare every written path. Each rename is `old/path -> new/path`.
+# List shared databases, snapshots, or other external state the task or checks
+# use or change.
+# Use [] for an empty category; omit any ownership field you cannot determine.
+# Missing ownership fields keep automatic scheduling serial.
+# kind: research   # optional: a cited doc, per references/build-execution.md
 ---
 
 <title>
 
-<!-- Optional context/design-notes the executor needs and can't cheaply
-     re-derive — task-specific only, never restated shared standards. -->
+<!-- optional task-specific context the executor can't cheaply re-derive -->
 
 #### Test approach
 
 profile: <tdd|regression|characterization|smoke|not-applicable>
 rationale: <one-line reason for choosing this profile>
-# Optional strict TDD selection fields:
-# strict_tdd: <required|waived|not-required|exception>
-# profile_source: <user|repository|decomposition|exception>
-# exception: <required only for strict_tdd=exception>
-
-#### Impact evidence
-
-query: <dependents or blast_radius query, including target file or symbol>
-evidence: <short summary of affected consumers and relevant tests>
-confirmation: <focused source paths read after the query>
-
-Use `verification_resources` for the exact canonical impact identifiers from
-the evidence. If `varde-code` is unavailable, name the manually inspected
-consumers and tests instead. Keep identifiers opaque after `impact:`.
 
 #### Out of scope
 
@@ -49,16 +36,6 @@ consumers and tests instead. Keep identifiers opaque after `impact:`.
 
 #### Progress
 
-<!-- Owned by this task's worker only. One line per meaningful event:
-     start + execution attempt, investigation result, verification result,
-     retry reason, completion summary. End with one concise marker:
-     `- evidence: profile=<profile>; checks=<profile checks>; result=pass;
-     note=<short result>`. Never write plan.md here. -->
+<!-- task owner only (parent after integration for isolated workers): one line per event (attempt, finding,
+     verification, retry); end with `- evidence: <what ran, what it showed>` -->
 ````
-
-There is no `#### Acceptance criteria` section. Acceptance criteria are
-**plan-level** (`plan.md`'s `## Acceptance criteria`), the definition of done for
-the whole change; build verifies them once at the end of the run. A task's own
-correctness check is its `#### Verification` block — the `assert:`/`retrieve:`
-checks that prove this slice works. Decomposition authors these task files from
-the plan's spec + AC; see `references/build-decomposition.md`.

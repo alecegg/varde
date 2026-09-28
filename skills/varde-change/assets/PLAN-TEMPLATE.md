@@ -5,21 +5,23 @@ Frontmatter:
 status: backlog
 title: "<user's initial prompt>"
 type: plan
+depends_on: []       # optional; sibling plan dir names (a child's slug, never `<group>/<child>`) that must be `completed` first
+observed_specs: []   # optional; <knowledge>/specs/<domain>.md domains this plan touches
 ---
 ```
 
-Writing style: `Problem` and `Solution` are the only sections that stay prose — 1-3 sentences of high-level explanation. Everything else (`Design`, `Decisions so far`, `Open Questions`, `Assumptions`, `Non-goals`, `Constraints`, `Acceptance criteria`) defaults to structured spec form — bullet lists, `key: value` lines, signatures, small tables — one fact per line, not paragraphs that bury a signature or an edge case inside connective sentences. If a bullet needs a reason, format it as `<decision> — <reason>`, not a run-on sentence.
+Writing style: only `Problem` and `Solution` are prose (1-3 sentences). Every other section is structured spec — bullets, `key: value` lines, signatures, small tables — one fact per line. A bullet that needs a reason reads `<decision> — <reason>`.
 
 Body template:
 
 ```
 ## Problem
 
-What's broken, missing, or costly — and why does it matter now? (prose, 1-3 sentences)
+What's broken, missing, or costly, and why now?
 
 ## Solution
 
-What will be true after this plan executes that isn't true now? (prose, 1-3 sentences)
+What will be true after this plan that isn't now?
 
 ## Non-goals
 
@@ -33,15 +35,15 @@ What will be true after this plan executes that isn't true now? (prose, 1-3 sent
 
 ### Tech choices
 
-(filled during planning — bullets, one choice per line: `<choice> — <reason>`)
+(none) unless needed — `<choice> — <reason>`
 
 ### Schema / data model
 
-(filled during planning — field/type list or signature block, not prose)
+(none) unless needed — fields/types or signatures
 
 ### API / interface contracts
 
-(filled during planning — one signature or endpoint per line, with behavior/edge cases as sub-bullets)
+(none) unless needed — one signature per line, edge cases as sub-bullets
 
 ## Decisions so far
 
@@ -49,38 +51,26 @@ What will be true after this plan executes that isn't true now? (prose, 1-3 sent
 
 ## Open Questions
 
-<!-- one entry per open item; write "n/a" with a one-line reason if none apply.
-     Each entry is answerable either in chat or by editing/commenting this
-     line directly — see references/plan-grow-doc.md. -->
+<!-- answerable in chat or by editing here; "n/a — <reason>" if none -->
 - **<question>** — <why it matters or what it blocks>. Recommendation: <suggested answer — one-line reason>.
 
 ## Assumptions
 
-<!-- guesses made while drafting so progress isn't blocked on every unknown.
-     User can confirm, correct, or challenge any line — in chat or by editing
-     here. Confirmed-as-is assumptions stay listed as a record of the call;
-     corrected ones move into Decisions so far and are removed from here. -->
+<!-- guesses made instead of asking; confirm or correct in chat or here -->
 - <assumption> — affects: <plan split | AC | sequencing | design> — confidence: <low|medium|high>
 
 ## Acceptance criteria
 
-<!-- The plan-level definition of done — what must be observably true once the
-     whole change ships, independent of how build later slices it into tasks.
-     Grown and reviewed during planning (references/plan-acceptance-criteria.md):
-     each item in Given/When/Then form, testability-scored, tagged assert or
-     retrieve. build verifies these once at the end of the run; it does NOT
-     re-author them per task. -->
+<!-- plan-level definition of done -->
 - [ ] Given <precondition>
       When <action>
       Then <observable outcome>
       (assert: <command or structural check> → <expected result>
        | retrieve: <file(s) or grep to read> → context for judgment)
+
+## Related
+
+<!-- knowledge this plan relies on: [title](/decision/x.md), /specs/, /pattern/, /definition/ -->
 ```
 
-There is no `## Tasks` section: task decomposition is owned by `varde-change build`,
-not the plan. `plan.md` carries the spec and the plan-level acceptance criteria;
-build reads them, breaks the work into task files, executes, and verifies the
-criteria.
-
-Execution evidence lives in each task's own `#### Progress` section, never in
-`plan.md`.
+No `## Tasks`: build writes task files; evidence lives in each task's Progress.

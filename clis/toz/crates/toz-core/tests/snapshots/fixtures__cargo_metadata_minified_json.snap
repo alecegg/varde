@@ -1,0 +1,14 @@
+---
+source: crates/toz-core/tests/fixtures.rs
+expression: outline(&text)
+---
+strategy: Json
+chunks: 8
+  0  L1-L111  code   packages[0].dependencies[0..7] (1/2)
+  1  L112-L119  code   packages[0].dependencies[0..7] (2/2)
+  2  L120-L194  code   packages[0].dependencies[8..13]
+  3  L195-L236  code   packages[0].description … version
+  4  L237-L344  code   packages[1].dependencies[0..7]
+  5  L345-L418  code   packages[1].dependencies[8..13]
+  6  L419-L475  code   packages[1].description … version
+  7  L476-L488  code   resolve … workspace_root

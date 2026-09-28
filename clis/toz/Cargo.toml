@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/toz-core", "crates/toz"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/alecegg/varde"
+description = "Keep large tool output out of an LLM agent's context window"
+keywords = ["llm", "agent", "claude-code", "context", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[workspace.dependencies]
+anyhow = "1"

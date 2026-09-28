@@ -30,5 +30,4 @@ reproduction and the regression check before completion.
 
 ## Related
 
-- [Debugging entry](../../../skills/varde-change/references/debugging-entry.md)
 - [Debug posture](../../../skills/varde-change/references/build-posture-debug.md)

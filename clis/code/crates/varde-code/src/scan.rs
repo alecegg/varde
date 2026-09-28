@@ -1,0 +1,760 @@
+//! Directory walking with skip-and-report semantics.
+//!
+//! Contract (plan): unparseable files (syntax error, unsupported/binary,
+//! tree-sitter failure) are skipped and reported as per-file diagnostics; the
+//! run continues and exits 0 unless a fatal (non-per-file) error occurs — a
+//! missing/unreadable root path is fatal.
+
+use crate::extract;
+use crate::model::{Diagnostic, ExtractOutput, FileMeta};
+use crate::parse::{language_for_path, parse_source_for_path};
+use anyhow::Result;
+use rayon::prelude::*;
+use std::path::Path;
+
+/// Sentinel used when filesystem metadata cannot be trusted.
+pub const UNKNOWN_METADATA: i64 = -1;
+
+/// Metadata collected for a file in the current source listing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFile {
+    pub path: String,
+    pub mtime: i64,
+    pub size: i64,
+    pub content_hash: Option<String>,
+}
+
+/// Results from source discovery: the files the walk reached, plus the
+/// traversal failures it survived.
+///
+/// `diagnostics` holds file-less [`Diagnostic`]s (`file_id: None`) — an
+/// unreadable directory yields no source file to key them to, and the walk
+/// continues so valid siblings still index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceListing {
+    pub files: Vec<SourceFile>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// List files and collect metadata without reading file contents.
+///
+/// The directory walk runs in parallel (`WalkBuilder::build_parallel`) and each
+/// entry's cached `file_type()` (from `readdir`, no syscall) decides file-ness,
+/// with `entry.metadata()` supplying mtime/size — one stat per file instead of
+/// the previous `path().is_file()` + `fs::metadata` double-stat.
+pub fn list_source_files(path: &str) -> Result<Vec<SourceFile>> {
+    Ok(list_source_listing(path)?.files)
+}
+
+/// List source files and preserve non-fatal traversal failures.
+pub fn list_source_listing(path: &str) -> Result<SourceListing> {
+    let root = Path::new(path);
+    if !root.exists() {
+        return Err(anyhow::anyhow!("path does not exist: {path}"));
+    }
+
+    if root.is_file() {
+        return Ok(SourceListing {
+            files: vec![source_file(root)],
+            diagnostics: Vec::new(),
+        });
+    }
+
+    list_directory(root)
+}
+
+fn list_directory(root: &Path) -> Result<SourceListing> {
+    let collected = std::sync::Mutex::new(Vec::<SourceFile>::new());
+    let diagnostics = std::sync::Mutex::new(Vec::<Diagnostic>::new());
+    ignore::WalkBuilder::new(root)
+        .hidden(false)
+        .filter_entry(|entry| !is_vcs_internal(entry))
+        .build_parallel()
+        .run(|| {
+            Box::new(|result| {
+                match result {
+                    Ok(entry) if entry.file_type().is_some_and(|ft| ft.is_file()) => {
+                        let file = source_file_from_entry(&entry);
+                        collected
+                            .lock()
+                            .expect("walk collector lock poisoned")
+                            .push(file);
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        let path = walk_error_path(&error)
+                            .unwrap_or(root)
+                            .display()
+                            .to_string();
+                        tracing::warn!(path = %path, "directory traversal failed — skipped");
+                        diagnostics
+                            .lock()
+                            .expect("walk diagnostics lock poisoned")
+                            .push(Diagnostic {
+                                file_id: None,
+                                path,
+                                message: format!("directory traversal failed — skipped: {error}"),
+                                severity: "error".to_string(),
+                            });
+                    }
+                }
+                ignore::WalkState::Continue
+            })
+        });
+
+    let mut files = collected
+        .into_inner()
+        .expect("walk collector lock poisoned");
+    files.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+    let mut diagnostics = diagnostics
+        .into_inner()
+        .expect("walk diagnostics lock poisoned");
+    diagnostics.sort_unstable_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.message.cmp(&right.message))
+    });
+    diagnostics.dedup();
+    Ok(SourceListing { files, diagnostics })
+}
+
+/// The path an `ignore::Error` refers to, when it carries one.
+///
+/// `ignore` has no accessor for this: the path lives in the `WithPath`
+/// variant, which the walker wraps in `WithDepth` (and, for ignore-file parse
+/// failures, `WithLineNumber`), so unwrap those layers to reach it. `Loop`
+/// reports the symlink child that closed the cycle. Everything else — a bare
+/// `Io` error, a bad glob — has no path and falls back to the walk root.
+fn walk_error_path(error: &ignore::Error) -> Option<&Path> {
+    match error {
+        ignore::Error::WithPath { path, .. } => Some(path),
+        ignore::Error::WithDepth { err, .. } | ignore::Error::WithLineNumber { err, .. } => {
+            walk_error_path(err)
+        }
+        ignore::Error::Loop { child, .. } => Some(child),
+        ignore::Error::Partial(errors) => errors.iter().find_map(walk_error_path),
+        _ => None,
+    }
+}
+
+/// Prune VCS-internal directories from the walk. `.hidden(false)` (set on the
+/// walkers so legitimate dotfiles like `.github/` and `.eslintrc` are indexed)
+/// otherwise descends into `.git/`, which holds machine internals — refs,
+/// hooks, logs, and potentially thousands of loose objects plus multi-megabyte
+/// packfiles. Indexing those pollutes the `files` table (observed: ~8% of rows
+/// on a real repo, >90% on a freshly-committed one), inflates file counts that
+/// feed nav_map/clusters, and wastes the walk. A submodule's `.git` is a
+/// gitlink *file*, also named `.git`, so matching the name (not just dirs)
+/// prunes both. This is deliberately narrow — only `.git`, the one dotdir that
+/// is never source — to preserve the dotfile-including policy above.
+pub(crate) fn is_vcs_internal(entry: &ignore::DirEntry) -> bool {
+    entry.file_name() == std::ffi::OsStr::new(".git")
+}
+
+/// Extract `(mtime, size)` from a `Metadata`, with `UNKNOWN_METADATA` sentinels
+/// for any field that can't be trusted (nanos/len overflow, bad timestamp).
+fn metadata_mtime_size(metadata: &std::fs::Metadata) -> (i64, i64) {
+    let mtime = metadata
+        .modified()
+        .ok()
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_nanos()).ok())
+        .unwrap_or(UNKNOWN_METADATA);
+    let size = i64::try_from(metadata.len()).unwrap_or(UNKNOWN_METADATA);
+    (mtime, size)
+}
+
+/// Build a `SourceFile` from a single path (single-file input case).
+fn source_file(path: &Path) -> SourceFile {
+    let (mtime, size) = std::fs::metadata(path)
+        .ok()
+        .map(|metadata| metadata_mtime_size(&metadata))
+        .unwrap_or((UNKNOWN_METADATA, UNKNOWN_METADATA));
+
+    source_file_with_metadata(path, mtime, size)
+}
+
+/// Build a `SourceFile` from a walker entry, reusing the entry's cached
+/// metadata (one `stat` total). `content_hash` stays `None` — it is computed at
+/// scan time from the bytes actually read, never here.
+fn source_file_from_entry(entry: &ignore::DirEntry) -> SourceFile {
+    let path = entry.path().display().to_string();
+    let (mtime, size) = entry
+        .metadata()
+        .ok()
+        .map(|metadata| metadata_mtime_size(&metadata))
+        .unwrap_or((UNKNOWN_METADATA, UNKNOWN_METADATA));
+    SourceFile {
+        path,
+        mtime,
+        size,
+        content_hash: None,
+    }
+}
+
+fn source_file_with_metadata(path: &Path, mtime: i64, size: i64) -> SourceFile {
+    let content_hash = if mtime == UNKNOWN_METADATA && size == UNKNOWN_METADATA {
+        std::fs::read(path)
+            .ok()
+            .map(|contents| content_hash(&contents))
+    } else {
+        None
+    };
+
+    SourceFile {
+        path: path.display().to_string(),
+        mtime,
+        size,
+        content_hash,
+    }
+}
+
+fn content_hash(contents: &[u8]) -> String {
+    const FNV_OFFSET_BASIS: u64 = 14_695_981_039_346_656_037;
+    const FNV_PRIME: u64 = 1_099_511_628_211;
+    let hash = contents.iter().fold(FNV_OFFSET_BASIS, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
+    });
+    format!("{hash:016x}")
+}
+
+/// Walk a file or directory tree and extract everything parseable.
+///
+/// Directory walking uses `ignore::WalkBuilder` (same crate + `.hidden(false)`
+/// policy as `find_pattern`'s directory walk, for the same reason: match
+/// `ast-grep`'s observed traversal rather than a hand-rolled recursive
+/// `read_dir` that blanket-skips dot-prefixed entries) and per-file
+/// parse+extract runs in parallel via `rayon`, since it was previously fully
+/// sequential and was the dominant cost in `build`'s scan phase — see
+/// `BENCHMARK.md`.
+pub fn run(path: &str) -> Result<ExtractOutput> {
+    tracing::debug!(file = path, "extracting");
+    let profile = std::env::var_os("VARDE_CODE_PROFILE")
+        .or_else(|| std::env::var_os("VARDE_PROFILE"))
+        .is_some();
+    let t = std::time::Instant::now();
+    let SourceListing {
+        files,
+        diagnostics: traversal,
+    } = list_source_listing(path)?;
+    if profile {
+        eprintln!(
+            "VARDE_CODE_PROFILE scan: list_source_listing done at {:?} ({} files, {} traversal errors)",
+            t.elapsed(),
+            files.len(),
+            traversal.len()
+        );
+    }
+
+    let mut output = ExtractOutput {
+        entities: Vec::new(),
+        symbols: Vec::new(),
+        // Traversal failures lead: they describe gaps in the file list that
+        // the per-file diagnostics below can say nothing about.
+        diagnostics: traversal,
+        files: Vec::with_capacity(files.len()),
+        file_meta: Vec::with_capacity(files.len()),
+    };
+
+    // Parse + extract in parallel; each file also yields its scan-time
+    // content hash so persistence never re-reads the bytes.
+    let processed: Vec<ProcessedFile> = files
+        .par_iter()
+        .enumerate()
+        .map(|(i, file)| process_file(Path::new(&file.path), i as u32))
+        .collect();
+    if profile {
+        eprintln!(
+            "VARDE_CODE_PROFILE scan: parallel parse+extract done at {:?}",
+            t.elapsed()
+        );
+    }
+
+    let (entity_total, symbol_total) = extracted_capacities(&processed);
+    output.entities.reserve_exact(entity_total);
+    output.symbols.reserve_exact(symbol_total);
+    merge_processed_files(&mut output, files, processed);
+    if profile {
+        eprintln!(
+            "VARDE_CODE_PROFILE scan: sequential merge done at {:?}",
+            t.elapsed()
+        );
+    }
+
+    tracing::debug!(
+        entities = output.entities.len(),
+        symbols = output.symbols.len(),
+        diagnostics = output.diagnostics.len(),
+        "extract complete"
+    );
+    Ok(output)
+}
+
+fn merge_processed_files(
+    output: &mut ExtractOutput,
+    files: Vec<SourceFile>,
+    processed: Vec<ProcessedFile>,
+) {
+    for (file, processed) in files.into_iter().zip(processed) {
+        output.file_meta.push(FileMeta {
+            mtime: file.mtime,
+            size: file.size,
+            content_hash: processed.content_hash,
+        });
+        output.files.push(file.path);
+        merge(output, processed.result);
+    }
+}
+
+fn extracted_capacities(processed: &[ProcessedFile]) -> (usize, usize) {
+    processed
+        .iter()
+        .fold((0, 0), |(entities, symbols), file| match &file.result {
+            FileResult::Extracted {
+                entities: found_entities,
+                symbols: found_symbols,
+                ..
+            } => (
+                entities + found_entities.len(),
+                symbols + found_symbols.len(),
+            ),
+            FileResult::Diagnostic(_) => (entities, symbols),
+        })
+}
+
+enum FileResult {
+    Diagnostic(Diagnostic),
+    Extracted {
+        entities: Vec<crate::model::Entity>,
+        symbols: Vec<crate::model::Symbol>,
+        /// Set when the parse hit a syntax error (or the walk-depth guard)
+        /// but tree-sitter's error recovery still yielded usable entities:
+        /// we keep the partial extract *and* record the diagnostic, rather
+        /// than discarding every entity in the file. Dropping the whole file
+        /// on one localized error erased thousands of valid entities from
+        /// real .NET code (Newtonsoft's `#if`/`#endif`-in-initializer files),
+        /// blanking them from the nav map, edges, and every SQL rule.
+        diagnostic: Option<Diagnostic>,
+    },
+}
+
+/// The per-file output of `process_file`: the extracted entities/symbols (or
+/// skip diagnostic) plus the scan-time content hash of the file bytes.
+struct ProcessedFile {
+    content_hash: String,
+    result: FileResult,
+}
+
+fn merge(out: &mut ExtractOutput, result: FileResult) {
+    match result {
+        FileResult::Diagnostic(d) => out.diagnostics.push(d),
+        FileResult::Extracted {
+            entities,
+            symbols,
+            diagnostic,
+        } => {
+            out.entities.extend(entities);
+            out.symbols.extend(symbols);
+            if let Some(d) = diagnostic {
+                out.diagnostics.push(d);
+            }
+        }
+    }
+}
+
+/// Parsed fragment for a contiguous slice of the file list, produced by
+/// [`parse_chunk`]. Entities/symbols/diagnostics carry their *global*
+/// `file_id` (`start_index + position_in_slice`), so the streaming full build
+/// ([`crate::persist::persist_full_streaming`]) can insert them against one
+/// repo-wide file-id table exactly as a whole-repo [`run`] would.
+pub(crate) struct ChunkParsed {
+    pub entities: Vec<crate::model::Entity>,
+    pub symbols: Vec<crate::model::Symbol>,
+    pub diagnostics: Vec<Diagnostic>,
+    /// One content hash per file in the slice, in slice order (index-aligned
+    /// with the slice passed to [`parse_chunk`]).
+    pub content_hashes: Vec<String>,
+}
+
+/// Parse+extract a contiguous slice of the file list in parallel, assigning
+/// each file the global id `start_index + position_in_slice`.
+///
+/// Order-preserving: the returned entities/symbols follow the slice's file
+/// order (the parallel map is collected in order, then merged sequentially),
+/// so a streaming writer assigns row ids in the same order a single whole-repo
+/// [`run`] would — the property the streaming full build relies on to produce
+/// a byte-identical index.
+pub(crate) fn parse_chunk(files: &[SourceFile], start_index: usize) -> ChunkParsed {
+    let processed: Vec<ProcessedFile> = files
+        .par_iter()
+        .enumerate()
+        .map(|(i, file)| process_file(Path::new(&file.path), (start_index + i) as u32))
+        .collect();
+
+    let (entity_total, symbol_total, diagnostic_total) =
+        processed
+            .iter()
+            .fold((0, 0, 0), |(e, s, d), p| match &p.result {
+                FileResult::Extracted {
+                    entities,
+                    symbols,
+                    diagnostic,
+                } => (
+                    e + entities.len(),
+                    s + symbols.len(),
+                    d + usize::from(diagnostic.is_some()),
+                ),
+                FileResult::Diagnostic(_) => (e, s, d + 1),
+            });
+    let mut parsed = ChunkParsed {
+        entities: Vec::with_capacity(entity_total),
+        symbols: Vec::with_capacity(symbol_total),
+        diagnostics: Vec::with_capacity(diagnostic_total),
+        content_hashes: Vec::with_capacity(files.len()),
+    };
+    for p in processed {
+        parsed.content_hashes.push(p.content_hash);
+        match p.result {
+            FileResult::Diagnostic(d) => parsed.diagnostics.push(d),
+            FileResult::Extracted {
+                entities,
+                symbols,
+                diagnostic,
+            } => {
+                parsed.entities.extend(entities);
+                parsed.symbols.extend(symbols);
+                if let Some(d) = diagnostic {
+                    parsed.diagnostics.push(d);
+                }
+            }
+        }
+    }
+    parsed
+}
+
+/// Parse + extract one file, or return a skip diagnostic.
+///
+/// The raw file bytes are read exactly once: `content_hash` is derived from
+/// them, and source files parse from the same read (via `from_utf8`) rather
+/// than issuing a second `read_to_string`. Non-source files are detected by
+/// extension *before* any read, so they contribute no I/O and only a stable
+/// empty-content hash.
+fn process_file(path: &Path, file_id: u32) -> ProcessedFile {
+    let Some(lang) = language_for_path(path) else {
+        return skipped_file(path, file_id, "unsupported file type — skipped", "info");
+    };
+
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_) => return skipped_file(path, file_id, "binary or non-UTF-8 — skipped", "error"),
+    };
+    let content_hash = content_hash(&bytes);
+
+    let source = match std::str::from_utf8(&bytes) {
+        Ok(source) => source,
+        Err(_) => return invalid_utf8_file(path, file_id, content_hash),
+    };
+    // Minified/generated bundles (a checked-in webpack bundle, a protoc `.pb`
+    // stub, ...) are machine output, not source an agent navigates. Indexing
+    // one lets it dominate the graph — the audit found a single 490 KB
+    // `chat.js` supplying 74% of a repo's entities. Skip extraction: the file
+    // stays tracked (hash recorded, incremental stays correct) but contributes
+    // no entities/symbols, so it can't pollute orientation or the call graph.
+    if crate::query::noise_filter::is_minified_source(source) {
+        tracing::warn!(file = %path.display(), "minified/generated source — skipped");
+        return ProcessedFile {
+            content_hash,
+            result: FileResult::Extracted {
+                entities: Vec::new(),
+                symbols: Vec::new(),
+                diagnostic: Some(Diagnostic {
+                    file_id: Some(file_id),
+                    path: path.display().to_string(),
+                    message: "minified/generated source — skipped".to_string(),
+                    severity: "warning".to_string(),
+                }),
+            },
+        };
+    }
+    extract_source_file(path, file_id, content_hash, lang, source)
+}
+
+fn skipped_file(path: &Path, file_id: u32, message: &str, severity: &str) -> ProcessedFile {
+    if severity == "info" {
+        tracing::debug!(file = %path.display(), "{message}");
+    } else {
+        tracing::warn!(file = %path.display(), "{message}");
+    }
+    ProcessedFile {
+        content_hash: content_hash(&[]),
+        result: FileResult::Diagnostic(Diagnostic {
+            file_id: Some(file_id),
+            path: path.display().to_string(),
+            message: message.to_string(),
+            severity: severity.to_string(),
+        }),
+    }
+}
+
+fn invalid_utf8_file(path: &Path, file_id: u32, content_hash: String) -> ProcessedFile {
+    let mut file = skipped_file(path, file_id, "binary or non-UTF-8 — skipped", "error");
+    file.content_hash = content_hash;
+    file
+}
+
+fn extract_source_file(
+    path: &Path,
+    file_id: u32,
+    content_hash: String,
+    lang: ast_grep_language::SupportLang,
+    source: &str,
+) -> ProcessedFile {
+    let parsed = parse_source_for_path(&lang, path, source);
+    let result = extract::extract(&parsed, file_id);
+    // A syntax error is localized: tree-sitter's error recovery still parses
+    // the rest of the file, so `result.entities`/`result.symbols` hold the
+    // valid constructs outside the error region. Keep them and record a
+    // diagnostic, rather than discarding the whole file — dropping it erased
+    // thousands of real entities from `#if`/`#endif`-heavy .NET code.
+    let diagnostic = result.has_error.then(|| {
+        let msg = "syntax error — partial extract kept";
+        tracing::warn!(
+            file = %path.display(),
+            entities = result.entities.len(),
+            symbols = result.symbols.len(),
+            "{msg}"
+        );
+        Diagnostic {
+            file_id: Some(file_id),
+            path: path.display().to_string(),
+            message: msg.to_string(),
+            severity: "warning".to_string(),
+        }
+    });
+    if diagnostic.is_none() {
+        tracing::debug!(
+            file = %path.display(),
+            entities = result.entities.len(),
+            symbols = result.symbols.len(),
+            "parsed file"
+        );
+    }
+    ProcessedFile {
+        content_hash,
+        result: FileResult::Extracted {
+            entities: result.entities,
+            symbols: result.symbols,
+            diagnostic,
+        },
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::{
+        FileResult, UNKNOWN_METADATA, list_source_files, list_source_listing, process_file,
+        source_file_with_metadata,
+    };
+    use std::path::Path;
+
+    /// Regression: a localized syntax error must NOT discard the whole file.
+    /// C# conditional-compilation directives (`#if`/`#endif`) inside a
+    /// collection initializer trip tree-sitter-c-sharp into an ERROR node —
+    /// pervasive in cross-framework .NET code (Newtonsoft) — yet the class and
+    /// its methods parse fine. We keep the recovered entities and record a
+    /// `warning` diagnostic, rather than blanking the file from the index.
+    #[test]
+    fn syntax_error_keeps_partial_extract_and_records_diagnostic() {
+        let dir = std::env::temp_dir().join(format!("varde-scan-partial-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path = dir.join("Widget.cs");
+        std::fs::write(
+            &path,
+            "using System;\n\
+             using System.Collections.Generic;\n\n\
+             class Widget\n\
+             {\n\
+             \x20\x20\x20\x20static readonly Dictionary<Type, int> Map = new Dictionary<Type, int>\n\
+             \x20\x20\x20\x20{\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20{ typeof(int), 1 },\n\
+             #if HAVE_BIG\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20{ typeof(long), 2 },\n\
+             #endif\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20{ typeof(string), 3 },\n\
+             \x20\x20\x20\x20};\n\n\
+             \x20\x20\x20\x20public int Compute() => 42;\n\
+             }\n",
+        )
+        .expect("write cs");
+
+        let processed = process_file(Path::new(path.to_str().unwrap()), 0);
+        match processed.result {
+            FileResult::Extracted {
+                entities,
+                diagnostic,
+                ..
+            } => {
+                assert!(
+                    !entities.is_empty(),
+                    "error-recovery must retain entities, got none"
+                );
+                assert!(
+                    entities.iter().any(|e| e.name == "Widget"),
+                    "the class outside the error region must survive: {:?}",
+                    entities.iter().map(|e| &e.name).collect::<Vec<_>>()
+                );
+                assert!(
+                    entities.iter().any(|e| e.name == "Compute"),
+                    "the method outside the error region must survive"
+                );
+                let d = diagnostic.expect("a syntax-error file must still carry a diagnostic");
+                assert_eq!(d.message, "syntax error — partial extract kept");
+                assert_eq!(d.severity, "warning");
+            }
+            FileResult::Diagnostic(d) => {
+                panic!("file wrongly discarded on syntax error: {d:?}");
+            }
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn source_file_hashes_content_when_metadata_is_unknown() {
+        let path =
+            std::env::temp_dir().join(format!("varde-scan-content-hash-{}.rs", std::process::id()));
+        let contents = b"fn main() {}\n";
+        std::fs::write(&path, contents).expect("source writes");
+
+        let source = source_file_with_metadata(&path, UNKNOWN_METADATA, UNKNOWN_METADATA);
+
+        assert_eq!(source.content_hash.as_deref(), Some("355463d2db8c9b7f"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Regression: `.hidden(false)` (set so legit dotfiles like `.github/` are
+    /// indexed) otherwise lets the walker descend into `.git/`, persisting refs,
+    /// hooks, logs, and loose objects as bogus source rows. The walk must prune
+    /// `.git/` while still returning the real source file and other dotfiles.
+    #[test]
+    fn walk_excludes_dot_git_but_keeps_other_dotfiles() {
+        let dir = std::env::temp_dir().join(format!("varde-scan-gitwalk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // A realistic `.git/` skeleton: nested subdirs and files, like a real repo.
+        std::fs::create_dir_all(dir.join(".git/hooks")).expect("git dir");
+        std::fs::create_dir_all(dir.join(".git/objects/ab")).expect("obj dir");
+        std::fs::write(dir.join(".git/HEAD"), "ref: refs/heads/main\n").expect("head");
+        std::fs::write(dir.join(".git/hooks/pre-commit.sample"), "#!/bin/sh\n").expect("hook");
+        std::fs::write(dir.join(".git/objects/ab/cdef"), b"\x00binary").expect("obj");
+        // A legit dotfile that MUST still be indexed (the reason for hidden(false)).
+        std::fs::create_dir_all(dir.join(".github")).expect("gh dir");
+        std::fs::write(dir.join(".github/ci.yml"), "on: push\n").expect("ci");
+        // The real source file.
+        std::fs::write(dir.join("main.rs"), "fn main() {}\n").expect("src");
+
+        let files = list_source_files(dir.to_str().unwrap()).expect("walks");
+        let paths: Vec<String> = files.iter().map(|f| f.path.clone()).collect();
+
+        assert!(
+            paths.iter().all(|p| !p.contains("/.git/")),
+            ".git internals must be pruned: {paths:?}"
+        );
+        assert!(
+            paths.iter().any(|p| p.ends_with("main.rs")),
+            "real source must be indexed: {paths:?}"
+        );
+        assert!(
+            paths.iter().any(|p| p.ends_with(".github/ci.yml")),
+            "non-.git dotfiles must still be indexed: {paths:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An unreadable nested directory must not silently shrink the file list:
+    /// siblings still index, and the failure is reported against the exact
+    /// path that failed — not the walk root.
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_directory_yields_path_based_diagnostic_and_keeps_siblings() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("varde-scan-denied-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let locked = dir.join("locked");
+        std::fs::create_dir_all(&locked).expect("locked dir");
+        std::fs::write(locked.join("hidden.rs"), "fn hidden() {}\n").expect("hidden src");
+        std::fs::write(dir.join("sibling.rs"), "fn sibling() {}\n").expect("sibling src");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+            .expect("chmod 000");
+
+        let listing = list_source_listing(dir.to_str().unwrap()).expect("walk survives");
+
+        // Restore before asserting so a failure still leaves a removable dir.
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod restore");
+
+        let paths: Vec<&str> = listing.files.iter().map(|f| f.path.as_str()).collect();
+        assert!(
+            paths.iter().any(|p| p.ends_with("sibling.rs")),
+            "valid siblings must still index: {paths:?}"
+        );
+        assert_eq!(
+            listing.diagnostics.len(),
+            1,
+            "one traversal failure expected, got {:?}",
+            listing.diagnostics
+        );
+        let diagnostic = &listing.diagnostics[0];
+        assert_eq!(
+            diagnostic.file_id, None,
+            "traversal errors have no file row"
+        );
+        assert_eq!(diagnostic.severity, "error");
+        assert!(
+            diagnostic.path.ends_with("locked"),
+            "diagnostic must name the failing directory, not the walk root: {}",
+            diagnostic.path
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `run` surfaces walk failures in the same `diagnostics` list as per-file
+    /// ones, so every downstream consumer sees them without a second channel.
+    #[cfg(unix)]
+    #[test]
+    fn run_carries_traversal_diagnostics_into_extract_output() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!("varde-scan-runwalk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let locked = dir.join("locked");
+        std::fs::create_dir_all(&locked).expect("locked dir");
+        std::fs::write(dir.join("sibling.rs"), "fn sibling() {}\n").expect("sibling src");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+            .expect("chmod 000");
+
+        let output = super::run(dir.to_str().unwrap()).expect("scan survives");
+
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod restore");
+
+        assert!(
+            output
+                .diagnostics
+                .iter()
+                .any(|d| d.file_id.is_none() && d.path.ends_with("locked")),
+            "traversal diagnostic missing from ExtractOutput: {:?}",
+            output.diagnostics
+        );
+        assert!(
+            output.files.iter().any(|f| f.ends_with("sibling.rs")),
+            "valid siblings must still index: {:?}",
+            output.files
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

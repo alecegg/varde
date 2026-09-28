@@ -52,6 +52,38 @@ for harness in claude codex opencode; do
     echo "FAIL: unmanaged Build changed for $harness" >&2
     exit 1
   }
+
+  # A default (-f) install writes the ownership marker without -m, so a
+  # later -m run can recognize the file as varde-managed and update it.
+  marker_check="$TEST_ROOT/marker-$harness"
+  mkdir -p "$marker_check"
+  "$AGENTS_DIR/install.sh" -t "$harness" -d "$marker_check" -a plan -f >/dev/null
+  grep -Fq "varde-managed-agent" "$marker_check/plan.$extension" || {
+    echo "FAIL: default install omitted ownership marker for $harness" >&2
+    exit 1
+  }
+  printf 'stale edit\n' >>"$marker_check/plan.$extension"
+  "$AGENTS_DIR/install.sh" -t "$harness" -d "$marker_check" -a plan -m >/dev/null
+  grep -Fq "stale edit" "$marker_check/plan.$extension" && {
+    echo "FAIL: -m did not update a marker-owned file for $harness" >&2
+    exit 1
+  }
+  grep -Fq "varde-managed-agent" "$marker_check/plan.$extension" || {
+    echo "FAIL: -m removed the ownership marker for $harness" >&2
+    exit 1
+  }
+
+  link_target="$TEST_ROOT/link-target-$harness"
+  printf 'external target\n<!-- varde-managed-agent -->\n' >"$link_target"
+  link_dir="$TEST_ROOT/link-$harness"
+  mkdir -p "$link_dir"
+  ln -s "$link_target" "$link_dir/plan.$extension"
+  "$AGENTS_DIR/install.sh" -t "$harness" -d "$link_dir" -a plan -m >/dev/null
+  [ -L "$link_dir/plan.$extension" ] || { echo "FAIL: -m replaced symlink for $harness" >&2; exit 1; }
+  [ "$(readlink "$link_dir/plan.$extension")" = "$link_target" ] || { echo "FAIL: -m changed symlink for $harness" >&2; exit 1; }
+  "$AGENTS_DIR/install.sh" -t "$harness" -d "$link_dir" -a plan -f >/dev/null
+  [ ! -L "$link_dir/plan.$extension" ] || { echo "FAIL: -f left symlink for $harness" >&2; exit 1; }
+  grep -Fq 'external target' "$link_target" || { echo "FAIL: -f changed link target for $harness" >&2; exit 1; }
 done
 
 echo "Executor install migration passed."

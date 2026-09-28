@@ -4,10 +4,18 @@ on:
   pull_request:
     paths:
       - "skills/**"
+      - "tools/**"
+      - "agents/**"
+      - "tests/**"
+      - "varde"
       - ".github/workflows/skills-benchmarks.yml"
   push:
     paths:
       - "skills/**"
+      - "tools/**"
+      - "agents/**"
+      - "tests/**"
+      - "varde"
       - ".github/workflows/skills-benchmarks.yml"
 
 permissions:
@@ -22,5 +30,35 @@ jobs:
         working-directory: skills
     steps:
       - uses: actions/checkout@v4
+      - name: Build workflow CLI
+        working-directory: ${{ github.workspace }}
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --locked --manifest-path clis/workflow/Cargo.toml --package varde-workflow --bin varde-workflow --target-dir clis/workflow/target
+          echo "$GITHUB_WORKSPACE/clis/workflow/target/debug" >> "$GITHUB_PATH"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
       - name: Run deterministic benchmark checks
         run: tests/benchmark-foundation.sh
+
+  root-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build workflow CLI
+        working-directory: ${{ github.workspace }}
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo +stable build --locked --manifest-path clis/workflow/Cargo.toml --package varde-workflow --bin varde-workflow --target-dir clis/workflow/target
+          echo "$GITHUB_WORKSPACE/clis/workflow/target/debug" >> "$GITHUB_PATH"
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+      - name: Run root tests
+        run: |
+          failed=0
+          for test_script in tests/*.sh; do
+            bash "$test_script" || { echo "FAIL: $test_script"; failed=1; }
+          done
+          exit "$failed"

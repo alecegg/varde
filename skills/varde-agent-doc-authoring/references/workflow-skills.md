@@ -1,39 +1,28 @@
 # Ordered skill layout
 
-Read this for work with ordered steps.
-
 ## Entry point dispatch
 
-Add an entry-point table when a skill has multiple invocation shapes. Each
-action cell names the actual discovery method, operation, or reference. Agents
-may act from the table before reading the workflow, so each cell must be
-actionable on its own rather than describe an outcome.
+For several invocation shapes, add an entry-point table. Agents act from it
+before reading the workflow, so each cell names the actual discovery method,
+operation, or reference, not an outcome.
 
 ## Workflow
 
-Use one numbered, imperative workflow. Each step should state one action and
-point to the reference that owns its detail. Keep a short gate inline only when
-the agent must evaluate it before deciding whether to read the reference.
-
-Keep a short ordered sub-checklist inline when it has three to five simple
-items. Move it to the step reference when it grows branches or its own
-procedure. Keep literal templates inline or in `assets/`.
-
-Put a short `## Gotchas` section at the end of `SKILL.md`. It records concrete
-corrections that must be visible whenever the skill fires.
+Use one numbered workflow per invocation type, with one imperative action per
+step. Give each step one primary procedure, inline or in a reference. Keep short
+procedures and gates inline; move branching detail to the reference that owns
+it. Keep literal templates inline
+or in `assets/`. End `SKILL.md` with a short `## Gotchas` section of concrete
+corrections needed whenever the skill fires.
 
 ## Reference fan-out
 
-Agents often lose their place when one phase requires many files, even when
-each file is short. Measure how many files a single phase requires.
+Agents lose their place when one phase needs many files.
 
-- One workflow step should usually map to one self-contained reference.
-- Merge files always read together during a phase.
-- Split a reference only when its branches have separate triggers.
-- Avoid a chain where one step needs several peers that cross-reference each
-  other.
-- Do not remove directives that carry required behavior merely to hit a
-  percentage target.
-
-When a workflow is short and has little branching, keep it together. A split
-must improve routing, not merely reduce the root line count.
+- Give each step one primary procedure. Load supplementary requirements only
+  when needed; avoid splitting the procedure across cross-referencing peers.
+- Split only to improve routing, never to hit a size target or by dropping
+  directives.
+- **Premature completion** (a step ends before its criterion is met): make
+  completion observable; split by sequence only when later work repeatedly
+  prompts early completion and evidence shows a handoff helps.

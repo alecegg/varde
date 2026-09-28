@@ -70,6 +70,9 @@ def validate_profile(manifest: dict, skills: list, profile: dict) -> None:
         raise ValueError(f"{profile['name']} must define models for every harness")
     for harness in HARNESSES:
         validate_model_policy(profile["name"], harness, models[harness])
+    tools = profile.get("opencode_tools", [])
+    if not isinstance(tools, list) or set(tools) - set(OPENCODE_TOOLS):
+        raise ValueError(f"{profile['name']} has unknown OpenCode capabilities")
 
 
 def validate_instructions(manifest: dict, profile: dict, instructions: str) -> None:
@@ -122,9 +125,18 @@ def context(profile: dict) -> dict[str, str]:
         "claude_model": json.dumps(claude["model"], ensure_ascii=False),
         "claude_tools": ", ".join(profile["claude_tools"]),
         "skills": ", ".join(profile["skills"]),
-        "opencode_tools": "\n".join(
-            f"  {tool}: {str(tool in enabled).lower()}" for tool in OPENCODE_TOOLS
-        ),
+        "opencode_permissions": json.dumps([
+            {"action": action, "resource": "*", "effect": effect}
+            for action, effect in (
+                ("read", "allow" if "read" in enabled else "deny"),
+                ("glob", "allow" if "glob" in enabled else "deny"),
+                ("grep", "allow" if "grep" in enabled else "deny"),
+                ("shell", "allow" if "bash" in enabled else "deny"),
+                ("edit", "allow" if enabled & {"write", "edit"} else "deny"),
+                ("skill", "allow"),
+                ("subagent", "deny"),
+            )
+        ]),
         "model_toml": json.dumps(codex["model"]),
         "reasoning_toml": json.dumps(codex["reasoning_effort"]),
         "opencode_model": json.dumps(opencode["model"], ensure_ascii=False),

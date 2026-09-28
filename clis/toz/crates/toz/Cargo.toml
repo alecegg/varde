@@ -1,0 +1,38 @@
+[package]
+name = "varde-toz"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+default-run = "varde-toz"
+
+[[bin]]
+name = "varde-toz"
+path = "src/main.rs"
+
+[[bin]]
+name = "toz"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22.1"
+clap = { version = "4.6.7", features = ["derive"] }
+dirs = "7.0.0"
+libc = "0.2.189"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+signal-hook = "0.4.4"
+tempfile = "3.27.0"
+toz-core = { package = "varde-toz-core", path = "../toz-core", version = "0.1.0" }
+walkdir = "2.5.0"
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+insta = "1.48.0"
+predicates = "3.1.4"

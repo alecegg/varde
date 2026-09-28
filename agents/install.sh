@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 HARNESS="claude"
 TARGET=""
+CUSTOM_TARGET=0
 AGENTS=""
 FORCE=0
 MANAGED=0
@@ -26,7 +27,7 @@ Usage: $(basename "$0") [-t harness] [-d target_dir] [-a agent1,agent2,...] [-f]
   -d target_dir   Directory to install into (default depends on harness):
                     claude   -> \$HOME/.claude/agents
                     codex    -> \$HOME/.codex/agents
-                    opencode -> \$HOME/.config/opencode/agent
+                    opencode -> \$HOME/.config/opencode/agents
   -a agents       Comma-separated agent names to install (default: all)
   -f              Overwrite existing agent files without prompting
   -m              Overwrite only varde-managed files; preserve other files
@@ -44,7 +45,7 @@ EOF
 while getopts "t:d:a:fmnh" opt; do
   case "$opt" in
     t) HARNESS="$OPTARG" ;;
-    d) TARGET="$OPTARG" ;;
+    d) TARGET="$OPTARG"; CUSTOM_TARGET=1 ;;
     a) AGENTS="$OPTARG" ;;
     f) FORCE=1 ;;
     m) MANAGED=1 ;;
@@ -62,7 +63,7 @@ fi
 case "$HARNESS" in
   claude)   VARIANT="claude.md";   EXT="md";   DEFAULT_TARGET="$HOME/.claude/agents" ;;
   codex)    VARIANT="codex.toml";  EXT="toml"; DEFAULT_TARGET="$HOME/.codex/agents" ;;
-  opencode) VARIANT="opencode.md"; EXT="md";   DEFAULT_TARGET="$HOME/.config/opencode/agent" ;;
+  opencode) VARIANT="opencode.md"; EXT="md";   DEFAULT_TARGET="$HOME/.config/opencode/agents" ;;
   *) echo "Unknown harness: $HARNESS (expected claude|codex|opencode)" >&2; exit 1 ;;
 esac
 
@@ -100,7 +101,7 @@ if [ "$DRY_RUN" -ne 1 ]; then
 fi
 
 is_varde_managed() {
-  grep -Fq "$OWNERSHIP_MARKER" "$1"
+  [ -f "$1" ] && [ ! -L "$1" ] && grep -Fq "$OWNERSHIP_MARKER" "$1"
 }
 
 mark_varde_managed() {
@@ -112,7 +113,7 @@ mark_varde_managed() {
 
 remove_stale_build() {
   local stale="$TARGET/build.$EXT"
-  if [ -e "$stale" ] && is_varde_managed "$stale"; then
+  if is_varde_managed "$stale"; then
     if [ "$DRY_RUN" -eq 1 ]; then
       printf 'Would remove stale managed %s\n' "$stale"
     else
@@ -122,37 +123,119 @@ remove_stale_build() {
   fi
 }
 
+# Retire only owned regular files from the V1 default directory, after a
+# corresponding V2 adapter is installed. Explicit targets never affect HOME.
+remove_legacy_opencode() {
+  local agent="$1" legacy="$HOME/.config/opencode/agent"
+  [ "$HARNESS" = "opencode" ] && [ "$CUSTOM_TARGET" -eq 0 ] || return 0
+  [ ! -L "$legacy" ] || return 0
+  { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; } || return 0
+  local candidates=("$legacy/$agent.md") candidate
+  [ "$agent" != "executor" ] || candidates+=("$legacy/build.md")
+  for candidate in "${candidates[@]}"; do
+    if is_varde_managed "$candidate"; then
+      if [ "$DRY_RUN" -eq 1 ]; then
+        printf 'Would remove legacy managed %s\n' "$candidate"
+      else
+        rm "$candidate"
+        printf 'Removed legacy managed %s\n' "$candidate"
+      fi
+    fi
+  done
+}
+
+exists() {
+  [ -e "$1" ] || [ -L "$1" ]
+}
+
+# Both preview and installation use this decision. In particular, a link is
+# never followed to inspect a marker or to write an installed adapter.
+install_action() {
+  local destination="$1"
+  if ! exists "$destination"; then
+    ACTION=install
+  elif [ "$MANAGED" -eq 1 ]; then
+    if is_varde_managed "$destination"; then ACTION=replace; else ACTION=preserve; fi
+  elif [ "$FORCE" -eq 1 ]; then
+    ACTION=replace
+  elif [ -t 0 ]; then
+    ACTION=prompt
+  else
+    ACTION=refuse
+  fi
+}
+
+COMPLETED=()
+install_failure() {
+  printf 'Failed to install %s -> %s\n' "$1" "$2" >&2
+  if [ "${#COMPLETED[@]}" -gt 0 ]; then
+    printf 'Previously installed: %s\n' "${COMPLETED[*]}" >&2
+  fi
+  exit 1
+}
+
+install_agent() {
+  local agent="$1" src="$2" dest="$3" staged backup=""
+  staged="$(mktemp "$TARGET/.varde-agent.XXXXXX")" || return 1
+  if ! cp -p "$src" "$staged" || ! mark_varde_managed "$staged"; then
+    rm -f "$staged"
+    return 1
+  fi
+  if exists "$dest"; then
+    backup="$(mktemp "$TARGET/.varde-agent-backup.XXXXXX")" || { rm -f "$staged"; return 1; }
+    rm -f "$backup" || { rm -f "$staged"; return 1; }
+    if ! mv "$dest" "$backup"; then
+      rm -f "$staged"
+      return 1
+    fi
+  fi
+  if ! mv "$staged" "$dest"; then
+    rm -f "$staged"
+    if [ -n "$backup" ]; then
+      mv "$backup" "$dest" || echo "Rollback failed for $dest; backup at $backup" >&2
+    fi
+    return 1
+  fi
+  [ -z "$backup" ] || rm -rf "$backup"
+}
+
 for agent in "${SELECTED[@]}"; do
   src="$SCRIPT_DIR/$agent/$VARIANT"
   dest="$TARGET/$agent.$EXT"
   if [ ! -f "$src" ]; then
     echo "No $HARNESS variant for $agent (missing $src)" >&2
-    exit 1
+    install_failure "$agent" "$dest"
   fi
-  if [ -e "$dest" ] && [ "$MANAGED" -eq 1 ] && ! is_varde_managed "$dest"; then
-    echo "Preserved unowned $dest"
-    continue
-  fi
+  install_action "$dest"
   if [ "$DRY_RUN" -eq 1 ]; then
-    printf 'Would install %s -> %s\n' "$src" "$dest"
+    case "$ACTION" in
+      install|replace) printf 'Would %s %s -> %s\n' "$ACTION" "$src" "$dest" ;;
+      preserve) printf 'Would preserve unowned %s\n' "$dest"; continue ;;
+      prompt) printf 'Would request confirmation to replace %s\n' "$dest"; continue ;;
+      refuse) printf 'Would refuse noninteractive replacement of %s; use -f or -m\n' "$dest" >&2; install_failure "$agent" "$dest" ;;
+    esac
     if [ "$agent" = "executor" ] &&
       { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; }; then
       remove_stale_build
     fi
+    remove_legacy_opencode "$agent"
     continue
   fi
-  if [ -e "$dest" ] && [ "$FORCE" -ne 1 ] && [ "$MANAGED" -ne 1 ]; then
+  case "$ACTION" in
+    preserve) echo "Preserved unowned $dest"; continue ;;
+    refuse) echo "Refusing to prompt without a TTY for $dest; use -f or -m" >&2; install_failure "$agent" "$dest" ;;
+    prompt)
     read -r -p "Overwrite existing $dest? [y/N] " reply
     case "$reply" in
       [yY]*) ;;
       *) echo "Skipped $agent"; continue ;;
     esac
-  fi
-  cp "$src" "$dest"
-  if [ "$MANAGED" -eq 1 ]; then
-    mark_varde_managed "$dest"
-  fi
+    ;;
+  esac
+  install_agent "$agent" "$src" "$dest" || install_failure "$agent" "$dest"
+  COMPLETED+=("$agent")
   echo "Installed $agent -> $dest"
+  remove_legacy_opencode "$agent"
   if [ "$agent" = "executor" ] &&
     { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; }; then
     remove_stale_build

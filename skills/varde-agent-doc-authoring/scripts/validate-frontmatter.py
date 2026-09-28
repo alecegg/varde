@@ -18,7 +18,7 @@ when a path itself has no SKILL.md but its children do.
 Checks:
   - Frontmatter is present and is valid YAML (catches unquoted `: ` inside
     plain scalars, the #1 real-world cause of silent install breakage).
-  - name: required, <=64 chars, lowercase unicode alphanumeric + hyphens,
+  - name: required, <=64 chars, lowercase ASCII alphanumeric + hyphens,
     no leading/trailing hyphen, no `--`, matches the parent directory name.
   - description: required, non-empty, <=1024 chars.
   - compatibility: optional, <=500 chars.
@@ -52,6 +52,42 @@ FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 BODY_LINE_BUDGET = 500
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """Reject explicit duplicates before YAML merges add inherited keys."""
+
+    def __init__(self, stream):
+        super().__init__(stream)
+        self._checked_mappings = set()
+
+    def flatten_mapping(self, node):
+        # Merges mutate nodes; aliases may revisit an already flattened mapping.
+        if node not in self._checked_mappings:
+            self._checked_mappings.add(node)
+            seen = set()
+            merge_key = object()
+            for key_node, _ in node.value:
+                if key_node.tag == "tag:yaml.org,2002:merge":
+                    key = merge_key
+                elif key_node.tag == "tag:yaml.org,2002:value":
+                    key = self.construct_scalar(key_node)
+                else:
+                    key = self.construct_object(key_node)
+                try:
+                    duplicate = key in seen
+                    seen.add(key)
+                except TypeError:
+                    raise yaml.constructor.ConstructorError(
+                        "while constructing a mapping", node.start_mark,
+                        "found unhashable key", key_node.start_mark,
+                    ) from None
+                if duplicate:
+                    raise yaml.constructor.ConstructorError(
+                        "while constructing a mapping", node.start_mark,
+                        f"duplicate key {key_node.value!r}", key_node.start_mark,
+                    )
+        return super().flatten_mapping(node)
+
+
 def find_skill_md_files(path: Path):
     """Return SKILL.md files under `path`: itself, its skill dir, or one level of children."""
     if path.is_file() and path.name == "SKILL.md":
@@ -83,7 +119,7 @@ def validate_skill(skill_md: Path) -> dict:
 
     raw_frontmatter = match.group(1)
     try:
-        frontmatter = yaml.safe_load(raw_frontmatter)
+        frontmatter = yaml.load(raw_frontmatter, Loader=UniqueKeyLoader)
     except yaml.YAMLError as exc:
         errors.append(f"frontmatter is not valid YAML: {exc}")
         return {"path": str(skill_md), "errors": errors, "warnings": warnings, "ok": False}
@@ -111,12 +147,18 @@ def validate_skill(skill_md: Path) -> dict:
 
     # description
     description = frontmatter.get("description")
-    if not description:
+    if not description or (isinstance(description, str) and not description.strip()):
         errors.append("missing required field `description`")
     elif not isinstance(description, str):
         errors.append(f"`description` must be a string, got {type(description).__name__}")
     elif len(description) > 1024:
         errors.append(f"`description` is {len(description)} chars, max is 1024")
+    if re.search(r"^description:\s*[>|]", raw_frontmatter, re.MULTILINE):
+        errors.append(
+            "`description` must be a single-line scalar, not a folded (`>`) or "
+            "literal (`|`) block — some harnesses read frontmatter with a "
+            "line-based regex and show the literal `>`/`|` as the description"
+        )
 
     # compatibility
     compatibility = frontmatter.get("compatibility")
@@ -141,7 +183,7 @@ def validate_skill(skill_md: Path) -> dict:
 
     # unknown fields
     unknown = set(frontmatter.keys()) - KNOWN_FIELDS
-    for key in sorted(unknown):
+    for key in sorted(unknown, key=str):
         warnings.append(f"unrecognized frontmatter field `{key}` (client-specific fields are fine)")
 
     # body size

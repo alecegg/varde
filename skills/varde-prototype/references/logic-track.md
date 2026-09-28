@@ -1,34 +1,38 @@
 # Logic Track
 
-Create one file: `<storage>/logic.html`. It is self-contained HTML with no
-build step, framework, or server. Anyone can open it and use the state model.
-Read `logic-format.md` for the structure.
+Edit `<storage>/logic.html` in place; no iteration files.
 
-## Steps
+## The page
 
-1. **State the question.** At the top of the visible page, name the exact state
-   model and question being tested. Do not hide it in a code comment.
-2. **Isolate the logic in a pure module.** Use a reducer, state machine, or
-   pure functions. Do not access the DOM. See `logic-format.md` and Gotchas.
-   Choose the shape that fits the question:
-   - Use a reducer for discrete actions over one state value.
-   - Use an explicit state machine when legal actions depend on current state.
-   - Use pure functions when no ongoing state exists.
-3. **Write the page in domain language**, not code, using the required sections
-   in `logic-format.md`. Include the happy path, a tricky edge case, and an
-   action that should be illegal. Test more than the obvious flow.
-4. **Show, ask, revise.** Show the file path. Add an Artifact or
-   `mcp__visualize` preview when detected, as in the Visual track. Ask one
-   targeted question about a missing action, scenario, or visible state field.
-   Wait for the answer, then revise in place. Do not increment a version number;
-   `logic.html` remains the one file across every round.
+`logic.html` is one valid, self-contained HTML document with inline `<style>`
+and no external dependencies, framework, bundler, or server.
 
-## Anti-patterns
+- **The logic is a pure module** in one `<script>` block: a reducer for
+  discrete actions over one state value, a state machine when legal actions
+  depend on the current state, or pure functions when no ongoing state exists.
+  The page calls the module; the module never touches the DOM.
+- **The rest is a thin shell** with these sections, top to bottom:
+  1. **Title and question** — one visible paragraph naming the exact state
+     model and question under test.
+  2. **Current-state panel** — the full relevant state as labelled fields, not
+     a `JSON.stringify` dump, re-rendered after every action.
+  3. **Free-play buttons** — one always-available button per action,
+     dispatching straight into the module.
+  4. **Guided scenarios** — tabs, each with a plain-language description of the
+     situation and what to watch for, and the scenario's steps as real
+     clickable buttons. Opening a tab resets to a known initial state.
 
-- Do not add tests. A prototype that needs tests has stopped being a prototype.
-- Do not use a real database or API. Keep state in memory unless persistence
-  itself is the question.
-- Do not generalize beyond the question asked. Do not ask, "what if we also
-  supported X later."
-- Do not use a framework, bundler, or dev server. Keep one file that opens by
-  double-click and can be shared.
+Write buttons, state fields, and scenarios in domain language so a
+non-developer can use the file unaided. Cover the happy path, a tricky edge
+case, and an action that should be illegal. Style plainly: clean typography,
+generous spacing, one accent color, no animation.
+
+## Rounds
+
+Each round, ask about one missing action, scenario, or state field.
+
+## Stay a prototype
+
+- Add no tests; a prototype that needs tests has stopped being one.
+- Keep state in memory, with no real database or API, unless persistence is
+  the question.

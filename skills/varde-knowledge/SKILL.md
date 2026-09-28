@@ -1,6 +1,6 @@
 ---
 name: varde-knowledge
-description: "Record or find durable project memory: a decision, pattern, definition, or finding; an obstacle worth keeping; a wrap-up or handoff after finished work. Not for plans, review findings, or user-facing docs."
+description: "Record or find durable project decisions, patterns, definitions, and references, or wrap up or resume a handoff. Not for friction, plans, or review findings."
 ---
 
 # Maintain durable project memory
@@ -9,17 +9,20 @@ description: "Record or find durable project memory: a decision, pattern, defini
 
 | The request is | Read |
 |---|---|
-| Find or record a durable fact — a decision, pattern, definition, finding, or an obstacle hit during work | `references/note.md` |
+| Find or record durable knowledge — a decision, pattern, definition, or reference | `references/note.md` |
 | Wrap up finished work, capture what was learned, or write a handoff before stopping | `references/reflect.md` |
+| Resume a handoff, or pick up where a previous session left off | `references/reflect-handoff.md` |
+| Check a knowledge note against current code | `references/reconcile.md` |
 
-Read only the reference for the request.
-Then load its explicitly required supporting files.
+Read only the Knowledge reference for the request. Friction capture,
+reconciliation, and distillation belong to the `varde-learn` skill; switch to
+it by name without importing its references.
 
 ## Gotchas
 
-- Paths written `<working>/…` and `<knowledge>/…` resolve per
-  `references/memory-locations.md`. Read it before the first memory read or write.
-- Handoffs require a stopping boundary. Create one only when the session stops
-  or pauses.
-- Mid-session reflection creates no handoff.
-- Preserve every existing artifact path and format.
+- Before first use, resolve `<working>` and `<knowledge>` with
+  `varde-workflow paths --json`. Use `<knowledge>` for notes and `<working>`
+  for plans, reviews, and handoffs; pass the relevant absolute path to
+  subagents. If the command fails, retry once with escalated access; if it
+  still fails, ask for the paths. Do not guess them. A location outside Git
+  skips git ops; use plain file operations.

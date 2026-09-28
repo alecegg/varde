@@ -4,20 +4,23 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: merge.sh <id> [into]
+Usage: worktree-merge.sh <id> [into]
 
 Merges worktree/<id> into <into> (default: the branch currently checked out
-in this checkout). An explicit <into> must name that checked-out branch.
-Commits any uncommitted changes left in the worktree first, using a
-placeholder message if the caller made no commit.
+in this checkout). An explicit <into> must name that checked-out branch. Does
+NOT commit on the caller's behalf — the worktree must be clean.
 
 Exit codes:
   0  merged cleanly, worktree/<id> is now in <into>
   1  usage error
   2  worktree/<id> has no commits ahead of its base — nothing to merge
-  3  merge conflict — resolve via references/RESOLVE.md, then finish the
-     merge manually; do NOT run cleanup.sh until it's resolved
-  4  target does not name the currently checked-out branch
+  3  merge conflict — resolve via references/worktree.md, then finish the
+     merge manually; do NOT run worktree-cleanup.sh until it's resolved
+  4  target rejected: branch/<id> is missing, <into> does not resolve, <into>
+     does not name the currently checked-out branch, or the merge failed for
+     a reason other than conflict
+  5  worktree/<id> has uncommitted changes — the task did not complete;
+     caller decides
 EOF
 }
 
@@ -44,15 +47,15 @@ if [[ $# -eq 2 ]]; then
   fi
 fi
 
-repo_name="$(basename "$(git rev-parse --show-toplevel)")"
-repo_root="$(git rev-parse --show-toplevel)"
-worktree_path="$(dirname "${repo_root}")/${repo_name}-worktrees/${id}"
+common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+repo_root="$(dirname "${common_git_dir}")"
+worktree_path="${repo_root}/.varde/worktrees/${id}"
 
 git rev-parse --verify --quiet "${branch}^{commit}" >/dev/null || { echo "error: branch ${branch} does not exist" >&2; exit 4; }
 git rev-parse --verify --quiet "${into}^{commit}" >/dev/null || { echo "error: target ${into} does not resolve" >&2; exit 4; }
 if [[ -d "${worktree_path}" ]] && [[ -n "$(git -C "${worktree_path}" status --porcelain)" ]]; then
-  git -C "${worktree_path}" add -A
-  git -C "${worktree_path}" commit -m "worktree ${id}: uncommitted changes at merge time" >&2
+  echo "error: worktree/${id} has uncommitted changes — the task did not complete" >&2
+  exit 5
 fi
 
 merge_base="$(git merge-base "${into}" "${branch}")"
@@ -69,6 +72,6 @@ else
     echo "error: merge failed without conflicts" >&2
     exit 4
   fi
-  echo "conflict merging ${branch} into ${into} — see references/RESOLVE.md" >&2
+  echo "conflict merging ${branch} into ${into} — see references/worktree.md" >&2
   exit 3
 fi

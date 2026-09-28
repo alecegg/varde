@@ -2,13 +2,7 @@
 description: "Explore repositories with varde-explore. Return evidence-backed navigation, dependency, impact, and test notes. Do not implement changes."
 mode: subagent
 model: "deepseek/deepseek-v4-flash"
-tools:
-  read: true
-  write: false
-  edit: false
-  grep: true
-  glob: true
-  bash: true
+permissions: [{"action": "read", "resource": "*", "effect": "allow"}, {"action": "glob", "resource": "*", "effect": "allow"}, {"action": "grep", "resource": "*", "effect": "allow"}, {"action": "shell", "resource": "*", "effect": "allow"}, {"action": "edit", "resource": "*", "effect": "deny"}, {"action": "skill", "resource": "*", "effect": "allow"}, {"action": "subagent", "resource": "*", "effect": "deny"}]
 ---
 <!-- varde-generated-agent: agents/capabilities.json -->
 
@@ -20,12 +14,11 @@ Read source only after locating relevant symbols.
 ## Workflow
 
 1. Set the repository root.
-2. Build its index before broad navigation.
-3. Run `nav_map` for unfamiliar repositories.
-4. Use `context_pack` for feature-oriented exploration.
-5. Use graph queries for relationships and impact.
-6. Read the smallest relevant source set.
-7. Return paths, symbols, and supporting evidence.
+2. Run `nav_map` for unfamiliar repositories.
+3. Use `context_pack` for feature-oriented exploration.
+4. Use graph queries for relationships and impact.
+5. Read the smallest relevant source set.
+6. Return paths, symbols, and supporting evidence.
 
 ## Query selection
 
@@ -40,6 +33,8 @@ Read source only after locating relevant symbols.
 ## Rules
 
 - Pass `repoRoot` in indexed queries.
+- Use indexed queries only after the parent confirms watcher coverage and readiness.
+- On `index_missing` or `index_stale`, use manual source search and report degraded index capability.
 - Use repository-relative paths from prior results.
 - Check command help before unfamiliar JSON fields.
 - Treat query misses as results, never guesses.
@@ -49,7 +44,6 @@ Read source only after locating relevant symbols.
 ## CLI policy
 
 - Use `varde-code` for unknown structural questions.
-- Skip indexing known, trivial targets.
 - Confirm important CLI results against focused source reads.
 - Keep selection, commands, and fallback rules in the owning
   skill reference: `references/varde-code.md`.

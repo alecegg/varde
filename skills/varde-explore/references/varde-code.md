@@ -2,29 +2,21 @@
 
 `varde-code` is an optional Rust CLI on PATH. If
 `command -v varde-code` finds nothing, use Read/Grep/Glob. Its absence is not
-an error. Never build or install it yourself. When the decision below selects
-the CLI, build its index once before other commands:
+an error. Never build or install it yourself. When it is installed, the main agent runs `varde-code watch --ensure --repo
+<absolute-repo-root>` and checks `watch --list` for `registered`, `alive`,
+and `ready` before dispatching indexed queries. The watcher writes the index;
+queries only validate and read it. If supervision or readiness fails, search
+source directly and report degraded index capability. An Explore agent in a
+read-only sandbox uses indexed queries only after the parent confirms coverage.
 
-```bash
-varde-code build --repo-root "$(pwd)"   # full rebuild each time
-```
-
-Every command prints `{"ok": true, "data": ...}` or `{"ok": false, "error": {...}}`.
-
-## Decision rule
-
-- **Discovery and relationships:** Use Varde Code for unknown scope,
-  dependencies, types, tests, and blast radius.
-- **Known content:** Read short, located files directly.
-- **Large known files:** Use `get_symbol` for one exact symbol.
-- **Batch related lookups:** Build once, then batch related queries.
-- **New or trivial targets:** Skip indexing.
-- **Confirmation:** Confirm important CLI results against focused source reads.
+Every command prints JSON: branch on `ok`; a failure carries `data.error`.
+When a truncated result includes `meta.toz.handle`, query that handle with
+`toz query --handle <H> "<term>"` or its `toz_read` line range instead of
+requesting repeated offset pages. The inline list remains bounded.
+For `find_pattern`, the handle stores locations and 160-character previews.
+Use `matchesOffset` or `fullMatches` when you need full match text or captures.
 
 ## Operations
-
-Use every result as a focused reading list. Confirm important relationships
-against the actual source.
 
 ```bash
 # Orient in an unfamiliar repository — start here
@@ -33,39 +25,31 @@ varde-code nav_map --json '{"repoRoot": "'"$(pwd)"'"}' --format text
 # Gather the files, symbols, and covering tests around a concept or keyword
 varde-code context_pack --json '{"repoRoot": "'"$(pwd)"'", "query": "authentication"}'
 
-# Outgoing and incoming structural relationships for one file
-varde-code dependencies --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
-varde-code dependents --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
-
 # Call graph from a seed file or symbol — direction outgoing, incoming, or both
 varde-code explore --json '{"repoRoot": "'"$(pwd)"'", "query": {"params": {"input": "src/foo.ts", "direction": "both"}}}'
 
-# Symbol body and type relationships, for writing an explanation
-varde-code get_symbol --json '{"repoRoot": "'"$(pwd)"'", "name": "myFunction", "includeBody": true}'
-varde-code type_hierarchy --json '{"repoRoot": "'"$(pwd)"'", "name": "MyClass"}'
-
-# Size a candidate change before comparing alternatives
+# Transitive dependents of a file — scope a change's potential downstream impact
 varde-code blast_radius --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
-varde-code symbol_blast_radius --json '{"repoRoot": "'"$(pwd)"'", "name": "handle_request"}'
 
-# Which tests would verify a given file
+# Files that depend on a given file
+varde-code dependents --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
+
+# Test files covering a given file
 varde-code tests_for_file --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
 
-# Batch known lookups sharing one repository root
+# One symbol's body, for writing an explanation
+varde-code get_symbol --json '{"repoRoot": "'"$(pwd)"'", "name": "myFunction", "includeBody": true}'
+
+# Batch related lookups sharing one repository root
 varde-code batch --json '{"repoRoot": "'"$(pwd)"'", "calls": [{"mode": "nav_map"}, {"mode": "dependents", "filePath": "src/foo.ts"}]}'
 ```
 
-Pass `includeBody` only when source bodies are necessary, and
-`includeReferences` only when usages are necessary.
+Pass `includeBody` only when bodies are needed.
 
 ## Fallback rule
 
-If the sandbox denies access to an index or lock under `~/.config/varde-code/`,
-retry that call once with escalated filesystem access, keeping the command
-unchanged. If approval is unavailable, denied, or the retry fails, use Read/Grep
-for that lookup and name the degraded capability in your next message.
-
-On any other failure, use Read/Grep for that lookup and keep using the CLI for
-the rest of the run. If a successful result looks implausible, such as zero
-dependents for an exported symbol, spot-check it with targeted grep before
-trusting it.
+If watcher setup is denied by the sandbox, the main agent retries once
+with escalated access. On `index_missing` or `index_stale`, or if setup fails,
+use Read/Grep for that call and report degraded index capability. Do not build
+from a read-only Explore agent. Grep-check implausible results (e.g. zero
+dependents).

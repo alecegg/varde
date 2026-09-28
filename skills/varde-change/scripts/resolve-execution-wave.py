@@ -1,341 +1,301 @@
 #!/usr/bin/env python3
-"""Resolve one dependency-ready execution wave from a task manifest."""
+"""Pick the next execution wave for a plan's tasks.
 
-from __future__ import annotations
+Usage: resolve-execution-wave.py [--max-workers N] [--repo-root DIR] <plan-dir>
+
+Reads task frontmatter (status, depends_on, modifies, creates, renames, and
+verification_resources). A task's write set is modifies + creates + both paths
+of each rename. Its reach is its write set plus `varde-code blast_radius` of
+every existing modified or renamed path (transitive dependents). Two ready
+tasks conflict when either writes into the other's reach or they share a
+verification resource. `next_wave` is a greedy, id-ordered set of mutually
+independent ready tasks, at most
+--max-workers (default and ceiling 3), safe to run in parallel when it holds two
+or more. Otherwise it is the first ready task alone. Without varde-code it
+always holds one task. A modified or renamed path whose blast radius is empty or
+fails is unknown, not independent: that task stays out of a multi-task wave.
+Missing ownership metadata keeps `next_wave` to one task. The caller decides
+how to execute it and may run fewer tasks together, never more.
+Ownership and graph paths are compared after resolving symlink ancestors,
+including new destinations. Unresolvable ownership keeps the whole wave serial.
+Without Python's ALLOW_MISSING, dangling aliases or unresolved .. stay serial.
+
+Output is JSON: ready, blocked_by_dep, next_wave, conflicts, reasons.
+Exit codes: 0 ok, 1 usage or input error, 3 dependency cycle.
+It dispatches nothing and writes nothing.
+"""
 
 import argparse
 import json
-import posixpath
+import os
+import re
+import shutil
+import stat
+import subprocess
 import sys
-from dataclasses import dataclass
-from pathlib import PurePosixPath
-from typing import Any
+from pathlib import Path
+
+MAX_WORKERS = 3
+LIST_KEYS = ("depends_on", "modifies", "creates", "renames", "verification_resources")
+OWNERSHIP_KEYS = ("modifies", "creates", "renames", "verification_resources")
 
 
-SCHEMA_VERSION = 1
-IMPACT_RESOURCE_PREFIX = "impact:"
-
-
-class ManifestError(Exception):
-    def __init__(self, message: str, code: str = "invalid_manifest") -> None:
-        super().__init__(message)
-        self.code = code
-
-
-@dataclass(frozen=True)
-class Task:
-    task_id: str
-    status: str
-    depends_on: frozenset[str]
-    owner_paths: tuple[str, ...]
-    resources: frozenset[str]
-    impact_resources: frozenset[str]
-    ownership_known: bool
-    impact_known: bool
-
-
-def require_list(value: Any, field: str, task_id: str) -> list[Any]:
-    if not isinstance(value, list):
-        raise ManifestError(f"task {task_id!r} field {field!r} must be a list")
-    return value
-
-
-def normalize_path(value: Any, field: str, task_id: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ManifestError(f"task {task_id!r} field {field!r} contains a blank path")
-    path = value.replace("\\", "/")
-    if path.startswith("/"):
-        raise ManifestError(
-            f"task {task_id!r} field {field!r} contains an absolute path"
-        )
-    path = posixpath.normpath(path)
-    if path in ("", ".") or path == ".." or path.startswith("../"):
-        raise ManifestError(
-            f"task {task_id!r} field {field!r} contains a traversal path"
-        )
-    return str(PurePosixPath(path))
-
-
-def rename_paths(value: Any, task_id: str) -> tuple[list[str], bool]:
-    paths: list[str] = []
-    complete = True
-    for entry in require_list(value, "renames", task_id):
-        if isinstance(entry, str):
-            paths.append(normalize_path(entry, "renames", task_id))
-            complete = False
+def parse_frontmatter(path):
+    text = path.read_text(encoding="utf-8")
+    match = re.match(r"^---\n(.*?)\n---", text, re.S)
+    if not match:
+        raise ValueError(f"{path}: missing frontmatter")
+    data, key = {}, None
+    for line in match.group(1).splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
             continue
-        if not isinstance(entry, dict):
-            raise ManifestError(f"task {task_id!r} contains an invalid rename")
-        if "from" not in entry or "to" not in entry:
-            complete = False
-        for key in ("from", "to"):
-            if key in entry:
-                paths.append(normalize_path(entry[key], f"renames.{key}", task_id))
-        if not any(key in entry for key in ("from", "to")):
-            raise ManifestError(f"task {task_id!r} contains an empty rename")
-    return paths, complete
-
-
-def parse_dependencies(raw: dict[str, Any], task_id: str) -> frozenset[str]:
-    dependencies = require_list(raw.get("depends_on", []), "depends_on", task_id)
-    if not all(isinstance(item, str) and item for item in dependencies):
-        raise ManifestError(f"task {task_id!r} has invalid dependencies")
-    return frozenset(dependencies)
-
-
-def parse_ownership(raw: dict[str, Any], task_id: str) -> tuple[tuple[str, ...], bool]:
-    ownership_known = True
-    owner_paths: list[str] = []
-    for field in ("modifies", "creates"):
-        if field not in raw:
-            ownership_known = False
+        item = re.match(r"^\s*-\s+(.*)$", line)
+        if item and key in LIST_KEYS:
+            data[key].append(unquote(item.group(1)))
             continue
-        owner_paths.extend(
-            normalize_path(item, field, task_id)
-            for item in require_list(raw[field], field, task_id)
-        )
-    if "renames" not in raw:
-        ownership_known = False
-    else:
-        renamed, rename_complete = rename_paths(raw["renames"], task_id)
-        owner_paths.extend(renamed)
-        ownership_known = ownership_known and rename_complete
-    return tuple(sorted(set(owner_paths))), ownership_known
-
-
-def parse_resources(
-    raw: dict[str, Any], task_id: str
-) -> tuple[frozenset[str], frozenset[str], bool]:
-    if "verification_resources" not in raw:
-        return frozenset(), frozenset(), False
-    values = require_list(
-        raw["verification_resources"], "verification_resources", task_id
-    )
-    if not all(isinstance(item, str) and item for item in values):
-        raise ManifestError(f"task {task_id!r} has invalid verification resources")
-    resources = frozenset(values)
-    impact_resources = frozenset(
-        item
-        for item in values
-        if item.startswith(IMPACT_RESOURCE_PREFIX)
-        and len(item) > len(IMPACT_RESOURCE_PREFIX)
-    )
-    return resources, impact_resources, bool(impact_resources)
-
-
-def parse_task(raw: Any, index: int) -> Task:
-    if not isinstance(raw, dict):
-        raise ManifestError(f"task at index {index} must be an object")
-    task_id = raw.get("id")
-    if not isinstance(task_id, str) or not task_id.strip():
-        raise ManifestError(f"task at index {index} needs a non-empty id")
-    status = raw.get("status", "todo")
-    if status not in {"todo", "in_progress", "done", "blocked"}:
-        raise ManifestError(f"task {task_id!r} has unknown status {status!r}")
-    dependencies = parse_dependencies(raw, task_id)
-    owner_paths, ownership_known = parse_ownership(raw, task_id)
-    resources, impact_resources, impact_known = parse_resources(raw, task_id)
-    ownership_known = ownership_known and "verification_resources" in raw
-
-    return Task(
-        task_id=task_id,
-        status=status,
-        depends_on=dependencies,
-        owner_paths=owner_paths,
-        resources=resources,
-        impact_resources=impact_resources,
-        ownership_known=ownership_known,
-        impact_known=impact_known,
-    )
-
-
-def validate_dependencies(tasks: list[Task]) -> None:
-    ids = [task.task_id for task in tasks]
-    if len(set(ids)) != len(ids):
-        raise ManifestError("task ids must be unique")
-    known_ids = set(ids)
-    for task in tasks:
-        missing = task.depends_on - known_ids
-        if missing:
-            raise ManifestError(
-                f"task {task.task_id!r} depends on missing task {sorted(missing)[0]!r}"
-            )
-
-
-def parse_worker_limits(manifest: dict[str, Any]) -> tuple[int, int]:
-    capacity = manifest.get("harness_capacity", 2)
-    maximum = manifest.get("max_parallel_workers", 2)
-    if not isinstance(capacity, int) or capacity < 1:
-        raise ManifestError("harness_capacity must be a positive integer")
-    if not isinstance(maximum, int) or maximum < 1:
-        raise ManifestError("max_parallel_workers must be a positive integer")
-    if maximum > capacity:
-        raise ManifestError(
-            f"max_parallel_workers={maximum} exceeds harness capacity={capacity}",
-            code="capacity_exceeded",
-        )
-    return capacity, maximum
-
-
-def load_manifest(path: str) -> tuple[list[Task], int, int]:
-    try:
-        with open(path, encoding="utf-8") as handle:
-            manifest = json.load(handle)
-    except (OSError, json.JSONDecodeError) as error:
-        raise ManifestError(f"cannot read manifest {path!r}: {error}") from error
-    if not isinstance(manifest, dict):
-        raise ManifestError("manifest root must be an object")
-    raw_tasks = manifest.get("tasks")
-    if not isinstance(raw_tasks, list) or not raw_tasks:
-        raise ManifestError("manifest needs a non-empty tasks list")
-    tasks = [parse_task(raw, index) for index, raw in enumerate(raw_tasks)]
-    validate_dependencies(tasks)
-    capacity, maximum = parse_worker_limits(manifest)
-    return tasks, capacity, maximum
-
-
-def path_overlap(left: str, right: str) -> bool:
-    return left == right or left.startswith(f"{right}/") or right.startswith(f"{left}/")
-
-
-def task_conflict(left: Task, right: Task) -> str | None:
-    if not left.ownership_known or not right.ownership_known:
-        return "unknown-ownership"
-    if not left.impact_known or not right.impact_known:
-        return "unknown-impact"
-    owns_same_path = any(
-        path_overlap(left_path, right_path)
-        for left_path in left.owner_paths
-        for right_path in right.owner_paths
-    )
-    shares_resource = bool(left.resources & right.resources)
-    shares_impact = bool(left.impact_resources & right.impact_resources)
-    if owns_same_path and shares_resource:
-        if shares_impact:
-            return "ownership-and-impact"
-        return "ownership-and-resource"
-    if owns_same_path:
-        return "ownership"
-    if shares_impact:
-        return "impact-resource"
-    if shares_resource:
-        return "verification-resource"
-    return None
-
-
-def find_conflicts(tasks: list[Task]) -> list[dict[str, Any]]:
-    conflicts: list[dict[str, Any]] = []
-    for index, left in enumerate(tasks):
-        for right in tasks[index + 1 :]:
-            reason = task_conflict(left, right)
-            if reason:
-                conflicts.append(
-                    {"tasks": [left.task_id, right.task_id], "reason": reason}
-                )
-    return conflicts
-
-
-def select_wave(
-    by_id: dict[str, Task],
-    pending: set[str],
-    completed: set[str],
-    maximum: int,
-) -> list[Task]:
-    candidates = sorted(
-        (
-            by_id[task_id]
-            for task_id in pending
-            if by_id[task_id].depends_on <= completed
-        ),
-        key=lambda task: task.task_id,
-    )
-    if not candidates:
-        blocked = sorted(pending)[0]
-        raise ManifestError(
-            f"task {blocked!r} is blocked by incomplete dependencies or a cycle",
-            code="dependency_blocked",
-        )
-    wave: list[Task] = []
-    for candidate in candidates:
-        if len(wave) >= maximum:
-            break
-        if not any(task_conflict(candidate, selected) for selected in wave):
-            wave.append(candidate)
-    if not wave:
-        raise ManifestError("no conflict-free task can enter the next wave")
-    return wave
-
-
-def build_waves(tasks: list[Task], maximum: int) -> tuple[list[str], list[list[str]]]:
-    by_id = {task.task_id: task for task in tasks}
-    completed = {task.task_id for task in tasks if task.status == "done"}
-    pending = {
-        task.task_id for task in tasks if task.status not in {"done", "blocked"}
-    }
-    initial_ready = sorted(
-        task_id for task_id in pending if by_id[task_id].depends_on <= completed
-    )
-
-    waves: list[list[str]] = []
-    while pending:
-        wave = select_wave(by_id, pending, completed, maximum)
-        wave_ids = [task.task_id for task in wave]
-        waves.append(wave_ids)
-        pending.difference_update(wave_ids)
-        completed.update(wave_ids)
-    return initial_ready, waves
-
-
-def resolve(tasks: list[Task], capacity: int, maximum: int) -> dict[str, Any]:
-    initial_ready, waves = build_waves(tasks, maximum)
-    conflicts = find_conflicts(tasks)
-    unknown = sorted(task.task_id for task in tasks if not task.ownership_known)
-    unknown_impact = sorted(task.task_id for task in tasks if not task.impact_known)
-
-    parallel_safe = not unknown and not unknown_impact and not conflicts
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "ready_tasks": initial_ready,
-        "waves": waves,
-        "conflicts": conflicts,
-        "unknown_ownership": unknown,
-        "unknown_impact": unknown_impact,
-        "parallel_safe": parallel_safe,
-        "capacity": capacity,
-        "max_parallel_workers": maximum,
-    }
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("manifest")
-    parser.add_argument("--strategy", choices=("auto", "parallel"))
-    args = parser.parse_args()
-    try:
-        tasks, capacity, maximum = load_manifest(args.manifest)
-        result = resolve(tasks, capacity, maximum)
-    except ManifestError as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 3 if error.code == "capacity_exceeded" else 2
-
-    if args.strategy:
-        first_wave_size = len(result["waves"][0]) if result["waves"] else 0
-        if args.strategy == "parallel":
-            if not result["parallel_safe"] or first_wave_size < 2:
-                print(
-                    "error: parallel requires at least two independent ready tasks",
-                    file=sys.stderr,
-                )
-                return 2
-            print("parallel")
+        field = re.match(r"^([A-Za-z_]+):\s*(.*)$", line)
+        if not field:
+            continue
+        key, value = field.group(1), field.group(2).strip()
+        if key in LIST_KEYS:
+            inner = value[1:-1] if value.startswith("[") and value.endswith("]") else value
+            data[key] = [unquote(v) for v in inner.split(",") if unquote(v)]
         else:
-            print(
-                "parallel"
-                if result["parallel_safe"] and first_wave_size > 1
-                else "fresh"
-            )
-        return 0
+            data[key] = unquote(value)
+    return data
 
+
+def unquote(value):
+    return value.strip().strip("'\"").strip()
+
+
+def load_tasks(plan_dir):
+    tasks = {}
+    for path in sorted((plan_dir / "tasks").glob("*.md")):
+        fm = parse_frontmatter(path)
+        rename_paths = []
+        invalid_renames = []
+        for rename in fm.get("renames", []):
+            parts = rename.split("->")
+            if len(parts) != 2 or not all(part.strip() for part in parts):
+                invalid_renames.append(rename)
+                continue
+            rename_paths.extend(norm(part) for part in parts)
+        missing_ownership = [key for key in OWNERSHIP_KEYS if key not in fm]
+        if invalid_renames:
+            missing_ownership.append('renames (expected "old/path -> new/path")')
+        tasks[path.stem] = {
+            "status": fm.get("status", "todo"),
+            "depends_on": fm.get("depends_on", []),
+            "writes": sorted(set(
+                [norm(p) for p in fm.get("modifies", []) + fm.get("creates", [])]
+                + rename_paths
+            )),
+            "modifies": [norm(p) for p in fm.get("modifies", [])],
+            "graph_sources": [norm(p) for p in fm.get("modifies", [])] + rename_paths,
+            "verification_resources": sorted(set(fm.get("verification_resources", []))),
+            "missing_ownership": missing_ownership,
+        }
+    return tasks
+
+
+def norm(path):
+    path = path.strip()
+    while path.startswith("./"):
+        path = path[2:]
+    return path
+
+
+def canonical_path(repo_root, path):
+    candidate = repo_root / path
+    allow_missing = getattr(os.path, "ALLOW_MISSING", None)
+    if allow_missing is not None:
+        resolved = Path(os.path.realpath(candidate, strict=allow_missing))
+    else:
+        resolved = resolve_missing_compat(candidate)
+    return resolved.relative_to(repo_root).as_posix()
+
+
+def resolve_missing_compat(candidate):
+    """Append only an unambiguous missing suffix on older Python."""
+    ancestor = candidate
+    suffix = []
+    while True:
+        try:
+            return ancestor.resolve(strict=True).joinpath(*reversed(suffix))
+        except FileNotFoundError:
+            if ancestor.name == "..":
+                raise ValueError(f"unresolved parent traversal in {candidate}")
+            try:
+                if stat.S_ISLNK(ancestor.lstat().st_mode):
+                    raise ValueError(f"unresolved symlink in {candidate}")
+            except FileNotFoundError:
+                pass
+            suffix.append(ancestor.name)
+            ancestor = ancestor.parent
+
+
+def find_cycle(tasks):
+    state = {}
+
+    def visit(tid):
+        state[tid] = "open"
+        for dep in tasks[tid]["depends_on"]:
+            if dep not in tasks:
+                continue
+            if state.get(dep) == "open" or (dep not in state and visit(dep)):
+                return True
+        state[tid] = "closed"
+        return False
+
+    return any(tid not in state and visit(tid) for tid in tasks)
+
+
+def blast_radius(repo_root, path):
+    payload = json.dumps({"repoRoot": str(repo_root), "filePath": path, "fullResults": True})
+    try:
+        proc = subprocess.run(
+            ["varde-code", "blast_radius", "--json", payload],
+            capture_output=True, text=True, timeout=120,
+        )
+        result = json.loads(proc.stdout)
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return None
+    if not result.get("ok") or not isinstance(result.get("data"), list):
+        return None
+    # Graph results and write sets must use the same repository-relative identity.
+    try:
+        return [canonical_path(repo_root, path) for path in result["data"]]
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return None
+
+
+def resolve(tasks, repo_root, max_workers):
+    reasons, conflicts = [], []
+    ready = [
+        tid for tid, t in tasks.items()
+        if t["status"] == "todo"
+        and all(tasks.get(d, {}).get("status") == "done" for d in t["depends_on"])
+    ]
+    blocked_by_dep = []
+    for tid, t in tasks.items():
+        if t["status"] != "todo":
+            continue
+        for d in t["depends_on"]:
+            dep = tasks.get(d)
+            if dep is None or dep["status"] == "blocked":
+                why = "missing" if dep is None else "blocked"
+                blocked_by_dep.append({"task": tid, "dependency": d, "reason": why})
+                reasons.append(f"{tid}: dependency {d} is {why}")
+    have_cli = shutil.which("varde-code") is not None
+    if not have_cli:
+        reasons.append("varde-code unavailable: independence cannot be checked")
+
+    missing_ownership = False
+    writes_by_task, graph_sources = {}, {}
+    for tid in ready:
+        missing = tasks[tid]["missing_ownership"]
+        if missing:
+            missing_ownership = True
+            reasons.append(f"{tid}: missing ownership metadata: {', '.join(missing)}")
+            continue
+        try:
+            writes_by_task[tid] = {canonical_path(repo_root, path) for path in tasks[tid]["writes"]}
+            graph_sources[tid] = {canonical_path(repo_root, path) for path in tasks[tid]["graph_sources"]}
+        except (OSError, RuntimeError, ValueError) as exc:
+            missing_ownership = True
+            reasons.append(f"{tid}: ownership path identity is uncertain: {exc}")
+            writes_by_task.pop(tid, None)
+
+    reach, candidates = {}, []
+    for tid in ready:
+        if tid not in writes_by_task:
+            continue
+        writes = writes_by_task[tid]
+        if not writes:
+            reasons.append(f"{tid}: empty modifies/creates/renames")
+            continue
+        if not have_cli:
+            continue
+        area = set(writes)
+        for path in sorted(graph_sources[tid]):
+            if not (repo_root / path).exists():
+                continue
+            found = blast_radius(repo_root, path)
+            if not found:
+                # Empty is indistinguishable from an unindexed language.
+                why = "failed" if found is None else "found no graph edges"
+                reasons.append(f"{tid}: blast_radius {why} for {path}")
+                area = None
+                break
+            area.update(found)
+        if area is not None:
+            reach[tid] = area
+            candidates.append(tid)
+
+    wave = []
+    for tid in candidates:
+        clash = None
+        for other in wave:
+            shared = (writes_by_task[tid] & reach[other]) | (writes_by_task[other] & reach[tid])
+            shared_resources = (
+                set(tasks[tid]["verification_resources"])
+                & set(tasks[other]["verification_resources"])
+            )
+            if shared or shared_resources:
+                clash = other
+                conflicts.append({
+                    "tasks": [other, tid],
+                    "files": sorted(shared),
+                    "resources": sorted(shared_resources),
+                })
+                break
+        if clash is None and len(wave) < max_workers:
+            wave.append(tid)
+
+    if len(wave) < 2 or missing_ownership:
+        wave = ready[:1]
+    return {
+        "schema_version": 3,
+        "ready": ready,
+        "blocked_by_dep": blocked_by_dep,
+        "next_wave": wave,
+        "conflicts": conflicts,
+        "reasons": reasons,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument("plan_dir", type=Path)
+    parser.add_argument("--max-workers", type=int, default=MAX_WORKERS)
+    parser.add_argument("--repo-root", type=Path)
+    args = parser.parse_args()
+
+    if not (args.plan_dir / "tasks").is_dir():
+        print(f"error: {args.plan_dir}/tasks is not a directory", file=sys.stderr)
+        return 1
+    if not 1 <= args.max_workers <= MAX_WORKERS:
+        print(f"error: --max-workers must be 1..{MAX_WORKERS}", file=sys.stderr)
+        return 1
+    repo_root = args.repo_root
+    if repo_root is None:
+        proc = subprocess.run(
+            ["git", "-C", str(args.plan_dir), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True,
+        )
+        repo_root = Path(proc.stdout.strip() or ".")
+
+    try:
+        tasks = load_tasks(args.plan_dir)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if find_cycle(tasks):
+        print("error: depends_on contains a cycle", file=sys.stderr)
+        return 3
+
+    result = resolve(tasks, repo_root.resolve(), args.max_workers)
     print(json.dumps(result, sort_keys=True))
     return 0
 

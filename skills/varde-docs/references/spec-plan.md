@@ -1,69 +1,57 @@
 # Find domains needing updates
 
-Compare existing spec documents in `<knowledge>/specs/` against the
-current code structure. For each domain, determine whether:
+Classify each domain as **missing** (no document), **stale** (provenance or
+coverage mismatch), or **up to date** (skip, unless the user asked to
+force-regenerate). Recompute hashes and the file inventory per
+`references/spec-format.md`; legacy specs without `source_roots` or
+`covered_paths` are stale.
 
-- The domain has no existing spec document (**missing** — needs a fresh
-  document).
-- The code backing an existing domain document has changed since the
-  document was last written (**stale** — needs regeneration).
-- The domain document still matches the current code (**up to date** — skip
-  it, unless a force-regenerate was requested, in which case treat all
-  domains as needing work).
+## Incremental, with a `source_commit`
 
-## When `varde-code` is available (see `references/varde-code.md`)
+Recompute every document's provenance and covered paths; a mismatch is stale.
+For missing domains, collect the union of `git diff --name-only <source_commit>..HEAD`,
+`git diff --cached --name-only`, `git diff --name-only`, and untracked files.
+Deduplicate paths before classifying them. Compare changed files with
+`source_roots`, not `sources`: a file outside every domain boundary is a
+candidate missing domain. Diff from `source_commit`, never
+`source_hash`; an unresolvable watermark means a Full scan.
 
-Read `source_commit` from `<knowledge>/specs/index.md`
-frontmatter. If present, scope the whole plan to the diff since that commit
-instead of scanning the repo:
+## Full scan
 
-1. `detect_changes` with `diffMode: "range"`, `range: "<source_commit>..HEAD"`
-   — use this changed-symbols list to scope commit-range candidates.
-2. For each changed symbol's file, resolve its domain with `map_file` (or
-   `clusters` for unmapped/new files) instead of reading directory structure
-   by hand.
-3. Add existing documents whose `sources` entries no longer match their current
-   file contents. Recompute every candidate entry with `git hash-object <path>`;
-   this includes working-tree edits. Sort entries by `path`, hash their ordered
-   `path` and `hash` pairs, and compare that `source_hash` with the document's
-   stored `source_hash`.
-4. A candidate document with a matching `source_hash` is `upToDate` and is not
-   rewritten. A mismatched or missing provenance hash is `dirty`. Every
-   non-candidate document with matching source hashes is `upToDate`; its source
-   files stay unread.
-5. A file in the diff that maps to no existing domain and doesn't fit an
-   existing domain's convention is a candidate **missing** domain; add it as
-   `dirty` with a note.
+Without `source_commit`, diff the directory and module structure against the
+domains in `index.md` and recompute every document's provenance and covered
+paths. With no
+`index.md` (first run): one domain per workspace member/package, else one per
+top-level source directory with its own entry point; state the list.
 
-If `source_commit` is absent because this is the first run or `index.md`
-predates this scheme, run the full scan below.
+## Architecture
 
-## Full scan (no watermark, or `varde-code` unavailable)
+Identify architecture sources (see `references/spec.md` step 3), including
+new declaration files outside old roots, and recompute provenance and covered
+paths the same way. Refresh architecture only when it is missing, stale, its
+declaration set changed, or a domain was added or removed. A full scan alone
+does not require rewriting an up-to-date architecture document.
 
-For a full scan, read directory/module structure and diff it against the
-domains already documented in `<knowledge>/specs/index.md`, and
-skimming source files for the sections that source-cite regenerable content
-(scope boundary, key operations, invariants, acceptance criteria, flows).
+List current source candidates (from workspace members, source directories,
+entrypoints, and deployment declarations) outside all domain `source_roots`,
+and candidates covered by more than one domain root. Report both sets for
+domain classification,
+including on scoped runs. Architecture may intentionally overlap domains;
+report that overlap without automatically changing a domain boundary.
 
-For every existing domain document, recompute its local provenance from
-`sources`: hash each listed file, sort entries by `path`, derive the aggregate
-`source_hash`, and compare it with the stored value. Missing or mismatched
-provenance makes the domain `dirty`.
+## Plan
 
-Return this plan as reasoning output, not as a generated artifact:
+Return, as reasoning rather than a file:
 
-- `dirty`: the list of domains requiring work (missing or stale), with a
-  short note on what changed or why the document is missing.
-- `upToDate`: count of unchanged domains.
-- `toDelete`: domain documents whose corresponding code no longer exists in
-  the repository — confirmed orphans.
-- `ambiguous`: domain documents you cannot confidently classify as orphaned
-  (e.g. the code may have moved rather than been deleted) — leave these in
-  place.
+- `dirty` — missing or stale domains, each with a note on what changed.
+- `upToDate` — count.
+- `toDelete` — confirmed orphans whose code no longer exists.
+- `architectureDirty` — whether the architecture document is missing, stale,
+  or needs refreshing because a domain was added or removed.
+- `overlapping` and `unmatched` — source paths needing classification.
+- `ambiguous` — possible orphans you cannot confirm (the code may have moved);
+  leave them in place.
 
-Classify architecture-relevant paths (UI, middleware, domain, and model layers)
-by directory convention and import structure. For unmatched paths, use the
-majority convention already present in the repo when available.
-
-If `dirty` is empty, report unchanged domains and stop — there is nothing to
-generate.
+An empty `dirty` list skips domain regeneration; it does not stop the run.
+Continue through architecture refresh when `architectureDirty`, confirmed
+orphan deletion when `toDelete` is nonempty, and index writing on every run.

@@ -2,56 +2,35 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_TARGET="$HOME/.claude/skills"
+DEFAULT_TARGET="$HOME/.agents/skills"
 OWNERSHIP_MARKER=.varde-managed-skill
 
-CATALOGUE=(
-  varde-explore
-  varde-change
-  varde-review
-  varde-docs
-  varde-knowledge
-  varde-prototype
-  varde-agent-doc-authoring
-)
-
-# Optional packs stay separate from the core catalogue. Future packs extend
-# their own membership list without making another pack a runtime dependency.
-BROWSER_PACK=(varde-browser)
-SHIPPING_PACK=(varde-release)
-DIAGNOSTICS_PACK=(varde-diagnose)
+# The catalogue is every varde-*/ directory holding a SKILL.md. This excludes
+# eval-tools/ (no SKILL.md, and not a varde-* name): maintainer-only eval
+# tooling never ships to an installed harness.
+CATALOGUE=()
+for skill_manifest in "$SCRIPT_DIR"/varde-*/SKILL.md; do
+  [ -e "$skill_manifest" ] || continue
+  skill_name="$(basename "$(dirname "$skill_manifest")")"
+  CATALOGUE+=("$skill_name")
+done
 
 RETIRED=(
-  varde-build
-  varde-define
-  varde-code-codebase-navigation
-  varde-code-rule-authoring
-  varde-code-rule-scan-triage
-  varde-dashboard
-  varde-explain
-  varde-friction
-  varde-friction-distillation
-  varde-handoff
-  varde-onboard
-  varde-orchestrate
-  varde-plan
-  varde-reflect
-  varde-review-fix
-  varde-simplify
-  varde-spec
-  varde-worktree
+  varde-browser
+  varde-diagnose
+  varde-release
 )
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-d target_dir] [-s skill1,skill2,...] [--pack pack] [-f] [-n] [--yes]
+Usage: $(basename "$0") [-d target_dir] [-s skill1,skill2,...] [-l source_dir] [-f] [-m] [-n]
 
   -d target_dir   Install into this directory
-  -s skills       Install an explicit comma-separated subset, including optional skills
-  --pack pack     Install one optional pack: browser, diagnostics, or shipping
-  -f              Overwrite selected consolidated directories
+  -s skills       Install an explicit comma-separated subset
+  -l source_dir   Link skills from this canonical directory into the target
+  -f              Overwrite existing installs without prompting
+  -m              Overwrite only varde-managed installs; preserve unowned dirs
   -n              Show planned writes without changing files
-  --yes           Approve unmarked legacy-directory removal
   -h              Show this help
 
 Default target: $DEFAULT_TARGET
@@ -60,12 +39,10 @@ EOF
 
 TARGET="$DEFAULT_TARGET"
 SKILLS=""
-PACK_REQUESTS=()
-PACK_REQUEST_COUNT=0
+LINK_SOURCE=""
 FORCE=0
+MANAGED=0
 DRY_RUN=0
-ASSUME_YES=0
-PRESERVE_LEGACY=0
 
 parse_arguments() {
   while [ "$#" -gt 0 ]; do
@@ -80,27 +57,50 @@ parse_arguments() {
         SKILLS="$2"
         shift 2
         ;;
-      --pack)
-        [ "$#" -ge 2 ] || { echo "--pack requires a value" >&2; exit 1; }
-        PACK_REQUESTS+=("$2")
-        PACK_REQUEST_COUNT=$((PACK_REQUEST_COUNT + 1))
+      -l)
+        [ "$#" -ge 2 ] || { echo "-l requires a value" >&2; exit 1; }
+        LINK_SOURCE="$2"
         shift 2
         ;;
       -f) FORCE=1; shift ;;
+      -m) MANAGED=1; shift ;;
       -n) DRY_RUN=1; shift ;;
-      --yes) ASSUME_YES=1; shift ;;
-      --preserve-legacy) PRESERVE_LEGACY=1; shift ;;
       -h|--help) usage; exit 0 ;;
       *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
     esac
   done
+  validate_install_options
+}
+
+validate_install_options() {
+  if [ "$FORCE" -eq 1 ] && [ "$MANAGED" -eq 1 ]; then
+    echo "-f and -m cannot be combined" >&2
+    exit 1
+  fi
+  if [ -n "$LINK_SOURCE" ]; then
+    case "$LINK_SOURCE" in
+      /*) ;;
+      *) echo "-l requires an absolute source directory" >&2; exit 1 ;;
+    esac
+    [ "$TARGET" != "$LINK_SOURCE" ] || {
+      echo "Cannot link a skill directory into itself" >&2
+      exit 1
+    }
+  fi
 }
 
 select_default_skills() {
   if [ -n "$SKILLS" ]; then
-    IFS=',' read -ra SELECTED <<< "$SKILLS"
-  elif [ "$PACK_REQUEST_COUNT" -gt 0 ]; then
+    IFS=',' read -ra RAW_SELECTED <<< "$SKILLS"
     SELECTED=()
+    local skill already existing
+    for skill in "${RAW_SELECTED[@]}"; do
+      already=0
+      for existing in "${SELECTED[@]-}"; do
+        [ "$existing" = "$skill" ] && already=1 && break
+      done
+      [ "$already" -eq 1 ] || SELECTED+=("$skill")
+    done
   else
     SELECTED=("${CATALOGUE[@]}")
   fi
@@ -109,36 +109,17 @@ select_default_skills() {
 known_skill() {
   local skill_name="$1"
   local candidate
-  for candidate in "${CATALOGUE[@]}" "${BROWSER_PACK[@]}" "${SHIPPING_PACK[@]-}" "${DIAGNOSTICS_PACK[@]}"; do
+  for candidate in "${CATALOGUE[@]}"; do
     [ "$skill_name" = "$candidate" ] && return 0
   done
   return 1
-}
-
-append_unique() {
-  local skill_name="$1"
-  local selected_skill
-  for selected_skill in "${SELECTED[@]-}"; do
-    [ -n "$selected_skill" ] || continue
-    [ "$selected_skill" = "$skill_name" ] && return 0
-  done
-  SELECTED+=("$skill_name")
-}
-
-portable_mode() {
-  local source_path="$1" mode
-  if mode=$(stat -f '%Lp' "$source_path" 2>/dev/null); then
-    printf '%s\n' "$mode"
-  else
-    stat -c '%a' "$source_path"
-  fi
 }
 
 included_skill_paths() {
   local source_root="$1"
   find "$source_root" \
     \( -type d \( -name evals -o -name '*-workspace' \) -prune \) -o \
-    \( -name '.DS_Store' -prune \) -o \
+    \( -name '.*' ! -path "$source_root" -prune \) -o \
     -print0
 }
 
@@ -146,57 +127,21 @@ copy_skill_tree() {
   local source_root="$1" destination_root="$2"
   local source_path relative_path target_path
   [ -d "$source_root" ] || return 1
-  mkdir -p "$destination_root"
+  mkdir -p "$destination_root" || return 1
   included_skill_paths "$source_root" | while IFS= read -r -d '' source_path; do
     [ "$source_path" != "$source_root" ] || continue
     relative_path="${source_path#"$source_root"/}"
     target_path="$destination_root/$relative_path"
     if [ -d "$source_path" ] && [ ! -L "$source_path" ]; then
-      mkdir -p "$target_path"
+      mkdir -p "$target_path" || exit 1
     elif [ -L "$source_path" ]; then
-      cp -Pp "$source_path" "$target_path"
+      cp -Pp "$source_path" "$target_path" || exit 1
     elif [ -f "$source_path" ]; then
-      cp -p "$source_path" "$target_path"
+      cp -p "$source_path" "$target_path" || exit 1
     else
       echo "Unsupported skill entry: $source_path" >&2
       exit 1
     fi
-  done
-}
-
-preserve_skill_directory_modes() {
-  local source_root="$1" destination_root="$2"
-  local source_path relative_path target_path
-  included_skill_paths "$source_root" | while IFS= read -r -d '' source_path; do
-    [ -d "$source_path" ] && [ ! -L "$source_path" ] || continue
-    if [ "$source_path" = "$source_root" ]; then
-      target_path="$destination_root"
-    else
-      relative_path="${source_path#"$source_root"/}"
-      target_path="$destination_root/$relative_path"
-    fi
-    chmod "$(portable_mode "$source_path")" "$target_path"
-  done
-}
-
-add_requested_packs() {
-  local pack_name skill_name
-  local pack_skills
-  for pack_name in "${PACK_REQUESTS[@]-}"; do
-    [ -n "$pack_name" ] || continue
-    case "$pack_name" in
-      browser) pack_skills=("${BROWSER_PACK[@]}") ;;
-      shipping) pack_skills=("${SHIPPING_PACK[@]-}") ;;
-      diagnostics) pack_skills=("${DIAGNOSTICS_PACK[@]}") ;;
-      *)
-        echo "Unknown pack: $pack_name" >&2
-        exit 1
-        ;;
-    esac
-    for skill_name in "${pack_skills[@]-}"; do
-      [ -n "$skill_name" ] || continue
-      append_unique "$skill_name"
-    done
   done
 }
 
@@ -211,109 +156,146 @@ validate_selected_skills() {
   done
 }
 
-marked_retired=("")
-unmarked_retired=("")
+# Remove retired skills this installer placed. A directory without the
+# ownership marker was not installed by varde and is never touched.
+retired_installs=("")
 
-classify_retired_skills() {
+find_retired_installs() {
   local skill destination
   for skill in "${RETIRED[@]}"; do
     destination="$TARGET/$skill"
-    [ -d "$destination" ] || continue
-    if [ -f "$destination/$OWNERSHIP_MARKER" ] &&
-      grep -Fxq 'varde-managed-skill' "$destination/$OWNERSHIP_MARKER"; then
-      marked_retired+=("$destination")
-    else
-      unmarked_retired+=("$destination")
+    # A link to the canonical copy is ours even after that copy is gone.
+    if [ -n "$LINK_SOURCE" ] && [ -L "$destination" ] &&
+       [ "$(readlink "$destination")" = "$LINK_SOURCE/$skill" ]; then
+      retired_installs+=("$destination")
+      continue
     fi
+    [ -f "$destination/$OWNERSHIP_MARKER" ] || continue
+    grep -Fxq 'varde-managed-skill' "$destination/$OWNERSHIP_MARKER" || continue
+    retired_installs+=("$destination")
   done
 }
 
-preview_retired_cleanup() {
+remove_retired_installs() {
   local destination
-  for destination in "${marked_retired[@]}"; do
+  for destination in "${retired_installs[@]}"; do
     [ -n "$destination" ] || continue
-    echo "Would remove managed legacy directory: $destination"
-  done
-  for destination in "${unmarked_retired[@]}"; do
-    [ -n "$destination" ] || continue
-    if [ "$ASSUME_YES" -eq 1 ]; then
-      echo "Would remove approved legacy directory: $destination"
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "Would remove retired skill: $destination"
     else
-      echo "Would request removal approval: $destination"
+      rm -rf "$destination"
+      echo "Removed retired skill: $destination"
     fi
   done
-}
-
-confirm_unmarked_removal() {
-  local unmarked_count reply
-  unmarked_count=$((${#unmarked_retired[@]} - 1))
-  [ "$unmarked_count" -gt 0 ] || return 1
-  [ "$ASSUME_YES" -ne 1 ] || return 0
-  [ "$PRESERVE_LEGACY" -ne 1 ] || return 1
-
-  printf 'Remove %d unmarked legacy skill directories? [y/N] ' "$unmarked_count"
-  reply=""
-  read -r reply || true
-  case "$reply" in
-    [yY]|[yY][eE][sS]) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-remove_retired_skills() {
-  local destination remove_unmarked=0
-  for destination in "${marked_retired[@]}"; do
-    [ -n "$destination" ] || continue
-    rm -rf "$destination"
-    echo "Removed managed legacy directory: $destination"
-  done
-
-  confirm_unmarked_removal && remove_unmarked=1
-
-  if [ "$remove_unmarked" -eq 1 ]; then
-    for destination in "${unmarked_retired[@]}"; do
-      [ -n "$destination" ] || continue
-      rm -rf "$destination"
-      echo "Removed legacy directory: $destination"
-    done
-  else
-    for destination in "${unmarked_retired[@]}"; do
-      [ -n "$destination" ] || continue
-      echo "Preserved unmarked legacy directory: $destination"
-    done
-  fi
-
-  mkdir -p "$TARGET"
+  [ "$DRY_RUN" -eq 1 ] || mkdir -p "$TARGET"
 }
 
 preview_skill_install() {
   local source_dir="$1" destination="$2" source_file
-  find "$source_dir" -type f \
-    -not -path '*/evals/*' \
-    -not -path '*-workspace/*' \
-    -not -name '.DS_Store' | while IFS= read -r source_file; do
+  if [ -n "$LINK_SOURCE" ]; then
+    printf 'Would link %s -> %s\n' "$LINK_SOURCE/$(basename "$source_dir")" "$destination"
+    return
+  fi
+  included_skill_paths "$source_dir" | while IFS= read -r -d '' source_file; do
+    [ -f "$source_file" ] || continue
     printf 'Would install %s -> %s/%s\n' "$source_file" "$destination" "${source_file#"$source_dir"/}"
   done
   printf 'Would install marker -> %s/%s\n' "$destination" "$OWNERSHIP_MARKER"
 }
 
+is_varde_managed_skill() {
+  local destination="$1"
+  [ ! -L "$destination" ] && [ -f "$destination/$OWNERSHIP_MARKER" ] &&
+    grep -Fxq 'varde-managed-skill' "$destination/$OWNERSHIP_MARKER"
+}
+
+destination_exists() {
+  [ -e "$1" ] || [ -L "$1" ]
+}
+
+COMPLETED=()
+install_failure() {
+  printf 'Failed to install %s -> %s\n' "$1" "$2" >&2
+  if [ "${#COMPLETED[@]}" -gt 0 ]; then
+    printf 'Previously installed: %s\n' "${COMPLETED[*]}" >&2
+  fi
+  exit 1
+}
+
+confirm_replace() {
+  local destination="$1" reply
+  if [ ! -t 0 ]; then
+    echo "Refusing to prompt without a TTY for $destination; use -f or -m" >&2
+    return 2
+  fi
+  read -r -p "Overwrite existing $destination? [y/N] " reply
+  case "$reply" in
+    [yY]*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 install_skill() {
-  local skill="$1" source_dir destination reply
+  local skill="$1" source_dir destination staged backup="" confirm_status
+  ITEM_INSTALLED=0
   source_dir="$SCRIPT_DIR/$skill"
   destination="$TARGET/$skill"
-  if [ -e "$destination" ] && [ "$FORCE" -ne 1 ]; then
-    read -r -p "Overwrite existing $destination? [y/N] " reply
-    case "$reply" in
-      [yY]*) ;;
-      *) echo "Skipped $skill"; return ;;
-    esac
+  if [ -n "$LINK_SOURCE" ] && [ ! -f "$LINK_SOURCE/$skill/SKILL.md" ]; then
+    echo "Missing canonical skill: $LINK_SOURCE/$skill" >&2
+    return 1
+  fi
+  if [ -n "$LINK_SOURCE" ] && [ -L "$destination" ] &&
+     [ "$(readlink "$destination")" = "$LINK_SOURCE/$skill" ]; then
+    echo "Already linked $skill -> $destination"
+    return
+  fi
+  if destination_exists "$destination" && [ "$MANAGED" -eq 1 ] && ! is_varde_managed_skill "$destination"; then
+    echo "Preserved unowned $destination"
+    return
+  fi
+  if destination_exists "$destination" && [ "$FORCE" -ne 1 ] && [ "$MANAGED" -ne 1 ]; then
+    if confirm_replace "$destination"; then
+      :
+    else
+      confirm_status=$?
+      if [ "$confirm_status" -eq 1 ]; then
+        echo "Skipped $skill"
+        return
+      fi
+      return "$confirm_status"
+    fi
   fi
 
-  rm -rf "$destination"
-  copy_skill_tree "$source_dir" "$destination"
-  printf 'varde-managed-skill\n' > "$destination/$OWNERSHIP_MARKER"
-  preserve_skill_directory_modes "$source_dir" "$destination"
-  echo "Installed $skill -> $destination"
+  staged="$(mktemp -d "$TARGET/.varde-skill.XXXXXX")" || return 1
+  if [ -n "$LINK_SOURCE" ]; then
+    rmdir "$staged" || return 1
+    ln -s "$LINK_SOURCE/$skill" "$staged" || return 1
+  else
+    if ! copy_skill_tree "$source_dir" "$staged" || [ ! -f "$staged/SKILL.md" ] ||
+       ! printf 'varde-managed-skill\n' > "$staged/$OWNERSHIP_MARKER"; then
+      rm -rf "$staged"
+      return 1
+    fi
+  fi
+  if destination_exists "$destination"; then
+    backup="$(mktemp -d "$TARGET/.varde-skill-backup.XXXXXX")" || { rm -rf "$staged"; return 1; }
+    rmdir "$backup" || { rm -rf "$staged"; return 1; }
+    if ! mv "$destination" "$backup"; then
+      rm -rf "$staged"
+      return 1
+    fi
+  fi
+  if ! mv "$staged" "$destination"; then
+    rm -rf "$staged"
+    if [ -n "$backup" ]; then
+      mv "$backup" "$destination" || echo "Rollback failed for $destination; backup at $backup" >&2
+    fi
+    return 1
+  fi
+  [ -z "$backup" ] || rm -rf "$backup"
+  ITEM_INSTALLED=1
+  if [ -n "$LINK_SOURCE" ]; then echo "Linked $skill -> $destination";
+  else echo "Installed $skill -> $destination"; fi
 }
 
 install_selected_skills() {
@@ -325,22 +307,18 @@ install_selected_skills() {
     if [ "$DRY_RUN" -eq 1 ]; then
       preview_skill_install "$source_dir" "$destination"
     else
-      install_skill "$skill"
+      install_skill "$skill" || install_failure "$skill" "$destination"
+      [ "$ITEM_INSTALLED" -eq 0 ] || COMPLETED+=("$skill")
     fi
   done
 }
 
 parse_arguments "$@"
 select_default_skills
-add_requested_packs
 validate_selected_skills
-classify_retired_skills
-if [ "$DRY_RUN" -eq 1 ]; then
-  preview_retired_cleanup
-else
-  remove_retired_skills
-fi
-install_selected_skills
+find_retired_installs
+remove_retired_installs
+install_selected_skills || exit 1
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "Dry run. No skills installed to: $TARGET"

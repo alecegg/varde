@@ -1,78 +1,78 @@
 # Refactor Posture
 
-Behavior-preserving structural changes — restructuring or simplifying code without changing observable behavior. The full test suite (or, when scoped, the relevant subset) serves as the invariant guard.
+Restructure code without changing observable behavior: for the same inputs, the
+same stdout, stderr, return code, side effects, and test results. Public APIs,
+error messages, log output, and wire formats stay unchanged.
+
+Apply `references/review-gates.md` before implementation edits and at
+completion. Reuse an unchanged approved plan verdict supplied by the caller.
 
 ## Bootstrap
 
-1. If `<knowledge>/pattern/` exists, read it.
-2. Determine the target in priority order:
-   a. An explicit argument (file glob, directory, or free-text direction such as "simplify the auth module") — use it as-is.
-   b. Otherwise, grep/glob the repo's findings directory (e.g. `<knowledge>/findings/`, if the repo has one) for the latest open review findings.
-      - If findings exist, read them and use them as targets. Confirm that each finding still applies to its listed `locations`. With `varde-code` available, check `hotspots` for each location. Otherwise read the file and judge the complexity directly. If a location is missing, re-check the finding's `locations` field before proceeding; it may name a more specific path.
-      - No findings found: ask the user for direction, or fall back to the structural goal stated by the task if one was given.
-3. For each target file, find its exact covering tests — with `varde-code` available, run `tests_for_file`; otherwise check for a sibling test by naming convention or grep for imports of the target file in test directories. If tests are found, read them in full before making any edits. If none are found, write a characterization test at the seam (see `references/build-execution.md`'s seam definition) before making any structural edit, so behavior preservation still has a baseline to verify against. Only treat the target as blocked if it genuinely cannot be exercised at all (e.g. no reachable entry point).
+1. Read `<knowledge>/pattern/` if it exists.
+2. Select the explicit target (path, glob, or free-text direction), else the
+   review findings the task addresses (confirm each still applies at its
+   listed location), else the task's structural goal. If none is given, ask.
+3. Record the target branch and SHA. Inspect its status and diffs for the
+   selected paths before creating a worktree. A new worktree excludes
+   uncommitted edits. Leave those edits untouched in the original checkout;
+   if a dirty target path must be refactored, stop before editing it and resume
+   only after its current content is included in the target branch's commit.
+4. Create or reuse a dedicated worktree with
+   `scripts/worktree-create.sh <task-id>-refactor <target-sha>`. If there is no
+   task file, use a stable short change ID in place of `<task-id>`. Work only
+   in the printed `path=`. `created=true` means you own the worktree and later
+   merge and clean it up; `created=false` means the caller owns those actions.
+   On resume, confirm the recorded branch and path before reuse.
+   When the printed path differs from the subject's approval checkout, load
+   `references/worktree.md`, bind its approved task scope before editing, and
+   use that binding context for start/resume checks. The original task file is
+   reference material; return evidence for parent-owned state updates.
+5. Find each target file's covering tests (`tests_for_file`, naming convention,
+   or grep for test-directory imports) and read them in full. If none exist,
+   write a characterization test pinning current behavior before any
+   structural edit. Block only when the target cannot be exercised at all.
 
 ## Cadence
 
-1. Run the full test suite (or, when working against a scoped target, the relevant subset) to establish a baseline. Record any pre-existing failures.
-2. For each structural change or complexity finding, one at a time:
-   a. **Read** — use the test list from Bootstrap step 3. Read the target code and those tests in full.
-   b. **Plan** — state the change and confirm it preserves exact behavior. If it would alter a public API, output format, or any other observable behavior, reject the plan and find an alternative.
-   c. **Edit** — apply the one change.
-   d. **Verify** — run the full test suite (or relevant subset, build, typecheck, or lint — see priority order below). If anything regresses, revert immediately.
-   e. **Commit** the change if verification passes.
-3. Repeat until the structural goal is achieved or all findings/directions have been addressed.
-4. Report a summary (see Summary format below).
+1. Run the full suite or scoped subset in the worktree; record pre-existing
+   failures.
+2. For each attempt, record its paths, make one change, and verify it. Start
+   with no unstaged changes; do not stage an attempt before it passes.
+3. On regression, restore only that attempt: run
+   `git restore --worktree -- <tracked-attempt-paths>` to return tracked files
+   to the last verified index checkpoint, then remove only attempt-created
+   untracked paths by their explicit names. Never run whole-tree `git clean`,
+   `git checkout`, or reset commands.
+4. After an attempt passes, stage its verified paths as a checkpoint. Later
+   rollback must preserve those staged steps.
+5. Before inlining a function, count its real callers (`varde-code dependents`
+   or grep); more than one means it is not an inline target.
+6. Rename only when the rename is the change, never as a side effect of
+   another one.
+7. Outside a parallel wave, follow `build-execution.md` Completion step 5 and
+   commit the task's source paths once, excluding task bookkeeping in an isolated worker. If you
+   own the worktree, return to the target checkout and confirm its branch and
+   SHA are unchanged. Preserve its uncommitted edits; if the merge would
+   overwrite one, keep the worktree and branch and stop. Otherwise run
+   `scripts/worktree-merge.sh <task-id>-refactor`, inspect and release its
+   binding against the integrated task commit, then clean it up with
+   `scripts/worktree-cleanup.sh <task-id>-refactor`. If the caller owns the
+   worktree, report the commit and leave merge and cleanup to that owner.
+   The parent updates all tracked or external task files only after integration
+   and release. A caller-owned worktree returns pending state with its binding.
+   During a parallel wave, leave task files to the orchestrator per
+   `references/build-parallel.md`. For a non-parallel isolated refactor, mark its task done only after the
+   worktree owner has merged the task commit successfully.
 
-## Verification command priority
+Verify with the independently approved checks and the task's
+`#### Verification` asserts. Include broad checks when affected consumers,
+shared behavior, or unresolved coverage uncertainty justify them. Complete
+required repository checks; do not repeat the full suite after each task
+without new failures, changes, or coverage concerns. Record how the checks
+establish behavior preservation.
 
-1. `npm test -- <test-path>` — the relevant test file, when the target is scoped.
-2. `npm test` — full suite.
-3. `npx tsc --noEmit` — typecheck the affected package.
-4. The project's configured static-analysis/lint/scan tooling (if any) — run it when source files changed outside `memory-bank/`. Advisory only — if it fails on a suspected false positive, record it in the plan and proceed.
+## Summary
 
-If the project uses a different language or toolchain, run the equivalent verification for that toolchain.
-
-## When to use
-
-- When the task is explicitly a refactor or simplification.
-- When `out_of_scope` explicitly prohibits behavior changes.
-- When the task references unaddressed review findings (complexity, readability) from the `findings` bundle.
-- When the user gives explicit direction to simplify a named target, with no task required.
-
-## What counts as a structural change
-
-A behavior-preserving change that restructures or reduces code without altering observable output. Examples:
-- Extracting a function, renaming, or moving a module.
-- Inlining a function called from only one call site — confirm the call count before inlining, via `varde-code dependents` or by grepping for the function name across the codebase; if it has more than one real caller (not just importing files), this is not a valid inline target.
-- Replacing a switch statement with a lookup table.
-- Removing dead code or unreachable branches.
-- Consolidating duplicate logic into a shared helper.
-- Flattening nested conditionals.
-
-Do not:
-- Rename variables or types as a side effect (that is cleanup, not a structural change).
-- Extract shared logic to a new module unless the extraction reduces complexity.
-- Change public APIs, error messages, log output, or wire formats.
-
-## Behavior preservation
-
-Exact behavior preservation means: for the same inputs, the code produces the same outputs (stdout, stderr, return code, side effects) and the same test results (same number of passing tests, no new failures). If a change alters any of these, it is not behavior-preserving — reject and revert.
-
-## Summary format
-
-```markdown
-## Refactor summary
-
-| File | Change | Verification |
-|------|--------|---------------|
-| src/foo.ts | Inlined helper | `npm test -- src/foo.test.ts` (passed) |
-```
-
-If no changes were made, state: "No behavior-preserving changes found."
-
-## Input resolution examples
-
-- No argument — looks for the latest open findings in the `findings` bundle, or the task's stated structural goal.
-- A path target such as `src/auth/` — operates on all files beneath it.
-- A free-text target such as "the payment processing pipeline".
+End with a `File | Change | Verification` table, or "No behavior-preserving
+changes found."

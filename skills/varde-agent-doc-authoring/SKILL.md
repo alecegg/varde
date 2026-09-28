@@ -1,40 +1,71 @@
 ---
 name: varde-agent-doc-authoring
-description: "Write or review a document an agent reads — SKILL.md, AGENTS.md, CLAUDE.md, or a skill reference — including its description, triggering, reference layout, or a full evaluation. Not for production code or user-facing docs."
+description: "Write or review a document an agent reads — SKILL.md, AGENTS.md, CLAUDE.md, or a skill reference — including its description and layout. Not for user-facing docs."
 ---
 
 # Agent document authoring
 
-Keep agent-facing documents grounded, procedural, and lean.
-Read only the detail needed for the active document and task.
+Before implementation edits, apply `references/review-gates.md`. Carry its
+verdict through execution and completion, including changes made by this skill.
 
 ## Choose the task
 
 | Task | Read first | Then read only when needed |
 |---|---|---|
-| Author or revise a skill | `references/authoring.md` | `references/workflow-skills.md` for ordered workflows; `references/specification.md` for frontmatter; `references/using-scripts.md` for bundled scripts |
-| Review a skill or agent document | `references/reviewing.md` | `references/workflow-skills.md` for workflow skills; `references/specification.md` for frontmatter failures |
-| Improve triggering | `references/authoring.md` | `references/optimizing-descriptions.md` for systematic trigger evaluation |
-| Evaluate a mature skill | `references/evaluating-skills.md` | `references/reviewing.md` for the final pass |
+| Author or revise a skill | `references/authoring.md`, `references/specification.md` | `references/workflow-skills.md` for ordered workflows |
+| Review a skill or agent document | Review section below | `references/reviewing.md` for supplementary checks; `references/workflow-skills.md` for workflow skills; `references/specification.md` for frontmatter failures |
+| Improve triggering | `references/specification.md`, sibling skills' SKILL.md descriptions | — |
 
-Read `references/vocabulary.md` when the problem is conceptual, not editorial.
-It explains why a skill misfires, how much detail to inline, and which choice
-to make. It defines the terms used by the other references.
+## Author or revise
 
-## Workflow
+1. Route with the table.
+2. Read the target and the reference(s) it routes to; apply them.
+3. After frontmatter edits: `uv run <this-skill-dir>/scripts/validate-frontmatter.py <skill-dir>`
+   (sandbox: prefix `UV_PYTHON_PREFERENCE=only-system`).
+4. Final pass: `references/reviewing.md` checklists on the changed scope; check every changed pointer. This pass does not invoke the full review below.
 
-1. **Choose the task.** Use the table, then read its required references.
-2. **Read the target.** Read local references too. Prefer project evidence.
-3. **Place details carefully.** Keep required rules in `SKILL.md`. Put conditional detail in a local reference and state when to read it.
-4. **Write the procedure.** Use direct steps, a clear default, and project-specific gotchas. Keep literal templates exact.
-5. **Validate frontmatter.** Run `uv run scripts/validate-frontmatter.py <skill-dir>` from this skill directory.
-6. **Review the result.** Use `references/reviewing.md`. Check every changed pointer.
+## Review
+
+Do an adversarial audit of every feature and aspect within the requested scope.
+Inventory instructions, steps, flows, branches, outputs (documents or
+otherwise), references, scripts, templates, and evals. Trace their behavior and
+what loads with them; everything in scope is under scrutiny.
+
+### Process
+
+For every item, determine:
+
+1. Is this worth doing? Does its value justify the tokens and time spent,
+   including load frequency, tool calls, agent turns, and maintenance?
+2. Is this the most direct, concise wording or approach? Can it use fewer
+   tokens while preserving functionality and accuracy?
+3. Would a different structure improve readability and understanding?
+
+Use `references/reviewing.md` as supplementary checks, not a replacement for
+these questions. Ground findings in locations and observed behavior; distinguish
+correctness defects from value judgments and mark untested effects as uncertain.
+
+### Fixes and output
+
+1. Produce a numbered list from most in need of a fix to least. Include the
+   location, evidence, and value/cost judgment for each item; briefly identify
+   retained items so the report accounts for the full inventory.
+2. For each finding, give at least three distinct, concise fix options and
+   recommend one. Include enough detail to judge tradeoffs; avoid filler
+   alternatives. Retained items need no invented fixes.
+3. Apply clear fixes that preserve system functionality and accuracy, then
+   verify them and mark them **Fixed** in the list, identifying the applied
+   option. Honor explicit report-only requests and caller write restrictions;
+   independent reviewers report without editing. Authorized edits follow
+   `references/review-gates.md`.
+4. If the originating request was initiated manually by the user, save the
+   list as Markdown in the current workspace (or a supplied location) and
+   respond with a summary and link. If another agent initiated the review,
+   return the list to that agent. Delegating a user request does not change
+   its origin.
 
 ## Gotchas
 
 - Keep each skill independently usable: every reference it loads is its own.
-- A shared source file reduces maintenance but not loaded context. Prefer local generated copies when standalone packaging requires them.
 - A reference pointer must name a real local file. Illustrative paths belong in prose, not instruction links.
-- Put rare edge cases in references. Keep the decision to load them in `SKILL.md`.
-- Copy literal templates verbatim. Do not summarize them.
-- After writing, check for stray literal `</content>` lines.
+- Check authored files for stray literal `</content>` lines.

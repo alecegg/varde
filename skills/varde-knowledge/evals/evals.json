@@ -4,43 +4,102 @@
     {
       "id": 1,
       "prompt": "Write a knowledge note capturing our decision to use OCC (optimistic concurrency) for all bundle writes instead of file locks. We chose it because multiple agents edit the same checkout concurrently. Store it in the project knowledge folder.",
-      "expected_output": "A new decision note is created with Write at memory-bank/knowledge/decision/<slug>.md (type-first path, not nested under a domain). Frontmatter carries type: decision, a one-sentence description, and generated: { by: <producer>/<version>, at: <ISO 8601> }. The body follows the decision shape with ## What, ## Why, and ## Constraints headings. Content is compact and factual with no session narrative.",
+      "expected_output": "A new decision note is created with Write at <knowledge>/decision/<slug>.md (type-first path, not nested under a domain). Frontmatter carries type: decision, a one-sentence description, and generated: { by: <producer>/<version>, at: <ISO 8601> }. The body follows the decision shape with ## What, ## Why, and ## Constraints headings. Content is compact and factual with no session narrative.",
       "assertions": [
         "The note is written to memory-bank/knowledge/decision/<slug>.md, with type as a top-level folder",
         "Frontmatter includes a non-empty type field, a description, and a generated entry with by and at",
         "The decision body uses the ## What / ## Why / ## Constraints structure",
         "The filename is not index.md or log.md"
-      ]
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
     },
     {
       "id": 2,
-      "prompt": "The user reviewed and signed off that our knowledge note memory-bank/knowledge/pattern/error-envelope.md is correct \u2014 please record their sign-off.",
-      "expected_output": "A verified entry (verified: { by: human:<id>, at: <ISO 8601> }) is added to the note via a targeted Edit, without overwriting or re-touching the existing generated entry \u2014 generated.by (who wrote it) and verified.by (who confirmed it) are kept separate per OKF \u00a75.2.",
+      "prompt": "The user reviewed and signed off that our knowledge note evals/fixtures/knowledge/pattern/error-envelope.md is correct \u2014 please record their sign-off.",
+      "expected_output": "A verified entry (verified: { by: human:<id>, at: <ISO 8601> }) is added to the note via a targeted Edit, without overwriting or re-touching the existing generated entry \u2014 generated.by (who wrote it) and verified.by (who confirmed it) are kept separate.",
       "assertions": [
         "A verified: { by: human:<id>, at: ... } entry is added to the note",
         "The existing generated entry is not modified or replaced",
         "The change is applied with a targeted Edit rather than recreating the file"
-      ]
+      ],
+      "files": [
+        "evals/fixtures/knowledge/pattern/error-envelope.md"
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
     },
     {
       "id": 3,
-      "prompt": "We're retiring the memory-bank/knowledge/pattern/legacy-polling.md note \u2014 the pattern is no longer how we do things, but old plans still link to it. Handle it.",
-      "expected_output": "Rather than deleting the file, the note is marked status: deprecated (OKF \u00a75.4) via a targeted Edit, keeping it in place so existing links and history stay resolvable. git rm is reserved for content that was wrong or should never have existed, which is not the case here.",
+      "prompt": "We're retiring the evals/fixtures/knowledge/pattern/legacy-polling.md note \u2014 the pattern is no longer how we do things, but old plans still link to it. Handle it.",
+      "expected_output": "Rather than deleting the file, the note is marked status: deprecated via a targeted Edit, keeping it in place so existing links and history stay resolvable. git rm is reserved for content that was wrong or should never have existed, which is not the case here.",
       "assertions": [
         "The note is marked status: deprecated rather than removed with git rm",
-        "The file remains at memory-bank/knowledge/pattern/legacy-polling.md so existing links resolve",
+        "The file remains at evals/fixtures/knowledge/pattern/legacy-polling.md so existing links resolve",
         "The retirement is done with a targeted Edit, not by recreating or deleting the note"
-      ]
+      ],
+      "files": [
+        "evals/fixtures/knowledge/pattern/legacy-polling.md"
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
     },
     {
       "id": 4,
       "prompt": "Find the knowledge note that explains how our plan bundles differ from findings \u2014 I think it's a concept somewhere in the knowledge folder.",
-      "expected_output": "Search is scoped to memory-bank/knowledge/ using Grep/Glob (or the varde-workflow CLI search if detected) to identify candidate notes first; only the identified note's full body is then read. The project knowledge store is checked before falling back to user knowledge. Notes are not opened one-by-one to browse the folder.",
+      "expected_output": "Search is scoped to <knowledge>/ using Grep/Glob (or the varde-workflow CLI search if detected) to identify candidate notes first; only the identified note's full body is then read. Notes are not opened one-by-one to browse the folder.",
       "assertions": [
         "Search is scoped to the memory-bank/knowledge/ folder before any note is read in full",
-        "Project knowledge is consulted before falling back to user knowledge",
         "A candidate note is identified via grep/glob (or CLI search) before its full body is read, not by opening every note"
       ]
+    },
+    {
+      "id": 5,
+      "prompt": "At the end of a `varde-change build` run that finished all tasks with nothing left to do, does the closing step write a handoff note?",
+      "expected_output": "No. Per varde-knowledge's reflect.md, a handoff is written only when work remains for a future session. A run that completed all its work with no open thread produces no handoff note.",
+      "assertions": [
+        "No handoff note is created when no work remains",
+        "The rule applied is 'handoff only if work remains', not 'always write a handoff at close'"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Reconcile is asked to update a knowledge note's claim, but no current evidence in the codebase supports the proposed change.",
+      "expected_output": "Reconcile does not edit the note. Without confirming evidence for the proposed change, the existing note is left as-is rather than updated on the strength of the request alone.",
+      "assertions": [
+        "No edit is made to the knowledge note without supporting evidence",
+        "The absence of evidence is treated as a reason to leave the note unchanged, not to guess"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Create a handoff for a session whose actual cwd is /tmp/scratch-project, outside any Git repository. It links notes/error-envelope.md, whose raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md. Record the frontmatter and link snapshot.",
+      "expected_output": "The handoff keeps cwd: /tmp/scratch-project and explicitly records repo_root: none, branch: none, head_sha: none, and dirty: not-applicable. Its file link has path: . and a sha256:<64 lowercase hex> snapshot matching the raw bytes of the named fixture.",
+      "assertions": [
+        "The non-Git handoff explicitly records repo_root, branch, and head_sha as none, and dirty as not-applicable",
+        "The actual session cwd remains /tmp/scratch-project rather than being replaced by a repository root",
+        "The file link uses path: . and a SHA-256 hash of the raw fixture bytes"
+      ],
+      "files": [
+        "references/reflect-handoff.md",
+        "evals/fixtures/handoffs/non-git-create.md",
+        "evals/fixtures/knowledge/pattern/error-envelope.md"
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
+    },
+    {
+      "id": 9,
+      "prompt": "Resume evals/fixtures/handoffs/non-git-resume.md. The current cwd is /tmp/scratch-project-moved. The first target exists and its raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md; the second target is missing. Report the cwd and link statuses, then summarize the handoff without acting.",
+      "expected_output": "The cwd is modified because it differs from the recorded /tmp/scratch-project. The error-envelope link is modified because its current raw-byte SHA-256 differs from the snapshot. The retired-plan link is missing. The agent summarizes the handoff and waits before acting.",
+      "assertions": [
+        "A changed cwd is reported as modified context",
+        "The existing link's raw-byte SHA-256 is recomputed and the changed link is marked modified",
+        "The absent target is marked missing",
+        "The agent summarizes the handoff and waits before taking action"
+      ],
+      "files": [
+        "references/reflect-handoff.md",
+        "evals/fixtures/handoffs/non-git-resume.md",
+        "evals/fixtures/knowledge/pattern/error-envelope.md"
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
     }
   ]
 }

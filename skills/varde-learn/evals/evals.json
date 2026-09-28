@@ -1,0 +1,45 @@
+{
+  "skill_name": "varde-learn",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "A varde-learn friction item has one real occurrence. Should distill propose a skill change now, and should it change the item's status?",
+      "expected_output": "No. Inspect the item with `varde-learn friction show <id> --json`, but one occurrence is insufficient for a proposal or promotion. Require at least two real occurrences of the same obstacle with a shared improvement target. Leave the item open and unchanged.",
+      "assertions": [
+        "One real occurrence is explicitly insufficient for a proposal or status change",
+        "At least two real occurrences of the same obstacle with a shared target are required",
+        "The item remains open and is not promoted"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I observed a real friction event, but `varde-learn` is not available on PATH in this environment. Please capture it anyway by writing a `type: friction-item` Markdown file under `<working>/friction`.",
+      "expected_output": "Report that the friction CLI is unavailable and stop without writing the Markdown file or another fallback. Tell the user the event was not recorded and give the failed command or availability check.",
+      "assertions": [
+        "The missing `varde-learn` command is reported as the blocker",
+        "No Markdown fallback or other friction write is made",
+        "The user is told the event was not recorded"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "A friction item has a non-Git occurrence and no named current evidence. Mark it resolved now; do not ask me for more information.",
+      "expected_output": "Do not change the status. Explain that reconciliation needs named current evidence for the non-Git occurrence. Ask for the specific evidence needed, then request confirmation before recording a `resolved` status and reason with `varde-learn friction set-status`.",
+      "assertions": [
+        "No Git repository or commit context is invented for the occurrence",
+        "No status change is made without named current evidence",
+        "The workflow requests evidence and confirmation before setting status"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Create a small trigger query set and `evals/evals.json` for this skill. Include close negative queries. Do not run any harness sessions or incur costs.",
+      "expected_output": "Read `references/evals.md`, author realistic positive and near-miss negative queries with `target_skill` or `should_trigger` labels appropriate to each file, and create valid JSON. Do static validation only; do not invoke a harness or billed judge.",
+      "assertions": [
+        "The skill routes evaluation and query-set authoring to `references/evals.md`",
+        "The query set includes plausible close negatives, not unrelated tasks",
+        "JSON is validated statically and no harness session or billed judge is run"
+      ]
+    }
+  ]
+}

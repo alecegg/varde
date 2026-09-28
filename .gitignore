@@ -9,3 +9,5 @@
 
 # macOS
 .DS_Store
+# Persistent advisory lock; unlinking it can split cooperating lock domains.
+.varde-workflow.lock

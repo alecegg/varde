@@ -1,0 +1,9 @@
+[package]
+name = "mods-app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1"
+helper-lib = { path = "../helper_lib" }
+ws-dep = { workspace = true }

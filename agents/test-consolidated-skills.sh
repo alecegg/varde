@@ -22,8 +22,8 @@ require_role_text() {
 }
 
 require_role_text plan "varde-change plan" "Do not implement"
-require_role_text executor "varde-change build" "varde-review fix"
-require_role_text review "varde-review report" "never edit production source"
+require_role_text executor "varde-change build" "loaded \`varde-review\` skill" "not a shell executable"
+require_role_text review "loaded \`varde-review\` skill" "is a skill workflow, not a shell command" "not a shell executable" "never edit production source"
 require_role_text explore "varde-explore" "Do not implement"
 
 grep -F "skills: varde-change" "$AGENTS_DIR/plan/claude.md" >/dev/null
@@ -37,3 +37,6 @@ if rg -n 'varde-(dashboard|explain|plan|build|orchestrate|review-fix|simplify|sp
 fi
 
 "$AGENTS_DIR/tests/generated-adapters.sh"
+python3 "$AGENTS_DIR/tests/opencode-v2-permissions.py"
+bash "$AGENTS_DIR/tests/opencode-install-migration.sh"
+"$AGENTS_DIR/tests/review-fix-routing.sh"

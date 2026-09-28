@@ -1,49 +1,42 @@
 ---
 name: varde-change
-description: "Run the change lifecycle: show work in flight, plan scope, build bounded changes, verify plans, or orchestrate groups. Route named bugs through evidence-led debugging. Not for exploration, review, or docs."
+description: "Plan, build, verify, or orchestrate a code change, list plans in flight, diagnose why something fails, or fix a named bug evidence-first. Not for explaining or reviewing code."
 ---
 
 # Manage the change lifecycle
 
 Read the request, then open the matching reference. Never ask the user which mode to use.
 
+Before implementation edits, apply `references/review-gates.md`. Carry its
+verdict through execution and completion, including changes made by this skill.
+
 ## Entry routing
 
-Resolve explicit intent before automatic routing. Use this precedence:
-
-1. A review request belongs to `varde-review report`.
-2. An exploration request belongs to `varde-explore`.
-3. An explicit diagnosis-only request opens `references/debugging-entry.md`
-   with `debug_mode: diagnose`.
-4. An explicit build request keeps the normal build path, even when it names a
-   bug or regression.
-5. A named bug or regression without an explicit mode opens
-   `references/debugging-entry.md` with `debug_mode: fix`.
-
-The debugging entry records `route_source` as `explicit` or `automatic`.
-Diagnosis does not edit production source. Fixes begin only after reproduction
-and tested hypothesis evidence exists.
+Explicit intent wins, in order: review → `varde-review report`; exploration →
+`varde-explore`; an explicit build request takes a build row below, even for a
+bug.
 
 ## What the request needs
 
 | The request is | Read |
 |---|---|
-| "What's in flight?" — show current work and what to do next | `references/status.md` |
-| Define scope, design, and acceptance criteria before building | `references/plan.md` |
-| Execute one plan, or make a bounded change described directly | `references/build.md` |
+| "What's in flight?", or an empty invocation — show current work and what to do next | `references/status.md` |
+| Plan a new feature before building | `references/plan-start.md` |
+| Resume planning with no feature named | `references/plan-resume.md` |
+| One task file assigned by an orchestrator (executor) | `references/build-execution.md` |
+| A bounded change with settled scope and verification, even across several files | `references/build-micro-change.md` |
+| A plan, ad-hoc change, refactor, or spike | `references/build-plan.md` |
+| Diagnose why something fails, without fixing it | `references/build-posture-debug.md` (`diagnose`) |
+| Fix a named bug or regression, no mode given | `references/build-posture-debug.md` (`fix`) |
 | Report evidence for finished work without changing anything | `references/verify.md` |
 | Run a group of related plans end to end, in dependency order | `references/orchestrate.md` |
 
-Open only the matching reference.
-Then open every supporting file it explicitly requires.
-
 ## Gotchas
 
-- Paths written `<working>/…` and `<knowledge>/…` resolve per
-  `references/memory-locations.md`. Read it before the first memory read or write.
-- Derive status from existing artifacts. Read each inspected artifact and leave it unchanged.
-- Verification reports never mutate plan files.
-- Handoffs require a stopping boundary.
-- Review-only requests belong to `varde-review`. Name it and stop.
-- Load `references/worktree.md` before isolated edits.
-- Parallel builds require a complete task manifest and atomic verification.
+- `<working>` (local, uncommitted) and `<knowledge>` (committed): resolve once
+  before first use with `varde-workflow paths --json`; use its absolute
+  `data.working`/`data.knowledge` paths for this session and pass them to
+  subagents. If the command fails, retry it once with escalated access; if it
+  still fails, ask the user for the paths. Do not guess storage paths. A
+  location outside the repo skips git ops (`check-ignore`, `mv`, `status`);
+  use plain file ops.

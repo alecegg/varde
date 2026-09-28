@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+python3 - "$repo_root" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+checks = 0
+
+def contains(relative, *needles):
+    global checks
+    path = root / relative
+    text = " ".join(path.read_text(encoding="utf-8").split())
+    missing = [needle for needle in needles if needle not in text]
+    if missing:
+        raise SystemExit(f"FAIL: {relative} is missing: {missing}")
+    checks += len(needles)
+
+
+gate_paths = [
+    "skills/varde-change/references/review-gates.md",
+    "skills/varde-review/references/review-gates.md",
+    "skills/varde-agent-doc-authoring/references/review-gates.md",
+    "skills/varde-docs/references/review-gates.md",
+    "skills/varde-prototype/references/review-gates.md",
+    "skills/varde-manage/references/review-gates.md",
+]
+gate = (root / gate_paths[0]).read_bytes()
+for path in gate_paths[1:]:
+    if (root / path).read_bytes() != gate:
+        raise SystemExit(f"FAIL: vendored review gate differs: {path}")
+checks += len(gate_paths) - 1
+
+# Core gates remain mandatory; each branch is loaded only for its operation.
+contains(gate_paths[0],
+    "review init --subject <safe-id> --contract <contract.json>",
+    "review inspect --subject <subject-id> --phase pre-edit --json",
+    "review record --subject <subject-id>",
+    "--checkpoint start", "--checkpoint resume", "--checkpoint complete",
+    "stop implementation", "manual fallback", "shared contracts",
+    "failing test before implementation", "exact approval checkout",
+    "references/review-gate-record.md", "before writing", "either phase",
+    "references/review-gate-plan.md", "Persisted plan",
+    "references/review-gate-worktree.md", "before dispatch",
+    "--artifact", "absolute", "file",
+)
+branches = {
+    "review-gate-record.md": [
+        '"verification_expected_results"', '"implementation_review_required"',
+        '"coverage": "entire-subject-change"', '"change_fingerprint"',
+        "data.version", "data.subject.subject_id", "schema_version",
+    ],
+    "review-gate-plan.md": [
+        "review init --plan <plan.md>", "review contract", "review expand",
+        "Tasks inherit", "aggregate", "conclude",
+    ],
+    "review-gate-worktree.md": [
+        "review bind-worktree", "review abandon-worktree", "--binding",
+        "--worktree", "parents", "live bindings", "completion",
+    ],
+}
+for branch, needles in branches.items():
+    first = root / "skills/varde-change/references" / branch
+    if not first.is_file():
+        raise SystemExit(f"FAIL: missing conditional gate reference {branch}")
+    for gate_path in gate_paths:
+        relative = str(Path(gate_path).with_name(branch))
+        if (root / relative).read_bytes() != first.read_bytes():
+            raise SystemExit(f"FAIL: vendored gate branch differs: {relative}")
+        contains(relative, *needles)
+contains("skills/varde-change/references/build-micro-change.md",
+    "review init --subject <safe-id>",
+    "--checkpoint start",
+    "complete",
+)
+contains("skills/varde-change/references/build-plan-run.md",
+    "planning_ready",
+    "implementation_ready",
+    "do not dispatch implementation until its start or resume check passes",
+)
+contains("skills/varde-change/references/build-dispatch.md",
+    "--checkpoint start --json",
+    "--checkpoint resume --json",
+    "readiness.data.planning_ready",
+    "readiness.data.implementation_ready",
+)
+contains("skills/varde-change/references/build-execution.md",
+    "--checkpoint start --json",
+    "--checkpoint resume",
+    "Tasks inherit that subject",
+)
+contains("skills/varde-change/references/plan-fundamentals.md",
+    "review init --plan <plan.md>",
+    "review record",
+    "keep the subject id in plan Progress",
+)
+contains("skills/varde-change/references/build-plan-finish.md",
+    "Finish all source and documentation edits",
+    "phase `implementation`",
+    "--checkpoint complete --json",
+    "varde-workflow conclude <plan.md> --json",
+)
+finish = " ".join((root / "skills/varde-change/references/build-plan-finish.md").read_text().split())
+if not (finish.index("Finish all source and documentation edits") <
+        finish.index("phase `implementation`") <
+        finish.index("--checkpoint complete --json") <
+        finish.index("varde-workflow conclude <plan.md> --json")):
+    raise SystemExit("FAIL: final review/check must follow changes and precede conclude")
+checks += 1
+contains("skills/varde-change/references/varde-workflow-cli.md",
+    "review inspect --subject <subject-id>",
+    "review record --subject <subject-id>",
+    "review contract --subject <subject-id>",
+    "review expand --subject <subject-id>",
+    "Never replace approval with prose",
+    "fallback below applies only to reads and planning/bookkeeping",
+    "gated implementation/completion operations; if unavailable, stop those operations",
+)
+contains("skills/varde-review/references/report.md",
+    "Review-gate evidence",
+    "review record",
+    "exact `data.version`",
+)
+contains("clis/workflow/README.md",
+    "varde-workflow review init --plan",
+    "varde-workflow review inspect",
+    "varde-workflow review record",
+    "varde-workflow review check",
+    "planning_ready",
+    "implementation_ready",
+)
+contains("memory-bank/knowledge/reference/workflow-artifact-kernel.md",
+    "## Review evidence",
+    "immutable scoped baseline",
+    "required for gated work",
+)
+contains("memory-bank/knowledge/reference/workflow-schema.md",
+    "`planning_ready`",
+    "`implementation_ready`",
+    "review checkpoint",
+)
+contains("memory-bank/knowledge/reference/workflow-conclusion.md",
+    "review prerequisites",
+    "evidence must cover the complete subject change",
+    "consumed review and source revisions",
+)
+
+print(f"Review gate routing checks passed ({checks} assertions across {len(gate_paths)} copies).")
+PY

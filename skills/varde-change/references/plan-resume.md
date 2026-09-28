@@ -1,17 +1,11 @@
-# Resume planning (empty invocation)
+# Resume planning
 
-When invoked with no feature idea:
+When asked to resume planning with no feature named:
 
-- **Find drafts.** Use `references/plan-recipes.md`'s "Find draft plans to
-  resume" section. Run its grep command and apply its `type: plan` filter.
-- **Include nested plans.** Include every draft plan, regardless of nesting
-  depth. This includes stub child plans from `references/plan-splitting.md`.
-  Their compound ids (`<group-plan-id>/<child-plan-id>`) resolve like any other
-  plan id because they are directory paths. Do not special-case children.
-- **Present and ask.** Present the full result set as a numbered list of title
-  and plan id. Read the `title` frontmatter field from each match. Do not show a
-  body snippet or silently limit the list to "most recent." Ask which plan to
-  resume. If the result is empty, start a new session only after the user gives
-  an idea.
-- **Resume.** Read `<working>/plans/<plan_id>/plan.md`. Continue from
-  the headings that still contain placeholder text.
+- **Find drafts.** A draft is a `plan.md` at any depth under `<working>/plans/`
+  with `status: backlog`, `type: plan`, and **either** an id ending in
+  `-draft` **or** an `## Open Questions` bullet that isn't `n/a — <reason>`.
+  Nested child plans count; their id is their path (`<group-id>/<child-id>`).
+- **Ask.** List every draft as a numbered `title — plan id` list and ask which
+  to resume. If there are none, wait for the user's idea.
+- **Resume:** continue per `references/plan-start.md` Later turns.

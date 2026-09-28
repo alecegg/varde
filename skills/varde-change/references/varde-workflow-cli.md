@@ -1,187 +1,111 @@
-# Optional `varde-workflow` and `docwatch` CLIs
+# Optional `varde-workflow` CLI
 
-`varde-workflow` is an optional Rust tool on PATH. It manages markdown with
-frontmatter and safe concurrent writes. Check once per session:
+`varde-workflow` is an optional Rust tool on PATH for ordinary read-only
+workflow operations. Its review commands and gated transitions are required
+for implementation work.
 
-```bash
-command -v varde-workflow >/dev/null 2>&1
-```
-
-If unavailable, plain Read and Grep may continue visibly degraded.
-Stop before CLI-owned mutations. Use CLI state and concept commands.
-
-## Decision rule
-
-- **Known content:** Read one known artifact directly when no mutation follows.
-- **Discovery:** Search unknown candidates. Use list or maps for inventories.
-- **Mutation:** Use state commands when applicable. Use OCC concept writes.
-- **Output scope:** Use text for reading. Request JSON for required fields.
-- **Candidate reads:** Search first. Show only selected concepts.
-
-## Output and exit codes
-
-With `--json`, every command prints one versioned envelope.
-Success uses `{"envelope_version":1,"ok":true,"data":...}`.
-Failure uses `{"envelope_version":1,"ok":false,"error":...}`.
-Branch on exit status before reading either payload:
-
-- `0` — success (stdout is the result)
-- `1` — infrastructure/parse failure
-- `2` — not found
-- `3` — OCC version conflict (`--expected-version` is stale)
-- `4` — invalid input (bad slug, validation failure)
-- `5` — already exists (`create` only)
-
-Read command payloads from `data`. Before rewriting legacy artifacts,
-run `varde-workflow migrate <path> --apply` explicitly.
-
+It validates workflow state and dependencies; it is not the write path. Write
+plans, tasks, and handoffs with Write/Edit whether or not it is installed.
+Without it, read-only inspection may use Read/Grep. Do not perform gated
+implementation or completion transitions by editing status fields manually.
 
 ## The workflow state machine
 
-These states are fixed by the workflow schema, not by any skill. Writing a
-status the schema does not know (`draft`, or a task in the plan's `backlog`)
-makes every later CLI call fail with `unknown status`.
+States are fixed by the workflow schema. An unknown status (`draft`, or a task
+in `backlog`) makes every later CLI call fail with `unknown status`.
 
 | Artifact | States | Initial | Legal moves |
 |---|---|---|---|
 | `plan` | `backlog`, `active`, `blocked`, `completed` | `backlog` | `backlog`→`active`/`blocked`; `active`→`blocked`/`completed`; `blocked`→`active`; `completed` is terminal |
 | `task` | `todo`, `in_progress`, `blocked`, `done` | `todo` | `todo`→`in_progress`/`blocked`; `in_progress`→`blocked`/`done`; `blocked`→`in_progress`; `done` is terminal |
 
-There is no `todo`→`done` shortcut. A task that never entered `in_progress`
-cannot be completed, and a plan left in `backlog` cannot reach `completed` — so
-`conclude` fails at the end of an otherwise clean run.
+No shortcut moves: a task never `in_progress` cannot reach `done`, and a plan
+left in `backlog` cannot reach `completed`.
 
-**Read state before changing it.** Use `readiness` to see the artifact's legal
-next states and blockers:
+With the CLI, change state through `transition`, never by editing `status`:
 
 ```bash
-varde-workflow readiness <plan.md> --json
-# data.actions  -> legal next states, e.g. ["active","blocked"]
-# data.blockers -> unmet dependencies; non-empty means hold this plan back
-# data.ready    -> false when a blocker applies
-```
-
-Use `graph` to see dependency order across sibling artifacts:
-
-```bash
-varde-workflow graph <any-sibling>/plan.md --json
-# data.nodes  -> {id, status, path} per sibling
-# data.edges  -> {from, to, relationship: "depends_on"}
-# data.schema -> the state table above, live from the schema
-```
-
-Invoke `graph` on **a sibling, not the parent**. It resolves the set around the
-artifact it is handed; given a group `plan.md` it returns that one node and no
-edges, which reads like a group with no children.
-
-**Change state through `transition`, never by editing frontmatter.**
-
-```bash
+varde-workflow readiness <plan.md> --json          # data.actions, data.blockers, data.ready
+varde-workflow graph <any-sibling>/plan.md --json  # data.nodes, data.edges, data.schema
 varde-workflow transition <artifact.md> <state> --json
+varde-workflow validate <artifact.md> --json       # diagnostics, no mutation
 ```
 
-A rejected transition returns `error.code: workflow_blocked` with
-`details.current_state`, `details.requested_state`, and `details.allowed_states`.
-It leaves every source byte unchanged. An accepted transition writes through the
-staged journal, so `recover --root <project-root>` can finish an interrupted
-write. A hand-edited frontmatter status skips validation and gives `recover`
-nothing to repair.
+## Review evidence and checkpoints
 
-**Validate without mutating** when you want diagnostics but no state change:
-`varde-workflow validate <artifact.md> --json`. `inspect` returns the resolved
-envelope and content revision; on a pre-kernel document it sets `legacy` and
-`migration_required`, and `migrate <path> --apply` is the only thing that
-rewrites it.
+Create one subject and immutable baseline before implementation. Plan subjects
+bind a persisted plan; bounded subjects bind a JSON contract. Both require an
+explicit repository root and one or more repository-relative scopes:
 
-Use `conclude` after every criterion and observed spec pass. Use
-`conclusion-status` to inspect qualitative follow-up, `conclusion-retry` to reset
-failed follow-up, and `conclusion-action` to record a completed follow-up.
-
-## The OCC read-then-write contract
-
-Writes (`update`, `set-field`) require `--expected-version`, the version hash
-last read via `show`, and reject a stale write instead of silently
-overwriting. Always:
-
-1. `show --bundle <dir> <slug> --json` → read `data.version`.
-2. Compute the new content, then `update`/`set-field` with
-   `--expected-version <that hash>`.
-3. On **exit 3** (conflict), someone else wrote in between. Re-read with
-   `show`, reconcile against the new content, and retry. Never pass a guessed
-   or reused hash.
-
-Prefer this CLI because it protects concurrent edits by a live agent and a user.
-It also provides ranked `search` and consistent whole-document reads.
-
-## Store the plan document
-
-Store the plan in a bundle rooted at the plan directory — the directory holding
-`plan.md`, whose slug is `plan`.
-
-```bash
-BUNDLE=<plan-dir>
-SLUG=plan
-
-# Create and seed the doc from the seeded draft.
-varde-workflow concept create --bundle "$BUNDLE" "$SLUG" --file "${TMPDIR:-/tmp}/plan-seed.md"
-
-# Each growth turn: show, read its "version", edit, update with that hash.
-varde-workflow concept show   --bundle "$BUNDLE" "$SLUG" --json
-varde-workflow concept update --bundle "$BUNDLE" "$SLUG" --expected-version <version> --file "${TMPDIR:-/tmp}/plan-next.md"
+```sh
+varde-workflow review init --plan <plan.md> --repository <repo-root> --scope <path> [--scope <path> ...] --json
+varde-workflow review init --subject <safe-id> --contract <contract.json> --repository <repo-root> --scope <path> [--scope <path> ...] --json
 ```
 
-Task files are ordinary files authored the same way as today. They do not need
-the CLI, though `create` works for them too.
+`init` returns the inspection payload: the subject id is
+`data.subject.subject_id` and the revision is `data.version`. Pass the id and
+the parent-resolved memory paths to the independent reviewer. Reviewers inspect the current evidence and write
+their own JSON record; the coordinator does not approve or write it:
 
-## In-doc collaboration mode (docwatch)
-
-`docwatch` is a sibling optional CLI (macOS/launchd) that lets the user steer the
-plan by editing the doc from anywhere. A line `@c: <steer>` in the doc dispatches
-an agent that runs one growth turn and writes the answer back in place — the same
-"user edits `plan.md` between turns" channel the growth loop already uses, made
-agent-responsive without a live session.
-
-Set it up early, when creating the doc, if the user wants this mode:
-
-```bash
-docwatch add <plan-dir>        # register the folder; starts a watcher
-docwatch list --json           # confirm it's watching
+```sh
+varde-workflow review inspect --subject <subject-id> --phase pre-edit --json
+varde-workflow review record --subject <subject-id> --expected-version <data.version> --file <reviewer-record.json> --json
+varde-workflow review check --subject <subject-id> --checkpoint <checkpoint> --json
+varde-workflow review contract --subject <subject-id> --expected-version <revision> --file <contract.json> --json
+varde-workflow review expand --subject <subject-id> --expected-version <revision> --scope <path> [--scope <path> ...] --json
 ```
 
-Seed the doc's top with a trigger contract so a dispatched agent adopts this
-skill's stance rather than docwatch's generic "answer inline" prompt:
+`inspect` returns `version`, `contract_fingerprint`, `baseline_id`, and the
+complete current change fingerprint. `record` requires the exact inspected
+version and stores reviewer-authored evidence in the configured working store.
+Pre-edit evidence includes verdict, unresolved choices, rationale,
+verification approach/rationale/expected results, structural-risk assessment
+and rationale, and whether final review is required. Implementation evidence binds the
+current change fingerprint and `coverage: entire-subject-change`. Use
+`review contract` or `review expand` with `--expected-version` for bounded
+subject changes; these commands invalidate previous approval as applicable.
 
-```markdown
-<!-- docwatch: on an `@c:`/`@cx:` trigger, load varde-change plan and treat the
-     trigger text as one growth-loop turn on this doc. Grow the doc, route
-     unknowns to ## Open Questions / ## Assumptions, write the result in
-     place. Do not create or edit any other file. -->
-```
+`check` reports `ready`, typed `blockers`, and consumed revisions. A blocked
+review exits 4; an OCC conflict exits 3; infrastructure errors exit 1.
+The checkpoint value is `start`, `resume`, or `complete`.
+`readiness` keeps dependency availability (`planning_ready`) separate from
+review-gated implementation availability (`implementation_ready`). Planning
+and selection can continue with missing approval; implementation cannot.
+Transitions and `conclude` enforce the same checkpoints before writes.
 
-Two boundaries keep this safe:
+The review CLI is not an optional fallback. If the binary, review subcommand,
+or required checkpoint is unavailable, stop implementation or completion and
+report the missing capability. Never replace approval with prose, manually
+write the evidence file, or bypass a gate by editing status.
 
-- **Path:** docwatch watches a persistent folder, so the doc lives at its
-  **stable plan path** for the whole growth phase — never inside a throwaway
-  worktree. The user must be able to reach the same path the agent writes.
-- **Phase:** docwatch reverts any write outside the triggering doc, so it fits
-  **only the growth phase**, with its single living `plan.md`. Task authoring
-  writes several `tasks/*.md` files and must run in a normal session outside
-  docwatch. Stop in-doc mode before authoring, and `docwatch remove <plan-dir>`
-  once the plan is done if the folder should not stay watched.
+Run `graph` on **a sibling, not the parent**: given a group `plan.md` it
+returns one node and no edges. A rejected transition (`workflow_blocked`) lists
+the allowed states and changes no bytes; `recover --root <project-root>`
+finishes an interrupted accepted one.
 
-If `docwatch` is absent, grow plans through live chat.
-If `varde-workflow` is absent, stop before artifact writes.
+After every criterion and observed spec passes, run `conclude`. Use
+`conclusion-status`, `conclusion-retry`, and `conclusion-action` (actions:
+`reflection`, `friction`, `handoff`) for follow-up.
+
+The fallback below applies only to reads and planning/bookkeeping. It never
+applies to review evidence commands or gated implementation/completion
+operations; if unavailable, stop those operations.
+
+## Bound worktrees
+
+For isolated task registration, checks, separate evidence and release, load
+`references/worktree.md`. Ordinary subject commands keep exact repository
+identity. Start/resume worker checks require `--repository`, `--worktree`, and
+`--binding` together; binding context cannot complete a parent. State transitions
+and final review run at the owning approval checkout after source integration.
 
 ## Fallback rule
 
-If the sandbox denies access to a path outside the workspace, such as the
-Personal vault under `~/.varde-workflow/` or a lock beside it, retry that call
-once with escalated filesystem access, keeping the command unchanged. If
-approval is unavailable, denied, or the retry fails, stop every mutation.
-Continue read-only operations with Read or Grep, and state the degraded
-capability.
+Sandbox denial: retry once with escalated access, command unchanged; if that
+fails, or the CLI errors, use Read/Grep and Write/Edit and name the lost
+capability once.
 
-On any other failure, stop mutations without changing bytes.
-For other read-only failures, report the lost capability and continue with
-degraded reads.
+A command that answers `ok: false` with a validation code is a result, not an
+outage: fix the cause instead of routing around it.
+
 Never build or install the binary during another workflow.

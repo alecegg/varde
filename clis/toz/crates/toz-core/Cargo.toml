@@ -1,0 +1,33 @@
+[package]
+name = "varde-toz-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+name = "toz_core"
+
+[dependencies]
+anyhow.workspace = true
+blake3 = "1.8.7"
+dirs = "7.0.0"
+dom_smoothie = "0.18.2"
+htmd = "0.5.5"
+memmap2 = "0.9.10"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls", "gzip", "brotli", "deflate", "charset", "http2", "system-proxy"] }
+rquickjs = { version = "0.14.0", default-features = false, features = ["std", "classes", "properties"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+strsim = "0.11.1"
+thiserror = "2.0.20"
+tempfile = "3.27.0"
+toml = "1.1.6"
+
+[dev-dependencies]
+insta = "1.48.0"

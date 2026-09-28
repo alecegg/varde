@@ -1,0 +1,43 @@
+---
+name: varde-change
+description: "Plan, build, verify, or orchestrate a code change, show work in flight, or fix a named bug evidence-first."
+---
+
+# Manage the change lifecycle
+
+Read the request, then open the matching reference. Never ask the user which mode to use.
+
+## Entry routing
+
+Resolve explicit intent before automatic routing. Use this precedence:
+
+1. A review request belongs to `varde-review report`.
+2. An exploration request belongs to `varde-explore`.
+3. An explicit diagnosis-only request opens `references/build-posture-debug.md`
+   in diagnose mode.
+4. An explicit build request keeps the normal build path, even when it names a
+   bug or regression.
+5. A named bug or regression without an explicit mode opens
+   `references/build-posture-debug.md` in fix mode.
+
+## What the request needs
+
+| The request is | Read |
+|---|---|
+| "What's in flight?" — show current work and what to do next | `references/status.md` |
+| Plan a new feature, or answer a readiness question, before building | `references/plan-start.md` |
+| Resume planning with no feature idea given (empty invocation) | `references/plan-resume.md` |
+| Execute one plan, or make a bounded change described directly | `references/build.md` |
+| Report evidence for finished work without changing anything | `references/verify.md` |
+| Run a group of related plans end to end, in dependency order | `references/orchestrate.md` |
+
+Open only the matching reference.
+Then open every supporting file it explicitly requires.
+
+## Gotchas
+
+- Paths written `<working>/…` and `<knowledge>/…` resolve per
+  `references/memory-locations.md`. Read it before the first memory read or write.
+- Load `references/worktree.md` before isolated edits.
+- Parallel waves need two or more tasks that `varde-code blast_radius` shows are
+  independent; otherwise tasks run inline.

@@ -3,9 +3,8 @@ type: decision
 description: Defines the shared versioned machine-output envelope across Varde CLIs.
 generated: { by: codex/gpt-5, at: 2026-09-22T22:11:32Z }
 paths:
-  - code-cli/crates/varde-code/src/query/mod.rs
-  - workflow-cli/varde-workflow/src/output.rs
-  - workflow-cli/docwatch/src/main.rs
+  - clis/code/crates/varde-code/src/query/mod.rs
+  - clis/workflow/varde-workflow/src/output.rs
 ---
 
 ## What

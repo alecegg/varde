@@ -1,30 +1,23 @@
 # Plan splitting into multiple candidates
 
-Use this when splitting a completed plan at `references/plan-fundamentals.md`
-Step 4, after the full spec is known. This is the only split point, so judge
-boundaries from real information instead of a pre-spec guess.
+Use this when the self-review or independent review in
+`references/plan-fundamentals.md` finds several shippable changes. This is the
+only split point, so boundaries come from the full spec rather than a pre-spec
+guess.
 
-## Steps
-
-- **Data-backed boundaries:** When `varde-code` is available
-  (`references/varde-code.md`), run `clusters` on the affected files. Densely
-  interconnected files suggest one candidate rather than several. Confirm or
-  override the result; it is a starting point, not a verdict.
-- **Confirm with the user first.** Before creating child plans, list each
-  candidate title and dependency order in a brief message. Ask: "Does this
-  decomposition look right, or should any of these be combined or split
-  differently?" Wait for acknowledgment.
-- **Create nested child plans.** Once confirmed, create one new **nested** child
-  plan directory per candidate under the current plan's directory:
-  `<working>/plans/<plan-id>/<child-slug>/plan.md`. This nesting gives
-  the child its compound Concept ID (`<plan-id>/<child-slug>`) and is how group
-  membership is derived — do not add `children:` or `parent:` frontmatter fields
-  (`children:`/`parent:` are for tasks linking to their plan, not plan grouping).
-  Each candidate proceeds through AC review and plan finalization independently
-  in its own nested directory; task decomposition happens later, per child plan,
-  in `varde-change build`.
-- **Repurpose the current plan as group parent.** Keep it rather than discarding:
-  targeted edit to its `plan.md` frontmatter to set `shape: group`. A group plan
-  has no children stored as a list — they are discovered by directory nesting —
-  so it skips AC review and plan finalization entirely; it only ever needs the
-  goal/non-goals/constraints recorded.
+1. **Data-backed boundaries.** With `varde-code` available, run `clusters` on
+   the affected files; densely interconnected files suggest one candidate. It
+   is a starting point, not a verdict.
+2. **Confirm with the user.** List each candidate title and the dependency
+   order, ask whether any should be combined or split differently, and wait.
+3. **Create nested child plans**, one per candidate:
+   `<working>/plans/<plan-id>/<child-slug>/plan.md`. Nesting gives the child its
+   compound id (`<plan-id>/<child-slug>`) and its group membership — no
+   `children:`/`parent:` fields. Each child goes through AC review and
+   finalization on its own; `varde-change build` decomposes each later.
+4. **Keep the current plan as the group parent**: set `shape: group` in its
+   frontmatter. It keeps goal, non-goals, and constraints plus an aggregate contract outside
+   Progress: source scope, each child ID/dependencies/contract, assumptions,
+   and aggregate acceptance/verification. Child contracts remain individually
+   finalized. Validate and commit the group parent together with its children
+   (tracked storage); orchestration obtains its own aggregate review gates.

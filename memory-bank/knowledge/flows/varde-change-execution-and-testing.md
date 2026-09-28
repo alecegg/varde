@@ -10,14 +10,17 @@ in one isolated parallel wave.
 
 ## Execution strategies
 
-`inline` keeps every task in the current executor.
-`fresh` uses a new executor for every task.
-`auto` keeps one-task changes inline.
-It uses fresh executors for multi-task plans unless a complete manifest proves
-parallel safety. `parallel` requires that manifest.
+`scripts/resolve-execution-wave.py` reports facts: ready tasks, conflicts, and
+a `next_wave` of tasks safe to run together. The orchestrator picks the
+strategy from `execution=<auto|serial|inline>`:
 
+- `parallel`: `auto` with two or more tasks in `next_wave`, one executor per
+  task in its own worktree.
+- `serial`: `execution=serial` or a one-task wave, one executor at a time.
+- `inline`: `execution=inline` or no executor agent available.
+
+The orchestrator may run fewer tasks together than `next_wave`, never more.
 Announce the selected strategy before dispatch.
-Parallel waves require disjoint ownership and verification resources.
 
 ## Testing profiles
 
@@ -29,12 +32,8 @@ Each task declares one testing profile and rationale.
 - `smoke` records `smoke,verify` checks.
 - `not-applicable` records `not-applicable,structural` checks.
 
-Completed tasks record one concise evidence marker.
-Validate it with `validate-task-evidence.sh`.
-
-Strict TDD selection and ordered stage evidence follow the
-[strict TDD flow](varde-change-strict-tdd.md). Existing profiles remain
-available when no strict requirement applies.
+Completed tasks end `#### Progress` with one concise marker:
+`- evidence: <what you ran and what it showed>`.
 
 ## Related
 

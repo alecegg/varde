@@ -6,7 +6,7 @@
       "prompt": "What's in flight right now?",
       "expected_output": "Dispatches to references/status.md without asking the user which mode to use. Globs memory-bank/working/plans/*/plan.md and memory-bank/working/handoffs/*/handoff.md, shows the non-terminal plans table (top 5, most recent by date-prefixed id) and the open handoffs panel, then names exactly one next varde-change mode. Reads only \u2014 no plan, task, or handoff file is written or modified.",
       "assertions": [
-        "Routes to status mode without asking the user to choose a mode",
+        "Reports status without asking the user to choose a mode",
         "Derives status from files on disk, not from conversation memory or inference",
         "Leaves every plan, task, and handoff file byte-identical",
         "Recommends exactly one next mode and stops there rather than running it"
@@ -17,9 +17,9 @@
     {
       "id": 2,
       "prompt": "I want to add rate limiting to the public API. Let's figure out what that involves.",
-      "expected_output": "Dispatches to references/plan.md \u2014 the request defines scope rather than naming a concrete change to make. Creates plan.md from the initial prompt before asking anything, seeded with a best-guess Problem/Solution and unknowns routed into ## Open Questions / ## Assumptions, reports the path, then works the open questions one per turn. Authors no task files and writes no production code.",
+      "expected_output": "Dispatches to references/plan-start.md \u2014 the request defines scope rather than naming a concrete change to make. Creates plan.md from the initial prompt before asking anything, seeded with a best-guess Problem/Solution and unknowns routed into ## Open Questions / ## Assumptions, reports the path, then works the open questions one per turn. Authors no task files and writes no production code.",
       "assertions": [
-        "Routes to plan mode, not build mode, and does not ask the user which mode to use",
+        "Creates a plan rather than asking the user which mode to use",
         "Creates plan.md seeded with a best guess before asking the first question",
         "Produces exactly one file \u2014 plan.md \u2014 with no ## Tasks section and no tasks/ files",
         "Changes no production source during planning",
@@ -30,14 +30,14 @@
     },
     {
       "id": 3,
-      "prompt": "The retry backoff in src/queue/worker.ts is using a fixed delay \u2014 make it exponential with jitter.",
-      "expected_output": "Dispatches to references/build.md. This is a clear micro-change, so build edits src/queue/worker.ts directly, runs the narrowest relevant check, and reports the result without creating plan or task artifacts.",
+      "prompt": "The retry backoff in src/queue/worker.mjs is using a fixed delay \u2014 make it exponential with jitter.",
+      "expected_output": "Dispatches to references/build-micro-change.md. This is a clear micro-change, so build persists a bounded JSON contract, initializes its review subject, obtains a reviewer-authored approval record, and passes the start checkpoint, then edits src/queue/worker.mjs, runs the narrowest relevant check (the repository's node --test suite), and reports the result without creating plan or task artifacts. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
       "assertions": [
-        "Routes to build mode, not plan mode, for a concrete bounded change",
-        "Implements exponential backoff with jitter in src/queue/worker.ts",
-        "Runs a narrow verification for the changed retry behavior",
+        "Implements exponential backoff with jitter in src/queue/worker.mjs",
+        "Reports running a test command, and the repository's tests pass on the changed worker",
         "Creates no plan or task artifacts for the micro-change",
-        "Changes production source directly for the requested micro-change"
+        "Changes production source for the requested bounded change",
+        "Captured execution events show an independent reviewer approved the actual plan before the first implementation edit; coordinator prose alone is not evidence"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
@@ -47,10 +47,10 @@
       "prompt": "Did we actually finish 2026-08-10-manage-command? Show me the evidence.",
       "expected_output": "Dispatches to references/verify.md. Resolves the plan at memory-bank/working/plans/2026-08-10-manage-command/plan.md, states its frontmatter status, reads the ## Acceptance criteria items, runs each assert: command and judges each retrieve: criterion against the named files, then reports passed / failed / unavailable with the command output or quoted line behind each. Ticks no checkbox and changes no task status.",
       "assertions": [
-        "Routes to verify mode, not build mode, for a request asking for evidence rather than fixes",
+        "Leaves production source unchanged, reporting evidence instead of building fixes",
         "Grades against each criterion's assert:/retrieve: clause rather than trusting the checkbox state",
         "Leaves plan.md acceptance checkboxes and every task status exactly as found",
-        "Separates unavailable evidence from failed criteria instead of reporting both as failures",
+        "Reports the missing compatibility checker as unavailable and the legacy return value as failed",
         "Recommends varde-change build if fixes are needed rather than making them"
       ],
       "setup_script": "evals/setup-change-eval.sh",
@@ -61,9 +61,9 @@
       "prompt": "Build out the whole notifications feature.",
       "expected_output": "Dispatches to references/orchestrate.md. With no group named, finds the notifications group because its frontmatter is shape: group and its nested children remain incomplete. Presents that group for selection, then stops without dispatching children or editing source until the user selects it.",
       "assertions": [
-        "Routes to orchestrate mode for a whole-feature request spanning multiple plans",
-        "Discovers the notifications group from shape: group and nested child plans",
-        "Presents the discovered group for selection before running children",
+        "Identifies the request as orchestration of the existing notifications group without creating a new plan",
+        "Discovers the notifications group and names both nested child plans (schema and delivery)",
+        "Asks the user to select the discovered group without claiming any child ran",
         "Leaves group plans and production source unchanged before selection"
       ],
       "setup_script": "evals/setup-change-eval.sh",
@@ -72,7 +72,7 @@
     {
       "id": 6,
       "prompt": "Go over the auth changes I just made and tell me what's wrong with them.",
-      "expected_output": "Does not dispatch to any varde-change mode. Reviewing a diff belongs to varde-review report, which the description's 'Not for exploration, review, or docs' boundary excludes. Names varde-review rather than treating the request as a build or verify.",
+      "expected_output": "Does not dispatch to any varde-change mode. Reviewing a diff belongs to varde-review report, which the description's 'Not for explaining or reviewing code' boundary excludes. Names varde-review rather than treating the request as a build or verify.",
       "assertions": [
         "Does not route to build, verify, or any other varde-change mode",
         "Names varde-review as the owner of the request",
@@ -81,13 +81,13 @@
     },
     {
       "id": 7,
-      "prompt": "Show how you would run the named notifications group. Do not execute it or edit anything.",
-      "expected_output": "Dispatches to references/orchestrate.md and resolves the named notifications group from its shape: group plan and nested children. Orders schema before delivery from depends_on, describes sequential delegation of each child through varde-change build, and states that any failed child stops later execution immediately. The walkthrough performs no edits because execution was explicitly excluded.",
+      "prompt": "Run the named notifications group end to end.",
+      "expected_output": "Dispatches to references/orchestrate.md and resolves the named notifications group from its shape: group plan and nested children. Orders schema before delivery from depends_on, builds the schema child first, and finds its one task already `blocked` on a product decision. Halts immediately: runs no later child, merges nothing, and reports the blocked child, its task, and the reason.",
       "assertions": [
         "Orders the schema child before delivery using the declared dependency",
-        "Delegates child plans sequentially through varde-change build",
-        "Stops immediately after a failed child without running later children",
-        "Leaves group plans and production source unchanged during the walkthrough"
+        "Builds the schema child and finds its task blocked, halting immediately",
+        "Never builds or edits the delivery child",
+        "Reports the blocked child, task, and reason without merging anything"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
@@ -95,37 +95,38 @@
     {
       "id": 8,
       "prompt": "Build the existing 2026-09-20-retry-policy plan.",
-      "expected_output": "Dispatches to references/build.md and selects the named existing plan without creating a replacement. Decomposes the plan into task files, executes them sequentially, creates src/retry-policy.ts with maxAttempts returning 5, verifies both plan acceptance criteria, marks every task done, checks every criterion, and completes the plan.",
+      "expected_output": "Dispatches to references/build-plan.md and selects the named existing plan without creating a replacement. Decomposes the plan into task files, executes them sequentially, creates src/retry-policy.ts with maxAttempts returning 5, verifies both plan acceptance criteria, marks every task done, checks every criterion, and completes the plan. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
       "assertions": [
         "Builds the named existing plan without creating a replacement plan",
         "Decomposes the plan specification into task files before implementation",
         "Creates src/retry-policy.ts with maxAttempts returning 5",
         "Marks every generated task done and the plan completed",
-        "Verifies and checks every plan acceptance criterion"
+        "Verifies and checks every plan acceptance criterion",
+        "Captured execution events show an independent reviewer approved the actual plan before the first implementation edit; coordinator prose alone is not evidence"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
     },
     {
       "id": 9,
-      "prompt": "The cache invalidation regression returned after the last release. Find the cause and fix it.",
-      "expected_output": "Automatically enters the debugging entry path with debug_mode fix. Reproduces and minimizes the regression, records ranked hypotheses and tested experiments before editing source, then records the root cause and reruns the original reproduction and regression verification.",
+      "prompt": "The cache invalidation regression described in ISSUE.md came back after the last release. Find the cause and fix it.",
+      "expected_output": "Automatically enters the debugging path in fix mode. Builds a deterministic reproduction of the ISSUE.md symptom (invalidate(\"user\") leaves \"user:42\" cached), records ranked hypotheses and tested experiments before editing source, adds a regression test that fails on the seeded code, fixes src/cache.mjs, then records the root cause and reruns the original reproduction and regression verification. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
       "assertions": [
-        "Routes a named regression to references/debugging-entry.md without an explicit mode",
         "Records reproduction, hypotheses, and experiments before implementation",
         "Records cause and verification after the fix",
-        "Changes the seeded source after the evidence gate"
+        "Fixes the reported symptom: invalidating a namespace evicts its namespaced entries",
+        "Adds a regression test that fails on the seeded source and passes after the fix",
+        "Captured execution events show an independent reviewer approved the actual plan before the first implementation edit; coordinator prose alone is not evidence"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
     },
     {
       "id": 10,
-      "prompt": "Diagnose the cache invalidation regression only. Do not modify production source.",
-      "expected_output": "Enters the debugging entry path with debug_mode diagnose and route_source explicit. Reports reproduction, ranked hypotheses, experiments, and evidence limits without changing source.",
+      "prompt": "Diagnose the cache invalidation regression described in ISSUE.md only. Do not modify production source.",
+      "expected_output": "Enters the debugging path in diagnose mode. Reports a reproduction of the ISSUE.md symptom, ranked hypotheses, experiments, and evidence limits without changing src/cache.mjs or adding a fix.",
       "assertions": [
-        "Honors explicit diagnosis-only mode over automatic bug routing",
-        "Leaves production source unchanged",
+        "Leaves production source byte-identical to the seed",
         "Reports reproduction and tested hypotheses",
         "States evidence limits without claiming a fix"
       ],
@@ -137,7 +138,7 @@
       "prompt": "Explore why the parser regression reproduces. Do not diagnose or fix it through varde-change.",
       "expected_output": "Routes the explicit exploration request to varde-explore, overriding automatic debugging routing, and makes no source changes.",
       "assertions": [
-        "Honors explicit exploration over automatic debugging routing",
+        "Does not enter the debugging path: records no debug evidence fields or debug mode",
         "Names varde-explore as the owning workflow",
         "Leaves production source unchanged"
       ],
@@ -146,12 +147,128 @@
     },
     {
       "id": 12,
-      "prompt": "Build the direct fix for the parser regression now. Change parse() to return fixed. Do not enter diagnosis mode.",
-      "expected_output": "Routes to the normal build path because explicit build intent overrides automatic debugging, changes src/parser.ts, and runs a focused verification.",
+      "prompt": "Build the direct fix for the parser regression now. Change parse() in src/parser.mjs to return \"fixed\". Do not enter diagnosis mode.",
+      "expected_output": "Routes to the normal build path because explicit build intent overrides automatic debugging, changes src/parser.mjs, and runs the focused parser test (node --test), which passes. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
       "assertions": [
-        "Honors explicit build over automatic debugging routing",
-        "Changes the seeded parser source directly",
-        "Runs a focused verification"
+        "Builds directly without entering the debugging path: records no debug evidence fields or debug mode",
+        "Changes the seeded parser source so parse() returns \"fixed\"",
+        "Reports running a test command, and the unchanged parser test passes",
+        "Captured execution events show an independent reviewer approved the actual plan before the first implementation edit; coordinator prose alone is not evidence"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 13,
+      "prompt": "Resume planning.",
+      "expected_output": "Dispatches to references/plan-resume.md for a resume request with no feature named. Finds drafts under memory-bank/working/plans/: 2026-09-02-beta-draft qualifies (its id ends in -draft and its Open Questions line is unresolved); 2026-09-01-alpha does not (its only Open Questions line is n/a \u2014 resolved). Lists only the qualifying draft and asks which to resume, without changing either plan file.",
+      "assertions": [
+        "Lists 2026-09-02-beta-draft as a draft to resume",
+        "Does not list 2026-09-01-alpha, whose Open Questions are all n/a",
+        "Leaves both plan files unchanged"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 14,
+      "prompt": "You are the executor for task memory-bank/working/plans/2026-09-21-logger-fix/tasks/flush-on-exit.md, assigned by the orchestrator. Complete only this task.",
+      "expected_output": "Matches SKILL.md's 'one task file assigned by an orchestrator' row and reads references/build-execution.md directly \u2014 no plan discovery, no decomposition, and no new task files. Checks the caller supplied independent pre-edit reviewer verdict covering this task and that captured execution evidence supports it, without repeating valid review. If approval is missing or stale, obtains review before editing. Implements the flush in src/logger.ts's close() method, verifies, marks the task done with an evidence line, and commits.",
+      "assertions": [
+        "Reads build-execution.md directly rather than build-plan.md's decomposition path",
+        "Creates no additional task files",
+        "Implements flush() in src/logger.ts's close() method",
+        "Marks the task done with evidence in its Progress",
+        "Captured execution events support a separate reviewer verdict supplied by the caller or a new independent review before edits; a user/coordinator claim alone is not proof, and unchanged approved scope does not get repeated review"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 15,
+      "prompt": "Finalize the widget exporter plan at memory-bank/working/plans/2026-09-10-widget-exporter-draft/plan.md. Nothing left to resolve.",
+      "expected_output": "Follows plan-fundamentals.md Finalize: derives the slug widget-exporter from the title, moves the untracked draft directory (plain mv, since it was never committed) from its -draft id to 2026-09-10-widget-exporter, obtains independent plan review (not an in-agent fresh-eyes pass) and final completeness check, validates the plan, and leaves it status: backlog without creating task files.",
+      "assertions": [
+        "Renames the plan directory from its -draft id to a slug derived from the title",
+        "Confirms no live Open Questions remain before finalizing",
+        "Leaves the plan's status as backlog after finalizing",
+        "Does not create task files or start building",
+        "Captured execution events show a separate reviewer checked unresolved human questions and assumptions before finalization"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 16,
+      "prompt": "Plan a small CLI feature to add a --quiet option. The working and knowledge paths are configured in $PWD/config/paths.toml. Set VARDE_CONFIG_DIR=$PWD/config when running varde-workflow paths --json. Create the draft plan using the resolved working path.",
+      "expected_output": "Resolves storage with VARDE_CONFIG_DIR=$PWD/config varde-workflow paths --json, then writes a draft plan beneath the configured redirected/working/plans/ path. Does not create a plan under memory-bank/working/plans/.",
+      "assertions": [
+        "Writes the plan under the configured working path, not the repo default"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 17,
+      "prompt": "During plan growth, the scope adds passwordless login beside an existing password-only account model. The plan's current user identity is the password login. Run plan-fundamentals self-review before finalization.",
+      "expected_output": "Recognizes a singular-to-plural identity shift outside code blocks. Adds one Open Question asking whether the new general account identity should become primary or whether passwordless should be added alongside the password login, with a recommendation grounded in the plan. After the user's answer, records promote or add-alongside and its rationale in Decisions so far; the advisory check itself does not block finalization.",
+      "assertions": [
+        "Raises exactly one promote-vs-add-alongside identity-model Open Question for the detected second auth method",
+        "Records the answer in Decisions so far after the user resolves it",
+        "Does not re-ask after Decisions so far already records the answer",
+        "Does not make the advisory check a separate finalization gate"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "During plan growth, the only mention of a second auth method is inside a fenced example code block; the actual scope adds logging to one existing auth method. Run plan-fundamentals self-review.",
+      "expected_output": "Ignores the fenced example and stays silent on the identity-model checkpoint because the plan's actual scope keeps a single auth method and identity anchor.",
+      "assertions": [
+        "Ignores shift words inside fenced code blocks",
+        "Adds no assumption-delta Open Question when the real plan scope has no singular-to-plural, required-to-optional, or derived-to-chosen shift"
+      ]
+    },
+    {
+      "id": 19,
+      "prompt": "A plan expands a single-platform integration to a second platform and turns its fixed region into a user-selected setting. Neither change appears inside a code block. Run self-review; the decision log has no answer for this modeling shift.",
+      "expected_output": "Asks one advisory Open Question covering whether the general platform/region model becomes primary or is added alongside the old single-platform assumption. Records the user's later answer in Decisions so far. It does not create separate questions for each cue or add a blocking gate.",
+      "assertions": [
+        "A second platform triggers even when the plan does not use the word identity",
+        "A fixed value becoming configurable is recognized as a chosen-value shift",
+        "At most one promote-vs-add-alongside Open Question is added for the scope"
+      ]
+    },
+    {
+      "id": 20,
+      "prompt": "Run the named notifications group with two ready children in sequence. Both build successfully in a varde-created feature worktree. The first child has finished; what finish choice is shown before the second child, and what happens after both complete?",
+      "expected_output": "Each child has independent pre-edit approval; the first child completes acceptance, conclusion, and lessons, then returns its diff/branch state to orchestrate without showing or executing a finish choice. Orchestrate builds the second child. Structural-risk implementation review is performed once on the aggregate applicable scope, rather than after every task. After the group completes, it shows the aggregate diff and one applicable Merge / Push and open PR / Keep as is menu, recommending Merge for the created worktree; it waits for the user's choice before merging or pushing.",
+      "assertions": [
+        "No per-child finish choice interrupts the unattended group build",
+        "The second child runs after the first succeeds",
+        "Exactly one aggregate finish menu offers applicable Merge, Push and open PR, and Keep as is choices",
+        "No merge, push, PR creation, or worktree cleanup happens before the user chooses",
+        "Describes implementation review once on the aggregate applicable scope when structural risk requires it, rather than an automatic per-task review loop"
+      ]
+    },
+    {
+      "id": 21,
+      "prompt": "Change src/parser.mjs so parse() returns \"fixed\". Independent reviewer delegation is unavailable in this run. Do not substitute self-review.",
+      "expected_output": "Recognizes a settled bounded change but stops before any implementation edit because independent pre-edit review is unavailable. Reports the missing reviewer capability without claiming approval or proceeding to self-review.",
+      "assertions": [
+        "Leaves src and test byte-identical to the seed when independent review is unavailable",
+        "Reports reviewer unavailability and stops without treating self-review as independent approval"
+      ],
+      "setup_script": "evals/setup-change-eval.sh",
+      "verification_script": "evals/verify-change-eval.sh"
+    },
+    {
+      "id": 22,
+      "prompt": "Add rate limiting to the API in src/api.mjs. The repository does not specify whether limits apply per account or per IP; I have not chosen a scope. Investigate what the code answers, then continue the appropriate workflow.",
+      "expected_output": "Investigates existing code for answerable questions, persists a draft plan with the unresolved per-account versus per-IP human choice, and asks one numbered question with a recommendation. Does not guess the choice, implement a default, or create executable tasks.",
+      "assertions": [
+        "Leaves production source and test byte-identical while the human choice is unresolved",
+        "Persists the unresolved rate-limit scope in a draft plan without task files",
+        "Asks the human to choose account or IP scope after investigating code; does not silently select one"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"

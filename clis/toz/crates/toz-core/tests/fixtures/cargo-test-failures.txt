@@ -1,0 +1,33 @@
+   Compiling fixcrate v0.1.0 (/private/tmp/claude-501/fixcrate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.58s
+     Running unittests src/lib.rs (target/debug/deps/fixcrate-6d15bdb304b1bbce)
+
+running 4 tests
+test tests::also_fine ... ok
+test tests::adds ... ok
+test tests::panics_with_context ... FAILED
+test tests::wrong_expectation ... FAILED
+
+failures:
+
+---- tests::panics_with_context stdout ----
+
+thread 'tests::panics_with_context' (29283697) panicked at src/lib.rs:7:74:
+index out of bounds: the len is 0 but the index is 3
+
+---- tests::wrong_expectation stdout ----
+
+thread 'tests::wrong_expectation' (29283698) panicked at src/lib.rs:6:38:
+assertion `left == right` failed: math is hard
+  left: 4
+ right: 5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::panics_with_context
+    tests::wrong_expectation
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`

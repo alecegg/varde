@@ -1,0 +1,84 @@
+# Built-in rule set: complexity
+#
+# File rules retain the legacy aggregate signal. Function rules consume the
+# normalized `function_metrics` table instead. Only certified, high-confidence
+# metrics may block a scan. Partial metrics remain visible as advisories.
+
+[[rule]]
+id = "file-complexity-hotspot"
+kind = "sql"
+severity = "error"
+name = "Concentrated file complexity"
+description = "Certified production functions exceed total and average cognitive complexity budgets."
+message = "file cognitive complexity {complexity} across {functions} functions exceeds total {max_complexity} and average {min_complexity_per_function} budgets"
+remediation = "consider extracting cohesive helpers when that improves naming, testing, or readability"
+query = """
+WITH measured AS (
+  SELECT f.id AS file_id, f.path, SUM(fm.cognitive) AS complexity,
+    COUNT(DISTINCT fm.identity) AS functions,
+    1.0 * SUM(fm.cognitive) / COUNT(DISTINCT fm.identity) AS complexity_per_function
+  FROM files f
+  JOIN function_metrics fm ON fm.file_id = f.id
+  WHERE f.is_test_path = 0 AND f.is_tooling_path = 0
+  GROUP BY f.id
+  HAVING COUNT(DISTINCT fm.identity) = (
+      SELECT COUNT(*) FROM entities fn
+      WHERE fn.file_id = f.id AND fn.kind = 0 AND fn.is_test = 0
+    )
+    AND SUM(CASE WHEN fm.confidence = 'high' THEN 0 ELSE 1 END) = 0
+    AND MIN(fm.metric_version) = :current_metric_version
+    AND MAX(fm.metric_version) = :current_metric_version
+)
+SELECT path AS file, 1 AS line, complexity, functions,
+  complexity_per_function, :max_complexity AS max_complexity,
+  :min_complexity_per_function AS min_complexity_per_function
+FROM measured
+WHERE complexity > :max_complexity
+  AND complexity_per_function > :min_complexity_per_function
+ORDER BY complexity_per_function DESC, complexity DESC, path
+"""
+thresholds = { max_complexity = 50.0, min_complexity_per_function = 7.0, current_metric_version = 2.0 }
+
+[[rule]]
+id = "churn-complexity-hotspot"
+kind = "sql"
+severity = "info"
+name = "Churn/complexity hotspot"
+description = "Complexity and commit activity identify review priorities, not a standalone quality prohibition."
+message = "file is both high-complexity and frequently changed"
+remediation = "review the measured complexity and churn, then improve structure or coverage where context supports it"
+query = "SELECT path AS file, 1 AS line FROM files WHERE is_test_path = 0 AND complexity > :max_complexity AND churn > :min_churn"
+thresholds = { max_complexity = 50.0, min_churn = 20.0 }
+
+[[rule]]
+id = "function-complexity-gate"
+kind = "sql"
+severity = "error"
+name = "Function complexity gate"
+description = "A certified function complexity metric exceeds a readability limit."
+message = "{name} exceeds complexity limits: cognitive {cognitive}, cyclomatic {cyclomatic}"
+remediation = "refactor cohesive branches into clearly named, independently testable helpers"
+query = "SELECT f.path AS file, fm.start_line AS line, fm.start_byte, fm.end_byte, fm.start_col, fm.end_line, fm.end_col, fm.name, COALESCE(fm.owner_type, '') AS owner_type, fm.cyclomatic, fm.cognitive, fm.max_nesting, fm.line_span, fm.byte_size, fm.confidence, fm.metric_version, :max_cyclomatic AS max_cyclomatic, :max_cognitive AS max_cognitive FROM function_metrics fm JOIN files f ON f.id = fm.file_id WHERE f.is_test_path = 0 AND f.is_tooling_path = 0 AND fm.confidence = 'high' AND (fm.cyclomatic > :max_cyclomatic OR fm.cognitive > :max_cognitive) ORDER BY fm.cognitive DESC, fm.cyclomatic DESC, fm.line_span DESC, f.path, fm.start_line, fm.id"
+thresholds = { max_cyclomatic = 20.0, max_cognitive = 15.0 }
+
+[[rule]]
+id = "function-length-warning"
+kind = "sql"
+severity = "warning"
+name = "Function length warning"
+description = "A certified function exceeds the line budget while complexity stays within limits."
+message = "{name} spans {line_span} lines (limit {max_function_lines})"
+remediation = "review whether a cohesive extraction improves readability"
+query = "SELECT f.path AS file, fm.start_line AS line, fm.start_byte, fm.end_byte, fm.start_col, fm.end_line, fm.end_col, fm.name, COALESCE(fm.owner_type, '') AS owner_type, fm.cyclomatic, fm.cognitive, fm.max_nesting, fm.line_span, fm.byte_size, fm.confidence, fm.metric_version, :max_cyclomatic AS max_cyclomatic, :max_cognitive AS max_cognitive, :max_function_lines AS max_function_lines FROM function_metrics fm JOIN files f ON f.id = fm.file_id WHERE f.is_test_path = 0 AND f.is_tooling_path = 0 AND fm.confidence = 'high' AND fm.line_span > :max_function_lines AND fm.cyclomatic <= :max_cyclomatic AND fm.cognitive <= :max_cognitive ORDER BY fm.line_span DESC, f.path, fm.start_line, fm.id"
+thresholds = { max_cyclomatic = 20.0, max_cognitive = 15.0, max_function_lines = 60.0 }
+
+[[rule]]
+id = "function-complexity-advisory"
+kind = "sql"
+severity = "info"
+name = "Partial function complexity advisory"
+description = "A partially supported function metric exceeds a readability limit."
+message = "{name} may exceed readability limits: cognitive {cognitive}, cyclomatic {cyclomatic}, lines {line_span}"
+remediation = "review the function manually before choosing a readability refactor"
+query = "SELECT f.path AS file, fm.start_line AS line, fm.start_byte, fm.end_byte, fm.start_col, fm.end_line, fm.end_col, fm.name, COALESCE(fm.owner_type, '') AS owner_type, fm.cyclomatic, fm.cognitive, fm.max_nesting, fm.line_span, fm.byte_size, fm.confidence, fm.confidence_reasons, fm.metric_version, :max_cyclomatic AS max_cyclomatic, :max_cognitive AS max_cognitive, :max_function_lines AS max_function_lines FROM function_metrics fm JOIN files f ON f.id = fm.file_id WHERE f.is_test_path = 0 AND f.is_tooling_path = 0 AND fm.confidence <> 'high' AND (fm.cyclomatic > :max_cyclomatic OR fm.cognitive > :max_cognitive OR fm.line_span > :max_function_lines) ORDER BY fm.cognitive DESC, fm.cyclomatic DESC, fm.line_span DESC, f.path, fm.start_line, fm.id LIMIT CAST(:max_findings AS INTEGER)"
+thresholds = { max_cyclomatic = 20.0, max_cognitive = 15.0, max_function_lines = 60.0, max_findings = 20.0 }

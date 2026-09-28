@@ -1,55 +1,45 @@
 # Simplify mode
 
-## Resolve the diff scope
+Simplify edits inline and reports to its caller; it keeps no findings store.
 
-Use uncommitted changes by default. Compare the working tree and staged changes
-against `HEAD`. Narrow the scope when requested: staged changes only, a named
-ref instead of `HEAD`, or named files. Named files still use line ranges
-against `HEAD` or the named ref.
+**Principles.** Preserve behavior; follow the repo's CLAUDE.md/AGENTS.md first.
+Readability beats fewer lines: keep abstractions that earn their place,
+rationale comments, and separate concerns; no nested ternaries. Keep security
+and safety code (auth, validation, sanitization, data-loss and destructive-op
+guards, accessibility) even when it looks dead; never weaken an assertion,
+loosen a type, or narrow validation to make a test pass.
+
+Apply `references/review-gates.md` before edits and at completion; a
+caller-approved plan can cover this pass when its scope and assumptions hold.
 
 ## Workflow
 
-1. **Load the instructions.** Read `references/simplify-scope.md` to learn how
-   to compute and merge changed-line ranges from `git diff`. Read
-   `references/simplify-principles.md` for the principles governing every edit.
-   Load `references/varde-code.md` only for several files, covering tests, or
-   structural relationships. Read known changed lines directly. Use
-   `get_symbol` only for exact symbols inside large files.
-2. **Keep the source location.** Run in the checkout that owns the selected
-   diff. A new worktree starts clean and cannot simplify the invocation's
-   uncommitted changes. If concurrent editing makes that checkout unsafe, stop.
-   Ask the user to pause the competing work or run this pass against a
-   committed ref range instead.
-3. **Compute scope.** Use `references/simplify-scope.md` to derive the changed
-   file list and line ranges. Use the whole file for newly added files. If no
-   changes exist, report that and stop.
-4. **State the plan.** Before editing, report the resolved diff source, which
-   can be the working tree, staged changes, or a named ref. Also report each
-   file and its line ranges.
-5. **Apply edits.** Edit one file at a time using
-   `references/simplify-principles.md`. Read surrounding code for context. Edit
-   only the listed ranges. Newly added files may be edited in full.
-6. **Verify.** Run the project's existing test command after each file's edits.
-   When `varde-code` is available, use `tests_for_file` to run tests covering
-   that file instead of the whole suite, if the test runner supports targeting
-   files. Otherwise, run the full command. If a run fails, revert that file's
-   edits before moving on. Use `git checkout -- <path>` for a tracked file, or
-   discard the edit for a new file. The tree must not be worse than it was.
-   A passing run proves behavior preservation only when tests exercise the
-   edited lines. If they do not, say so in the report.
-7. **Report.** Give a short summary of files touched, what changed, and why.
-   Name worthwhile improvements outside the scope, but do not apply them.
-8. **Record lessons.** Invoke `varde-knowledge reflect` for this run. Record
-   friction and durable lessons only. Record a handoff at a session boundary,
-   not during this run.
-
-## Gotchas
-
-- Newly added files are in scope in full. Files with deletions-only hunks have
-  no current lines to simplify, so skip them.
-- This pass has no findings store or review folder. It edits inline and reports
-  a summary directly to its caller. Use report mode when you need persisted,
-  triaged findings. Use fix mode to apply an existing review's findings.
-- This pass edits the checkout containing its input diff. It creates no
-  worktree. A caller's worktree remains valid because it holds that diff, and
-  the caller owns the merge.
+1. **Edit in the current checkout, no worktree;** if concurrent edits make it
+   unsafe, stop and ask.
+2. **Compute scope.** The source defaults to working tree plus staged changes
+   against `HEAD` plus untracked files (`git ls-files --others --exclude-standard`
+   — each one is whole-file in scope); narrow to staged
+   only, a named ref, or named files on request. For everything else, scope is
+   the lines added or changed in `git diff -U0 <source>`: a whole added file,
+   nothing for a pure deletion. Read outside the ranges for context; edit only
+   inside them. With no diff and no untracked files, report that and stop.
+3. **Map the connections.** With `varde-code`, per `references/varde-code.md`:
+   changed symbols, dependents per changed file, tests to verify with, and
+   whether a new public helper duplicates an existing one. Without it, grep
+   for callers and similar helpers. A changed symbol used outside scope keeps
+   its name and signature; simplify only its body. Replacing new code with a
+   call to an existing helper is in scope.
+4. **Edit one file at a time, per the principles above, then verify once.**
+   Snapshot each existing file under a per-run backup directory using its
+   repository-relative path; record any newly created files. After all edits,
+   run the project's
+   tests — only the `tests_for_file` set when the runner can target files. On
+   failure, restore snapshots to their original paths one file at a time and
+   delete newly created files until the tests pass again
+   (`git checkout` would also discard the diff under review). A pass proves
+   behavior preserved only when tests exercise the edited lines; if they do
+   not, say so.
+5. **Report** files touched, what changed, why, and any obstacle you hit. List
+   worthwhile improvements outside scope as unapplied recommendations.
+6. **Record lessons.** Record real obstacles through `varde-learn` and durable
+   decisions through `varde-knowledge`; otherwise skip.

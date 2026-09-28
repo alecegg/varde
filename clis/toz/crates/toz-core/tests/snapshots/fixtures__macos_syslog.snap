@@ -1,0 +1,22 @@
+---
+source: crates/toz-core/tests/fixtures.rs
+expression: outline(text)
+---
+strategy: Log
+chunks: 16
+  0  L1-L16  prose  [gui/501 [100015]:] denied lookup: name = com.apple.system.notific… = 159: Sandbox restriction (1/5)
+  1  L17-L37  prose  [gui/501 [100015]:] denied lookup: name = com.apple.system.notific… = 159: Sandbox restriction (2/5)
+  2  L38-L61  prose  [gui/501 [100015]:] denied lookup: name = com.apple.system.notific… = 159: Sandbox restriction (3/5)
+  3  L62-L77  prose  [gui/501 [100015]:] denied lookup: name = com.apple.system.notific… = 159: Sandbox restriction (4/5)
+  4  L78-L80  prose  [gui/501 [100015]:] denied lookup: name = com.apple.system.notific… = 159: Sandbox restriction (5/5)
+  5  L81-L96  prose  [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = … = 159: Sandbox restriction (1/5)
+  6  L97-L116  prose  [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = … = 159: Sandbox restriction (2/5)
+  7  L117-L137  prose  [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = … = 159: Sandbox restriction (3/5)
+  8  L138-L156  prose  [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = … = 159: Sandbox restriction (4/5)
+  9  L157-L160  prose  [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = … = 159: Sandbox restriction (5/5)
+ 10  L161-L179  prose  [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000…vice state: spawn scheduled (1/5)
+ 11  L180-L202  prose  [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000…vice state: spawn scheduled (2/5)
+ 12  L203-L223  prose  [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000…vice state: spawn scheduled (3/5)
+ 13  L224-L238  prose  [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000…vice state: spawn scheduled (4/5)
+ 14  L239-L240  prose  [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000…vice state: spawn scheduled (5/5)
+ 15  L241-L250  prose  [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = … error = 159: Sandbox restriction

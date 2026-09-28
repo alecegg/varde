@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "{{TOZ_BIN_SHELL}} --fallback-dir {{TOZ_FALLBACK_SHELL_JSON}} note --harness codex", "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "{{TOZ_BIN_SHELL}} --fallback-dir {{TOZ_FALLBACK_SHELL_JSON}} capture --hook --harness codex", "timeout": 30 }
+        ]
+      }
+    ]
+  }
+}

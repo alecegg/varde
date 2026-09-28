@@ -1,100 +1,64 @@
 # Plan Fundamentals
 
-Use this breadth-first checklist during the growth loop
-(`references/plan-grow-doc.md`). Run the closing step after resolving both
-`## Open Questions` and `## Assumptions`.
+Checks run during the growth loop (`references/plan-grow-doc.md`) and the
+closing sequence run once its exit criteria pass.
 
-## Breadth-first checklist
+## External interface check
 
-Before finalizing the draft, and whenever an answer sharpens the picture, map
-every major area of the full scope. Do not rely on what came to mind first:
+If a touched surface has existing consumers (exported API, CLI flag, env var,
+CI config, shared type, a file others read), flag it explicitly and find them
+— `dependents`/`blast_radius` with `varde-code` (`references/varde-code.md`),
+else grep. Record them in Design and AC. Wider than expected is itself a
+flag; fan-out across independent packages is a split candidate. Internal-only
+changes skip this.
 
-- Constraints (technical, product, time)
-- Integration points
-- Architecture / data-model decisions
-- UX / workflow
-- Operational concerns
+## Self-review
 
-Do not skip an area silently. If an area does not apply, note "n/a" and why,
-inline while drafting or as a one-line note in `## Constraints`.
+Empty `## Open Questions` is not done. Hunt placeholders (TBD, vague Design),
+contradictions between decisions, scope the Solution implies but Non-goals
+omits, and decisions admitting two implementations; add each as an Open
+Question and continue.
+If scope outside fenced code blocks adds a second case to a formerly
+single-case model, makes a required field optional, or turns a derived or fixed
+value into a choice, and `## Decisions so far` does not already resolve that
+shift, add one Open Question asking whether to promote the general model or
+add-alongside the old one and record its answer there; otherwise stay silent.
 
-**External interface check:** If the destination touches code, config, or people
-that already depend on it, flag it explicitly. Examples include an env var
-consumed elsewhere, an exported public API/CLI flag, CI config, or a shared type. Do not
-fold it into a generic note. Scan wider for consumers and record the wider
-surface in the spec/AC so build sizes the corresponding task(s) with more
-scrutiny at decomposition time
-(`references/plan-acceptance-criteria.md`'s scope indicators); a narrow internal-only change
-doesn't need the same diligence.
-When `varde-code` is available (`references/varde-code.md`), run
-`dependents`/`blast_radius` on the touched file or symbol to find actual
-consumers instead of guessing — a wider-than-expected result is itself grounds to
-flag.
+## Finalize
 
-Record the query and a short evidence summary in every affected task's
-`#### Impact evidence` section. Confirm the important consumers and relevant
-tests with focused source reads. Convert each confirmed consumer into an exact
-`impact:<repo-relative-path>` entry in `verification_resources`. Those
-identifiers are opaque after the `impact:` prefix and must not be normalized by
-later scheduling steps.
+1. Derive the slug from the plan's title or problem (lowercase, hyphenated)
+   without asking. Rename the directory to `<UTC-date>-<slug>`, keeping the
+   draft's date; the plan id is its name. Use `git mv` when
+   `git ls-files --error-unmatch <working>/plans/<old-plan-id>/plan.md`
+   succeeds, else plain `mv`.
+   Name the final id in the confirmation turn; the user may rename it.
+2. **Review before confirming.** Apply `references/review-gates.md` to the
+   persisted plan and initialize a subject before implementation:
 
-If `varde-code` is unavailable, use manual dependency analysis. Name the
-inspected consumers and relevant tests in the same evidence section. Manual
-evidence remains valid, but a missing or uncertain consumer blocks parallel
-eligibility until the task is narrowed or the relationship is confirmed.
+   ```sh
+   varde-workflow review init --plan <plan.md> --repository <repo-root> --scope <path> [--scope <path> ...] --json
+   ```
 
-## Self-review checklist
-
-An empty `## Open Questions` alone isn't grounds to stop. Hunt for gaps first:
-
-- **Placeholders:** Re-read the plan body for TBD, "figure out later", or any
-  Design subsection still too vague to implement.
-- **Contradictions:** Do two confirmed decisions conflict, or does a later
-  decision silently invalidate an earlier one?
-- **Scope gaps:** Does Non-goals actually cover everything implied by the
-  Solution, or is there a boundary nobody asked about?
-- **Ambiguity:** Any confirmed decision still admitting two valid
-  implementations — pick the interpretation that best matches the spec, then add
-  it to `## Open Questions` as a normal item rather than assuming.
-
-If this scan finds anything, add it to `## Open Questions` and continue the loop
-(`references/plan-grow-doc.md`). Do not add it only as an afterthought to the
-final completeness check below.
-
-## Step 4: Metadata and closing
-
-Once `## Open Questions` and `## Assumptions` are both resolved:
-
-1. Propose a slug from the plan's title or problem statement (lowercase,
-   hyphenated); ask the user to confirm or change it — follow the recommendation
-   requirement from `references/plan-interview.md`. Wait for their answer.
-2. Ask separately whether the plan includes a frontend/UI surface; wait. If yes,
-   invoke `varde-prototype` and wait for it to complete. Use its output to shape
-   the acceptance criteria and later build decomposition.
-3. If the temporary slug differs, rename the draft plan directory to the
-   confirmed slug (the plan id is its directory name):
-   `git mv <working>/plans/<old-plan-id> <working>/plans/<new-plan-id>`
-   (plain `mv` when `<working>` is redirected outside the repository or
-   git-ignored).
-
-Then, in order:
-
-1. Replace any `## Design` subsection still containing only
-   `(filled during planning)` with `(none)`.
-2. Preserve the storage mode selected in `references/plan.md` step 2. Keep
-   ignored plans local.
-   Stage and commit only this plan's directory when the plan is tracked.
-3. Ask the **final completeness check** by pointing at the plan file instead of
-   restating its contents: "Anything left to resolve before we finalize the
-   plan?" This check looks for missed items, not scope decisions. Wait for
-   explicit confirmation before continuing without more questions.
-
-After confirmation, continue without more questions. Use a subagent to evaluate plan
-boundaries: identify independently shippable candidates, each with slug, title,
-goal, constraints, non-goals, dependency candidates.
-
-- **Single candidate:** apply the result to the draft plan directly —
-  `shape: "single"`, one plan total. Continue to finalize the plan (AC review
-  and storage-aware persistence, `references/plan-authoring.md`).
-- **Multiple candidates:** read `references/plan-splitting.md` and follow it to
-  confirm the split with the user and spawn one plan per candidate.
+   Give an independent agent the plan, returned subject id, scope, and resolved
+   absolute `<working>`/`<knowledge>` paths. Ask it to find unstated
+   assumptions, unresolved human choices, unverifiable criteria, and
+   independently shippable changes. It inspects `pre-edit` and writes its own
+   review record through `varde-workflow review record`; keep the subject id in
+   plan Progress for build and resume. Apply findings and review every
+   criterion per `references/plan-acceptance-criteria.md`. Investigate
+   code-answerable unknowns; return human decisions to the interview. Several
+   changes: follow `references/plan-splitting.md` instead of step 3. Preserve
+   the approved verdict for build; materially changed plans need fresh
+   inspection and independent approval.
+3. Ask the **final completeness check** in one turn: every assumption the user
+   has not yet seen and every change step 2 made, one line each, grouped by
+   what it affects, high-impact first; point at the plan file and ask
+   "Anything left to resolve before we finalize?" Silence on a line the user
+   never saw is not confirmation. Wait for explicit confirmation.
+4. After confirmation, no more questions or content changes. Run
+   `varde-workflow validate <plan-dir>/plan.md --json` and fix diagnostics;
+   the plan stays `backlog`. Legal states and moves:
+   `references/varde-workflow-cli.md`.
+5. `git check-ignore -q` the plan path: ignored → local only; tracked →
+   commit only its directory.
+6. Announce "Plan `<plan-id>` is ready — ask to build it."

@@ -4,9 +4,9 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: create.sh <id> [base]
+Usage: worktree-create.sh <id> [base]
 
-Creates a worktree for <id> at ../<repo-name>-worktrees/<id>, branched from
+Creates a worktree for <id> at <repo>/.varde/worktrees/<id>, branched from
 <base> (default: HEAD), pinned to that commit's resolved SHA.
 
 Prints three lines on success:
@@ -57,9 +57,8 @@ if [[ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]]; th
   exit 0
 fi
 
-repo_name="$(basename "$(git rev-parse --show-toplevel)")"
 repo_root="$(git rev-parse --show-toplevel)"
-worktree_path="$(dirname "${repo_root}")/${repo_name}-worktrees/${id}"
+worktree_path="${repo_root}/.varde/worktrees/${id}"
 branch="worktree/${id}"
 
 if git worktree list --porcelain | grep -qx "worktree ${worktree_path}"; then
@@ -72,6 +71,11 @@ if git show-ref --verify --quiet "refs/heads/${branch}"; then
 fi
 
 mkdir -p "$(dirname "${worktree_path}")"
+# Keep the nested worktrees out of the main checkout's status without editing
+# any tracked .gitignore.
+exclude="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+mkdir -p "$(dirname "${exclude}")"
+grep -qx '/.varde/' "${exclude}" 2>/dev/null || echo '/.varde/' >> "${exclude}"
 git worktree add -b "${branch}" "${worktree_path}" "${base_sha}" >&2
 
 echo "path=${worktree_path}"

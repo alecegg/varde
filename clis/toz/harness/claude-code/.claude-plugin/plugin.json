@@ -1,0 +1,6 @@
+{
+  "name": "toz",
+  "version": "0.1.0",
+  "description": "tool-output-zone: keeps large tool output out of the context window. Captures overflow into a local FTS store and swaps in a searchable preview.",
+  "author": { "name": "alec" }
+}

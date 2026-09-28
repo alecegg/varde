@@ -2,92 +2,60 @@
 
 `varde-code` is an optional Rust CLI on PATH. If
 `command -v varde-code` finds nothing, use Read/Grep/Glob. Its absence is not
-an error. Never build or install it yourself. When the decision below selects
-the CLI, build its index once before other commands:
+an error. Never build or install it yourself. When it is installed, the main agent runs `varde-code watch --ensure --repo
+<absolute-repo-root>` and checks `watch --list` for `registered`, `alive`,
+and `ready` before dispatching indexed queries. The watcher writes the index;
+queries only validate and read it. If supervision or readiness fails, search
+source directly and report degraded index capability. An Explore agent in a
+read-only sandbox uses indexed queries only after the parent confirms coverage.
 
-```bash
-varde-code build --repo-root "$(pwd)"   # full rebuild each time
-```
+Every command prints JSON: branch on `ok`; a failure carries `data.error`.
+When a truncated result includes `meta.toz.handle`, query that handle with
+`toz query --handle <H> "<term>"` or its `toz_read` line range instead of
+requesting repeated offset pages. The inline list remains bounded.
+For `find_pattern`, the handle stores locations and 160-character previews.
+Use `matchesOffset` or `fullMatches` when you need full match text or captures.
 
-Every command prints `{"ok": true, "data": ...}` or `{"ok": false, "error": {...}}`.
+## When to use it
 
-## Decision rule
-
-- **Discovery and relationships:** Use Varde Code for unknown scope,
-  dependencies, tests, hotspots, and blast radius.
-- **Known content:** Read short, located files directly.
-- **Large known files:** Use `get_symbol` for one exact symbol.
-- **Batch related lookups:** Build once, then batch related queries.
-- **New or trivial targets:** Skip indexing.
-- **Confirmation:** Confirm important CLI results against focused source reads.
+Use it for unknown scope, dependencies, tests, hotspots, and blast radius;
+`get_symbol` for one symbol in a large file; `batch` related lookups.
 
 ## Review scoping
 
-Additive to the grep step in `references/report.md`, not a replacement —
-grep still runs for anti-pattern text matching. These add structural and graph
-signal grep cannot produce, as a scoping pass before the manual read.
+Set `ROOT=$(git rev-parse --show-toplevel)` once.
 
 ```bash
-# Orient in an unfamiliar area before reading it — entrypoints, module
-# layers, subsystems, and hotspots from the persisted index
-varde-code nav_map       --json '{"repoRoot": "'"$(pwd)"'"}' --format text
-
-# Rank files by risk before deciding review depth
-varde-code hotspots      --json '{"repoRoot": "'"$(pwd)"'"}'
-
-# Blast radius of a changed file, and what depends on it
-varde-code blast_radius  --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
-varde-code dependents    --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
-
-# How one file actually reaches another — the dependency path between them,
-# for "does this change reach that subsystem" questions
-varde-code map_path      --json '{"repoRoot": "'"$(pwd)"'", "sourceFile": "src/foo.ts", "targetFile": "src/bar.ts"}'
-
-# Existing tests covering a changed file — an empty result is a CORRECTNESS
-# severity signal (see `references/report-categories.md`)
-varde-code tests_for_file --json '{"repoRoot": "'"$(pwd)"'", "filePath": "src/foo.ts"}'
-
-# Structural pattern shortlist with relational matching
-varde-code find_pattern  --json '{"repoRoot": "'"$(pwd)"'", "pattern": "$FN($$$ARGS)", "file": "src/foo.ts", "inside": {"kind": "try_statement"}}'
-
-# Batch across all changed files in the diff
-varde-code batch         --json '{"repoRoot": "'"$(pwd)"'", "calls": [{"mode": "hotspots"}, {"mode": "blast_radius", "filePath": "src/foo.ts"}]}'
-
-# Rule-pack findings; scan refreshes its index, without source rewrites
-varde-code scan          --json '{"repoRoot": "'"$(pwd)"'"}'
+# Every review: tests and dependents of each changed file, in one call
+varde-code batch --json '{"repoRoot":"'"$ROOT"'","calls":[
+  {"mode":"tests_for_file","filePath":"src/foo.ts"},
+  {"mode":"dependents","filePath":"src/foo.ts"}]}'
 ```
 
-For scan gates, inspect `ok` and `data.gate.status`.
-Only `pass` exits zero; `fail` and `incomplete` exit nonzero.
-Resolve diagnostics before treating an incomplete scan as certified.
-The default `error` threshold gates every error rule, including exact-clone and
-certified dependency policy. Architectural heuristics remain informational;
-syntax rules declare language scopes. `gateRules` selects a nonempty set of
-active rule IDs and excludes `severityThreshold`; boundary rules also require
-configured prefixes.
-Use `rules_list` to inspect active definitions and override provenance.
-Read `references/scan.md` when triaging or customizing scan rules.
+Also useful, same `--json '{"repoRoot":"'"$ROOT"'", ...}'` shape: `nav_map` for
+an unfamiliar area or multi-module diff; `hotspots` and `scan` for a
+whole-repo review only.
 
 ## Diff-scoped lookups
 
 For a simplify pass, scope to what actually changed rather than the whole tree.
 
 ```bash
-varde-code symbols_in_files --json '{"repoRoot": "'"$(pwd)"'", "filePaths": ["src/foo.ts", "src/bar.ts"], "includeBody": true}'
-varde-code detect_changes   --json '{"repoRoot": "'"$(pwd)"'", "diffMode": "working"}'
+# Symbols changed vs HEAD, staged included (diffMode: working_tree | staged | range)
+varde-code detect_changes   --json '{"repoRoot": "'"$ROOT"'", "diffMode": "range", "range": "HEAD"}'
+# detect_changes omits untracked files
+git ls-files --others --exclude-standard
+# Who uses a changed file: its symbols keep their signatures when this is nonempty
+varde-code dependents       --json '{"repoRoot": "'"$ROOT"'", "filePath": "src/foo.ts"}'
+# Existing helpers matching a new symbol's key terms, with their neighbors
+varde-code context_pack     --json '{"repoRoot": "'"$ROOT"'", "query": "retry backoff"}'
+varde-code symbols_in_files --json '{"repoRoot": "'"$ROOT"'", "filePaths": ["src/foo.ts"], "includeBody": true}'
 ```
-
-`tests_for_file` (above) also scopes the verify run to the tests actually
-covering an edited file, where the project's test runner supports targeting.
 
 ## Fallback rule
 
-If the sandbox denies access to an index or lock under `~/.config/varde-code/`,
-retry that call once with escalated filesystem access, keeping the command
-unchanged. If approval is unavailable, denied, or the retry fails, use Read/Grep
-for that lookup and name the degraded capability in your next message.
-
-On any other failure, use Read/Grep for that lookup and keep using the CLI for
-the rest of the run. If a successful result looks implausible, such as zero
-dependents for an exported symbol, spot-check it with targeted grep before
-trusting it.
+If watcher setup is denied by the sandbox, the main agent retries once
+with escalated access. On `index_missing` or `index_stale`, or if setup fails,
+use Read/Grep for that call and report degraded index capability. Do not build
+from a read-only Explore agent. Grep-check implausible results (e.g. zero
+dependents).

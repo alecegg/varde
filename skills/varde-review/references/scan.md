@@ -1,220 +1,96 @@
-# Scan rules and scan findings
+# Triage scan findings
 
-This file covers two `varde-code scan` tasks. Both use the rule definitions in
-`references/scan-rule-format.md`.
+A `varde-code scan` finding is a **candidate**, not a verdict: the rule engine
+cannot see context such as test fixtures, intentional cycles, public
+re-exports, or trait boilerplate.
 
-| The request is | Section |
-|---|---|
-| Run a scan and decide what each finding actually means, then fix the real ones | **Triage scan findings** |
-| Add a new check, or customize a seeded built-in | **Author a scan rule** |
+**Every finding ends fixed, not-real with a reason, or explicitly handed to
+the user.** Group large result sets by rule; do not sample them. A rule that keeps
+producing the same false positive is a rule problem: hand off its definition, false-positive examples, and intended matches to the
+installed `varde-manage` skill for rule authoring. If that skill is unavailable,
+continue triage and report the proposed rule change for setup; do not claim the
+rule was corrected.
 
-If a scan repeats the same false positive, the rule needs work. Use the second
-section instead of re-deciding the same finding.
+## Workflow
 
-## Triage scan findings
-
-A `varde-code scan` finding is a **candidate**, not a verdict. The rule engine
-flags patterns that are usually problems. It cannot see context such as test
-fixtures, intentional cycles, public API re-exports, or trait boilerplate.
-
-**Put every finding in one of two buckets: needs a fix, or not a real issue
-with a stated reason.** Findings you have not checked are untriaged and
-unfinished. Group large result sets by rule in step 3. Do not sample them.
-
-The embedded built-ins currently contain 34 rules: 28 errors and 6 infos.
-Their pattern declarations cover 35 rule/language pairs. These counts are
-source facts, not scan-result counts.
-
-### Workflow
-
-1. **Choose the gate threshold.** Default `error` gates every error finding,
-   including certified complexity, exact clones, and certified dependency
-   policy. `warning` includes warnings; `info` includes advisories. Scan
-   builds or refreshes its index automatically. `gateRules` accepts a nonempty
-   array of active rule IDs and gates only those rules. It cannot be combined
-   with `severityThreshold`; IDs must be unique. A `dependency-boundary` gate
-   needs both nonempty normalized `source_prefix` and `target_prefix`
-   configuration. Both blank leaves it inactive. One blank is invalid. The
-   same validation rejects `gateRules` before index refresh or source writes.
-
-2. **Run the scan.**
+1. **Run the scan** without `--apply`:
    ```bash
-   varde-code scan --json '{"repoRoot":"<repo>"}'
+   varde-code scan --json '{"repoRoot":"<repo>","severityThreshold":"error"}'
    ```
-   Inspect `ok`, then `data.gate.status`.
-   `pass` exits zero; `fail` and `incomplete` exit nonzero.
-   `ok: true` alone does not establish gate success.
-   Resolve incomplete-scan diagnostics before certifying the result.
-   Intentionally malformed fixtures can use repository `.ignore` exclusions.
-   Document the resulting scope; suppressing findings never clears diagnostics.
-   Keep findings for triage while repairing analysis failures.
-   Do not pass `--apply` during initial triage.
+   (or `gateRules`; not both). Inspect `ok`, then `data.analysis.status` and
+   `data.gate.status` independently; `ok: true` alone establishes neither. A
+   nonzero exit means incomplete analysis or blocking findings. Resolve
+   incomplete-analysis diagnostics before certifying a result, keeping the
+   findings for triage meanwhile. Suppressions never clear diagnostics; exclude
+   intentionally malformed fixtures with repository `.ignore` entries and
+   document the scope.
 
-3. **Group findings** by `rule_id`. Handle one rule at a time. Findings from
-   one rule usually share a false-positive pattern, so the first triage decision
-   often resolves the rest of that group.
+   `data.findings` is bounded. While `data.findings_summary.truncated` is
+   true, use `meta.toz.handle` with
+   `data.guide.truncated.findings.toz_read` or search that handle when
+   present. Otherwise re-run with `findingsOffset` =
+   `data.guide.truncated.findings.next_offset`, or pass `fullFindings: true`.
+   Triage every finding, never a truncated sample.
+2. **Group findings by `rule_id`** (`data.findings_summary.by_rule` gives the
+   counts) and handle one rule at a time; the first decision usually settles
+   its group.
+3. **Triage from the real code** at `location.file`:`location.span`, not from
+   `message` or `evidence`, which come from the rule template — especially for
+   `sql` rules that summarize several locations. Weigh:
+   - `certainty` (pattern rules) as a hint only: a high-certainty match can
+     still be a false positive when the pattern is too broad for the site.
+   - The rule's actual definition, from
+     `varde-code rules_list --json '{"repoRoot":"<repo>"}'`.
+   - Context the rule cannot see: a credential that is a test fixture, an
+     unused export that is a public re-export, a documented intentional cycle.
 
-4. **Triage each finding or group.** Read the actual code at
-   `location.file`:`location.span`, or the indicated line, with the Read tool.
-   Let the code decide, not `message` or `evidence`. Decide using:
-   - **`certainty`** (pattern rules only, `High`/`Medium`/`Low` if present). Treat
-     it as a hint, not a verdict. Read low-certainty findings closely. A
-     high-certainty finding can still be a false positive when its pattern is
-     too broad for the call site.
-   - **The rule's intent.** Run `varde-code rules_list --json '{"repoRoot":"<repo>"}'`
-     to inspect active patterns, SQL, thresholds, languages, and guidance.
-     Listings include overrides and provenance. Judge the actual definition.
-   - **Context the rule cannot see.** Examples include a hardcoded credential
-     that is a test fixture, an unused export that is a public re-export, or a
-     circular import documented as intentional. Human review supplies this
-     context.
-   - If you remain unsure, ask the user. Do not guess. Both false positives and
-     missed bugs are costly.
+   A finding is not real only when the flagged code is not the problem the rule
+   describes; a difficult fix is still a fix. Approximate clone bands and the
+   persisted dependency graph are navigation signals: inspect their evidence
+   before inferring a defect.
+4. **Record each verdict as you go:** rule id, file:line, verdict, one-line
+   reason.
+5. **Fix.** Before using `scan --apply`, inspect and record a verdict for every
+   rewrite-bearing finding from every loaded rule in the complete scan;
+   `--apply` runs rewrite handling for every unsuppressed match of every
+   rewrite rule in the run, regardless of `severityThreshold`. Suppress
+   not-real findings with a reason (Suppressions section). Use `--apply` only
+   when you intend to apply every remaining real rewrite finding; otherwise
+   hand-edit selected findings in the file's style, using
+   `data.rules.<rule_id>.remediation` as guidance.
+   `--apply` skips modified, staged, or untracked files as `skipped-dirty`
+   unless `--force`; suppression edits can make their files dirty. Tell the
+   user when files are skipped, and use `--force` only with approval.
+6. **Verify.** Re-run the scan: addressed findings are gone and nothing new
+   appeared. Run the project's test or build command.
+7. **Report every finding from step 1:** fixed ones with rule id and
+   file:line, not-real ones with their reason, and anything left for the user.
+   Persist each real or undecided finding left for the user in the standing
+   review at `<working>/reviews/deferred/`. Create or update its `review.md`
+   using `references/report-format.md`, with a SCAN category marked complete,
+   and append findings to SCAN.md with the next unused `SCAN-NNN` ID. Include
+   the scan finding's `id` in its Summary. Check existing SCAN findings for
+   that same scan finding id before appending; update its evidence instead of
+   making a duplicate on a repeat scan. If no id is present, match rule id,
+   full location span, and the message resolved below. Do not persist findings
+   already fixed or judged not-real.
 
-5. **Record every classification as you go.** Keep a short list with rule id,
-   file:line, verdict, and one-line reason. Include "not a real issue" verdicts.
+   Map `data.findings[].severity` error→high, warning→medium, info→info;
+   use `Label: triage`, `Disposition: blank`, and `Location` from
+   `location.file` plus `location.span.start_line` when present. Put the rule
+   id and message in `Summary`, using `data.findings[].message` when present
+   (interpolated) or `data.rules[rule_id].message` otherwise (static), along
+   with the reason it remains for the user. In `Solutions`, use
+   `data.rules.<rule_id>.remediation` when it describes a concrete fix;
+   otherwise name the fix found during triage.
+   Preserve enough rule and location detail to distinguish findings when a
+   single rule reports more than one issue in one file.
+8. **Record lessons.** Record real obstacles through `varde-learn` and durable
+   decisions through `varde-knowledge`; otherwise skip.
 
-6. **Fix the real findings.**
-   - If the rule sets `rewrite` and the match is straightforward, prefer
-     `varde-code scan --apply --json '{"repoRoot":"<repo>"}'` for that rule's
-     findings. It applies the same transform consistently and requires a clean
-     git tree. Add `--force` only when the user explicitly approves overriding
-     that check, and say so.
-   - Otherwise fix the code by hand with Edit. Use
-     `agent_instructions`/`remediation` as guidance, not as text to paste.
-     Verify that the fix addresses the flagged code.
-   - Group fixes for the same rule. Re-read surrounding code before editing so
-     each fix matches the file's existing style.
+## Suppressions
 
-7. **Verify.** Re-run `varde-code scan --json '{"repoRoot":"<repo>"}'` after fixes and confirm the addressed findings are gone and nothing new was introduced. If the project has a test/build command (check `AGENTS.md`/`CLAUDE.md`), run it to confirm the fixes didn't break anything.
-
-8. **Report every scan finding.** Include fixed findings with rule id and
-   file:line, findings judged not real issues with the reason from step 5, and
-   anything left for the user to decide. Every finding from step 2 must appear.
-
-### Gotchas
-
-- All 21 extraction languages have certified complexity profiles.
-  Syntax rules cover only their declared languages.
-  `solid-lsp` and `solid-isp` remain informational. `fat-interface`,
-  `too-many-interfaces`, and `deep-inheritance` are error rules. Exact clone
-  and certified dependency rules are enforceable errors. Approximate clone
-  bands and the persisted dependency graph remain navigation signals.
-  Inspect their evidence before inferring defects or changing architecture.
-- For justified exceptions, use parser-recognized suppression comments.
-  `varde-ignore-next-line rule-id -- reason` suppresses the next line.
-  `varde-ignore-file rule-id -- reason` suppresses that file.
-  Omitted identifiers suppress all rules in that scope.
-  Suppressions remove findings before gating, never analysis diagnostics.
-- `scan --apply` only touches findings whose rule has a `rewrite` template.
-  Applied findings receive `rewrite_status`; skipped rewrites remain unresolved.
-  Incomplete scans skip all rewrites. Rerun after repairing diagnostics.
-- `scan --apply` refuses files with uncommitted changes unless `--force` is
-  passed. Tell the user about this safety gate. Do not use `--force` by default.
-- A finding's `evidence` and `message` come from the rule template. They do not
-  prove correctness. Read the real code before deciding real or false positive,
-  especially for `sql` rules summarizing multiple locations.
-- If one rule repeatedly produces the same not-real-issue pattern, tighten the
-  rule. See **Author a scan rule**. Tell the user instead of repeating the same
-  judgment for every finding.
-- Classify a finding as not real only when the flagged code is not the problem
-  the rule describes. A difficult fix is still a fix.
-
-## Author a scan rule
-
-Develop the rule with the user. Do not generate it silently. Ask the user to
-confirm thresholds, severity, and pattern shape.
-
-### Workflow
-
-1. **Understand the check.** Ask what the user wants flagged. Get concrete
-   examples of code that SHOULD and should NOT match. Vague requests such as
-   "catch bad error handling" need before-and-after examples first.
-
-2. **Choose the rule kind.** Read `references/scan-rule-format.md` "Choosing
-   pattern vs sql" for the decision criteria. Summary:
-   - **`pattern`** — the check is a syntactic shape in one file/AST node (a specific call, a specific declaration form, a specific literal assignment). Runs per-file at scan time via the ast-grep-style matcher.
-   - **`sql`** — the check is about aggregates, thresholds, or relationships across the persisted index (complexity, churn, fan-in/out, import graphs, cross-file joins). Runs as a read-only query against the built DB.
-   - If the request needs both a structural shape and a cross-file relationship,
-     prefer `sql` joining `entities`/`resolved_edges`. SQL has the full graph;
-     the pattern engine sees one file at a time.
-
-3. **For `pattern` rules**, draft the `pattern` string and `languages` list.
-   Read `references/scan-rule-format.md` "Pattern syntax" for
-   `$VAR`/`$$$VAR` captures, `constraints` regexes, and the optional `rewrite`
-   template. Use
-   `crates/varde-code/src/rules/builtin/hardcoded_credential_literal.toml` as
-   the multi-pattern, multi-constraint example.
-
-4. **For `sql` rules**, identify the tables and columns needed. Read
-   `references/scan-rule-format.md` "SQL surface" for the schema, integer kind
-   codes, and query conventions. The SELECT needs `file` and `line` columns;
-   `:threshold_name` binds to `thresholds` or `strings`. Use
-   `crates/varde-code/src/rules/builtin/complexity.toml` for aggregation and
-   `circular_import.toml` for self-joins.
-
-5. **Fill in every required and relevant optional field.** Read
-   `references/scan-rule-format.md` "Rule fields" for types and semantics.
-   Required fields are `id`, `kind`, `severity`, and `message`. Recommended
-   fields are `name`, `description`, and `remediation`. Confirm `severity`
-   (`error`/`warning`/`info`) and `thresholds`/`strings` defaults with the user.
-   These values are the usual repo or user override settings.
-
-6. **Write `[[rule.test]]` self-tests.** Add at least one positive and one
-   negative case to every rule. Read `references/scan-rule-format.md` "Test
-   entries" for each kind. Pattern rules use `valid`/`invalid` snippets and
-   `expect_rewrite` when `rewrite` is set. SQL rules use an inline
-   `[rule.test.fixture]` file tree and `expect_rows`.
-   Verify positive and negative cases separately for every declared language.
-   The standard runner unions matches across languages; one passing
-   multi-language test does not certify every grammar.
-
-7. **Pick the target file and scope.**
-   - For a new standalone rule, use one file: either
-     `<repo_root>/.varde-code/rules/<id>.toml` for this repository, or
-     `~/.config/varde-code/rules/<id>.toml` for every repository. Ask when the
-     scope is unclear. Default to repository scope for this codebase's rules.
-   - To customize a seeded built-in, first run
-     `varde-code rules_seed --json '{"repoRoot":"<repo>"}'`. This writes
-     editable copies into `.varde-code/rules/`. Edit the seeded file in place,
-     keeping its `id`. A matching repo or user file silently overrides the
-     embedded built-in. No separate override mechanism exists.
-
-8. **Validate.**
-   ```bash
-   varde-code test --json '{"rulesDir":"<dir-containing-the-toml>"}'
-   ```
-   This exits non-zero for any failing `[[rule.test]]` case. Fix failures and rerun
-   until clean. Then confirm that the rule loads with the expected provenance:
-   ```bash
-   varde-code rules_list --json '{"repoRoot":"<repo_root>"}'
-   ```
-   Check the new or edited rule's `"source"` field (`custom`, `override`, or
-   `builtin`) against the expected scope.
-
-9. **Dry-run against real code.** For `sql` rules, this is optional but
-   recommended. Run `varde-code scan --json '{"repoRoot":"<repo>"}'`.
-   The scan refreshes its index automatically. Check for false positives
-   in this repository and confirm the rule catches the cases from step 1.
-
-### Gotchas
-
-- `pattern` rules are language-agnostic by default. They match every file whose
-  parse succeeds. Set `languages` for language-specific rules. Otherwise a
-  JavaScript-shaped pattern silently does nothing on Python files.
-- Regex `constraints` use Rust `regex`. Lookaheads and lookbehinds are not
-  supported. Anchor with `^...$` for whole-capture matches. See the
-  credential-literal built-in comments for the false-positive risk.
-- SQL rule queries must alias `file` as the source path and `line` as a
-  one-based line number in the SELECT. `Finding` rendering reads these aliases.
-  Use `1 AS line` when the check has no natural line.
-- `thresholds` and `strings` keys bind as named SQL parameters such as `:key`.
-  An unused declared key is dead. A `:name` without a matching declaration
-  fails at scan time, not load time.
-- `fix` and `rewrite` differ. `fix` is informational remediation text. A
-  `rewrite` is a live meta-variable template applied by `scan --apply` for
-  pattern rules. Set it only for safe automatic fixes. Every `$VAR` in it must
-  appear in `pattern`; otherwise the loader rejects the rule.
-- One rule pack can contain multiple `[[rule]]` entries. Group closely related
-  checks, such as assignment and declaration forms, in one file. Follow the
-  built-in pack convention.
+For a justified exception, use a parser-recognized comment:
+`varde-ignore-next-line rule-id -- reason` or
+`varde-ignore-file rule-id -- reason`. Omitting the id suppresses every rule in
+that scope. Suppressions remove findings before gating.

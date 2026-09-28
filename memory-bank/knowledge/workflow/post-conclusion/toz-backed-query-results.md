@@ -1,0 +1,15 @@
+---
+actions:
+  friction: completed
+  handoff: completed
+  reflection: completed
+attempts: 0
+outputs:
+- working/friction/find-pattern-full-toz-capture-latency.md
+- memory-bank/knowledge/decision/find-pattern-toz-preview.md
+plan: toz-backed-query-results
+status: completed
+type: reference
+---
+
+Post-conclusion enrichment remains retryable.

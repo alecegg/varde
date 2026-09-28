@@ -5,12 +5,9 @@ generated: { by: codex/gpt-5.6, at: 2026-09-20T21:13:25Z }
 paths:
   - .github/workflows/skills-benchmarks.yml
   - skills/tests/benchmark-foundation.sh
-  - skills/varde-agent-doc-authoring/scripts/run-output-evals.sh
-  - skills/varde-agent-doc-authoring/scripts/run-changed-output-evals.sh
-  - skills/varde-change/scripts/audit-word-counts.py
-  - skills/tests/word-count-audit.sh
-  - skills/benchmarks/lifecycle-scenarios.json
-  - skills/benchmarks/validate-lifecycle-scenarios.sh
+  - clis/learn/crates/varde-learn
+  - tools/audit-word-counts.py
+  - tests/word-count-audit-test.sh
 schema_version: 1
 artifact_type: reference
 id: legacy-93882a9c500702a5
@@ -30,7 +27,7 @@ Run `cd skills && tests/benchmark-foundation.sh` during ordinary CI.
 GitHub runs it for skill pull requests and pushes.
 
 Evidence is the command's exit status and fixture output.
-Fixtures cover efficiency aggregation, changed-skill selection, and catalog validation.
+Fixtures cover efficiency aggregation and changed-skill selection.
 
 These checks use mocks and validate stable contracts.
 They do not measure real agent quality.
@@ -48,14 +45,19 @@ Compare runtime quality after deterministic fixtures pass.
 
 ## Changed-skill release
 
-Before releases, run this from the repository root:
+Before releases, find skills changed since a base ref and run each by hand;
+there is no changed-skills wrapper:
 
 ```bash
-skills/varde-agent-doc-authoring/scripts/run-changed-output-evals.sh \
-  --base <release-base> --head HEAD
+git diff --name-only <release-base> HEAD -- skills | cut -d/ -f2 | sort -u
 ```
 
-Only changed skills containing both required files qualify.
+For each name with both required files, run:
+
+```bash
+varde-learn eval output skills/<name>
+```
+
 Those files are `SKILL.md` and `evals/evals.json`.
 
 Evidence lives under `<skill-dir>-workspace/iteration-<N>` by default.
@@ -72,24 +74,57 @@ Fixture observed transcript variants before widening matchers.
 
 ## Major-release lifecycle
 
-Before major releases, validate the scenario catalog:
+Before major releases, run each scenario by hand in a disposable repository
+with the skills and CLIs under evaluation installed. Save transcripts and
+harness usage beside each scenario's evidence so releases stay comparable.
 
-```bash
-skills/benchmarks/validate-lifecycle-scenarios.sh \
-  skills/benchmarks/lifecycle-scenarios.json
-```
+### `plan-build-verify`: Plan, build, and verify a bounded change
 
-Then manually execute every cataloged scenario.
-Capture artifacts under each declared `evidence_paths` entry.
-Capture harness usage under each declared token evidence path.
+Setup:
+- Prepare a disposable repository containing one bounded change request.
+- Install the Varde skills and workflow CLI under evaluation.
 
-Current identifiers include `plan-build-verify` and `review-fix-verify`.
-They also include `knowledge-record-recall`.
-The catalog defines observable assertions and required evidence.
+Actions:
+1. Create and finalize a plan with acceptance criteria.
+2. Decompose the plan and execute every ready task sequentially.
+3. Review the aggregate changes and verify every acceptance criterion.
 
-Validation checks catalog structure only.
-No automated lifecycle runner currently executes these scenarios.
-External-system comparisons wait until Varde fixtures stabilize.
+Check:
+- [ ] The finalized plan records explicit scope and acceptance criteria.
+- [ ] Every task reaches done with verification evidence.
+- [ ] The completed plan records verified acceptance criteria.
+
+### `review-fix-verify`: Review, fix, and verify a seeded defect
+
+Setup:
+- Prepare a disposable repository containing one observable seeded defect.
+- Capture the expected defect and regression check independently.
+
+Actions:
+1. Run a report-only review against the seeded change.
+2. Apply the accepted finding through the review fix workflow.
+3. Run the independent regression check.
+
+Check:
+- [ ] The review reports the seeded defect with concrete evidence.
+- [ ] The fix changes only files required by the finding.
+- [ ] The independent regression check passes afterward.
+
+### `knowledge-record-recall`: Record and recall durable project knowledge
+
+Setup:
+- Prepare a disposable repository with one documented project decision.
+- Remove that decision from the active conversation context.
+
+Actions:
+1. Record the decision through the knowledge workflow.
+2. Start a fresh agent context.
+3. Ask the agent to retrieve and apply the decision.
+
+Check:
+- [ ] The knowledge note preserves the decision and its rationale.
+- [ ] The fresh context locates the correct knowledge note.
+- [ ] The resulting recommendation follows the recorded decision.
 
 ## Related
 

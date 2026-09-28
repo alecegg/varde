@@ -27,10 +27,22 @@ Promotion candidates require accepted status and provenance.
 Required fields include source plan and source review.
 Disposition, staleness, and resolution remain searchable afterward.
 
-Conclusion validates every prerequisite before staging writes.
+Conclusion validates dependency and review prerequisites before staging writes.
+When review is required, current independent implementation evidence must cover
+the complete subject change. A missing or stale record rejects before
+promotions or plan status are written.
 It then journals contracts, promotions, records, and plan status.
-Recovery finishes staged or partially committed writes exactly once.
+The journal retains consumed review and source revisions. Recovery validates
+untouched prerequisites and finishes staged or partially committed writes
+exactly once; changed prerequisites remain a conflict for diagnosis.
 
 Reflection, friction, and handoff follow mechanical conclusion.
 Their state remains visible and independently retryable.
 Action outputs deduplicate during idempotent status recording.
+
+Group plans retain aggregate scope, child dependency/contract evidence and
+acceptance criteria. Their own independent pre-edit and combined implementation
+reviews augment child gates; active groups resume without repeated activation.
+All child completion and aggregate checks precede group conclusion. Active
+worktree bindings block parent completion. Separate archived worker evidence
+and integrated source contribute to the current aggregate fingerprint.

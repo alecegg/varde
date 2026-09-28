@@ -4,19 +4,33 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 SUPPORTED_AGENTS="claude codex opencode"
-RETIRED_SKILLS="varde-build varde-code-codebase-navigation varde-code-rule-authoring varde-code-rule-scan-triage varde-dashboard varde-explain varde-friction varde-friction-distillation varde-handoff varde-orchestrate varde-plan varde-reflect varde-review-fix varde-simplify varde-spec varde-worktree"
 
 usage() {
   cat <<'EOF'
-Usage: varde init [--agents ids] [--yes] [--dry-run] [--list-agents] [-h]
+Usage: varde sync [--agents ids] [--yes] [--dry-run] [--no-cli] [--list-agents]
+                   [--skills-dir path]...
+                   [--agents-dir path --agent-format <claude|codex|opencode>]...
+                   [-h]
 
-Wire varde skills and agents into supported agent harnesses.
+Install varde CLIs and wire skills and agents into supported agent harnesses.
 
-  --agents ids  Comma-separated harness ids: claude, codex, opencode
-  --yes         Install every detected harness without prompting
-  --dry-run     Show files that would be installed without writing
-  --list-agents List supported harness ids
-  -h            Show this help
+  --agents ids     Comma-separated harness ids: claude, codex, opencode
+  --yes            Install every detected harness without prompting
+  --dry-run        Show files that would be installed without writing
+  --no-cli         Skip installing varde-code, varde-workflow, varde-toz, and varde-learn
+  --list-agents    List supported harness ids
+  --skills-dir     Link skills into this directory in addition to (or,
+                    with --agents omitted, instead of) detected harnesses.
+                    Skills are linked from ~/.agents/skills.
+                    Repeatable. Not persisted between runs.
+  --agents-dir     Install agents into this directory. Must be followed by
+                    --agent-format. Repeatable.
+  --agent-format   Agent file format for the preceding --agents-dir:
+                    claude, codex, or opencode.
+  -h               Show this help
+
+Example (pi harness, which has no built-in detection):
+  varde sync --skills-dir ~/.pi/agent/skills
 EOF
 }
 
@@ -45,25 +59,76 @@ detected_agents() {
   [ -d "$HOME/.config/opencode" ] && printf '%s\n' opencode
 }
 
-unmarked_legacy_count() {
-  count=0
-  for selected_agent in $SELECTED; do
-    selected_target=$(skills_dir "$selected_agent")
-    for retired_skill in $RETIRED_SKILLS; do
-      retired_dir="$selected_target/$retired_skill"
-      [ -d "$retired_dir" ] || continue
-      if [ -f "$retired_dir/.varde-managed-skill" ] &&
-        grep -Fxq 'varde-managed-skill' "$retired_dir/.varde-managed-skill"; then
-        continue
-      fi
-      count=$((count + 1))
-    done
+toz_harness_for() {
+  case "$1" in
+    claude) printf '%s\n' "claude-code" ;;
+    codex) printf '%s\n' "codex" ;;
+    opencode) printf '%s\n' "opencode" ;;
+  esac
+}
+
+cargo_install_root() {
+  if [ -n "${CARGO_INSTALL_ROOT:-}" ]; then
+    printf '%s\n' "$CARGO_INSTALL_ROOT"
+    return
+  fi
+  cargo_home=${CARGO_HOME:-$HOME/.cargo}
+  config_dir=$1
+  while [ ! -f "$config_dir/.cargo/config.toml" ] && [ ! -f "$config_dir/.cargo/config" ]; do
+    [ "$config_dir" != / ] || break
+    config_dir=$(dirname "$config_dir")
   done
-  printf '%s\n' "$count"
+  if [ ! -f "$config_dir/.cargo/config.toml" ] && [ ! -f "$config_dir/.cargo/config" ] &&
+    [ ! -f "$cargo_home/config.toml" ] && [ ! -f "$cargo_home/config" ]; then
+    printf '%s\n' "$cargo_home"
+    return
+  fi
+  python3 - "$1" "$cargo_home" <<'PY'
+import ast
+import pathlib
+import re
+import sys
+
+package_dir, cargo_home = map(pathlib.Path, sys.argv[1:])
+configs = []
+for directory in (package_dir, *package_dir.parents):
+    configs.extend((directory / ".cargo" / "config.toml", directory / ".cargo" / "config"))
+configs.extend((cargo_home / "config.toml", cargo_home / "config"))
+
+for config in configs:
+    if not config.is_file():
+        continue
+    text = config.read_text()
+    try:
+        import tomllib
+        root = tomllib.loads(text).get("install", {}).get("root")
+    except ModuleNotFoundError:
+        section = ""
+        root = None
+        for line in text.splitlines():
+            header = re.match(r"^\s*\[([^]]+)\]", line)
+            if header:
+                section = header.group(1).strip()
+                continue
+            match = re.match(
+                r"^\s*(install\.root|root)\s*=\s*((?:\"(?:\\.|[^\"])*\"|'[^']*'))",
+                line,
+            )
+            if match and ((match.group(1) == "install.root" and not section)
+                          or (match.group(1) == "root" and section == "install")):
+                root = ast.literal_eval(match.group(2))
+                break
+    if root:
+        path = pathlib.Path(root)
+        print(path if path.is_absolute() else (config.parent.parent / path).resolve())
+        break
+else:
+    print(cargo_home)
+PY
 }
 
 COMMAND=${1:-}
-[ "$COMMAND" = init ] || {
+[ "$COMMAND" = sync ] || {
   usage >&2
   exit 1
 }
@@ -72,6 +137,10 @@ shift
 AGENTS=""
 ASSUME_YES=0
 DRY_RUN=0
+NO_CLI=0
+CUSTOM_SKILLS_DIRS=""
+CUSTOM_AGENTS_PAIRS=""
+PENDING_AGENTS_DIR=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -82,27 +151,62 @@ while [ "$#" -gt 0 ]; do
       ;;
     --yes) ASSUME_YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --no-cli) NO_CLI=1; shift ;;
     --list-agents) list_agents; exit 0 ;;
+    --skills-dir)
+      [ "$#" -ge 2 ] || { echo "--skills-dir requires a value" >&2; exit 1; }
+      CUSTOM_SKILLS_DIRS="${CUSTOM_SKILLS_DIRS}${2}
+"
+      shift 2
+      ;;
+    --agents-dir)
+      [ "$#" -ge 2 ] || { echo "--agents-dir requires a value" >&2; exit 1; }
+      [ -z "$PENDING_AGENTS_DIR" ] ||
+        { echo "--agents-dir requires --agent-format before the next --agents-dir" >&2; exit 1; }
+      PENDING_AGENTS_DIR=$2
+      shift 2
+      ;;
+    --agent-format)
+      [ "$#" -ge 2 ] || { echo "--agent-format requires a value" >&2; exit 1; }
+      [ -n "$PENDING_AGENTS_DIR" ] ||
+        { echo "--agent-format requires a preceding --agents-dir" >&2; exit 1; }
+      is_known_agent "$2" || {
+        echo "Unknown --agent-format: $2 (expected $(printf '%s|' $SUPPORTED_AGENTS | sed 's/|$//'))" >&2
+        exit 1
+      }
+      CUSTOM_AGENTS_PAIRS="${CUSTOM_AGENTS_PAIRS}${PENDING_AGENTS_DIR}	${2}
+"
+      PENDING_AGENTS_DIR=""
+      shift 2
+      ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
 
-if [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ] && [ "$DRY_RUN" -eq 0 ] &&
-  [ ! -t 0 ]; then
-  echo "No terminal is available. Run: varde init --yes"
-  exit 0
+[ -z "$PENDING_AGENTS_DIR" ] ||
+  { echo "--agents-dir requires --agent-format" >&2; exit 1; }
+
+HAS_CUSTOM=0
+[ -z "$CUSTOM_SKILLS_DIRS" ] && [ -z "$CUSTOM_AGENTS_PAIRS" ] || HAS_CUSTOM=1
+
+if [ -z "$AGENTS" ] && [ "$HAS_CUSTOM" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ] &&
+  [ "$DRY_RUN" -eq 0 ] && [ ! -t 0 ]; then
+  echo "No terminal is available. Run: varde sync --yes"
+  exit 1
 fi
 
 if [ -n "$AGENTS" ]; then
   SELECTED=$(printf '%s' "$AGENTS" | tr ',' '\n')
+elif [ "$HAS_CUSTOM" -eq 1 ]; then
+  SELECTED=""
 else
   SELECTED=$(detected_agents || true)
 fi
 
-if [ -z "$SELECTED" ]; then
+if [ -z "$SELECTED" ] && [ "$HAS_CUSTOM" -eq 0 ]; then
   echo "No supported harness configuration was detected."
-  exit 0
+  exit 1
 fi
 
 for agent in $SELECTED; do
@@ -112,7 +216,9 @@ for agent in $SELECTED; do
   }
 done
 
-if [ "$DRY_RUN" -eq 0 ] && [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ]; then
+CANONICAL_SKILLS_DIR="$HOME/.agents/skills"
+
+if [ "$DRY_RUN" -eq 0 ] && [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ] && [ -n "$SELECTED" ]; then
   printf 'Install varde for detected harnesses (%s)? [y/N] ' "$(printf '%s ' $SELECTED)"
   read reply
   case "$reply" in
@@ -121,34 +227,144 @@ if [ "$DRY_RUN" -eq 0 ] && [ -z "$AGENTS" ] && [ "$ASSUME_YES" -eq 0 ]; then
   esac
 fi
 
-LEGACY_APPROVED=0
-if [ "$DRY_RUN" -eq 0 ] && [ "$ASSUME_YES" -eq 0 ]; then
-  LEGACY_COUNT=$(unmarked_legacy_count)
-  if [ "$LEGACY_COUNT" -gt 0 ]; then
-    printf 'Remove %s unmarked legacy skill directories? [y/N] ' "$LEGACY_COUNT"
-    legacy_reply=""
-    read -r legacy_reply || true
-    case "$legacy_reply" in
-      [yY]|[yY][eE][sS]) LEGACY_APPROVED=1 ;;
+if [ "$NO_CLI" -eq 0 ]; then
+  if [ "$DRY_RUN" -eq 0 ] && ! command -v cargo >/dev/null 2>&1; then
+    echo "cargo not found; install Rust (https://rustup.rs) or rerun with --no-cli" >&2
+    exit 1
+  fi
+  for cli in varde-code varde-workflow varde-toz varde-learn; do
+    case "$cli" in
+      varde-code) cli_path=clis/code/crates/varde-code; cli_target=clis/code/target ;;
+      varde-workflow) cli_path=clis/workflow/varde-workflow; cli_target=clis/workflow/target ;;
+      varde-toz) cli_path=clis/toz/crates/toz; cli_target=clis/toz/target ;;
+      varde-learn) cli_path=clis/learn/crates/varde-learn; cli_target=clis/learn/target ;;
     esac
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "would run: cargo install --path $ROOT_DIR/$cli_path --locked --target-dir $ROOT_DIR/$cli_target"
+    else
+      install_root=$(cargo_install_root "$ROOT_DIR/$cli_path")
+      cargo install --path "$ROOT_DIR/$cli_path" --locked --target-dir "$ROOT_DIR/$cli_target"
+      installed_cli="$install_root/bin/$cli"
+      selected_cli=$(command -v "$cli" || true)
+      resolved_installed=$(realpath "$installed_cli" 2>/dev/null || true)
+      resolved_selected=$(realpath "$selected_cli" 2>/dev/null || true)
+      if [ -z "$resolved_installed" ] || [ "$resolved_selected" != "$resolved_installed" ]; then
+        echo "$cli was installed at $installed_cli, but PATH selects ${selected_cli:-no executable}." >&2
+        echo "Put $(dirname "$installed_cli") before other bin directories on PATH, or remove the older $cli executable." >&2
+        exit 1
+      fi
+    fi
+  done
+fi
+
+if [ -n "$SELECTED" ] || [ -n "$CUSTOM_SKILLS_DIRS" ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    "$ROOT_DIR/skills/install.sh" -d "$CANONICAL_SKILLS_DIR" -m -n
+  else
+    "$ROOT_DIR/skills/install.sh" -d "$CANONICAL_SKILLS_DIR" -m
+  fi
+fi
+
+HAVE_TOZ=0
+TOZ_CLI=varde-toz
+if command -v varde-toz >/dev/null 2>&1; then
+  HAVE_TOZ=1
+elif command -v toz >/dev/null 2>&1; then
+  TOZ_CLI=toz
+  HAVE_TOZ=1
+fi
+TOZ_WARNED=0
+
+if command -v varde-workflow >/dev/null 2>&1; then
+  DEFAULT_TOZ_STORE="${XDG_CONFIG_HOME:-$HOME/.config}/varde-toz"
+  LEGACY_TOZ_STORE="${XDG_CONFIG_HOME:-$HOME/.config}/tool-output-zone"
+  # Reuse existing captures until the user explicitly migrates the store.
+  if [ -d "$LEGACY_TOZ_STORE" ] && ! [ "$LEGACY_TOZ_STORE" -ef "$DEFAULT_TOZ_STORE" ]; then
+    DEFAULT_TOZ_STORE="$LEGACY_TOZ_STORE"
+  fi
+  PATHS_STATUS=0
+  PATHS_JSON=$(varde-workflow paths --json 2>/dev/null) || PATHS_STATUS=$?
+  if [ "$PATHS_STATUS" -ne 0 ]; then
+    echo "could not read varde paths; skipping default toz store"
+  else
+    PARSE_STATUS=0
+    CURRENT_TOZ_STORE=$(printf '%s' "$PATHS_JSON" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+v = d.get("data", {}).get("toz")
+print(v or "")' 2>/dev/null) || PARSE_STATUS=$?
+    if [ "$PARSE_STATUS" -ne 0 ]; then
+      echo "could not read varde paths; skipping default toz store"
+    elif [ -z "$CURRENT_TOZ_STORE" ]; then
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo "would run: varde-workflow paths set --default --toz $DEFAULT_TOZ_STORE"
+      else
+        if ! varde-workflow paths set --default --toz "$DEFAULT_TOZ_STORE" >/dev/null 2>&1; then
+          echo "could not set default toz store; run: varde-workflow paths set --default --toz $DEFAULT_TOZ_STORE"
+        fi
+      fi
+    fi
   fi
 fi
 
 for agent in $SELECTED; do
   skill_target=$(skills_dir "$agent")
   if [ "$DRY_RUN" -eq 1 ]; then
-    if [ "$ASSUME_YES" -eq 1 ]; then
-      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f -n --yes
-    else
-      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f -n
-    fi
+    "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m -n
     "$ROOT_DIR/agents/install.sh" -t "$agent" -m -n
   else
-    if [ "$ASSUME_YES" -eq 1 ] || [ "$LEGACY_APPROVED" -eq 1 ]; then
-      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f --yes
-    else
-      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -f --preserve-legacy
-    fi
+    "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m
     "$ROOT_DIR/agents/install.sh" -t "$agent" -m
   fi
+
+  toz_harness=$(toz_harness_for "$agent")
+  if [ "$HAVE_TOZ" -eq 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "would run: $TOZ_CLI install $toz_harness"
+    else
+      "$TOZ_CLI" install "$toz_harness"
+    fi
+  elif [ "$TOZ_WARNED" -eq 0 ]; then
+    echo "varde-toz not found; install it with: cargo install --path $ROOT_DIR/clis/toz/crates/toz --locked"
+    TOZ_WARNED=1
+  fi
 done
+
+if [ -n "$CUSTOM_SKILLS_DIRS" ]; then
+  printf '%s' "$CUSTOM_SKILLS_DIRS" | while IFS= read -r skill_target; do
+    [ -n "$skill_target" ] || continue
+    [ "$skill_target" != "$CANONICAL_SKILLS_DIR" ] || continue
+    if [ "$DRY_RUN" -eq 1 ]; then
+      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m -n
+    else
+      "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m
+    fi
+  done
+fi
+
+if [ -n "$CUSTOM_AGENTS_PAIRS" ]; then
+  printf '%s' "$CUSTOM_AGENTS_PAIRS" | while IFS="$(printf '\t')" read -r agents_target agent_format; do
+    [ -n "$agents_target" ] || continue
+    if [ "$DRY_RUN" -eq 1 ]; then
+      "$ROOT_DIR/agents/install.sh" -t "$agent_format" -d "$agents_target" -m -n
+    else
+      "$ROOT_DIR/agents/install.sh" -t "$agent_format" -d "$agents_target" -m
+    fi
+  done
+fi
+
+if [ "$NO_CLI" -eq 1 ]; then
+  for cli in varde-code varde-workflow varde-learn; do
+    if ! command -v "$cli" >/dev/null 2>&1; then
+      case "$cli" in
+        varde-code) cli_path=clis/code/crates/varde-code; cli_target=clis/code/target ;;
+        varde-workflow) cli_path=clis/workflow/varde-workflow; cli_target=clis/workflow/target ;;
+        varde-learn) cli_path=clis/learn/crates/varde-learn; cli_target=clis/learn/target ;;
+      esac
+      echo "$cli not found; install it with: cargo install --path $ROOT_DIR/$cli_path --locked --target-dir $ROOT_DIR/$cli_target"
+    fi
+  done
+fi

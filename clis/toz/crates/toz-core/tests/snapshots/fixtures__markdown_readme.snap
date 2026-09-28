@@ -1,0 +1,14 @@
+---
+source: crates/toz-core/tests/fixtures.rs
+expression: outline(text)
+---
+strategy: Markdown
+chunks: 8
+  0  L1-L17  prose  htmd > Features
+  1  L18-L44  code   Usages > Skip tags
+  2  L45-L58  code   Usages > Options
+  3  L59-L69  code   Usages > Custom tag handlers
+  4  L70-L106  prose  Usages > Tables
+  5  L107-L123  code   Usages > Multithreading
+  6  L124-L133  code   Bindings
+  7  L134-L150  prose  License

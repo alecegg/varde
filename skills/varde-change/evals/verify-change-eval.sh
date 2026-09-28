@@ -9,6 +9,21 @@ verdict() {
   fi
 }
 
+# Builds one {assertion, verdict, evidence} object.
+emit() {
+  jq -n --arg a "$1" --arg v "$2" --arg e "$3" '{assertion:$a, verdict:$v, evidence:$e}'
+}
+
+# Combines emit() outputs (one per argument) into {"results":[...]}.
+# With no arguments, emits an empty result set.
+emit_results() {
+  if [[ $# -eq 0 ]]; then
+    printf '{"results":[]}'
+    return
+  fi
+  printf '%s\n' "$@" | jq -s '{results: .}'
+}
+
 one_plan_exists() {
   [[ "$(find memory-bank/working/plans -name plan.md -type f 2>/dev/null | wc -l | tr -d ' ')" == 1 ]]
 }
@@ -22,12 +37,8 @@ plan_has_seed_sections() {
     grep -Fq '## Acceptance criteria' "$plan_file"
 }
 
-path_is_clean() {
-  [[ -z "$(git status --porcelain -- "$1")" ]]
-}
-
 repository_artifacts_are_clean() {
-  path_is_clean memory-bank && path_is_clean src
+  unchanged_since_seed memory-bank && unchanged_since_seed src
 }
 
 all_tasks_done() {
@@ -47,87 +58,142 @@ all_criteria_checked() {
   ' "$plan_file"
 }
 
-first_line_matching() {
-  local pattern="$1"
-  local transcript="$2"
-  grep -Einm1 "$pattern" "$transcript" 2>/dev/null | cut -d: -f1 || true
+node_available() {
+  command -v node >/dev/null 2>&1
 }
 
-evidence_precedes_implementation() {
-  local transcript="$1"
-  local reproduction hypotheses experiments implementation
-  reproduction="$(first_line_matching 'reproduction:|reproduce|phase 1' "$transcript")"
-  hypotheses="$(first_line_matching 'hypotheses:' "$transcript")"
-  experiments="$(first_line_matching 'experiments:' "$transcript")"
-  implementation="$(first_line_matching 'implementation begins|implementing the fix|apply the fix|fix applied|phase 5' "$transcript")"
-  [[ -n "$reproduction" && -n "$hypotheses" && -n "$experiments" &&
-     -n "$implementation" &&
-     "$reproduction" -lt "$hypotheses" &&
-     "$hypotheses" -lt "$experiments" &&
-     "$experiments" -lt "$implementation" ]]
+# The setup script commits the fixture as the repository's root commit, so
+# "seeded" state stays comparable even if the agent commits its own work.
+seed_commit() {
+  git rev-list --max-parents=0 HEAD 2>/dev/null | tail -n1
 }
 
-evidence_follows_implementation() {
-  local transcript="$1"
-  local implementation cause verification
-  implementation="$(first_line_matching 'implementation begins|implementing the fix|apply the fix|fix applied|phase 5' "$transcript")"
-  cause="$(first_line_matching 'cause:' "$transcript")"
-  verification="$(first_line_matching 'verification:' "$transcript")"
-  [[ -n "$implementation" && -n "$cause" && -n "$verification" &&
-     "$implementation" -lt "$cause" &&
-     "$cause" -lt "$verification" ]]
+unchanged_since_seed() {
+  local seed
+  seed="$(seed_commit)"
+  [[ -n "$seed" ]] &&
+    git diff --quiet "$seed" -- "$1" &&
+    [[ -z "$(git ls-files --others --exclude-standard -- "$1")" ]]
+}
+
+files_changed_since_seed() {
+  local seed
+  seed="$(seed_commit)"
+  {
+    [[ -n "$seed" ]] && git diff --name-only "$seed"
+    git ls-files --others --exclude-standard
+  } | sort -u
+}
+
+# Runs the fixture's own `npm test` script (node --test) in a directory.
+node_tests_pass() {
+  (cd "$1" && node --test --test-timeout=30000 >/dev/null 2>&1)
+}
+
+retry_delay_is_exponential_with_jitter() {
+  node --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    const { retryDelay } = await import(pathToFileURL(process.argv[1]).href);
+    const mean = (attempt) => {
+      const values = Array.from({ length: 400 }, () => retryDelay(attempt));
+      if (!values.every((v) => Number.isFinite(v) && v >= 0)) process.exit(1);
+      return [values.reduce((a, b) => a + b, 0) / values.length, new Set(values).size];
+    };
+    const [m1] = mean(1);
+    const [m2, distinct] = mean(2);
+    const [m3] = mean(3);
+    process.exit(m2 > 1.4 * m1 && m3 > 1.4 * m2 && distinct > 1 ? 0 : 1);
+  ' "$PWD/src/queue/worker.mjs" >/dev/null 2>&1
+}
+
+cache_invalidation_is_fixed() {
+  node --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    const { createCache } = await import(pathToFileURL(process.argv[1]).href);
+    const cache = createCache();
+    cache.set("user:42", "old");
+    cache.set("user:7", "old");
+    cache.set("session:1", "keep");
+    cache.invalidate("user");
+    const namespace = cache.get("user:42") === undefined &&
+      cache.get("user:7") === undefined && cache.get("session:1") === "keep";
+    const exact = createCache();
+    exact.set("user:42", "old");
+    exact.set("user:7", "keep");
+    exact.invalidate("user:42");
+    const single = exact.get("user:42") === undefined && exact.get("user:7") === "keep";
+    process.exit(namespace && single ? 0 : 1);
+  ' "$PWD/src/cache.mjs" >/dev/null 2>&1
+}
+
+parser_returns_fixed() {
+  node --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    const { parse } = await import(pathToFileURL(process.argv[1]).href);
+    process.exit(parse("input") === "fixed" ? 0 : 1);
+  ' "$PWD/src/parser.mjs" >/dev/null 2>&1
+}
+
+# A regression test must be new or changed, pass now, and fail when the
+# seeded src/cache.mjs is restored in a scratch copy. Every step fails
+# closed: a sandbox-denied mktemp, a failed copy, or a failed git show
+# must not be mistaken for a passing regression test.
+regression_test_catches_bug() {
+  local seed scratch status
+  files_changed_since_seed | grep -Eq '^test/|\.test\.m?js$' || return 1
+  node_tests_pass . || return 1
+  seed="$(seed_commit)"
+  [[ -n "$seed" ]] || return 1
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/change-eval.XXXXXX")" || return 1
+  cp -R . "$scratch/repo" || { rm -rf "$scratch"; return 1; }
+  git show "$seed:src/cache.mjs" > "$scratch/repo/src/cache.mjs" || { rm -rf "$scratch"; return 1; }
+  status=0
+  node_tests_pass "$scratch/repo" && status=1
+  rm -rf "$scratch"
+  return "$status"
+}
+
+# Process/independence assertions deliberately fall through to the judge.
+# File contents and coordinator prose cannot prove a separate reviewer ran.
+policy_sources_unchanged() {
+  unchanged_since_seed src && unchanged_since_seed test
+}
+
+human_choice_is_persisted() {
+  one_plan_exists || return 1
+  local plan_file
+  plan_file="$(find memory-bank/working/plans -name plan.md -type f -print -quit)"
+  [[ "$(basename "$(dirname "$plan_file")")" == *-draft ]] || return 1
+  grep -Eq '^status:[[:space:]]*backlog[[:space:]]*$' "$plan_file" || return 1
+  awk '
+    NR == 1 && $0 == "---" {frontmatter=1; next}
+    frontmatter && $0 == "---" {frontmatter=0; next}
+    frontmatter && /^type:[[:space:]]*plan[[:space:]]*$/ {kind=1}
+    frontmatter && /^title:[[:space:]]*[^[:space:]]/ && $0 !~ /^title:[[:space:]]*""[[:space:]]*$/ {title=1}
+    END {exit(kind && title ? 0 : 1)}
+  ' "$plan_file" || return 1
+  plan_has_seed_sections || return 1
+  ! find memory-bank/working/plans -path '*/tasks/*' -type f -print -quit | grep -q . || return 1
+  awk '
+    /^## Open Questions/ {inside=1; next}
+    inside && /^## / {inside=0}
+    inside && tolower($0) ~ /account/ && tolower($0) ~ /ip/ && tolower($0) !~ /n\/a|^[[:space:]]*-[[:space:]]*resolved/ {found=1}
+    END {exit(found ? 0 : 1)}
+  ' "$plan_file"
 }
 
 case "$EVAL_ID" in
   1)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    routed="FAIL"
-    if grep -Eiq 'references/status\.md|status mode' "$transcript" 2>/dev/null; then
-      routed="PASS"
-    fi
-    disk="FAIL"
-    if grep -Fq '2026-09-18-active' "$transcript" 2>/dev/null &&
-       grep -Fq '2026-09-19-open' "$transcript" 2>/dev/null; then
-      disk="PASS"
-      routed="PASS"
-    fi
-    unchanged="$(verdict path_is_clean memory-bank)"
-    next_mode="FAIL"
-    if grep -Eiq 'recommended next mode.*(plan|build|orchestrate|verify)' \
-       "$transcript" 2>/dev/null; then
-      next_mode="PASS"
-    fi
-    jq -n --arg routed "$routed" --arg disk "$disk" \
-      --arg unchanged "$unchanged" --arg next_mode "$next_mode" '{results:[
-      {
-        assertion:"Routes to status mode without asking the user to choose a mode",
-        verdict:$routed,
-        evidence:(if $routed == "PASS" then "status output matches both seeded disk artifacts" else "status output omits seeded disk artifacts" end)
-      },
-      {
-        assertion:"Derives status from files on disk, not from conversation memory or inference",
-        verdict:$disk,
-        evidence:(if $disk == "PASS" then "transcript reports both seeded artifacts" else "transcript omits seeded disk artifacts" end)
-      },
-      {
-        assertion:"Leaves every plan, task, and handoff file byte-identical",
-        verdict:$unchanged,
-        evidence:(if $unchanged == "PASS" then "git status reports no memory-bank changes" else "git status reports memory-bank changes" end)
-      },
-      {
-        assertion:"Recommends exactly one next mode and stops there rather than running it",
-        verdict:$next_mode,
-        evidence:(if $next_mode == "PASS" then "transcript recommends one next mode" else "transcript does not recommend exactly one next mode" end)
-      }
-    ]}'
+    unchanged="$(verdict unchanged_since_seed memory-bank)"
+    evidence="memory-bank differs from the seed"
+    [[ "$unchanged" == PASS ]] && evidence="memory-bank matches the seed"
+    emit_results "$(emit "Leaves every plan, task, and handoff file byte-identical" "$unchanged" "$evidence")"
     ;;
   2)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    routed="FAIL"
-    if grep -Eiq 'references/plan\.md|plan mode' "$transcript" 2>/dev/null; then
-      routed="PASS"
-    fi
     seeded="$(verdict plan_has_seed_sections)"
+    seeded_evidence="plan.md is missing required seed sections"
+    [[ "$seeded" == PASS ]] && seeded_evidence="plan.md contains Problem, Solution, and Acceptance criteria"
+
     one_file="FAIL"
     if one_plan_exists &&
        [[ "$(find memory-bank/working/plans -type f 2>/dev/null | wc -l | tr -d ' ')" == 1 ]] &&
@@ -135,206 +201,94 @@ case "$EVAL_ID" in
        ! grep -Fq '## Tasks' "$(find memory-bank/working/plans -name plan.md -type f -print -quit)"; then
       one_file="PASS"
     fi
-    source_unchanged="$(verdict path_is_clean src)"
-    if [[ "$seeded" == "PASS" && "$one_file" == "PASS" &&
-          "$source_unchanged" == "PASS" ]]; then
-      routed="PASS"
-    fi
-    inline_menu="FAIL"
-    if grep -Eq '^[[:space:]]*1[.)][[:space:]]' "$transcript" 2>/dev/null &&
-       grep -Eiq 'recommendation:|my recommendation' "$transcript" 2>/dev/null; then
-      inline_menu="PASS"
-    fi
-    jq -n --arg routed "$routed" --arg seeded "$seeded" \
-      --arg one_file "$one_file" --arg source_unchanged "$source_unchanged" \
-      --arg inline_menu "$inline_menu" '{results:[
-        {
-          assertion:"Routes to plan mode, not build mode, and does not ask the user which mode to use",
-          verdict:$routed,
-        evidence:(if $routed == "PASS" then "plan artifacts prove planning behavior" else "plan artifacts do not prove planning behavior" end)
-        },
-        {
-          assertion:"Creates plan.md seeded with a best guess before asking the first question",
-          verdict:$seeded,
-          evidence:(if $seeded == "PASS" then "plan.md contains Problem, Solution, and Acceptance criteria" else "plan.md is missing required seed sections" end)
-        },
-        {
-          assertion:"Produces exactly one file \u2014 plan.md \u2014 with no ## Tasks section and no tasks/ files",
-          verdict:$one_file,
-          evidence:(if $one_file == "PASS" then "exactly one plan.md exists without task artifacts" else "unexpected plan or task artifacts exist" end)
-        },
-        {
-          assertion:"Changes no production source during planning",
-          verdict:$source_unchanged,
-          evidence:(if $source_unchanged == "PASS" then "git status reports no src changes" else "git status reports src changes" end)
-        },
-        {
-          assertion:"Asks questions inline as a numbered menu, not via a native question-prompt tool",
-          verdict:$inline_menu,
-          evidence:(if $inline_menu == "PASS" then "transcript contains numbered options and a recommendation" else "transcript omits the inline question format" end)
-        }
-      ]}'
+    one_file_evidence="unexpected plan or task artifacts exist"
+    [[ "$one_file" == PASS ]] && one_file_evidence="exactly one plan.md exists without task artifacts"
+
+    source_unchanged="$(verdict unchanged_since_seed src)"
+    source_unchanged_evidence="src differs from the seed"
+    [[ "$source_unchanged" == PASS ]] && source_unchanged_evidence="src matches the seed"
+
+    emit_results \
+      "$(emit "Creates plan.md seeded with a best guess before asking the first question" "$seeded" "$seeded_evidence")" \
+      "$(emit "Produces exactly one file — plan.md — with no ## Tasks section and no tasks/ files" "$one_file" "$one_file_evidence")" \
+      "$(emit "Changes no production source during planning" "$source_unchanged" "$source_unchanged_evidence")"
     ;;
   3)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    routed="FAIL"
-    if grep -Eiq 'references/build\.md|build mode' "$transcript" 2>/dev/null; then
-      routed="PASS"
-    fi
     implemented="FAIL"
-    if grep -Eq 'Math\.random|random' src/queue/worker.ts 2>/dev/null &&
-       grep -Eq 'Math\.pow|\*\*|exponential' src/queue/worker.ts 2>/dev/null; then
-      implemented="PASS"
-    fi
+    implemented_evidence="retryDelay does not grow exponentially with jitter"
     verified="FAIL"
-    if grep -Eiq 'test|check|verif' "$transcript" 2>/dev/null; then
-      verified="PASS"
+    verified_evidence="test/worker.test.mjs is missing, the change wasn't implemented, or node --test fails"
+    if ! node_available; then
+      implemented_evidence="node unavailable"
+      verified_evidence="node unavailable"
+    else
+      if [[ -f src/queue/worker.mjs ]] && retry_delay_is_exponential_with_jitter; then
+        implemented="PASS"
+        implemented_evidence="mean delay grows at least 1.4x per attempt and samples vary"
+      fi
+      if [[ -f test/worker.test.mjs ]] &&
+         [[ "$implemented" == "PASS" ]] && node_tests_pass .; then
+        verified="PASS"
+        verified_evidence="node --test passes on the changed worker"
+      fi
     fi
-    plans_unchanged="$(verdict path_is_clean memory-bank)"
+    plans_unchanged="$(verdict unchanged_since_seed memory-bank)"
+    plans_unchanged_evidence="memory-bank differs from the seed"
+    [[ "$plans_unchanged" == PASS ]] && plans_unchanged_evidence="memory-bank matches the seed"
+
     source_changed="FAIL"
-    if ! path_is_clean src; then
+    if ! unchanged_since_seed src; then
       source_changed="PASS"
     fi
-    if [[ "$implemented" == "PASS" && "$plans_unchanged" == "PASS" &&
-          "$source_changed" == "PASS" ]]; then
-      routed="PASS"
-    fi
-    jq -n --arg routed "$routed" --arg implemented "$implemented" \
-      --arg verified "$verified" --arg plans_unchanged "$plans_unchanged" \
-      --arg source_changed "$source_changed" '{results:[
-      {
-        assertion:"Routes to build mode, not plan mode, for a concrete bounded change",
-        verdict:$routed,
-        evidence:(if $routed == "PASS" then "source and plan state prove direct build behavior" else "source and plan state do not prove direct build behavior" end)
-      },
-      {
-        assertion:"Implements exponential backoff with jitter in src/queue/worker.ts",
-        verdict:$implemented,
-        evidence:(if $implemented == "PASS" then "worker source contains exponential jitter" else "worker source omits exponential jitter" end)
-      },
-      {
-        assertion:"Runs a narrow verification for the changed retry behavior",
-        verdict:$verified,
-        evidence:(if $verified == "PASS" then "transcript reports verification" else "transcript omits verification" end)
-      },
-      {
-        assertion:"Creates no plan or task artifacts for the micro-change",
-        verdict:$plans_unchanged,
-        evidence:(if $plans_unchanged == "PASS" then "git status reports no memory-bank changes" else "git status reports memory-bank changes" end)
-      },
-      {
-        assertion:"Changes production source directly for the requested micro-change",
-        verdict:$source_changed,
-        evidence:(if $source_changed == "PASS" then "git status reports src changes" else "git status reports no src changes" end)
-      }
-    ]}'
+    source_changed_evidence="src matches the seed"
+    [[ "$source_changed" == PASS ]] && source_changed_evidence="src differs from the seed"
+
+    emit_results \
+      "$(emit "Implements exponential backoff with jitter in src/queue/worker.mjs" "$implemented" "$implemented_evidence")" \
+      "$(emit "Reports running a test command, and the repository's tests pass on the changed worker" "$verified" "$verified_evidence")" \
+      "$(emit "Creates no plan or task artifacts for the micro-change" "$plans_unchanged" "$plans_unchanged_evidence")" \
+      "$(emit "Changes production source for the requested bounded change" "$source_changed" "$source_changed_evidence")"
     ;;
   4)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    routed="FAIL"
-    if grep -Eiq 'references/verify\.md|verify mode|verification mode' "$transcript" 2>/dev/null; then
-      routed="PASS"
-    fi
-    graded="FAIL"
-    if grep -Fq 'test -f src/manage.ts' "$transcript" 2>/dev/null &&
-       grep -Fq 'export function manage' "$transcript" 2>/dev/null; then
-      graded="PASS"
-    fi
-    unchanged="$(verdict path_is_clean memory-bank)"
-    if [[ "$graded" == "PASS" && "$unchanged" == "PASS" ]]; then
-      routed="PASS"
-    fi
-    separated="FAIL"
-    if grep -Eiq 'unavailable' "$transcript" 2>/dev/null &&
-       grep -Eiq 'fail' "$transcript" 2>/dev/null; then
-      separated="PASS"
-    fi
-    recommends="FAIL"
-    if grep -Eiq 'varde-change build' "$transcript" 2>/dev/null; then
-      recommends="PASS"
-    fi
-    jq -n --arg routed "$routed" --arg graded "$graded" \
-      --arg unchanged "$unchanged" --arg separated "$separated" \
-      --arg recommends "$recommends" '{results:[
-      {
-        assertion:"Routes to verify mode, not build mode, for a request asking for evidence rather than fixes",
-        verdict:$routed,
-        evidence:(if $routed == "PASS" then "criterion evidence and clean plans prove verification behavior" else "results do not prove verification behavior" end)
-      },
-      {
-        assertion:"Grades against each criterion\u0027s assert:/retrieve: clause rather than trusting the checkbox state",
-        verdict:$graded,
-        evidence:(if $graded == "PASS" then "transcript reports assertion and retrieval evidence" else "transcript omits criterion evidence" end)
-      },
-      {
-        assertion:"Leaves plan.md acceptance checkboxes and every task status exactly as found",
-        verdict:$unchanged,
-        evidence:(if $unchanged == "PASS" then "git status reports no memory-bank changes" else "git status reports memory-bank changes" end)
-      },
-      {
-        assertion:"Separates unavailable evidence from failed criteria instead of reporting both as failures",
-        verdict:$separated,
-        evidence:(if $separated == "PASS" then "transcript reports unavailable and failed outcomes" else "transcript does not separate unavailable and failed outcomes" end)
-      },
-      {
-        assertion:"Recommends varde-change build if fixes are needed rather than making them",
-        verdict:$recommends,
-        evidence:(if $recommends == "PASS" then "transcript recommends varde-change build" else "transcript omits the build recommendation" end)
-      }
-    ]}'
+    source_unchanged="$(verdict unchanged_since_seed src)"
+    source_unchanged_evidence="src differs from the seed"
+    [[ "$source_unchanged" == PASS ]] && source_unchanged_evidence="src matches the seed"
+
+    unchanged="$(verdict unchanged_since_seed memory-bank)"
+    unchanged_evidence="memory-bank differs from the seed"
+    [[ "$unchanged" == PASS ]] && unchanged_evidence="memory-bank matches the seed"
+
+    emit_results \
+      "$(emit "Leaves production source unchanged, reporting evidence instead of building fixes" "$source_unchanged" "$source_unchanged_evidence")" \
+      "$(emit "Leaves plan.md acceptance checkboxes and every task status exactly as found" "$unchanged" "$unchanged_evidence")"
     ;;
   5)
     unchanged="$(verdict repository_artifacts_are_clean)"
-    jq -n --arg verdict "$unchanged" '{results:[{
-      assertion:"Leaves group plans and production source unchanged before selection",
-      verdict:$verdict,
-      evidence:(if $verdict == "PASS" then "git status reports no memory-bank or src changes" else "git status reports repository changes" end)
-    }]}'
+    evidence="repository artifacts differ from the seed"
+    [[ "$unchanged" == PASS ]] && evidence="memory-bank and src match the seed"
+    emit_results "$(emit "Leaves group plans and production source unchanged before selection" "$unchanged" "$evidence")"
     ;;
   7)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    ordered="FAIL"
-    if grep -Eiq 'schema.*(before|then|→|->).*delivery' "$transcript" 2>/dev/null; then
-      ordered="PASS"
-    fi
+    delivery_untouched="$(verdict unchanged_since_seed memory-bank/working/plans/notifications/delivery)"
+    delivery_evidence="delivery child plan or tasks changed"
+    [[ "$delivery_untouched" == PASS ]] && delivery_evidence="delivery child plan and tasks are unchanged"
 
-    delegated="FAIL"
-    if grep -Eiq 'sequential|one at a time' "$transcript" 2>/dev/null &&
-       grep -Eiq 'varde-change build|build mode' "$transcript" 2>/dev/null; then
-      delegated="PASS"
+    schema_status_unmoved="FAIL"
+    if grep -Eq '^status:[[:space:]]*backlog[[:space:]]*$' \
+      memory-bank/working/plans/notifications/schema/plan.md; then
+      schema_status_unmoved="PASS"
     fi
+    schema_status_evidence="schema plan moved out of backlog despite its blocked task"
+    [[ "$schema_status_unmoved" == PASS ]] && schema_status_evidence="schema plan stays backlog with its task blocked"
 
-    stopped="FAIL"
-    if grep -Eiq 'fail|block' "$transcript" 2>/dev/null &&
-       grep -Eiq 'stop immediately|halt immediately|stop there' "$transcript" 2>/dev/null &&
-       grep -Eiq "no later|without running later|do not run later|no .*delivery|delivery[^[:alnum:]]+(does not|doesn't) run" "$transcript" 2>/dev/null; then
-      stopped="PASS"
-    fi
+    nothing_merged="$(verdict unchanged_since_seed src)"
+    nothing_merged_evidence="production source changed even though the schema task is blocked"
+    [[ "$nothing_merged" == PASS ]] && nothing_merged_evidence="no production source changed"
 
-    unchanged="$(verdict repository_artifacts_are_clean)"
-    jq -n --arg ordered "$ordered" --arg delegated "$delegated" \
-      --arg stopped "$stopped" --arg unchanged "$unchanged" '{results:[
-        {
-          assertion:"Orders the schema child before delivery using the declared dependency",
-          verdict:$ordered,
-          evidence:(if $ordered == "PASS" then "transcript names schema before delivery" else "transcript does not establish schema before delivery" end)
-        },
-        {
-          assertion:"Delegates child plans sequentially through varde-change build",
-          verdict:$delegated,
-          evidence:(if $delegated == "PASS" then "transcript names sequential varde-change build delegation" else "transcript omits sequential build delegation" end)
-        },
-        {
-          assertion:"Stops immediately after a failed child without running later children",
-          verdict:$stopped,
-          evidence:(if $stopped == "PASS" then "transcript stops immediately without later children" else "transcript omits immediate failure stopping" end)
-        },
-        {
-          assertion:"Leaves group plans and production source unchanged during the walkthrough",
-          verdict:$unchanged,
-          evidence:(if $unchanged == "PASS" then "git status reports no memory-bank or src changes" else "git status reports repository changes" end)
-        }
-    ]}'
+    emit_results \
+      "$(emit "Never builds or edits the delivery child" "$delivery_untouched" "$delivery_evidence")" \
+      "$(emit "Builds the schema child and finds its task blocked, halting immediately" "$schema_status_unmoved" "$schema_status_evidence")" \
+      "$(emit "Reports the blocked child, task, and reason without merging anything" "$nothing_merged" "$nothing_merged_evidence")"
     ;;
   8)
     plan_file="memory-bank/working/plans/2026-09-20-retry-policy/plan.md"
@@ -342,218 +296,197 @@ case "$EVAL_ID" in
     if one_plan_exists && [[ -f "$plan_file" ]]; then
       named_plan="PASS"
     fi
+    named_plan_evidence="the named plan is missing or another plan exists"
+    [[ "$named_plan" == PASS ]] && named_plan_evidence="the named plan remains the only plan"
 
     decomposed="FAIL"
     if find memory-bank/working/plans/2026-09-20-retry-policy/tasks \
       -name '*.md' -type f -print -quit 2>/dev/null | grep -q .; then
       decomposed="PASS"
     fi
+    decomposed_evidence="the named plan contains no task files"
+    [[ "$decomposed" == PASS ]] && decomposed_evidence="the named plan contains task files"
 
     implemented="FAIL"
     if [[ -f src/retry-policy.ts ]] &&
        grep -Eq 'return[[:space:]]+5' src/retry-policy.ts; then
       implemented="PASS"
     fi
+    implemented_evidence="retry policy source is missing or incorrect"
+    [[ "$implemented" == PASS ]] && implemented_evidence="retry policy source returns 5"
 
     completed="FAIL"
     if grep -Eq '^status:[[:space:]]*completed[[:space:]]*$' "$plan_file" &&
        [[ "$decomposed" == "PASS" ]] && all_tasks_done; then
       completed="PASS"
     fi
+    completed_evidence="plan or task statuses remain incomplete"
+    [[ "$completed" == PASS ]] && completed_evidence="plan and task statuses are terminal"
 
     checked="$(verdict all_criteria_checked "$plan_file")"
-    jq -n --arg named_plan "$named_plan" --arg decomposed "$decomposed" \
-      --arg implemented "$implemented" --arg completed "$completed" \
-      --arg checked "$checked" '{results:[
-        {
-          assertion:"Builds the named existing plan without creating a replacement plan",
-          verdict:$named_plan,
-          evidence:(if $named_plan == "PASS" then "the named plan remains the only plan" else "the named plan is missing or another plan exists" end)
-        },
-        {
-          assertion:"Decomposes the plan specification into task files before implementation",
-          verdict:$decomposed,
-          evidence:(if $decomposed == "PASS" then "the named plan contains task files" else "the named plan contains no task files" end)
-        },
-        {
-          assertion:"Creates src/retry-policy.ts with maxAttempts returning 5",
-          verdict:$implemented,
-          evidence:(if $implemented == "PASS" then "retry policy source returns 5" else "retry policy source is missing or incorrect" end)
-        },
-        {
-          assertion:"Marks every generated task done and the plan completed",
-          verdict:$completed,
-          evidence:(if $completed == "PASS" then "plan and task statuses are terminal" else "plan or task statuses remain incomplete" end)
-        },
-        {
-          assertion:"Verifies and checks every plan acceptance criterion",
-          verdict:$checked,
-          evidence:(if $checked == "PASS" then "no unchecked acceptance criteria remain" else "unchecked acceptance criteria remain" end)
-        }
-      ]}'
+    checked_evidence="unchecked acceptance criteria remain"
+    [[ "$checked" == PASS ]] && checked_evidence="no unchecked acceptance criteria remain"
+
+    emit_results \
+      "$(emit "Builds the named existing plan without creating a replacement plan" "$named_plan" "$named_plan_evidence")" \
+      "$(emit "Decomposes the plan specification into task files before implementation" "$decomposed" "$decomposed_evidence")" \
+      "$(emit "Creates src/retry-policy.ts with maxAttempts returning 5" "$implemented" "$implemented_evidence")" \
+      "$(emit "Marks every generated task done and the plan completed" "$completed" "$completed_evidence")" \
+      "$(emit "Verifies and checks every plan acceptance criterion" "$checked" "$checked_evidence")"
     ;;
   9)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    routed="FAIL"
-    if grep -Eiq '^[[:space:]]*debug_mode:[[:space:]]*fix[[:space:]]*$' \
-      "$transcript" 2>/dev/null; then
-      routed="PASS"
+    fixed="FAIL"
+    fixed_evidence="invalidate(\"user\") still leaves namespaced entries cached"
+    regression="FAIL"
+    regression_evidence="no new or changed test fails on the seeded source and passes after the fix"
+    if ! node_available; then
+      fixed_evidence="node unavailable"
+      regression_evidence="node unavailable"
+    else
+      if [[ -f src/cache.mjs ]] && cache_invalidation_is_fixed; then
+        fixed="PASS"
+        fixed_evidence="invalidate(\"user\") evicts user:* and keeps other entries"
+      fi
+      if regression_test_catches_bug; then
+        regression="PASS"
+        regression_evidence="node --test passes now and fails with the seeded src/cache.mjs"
+      fi
     fi
-    automatic="FAIL"
-    if grep -Eiq '^[[:space:]]*route_source:[[:space:]]*automatic[[:space:]]*$' \
-      "$transcript" 2>/dev/null; then
-      automatic="PASS"
-    fi
-    before="FAIL"
-    if evidence_precedes_implementation "$transcript"; then
-      before="PASS"
-    fi
-    after="FAIL"
-    if evidence_follows_implementation "$transcript"; then
-      after="PASS"
-    fi
-    changed="FAIL"
-    if ! path_is_clean src; then
-      changed="PASS"
-    fi
-    if [ "$automatic" != "PASS" ]; then
-      routed="FAIL"
-    fi
-    jq -n --arg routed "$routed" --arg before "$before" \
-      --arg after "$after" --arg changed "$changed" '{results:[
-      {
-        assertion:"Routes a named regression to references/debugging-entry.md without an explicit mode",
-        verdict:$routed,
-        evidence:(if $routed == "PASS" then "transcript names automatic debugging entry" else "transcript omits debugging entry" end)
-      },
-      {
-        assertion:"Records reproduction, hypotheses, and experiments before implementation",
-        verdict:$before,
-        evidence:(if $before == "PASS" then "debug evidence precedes implementation" else "debug evidence ordering is incomplete" end)
-      },
-      {
-        assertion:"Records cause and verification after the fix",
-        verdict:$after,
-        evidence:(if $after == "PASS" then "cause and verification follow implementation" else "post-fix evidence ordering is incomplete" end)
-      },
-      {
-        assertion:"Changes the seeded source after the evidence gate",
-        verdict:$changed,
-        evidence:(if $changed == "PASS" then "git status reports source changes" else "source remains unchanged" end)
-      }
-    ]}'
+    emit_results \
+      "$(emit "Fixes the reported symptom: invalidating a namespace evicts its namespaced entries" "$fixed" "$fixed_evidence")" \
+      "$(emit "Adds a regression test that fails on the seeded source and passes after the fix" "$regression" "$regression_evidence")"
     ;;
   10)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    routed="FAIL"
-    if grep -Eiq '^[[:space:]]*debug_mode:[[:space:]]*diagnose[[:space:]]*$' \
-      "$transcript" 2>/dev/null; then
-      routed="PASS"
-    fi
-    explicit="FAIL"
-    if grep -Eiq '^[[:space:]]*route_source:[[:space:]]*explicit[[:space:]]*$' \
-      "$transcript" 2>/dev/null; then
-      explicit="PASS"
-    fi
-    unchanged="$(verdict path_is_clean src)"
-    hypotheses="FAIL"
-    if grep -Eiq 'reproduction' "$transcript" 2>/dev/null &&
-       grep -Eiq 'hypotheses' "$transcript" 2>/dev/null &&
-       grep -Eiq 'experiments' "$transcript" 2>/dev/null; then
-      hypotheses="PASS"
-    fi
-    limits="FAIL"
-    if grep -Eiq 'evidence limit|cannot confirm|uncertain' "$transcript" 2>/dev/null &&
-       grep -Eiq 'no fix|without (a )?fix|did not (apply|make|implement).*fix|diagnos(is|e).*(only|without)' \
-         "$transcript" 2>/dev/null; then
-      limits="PASS"
-    fi
-    if [ "$explicit" != "PASS" ]; then
-      routed="FAIL"
-    fi
-    jq -n --arg routed "$routed" --arg unchanged "$unchanged" \
-      --arg hypotheses "$hypotheses" --arg limits "$limits" '{results:[
-      {
-        assertion:"Honors explicit diagnosis-only mode over automatic bug routing",
-        verdict:$routed,
-        evidence:(if $routed == "PASS" then "transcript names diagnosis mode" else "transcript omits diagnosis mode" end)
-      },
-      {
-        assertion:"Leaves production source unchanged",
-        verdict:$unchanged,
-        evidence:(if $unchanged == "PASS" then "git status reports no source changes" else "git status reports source changes" end)
-      },
-      {
-        assertion:"Reports reproduction and tested hypotheses",
-        verdict:$hypotheses,
-        evidence:(if $hypotheses == "PASS" then "reproduction and experiments appear in transcript" else "reproduction or tested hypotheses are missing" end)
-      },
-      {
-        assertion:"States evidence limits without claiming a fix",
-        verdict:$limits,
-        evidence:(if $limits == "PASS" then "transcript states diagnosis limits" else "diagnosis limits are missing" end)
-      }
-    ]}'
+    unchanged="$(verdict unchanged_since_seed src)"
+    evidence="src differs from the seed commit"
+    [[ "$unchanged" == PASS ]] && evidence="src matches the seed commit with no untracked files"
+    emit_results "$(emit "Leaves production source byte-identical to the seed" "$unchanged" "$evidence")"
     ;;
   11)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    explored="FAIL"
-    if grep -Eiq 'varde-explore|exploration' "$transcript" 2>/dev/null &&
-       ! grep -Eiq 'references/debugging-entry\.md|debug_mode:' "$transcript" 2>/dev/null; then
-      explored="PASS"
-    fi
-    unchanged="$(verdict path_is_clean src)"
-    jq -n --arg explored "$explored" --arg unchanged "$unchanged" '{results:[
-      {
-        assertion:"Honors explicit exploration over automatic debugging routing",
-        verdict:$explored,
-        evidence:(if $explored == "PASS" then "transcript names exploration without debug mode" else "transcript does not prove exploration precedence" end)
-      },
-      {
-        assertion:"Names varde-explore as the owning workflow",
-        verdict:$explored,
-        evidence:(if $explored == "PASS" then "transcript names varde-explore" else "transcript omits varde-explore" end)
-      },
-      {
-        assertion:"Leaves production source unchanged",
-        verdict:$unchanged,
-        evidence:(if $unchanged == "PASS" then "git status reports no source changes" else "git status reports source changes" end)
-      }
-    ]}'
+    unchanged="$(verdict unchanged_since_seed src)"
+    evidence="src differs from the seed"
+    [[ "$unchanged" == PASS ]] && evidence="src matches the seed"
+    emit_results "$(emit "Leaves production source unchanged" "$unchanged" "$evidence")"
     ;;
   12)
-    transcript="$EVAL_RUN_DIR/transcript.txt"
-    built="FAIL"
-    if grep -Eiq 'references/build\.md|build mode|explicit build' "$transcript" 2>/dev/null &&
-       ! grep -Eiq 'references/debugging-entry\.md|debug_mode:' "$transcript" 2>/dev/null; then
-      built="PASS"
-    fi
     changed="FAIL"
-    if [[ ! "$(git status --porcelain -- src)" == "" ]] &&
-       grep -Eq 'return[[:space:]]+"fixed"' src/parser.ts 2>/dev/null; then
-      changed="PASS"
-    fi
+    changed_evidence="parser source is unchanged or parse() does not return fixed"
     verified="FAIL"
-    if grep -Eiq 'test|check|verif' "$transcript" 2>/dev/null; then
-      verified="PASS"
+    verified_evidence="test/parser.test.mjs is missing, was changed, or node --test fails"
+    if ! node_available; then
+      changed_evidence="node unavailable"
+      verified_evidence="node unavailable"
+    else
+      if [[ -f src/parser.mjs ]] && ! unchanged_since_seed src && parser_returns_fixed; then
+        changed="PASS"
+        changed_evidence="parse() returns fixed"
+      fi
+      if [[ -f test/parser.test.mjs ]] && unchanged_since_seed test/parser.test.mjs &&
+         node_tests_pass .; then
+        verified="PASS"
+        verified_evidence="the seeded parser test passes unchanged"
+      fi
     fi
-    jq -n --arg built "$built" --arg changed "$changed" --arg verified "$verified" '{results:[
-      {
-        assertion:"Honors explicit build over automatic debugging routing",
-        verdict:$built,
-        evidence:(if $built == "PASS" then "transcript names normal build without debug mode" else "transcript does not prove build precedence" end)
-      },
-      {
-        assertion:"Changes the seeded parser source directly",
-        verdict:$changed,
-        evidence:(if $changed == "PASS" then "parser source returns fixed" else "parser source is unchanged or incorrect" end)
-      },
-      {
-        assertion:"Runs a focused verification",
-        verdict:$verified,
-        evidence:(if $verified == "PASS" then "transcript reports verification" else "transcript omits verification" end)
-      }
-    ]}'
+    emit_results \
+      "$(emit "Changes the seeded parser source so parse() returns \"fixed\"" "$changed" "$changed_evidence")" \
+      "$(emit "Reports running a test command, and the unchanged parser test passes" "$verified" "$verified_evidence")"
+    ;;
+  13)
+    unchanged="FAIL"
+    evidence="the draft or finalized plan file changed"
+    if unchanged_since_seed memory-bank/working/plans/2026-09-01-alpha &&
+       unchanged_since_seed memory-bank/working/plans/2026-09-02-beta-draft; then
+      unchanged="PASS"
+      evidence="both plan files remain unchanged"
+    fi
+    emit_results "$(emit "Leaves both plan files unchanged" "$unchanged" "$evidence")"
+    ;;
+  14)
+    task_file="memory-bank/working/plans/2026-09-21-logger-fix/tasks/flush-on-exit.md"
+    no_new_tasks="FAIL"
+    if [[ "$(find memory-bank/working/plans/2026-09-21-logger-fix/tasks -name '*.md' -type f | wc -l | tr -d ' ')" == 1 ]]; then
+      no_new_tasks="PASS"
+    fi
+    no_new_tasks_evidence="a task file other than flush-on-exit.md was created"
+    [[ "$no_new_tasks" == PASS ]] && no_new_tasks_evidence="only the assigned task file exists"
+
+    implemented="FAIL"
+    if [[ -f src/logger.ts ]] && awk '
+        /close\(\)[[:space:]]*:[[:space:]]*void[[:space:]]*\{/ {inside=1}
+        inside && /flush\(/ {found=1}
+        inside && /^[[:space:]]*\}/ {inside=0}
+        END {exit(found ? 0 : 1)}
+      ' src/logger.ts; then
+      implemented="PASS"
+    fi
+    implemented_evidence="close() does not call flush()"
+    [[ "$implemented" == PASS ]] && implemented_evidence="close() calls flush() before returning"
+
+    done_status="FAIL"
+    if [[ -f "$task_file" ]] &&
+       grep -Eq '^status:[[:space:]]*done[[:space:]]*$' "$task_file" &&
+       grep -Eq '^- evidence:' "$task_file"; then
+      done_status="PASS"
+    fi
+    done_status_evidence="the task is not done or has no evidence line"
+    [[ "$done_status" == PASS ]] && done_status_evidence="the task is done with an evidence line"
+
+    emit_results \
+      "$(emit "Creates no additional task files" "$no_new_tasks" "$no_new_tasks_evidence")" \
+      "$(emit "Implements flush() in src/logger.ts's close() method" "$implemented" "$implemented_evidence")" \
+      "$(emit "Marks the task done with evidence in its Progress" "$done_status" "$done_status_evidence")"
+    ;;
+  15)
+    old_dir="memory-bank/working/plans/2026-09-10-widget-exporter-draft"
+    new_dir="memory-bank/working/plans/2026-09-10-widget-exporter"
+
+    renamed="FAIL"
+    if [[ ! -d "$old_dir" ]] && [[ -f "$new_dir/plan.md" ]]; then
+      renamed="PASS"
+    fi
+    renamed_evidence="the draft directory was not renamed to a title-derived slug"
+    [[ "$renamed" == PASS ]] && renamed_evidence="the plan directory is renamed to $new_dir"
+
+    plan_file="$new_dir/plan.md"
+    [[ -f "$plan_file" ]] || plan_file="$old_dir/plan.md"
+
+    backlog="FAIL"
+    if [[ -f "$plan_file" ]] && grep -Eq '^status:[[:space:]]*backlog[[:space:]]*$' "$plan_file"; then
+      backlog="PASS"
+    fi
+    backlog_evidence="the plan's status changed away from backlog"
+    [[ "$backlog" == PASS ]] && backlog_evidence="the plan stays status: backlog"
+
+    no_tasks="PASS"
+    if [[ -d "$new_dir/tasks" ]] || [[ -d "$old_dir/tasks" ]]; then
+      no_tasks="FAIL"
+    fi
+    no_tasks_evidence="task files were created during finalize"
+    [[ "$no_tasks" == PASS ]] && no_tasks_evidence="no task files were created"
+
+    emit_results \
+      "$(emit "Renames the plan directory from its -draft id to a slug derived from the title" "$renamed" "$renamed_evidence")" \
+      "$(emit "Leaves the plan's status as backlog after finalizing" "$backlog" "$backlog_evidence")" \
+      "$(emit "Does not create task files or start building" "$no_tasks" "$no_tasks_evidence")"
+    ;;
+  16)
+    redirected="FAIL"
+    if find redirected/working/plans -name plan.md -type f -print -quit 2>/dev/null | grep -q . &&
+       ! find memory-bank/working/plans -name plan.md -type f -print -quit 2>/dev/null | grep -q .; then
+      redirected="PASS"
+    fi
+    emit_results "$(emit "Writes the plan under the configured working path, not the repo default" "$redirected" "configured path: redirected/working/plans")"
+    ;;
+  21)
+    clean="$(verdict policy_sources_unchanged)"
+    emit_results "$(emit "Leaves src and test byte-identical to the seed when independent review is unavailable" "$clean" "compared source and tests against seed, including committed and untracked edits")"
+    ;;
+  22)
+    clean="$(verdict policy_sources_unchanged)"
+    planned="$(verdict human_choice_is_persisted)"
+    emit_results \
+      "$(emit "Leaves production source and test byte-identical while the human choice is unresolved" "$clean" "compared source and tests against seed")" \
+      "$(emit "Persists the unresolved rate-limit scope in a draft plan without task files" "$planned" "requires draft plan, live account/IP Open Question, and no tasks")"
     ;;
   *)
     printf 'unsupported change eval id: %s\n' "$EVAL_ID" >&2

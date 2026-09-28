@@ -1,0 +1,17 @@
+---
+source: crates/toz-core/tests/fixtures.rs
+expression: outline(text)
+---
+strategy: Diff
+chunks: 11
+  0  L1-L22  code   crates/toz-core/src/store.rs — pub struct ChunkRow {
+  1  L23-L37  code   crates/toz-core/src/store.rs — impl Store {
+  2  L38-L86  code   crates/toz/src/install.rs — pub struct Bundle {
+  3  L87-L96  code   crates/toz/src/install.rs — const CLAUDE_CODE: Bundle = Bundle {
+  4  L97-L116  code   crates/toz/src/install.rs — const OPENCODE: Bundle = Bundle {
+  5  L117-L126  code   crates/toz/src/install.rs — const CODEX: Bundle = Bundle {
+  6  L127-L211  code   crates/toz/src/install.rs — pub fn install(b: &Bundle, dir: &Path)…ult<Vec<(PathBuf, bool)>> { (1/2)
+  7  L212-L260  code   crates/toz/src/install.rs — pub fn install(b: &Bundle, dir: &Path)…ult<Vec<(PathBuf, bool)>> { (2/2)
+  8  L261-L297  code   crates/toz/src/install.rs — mod tests {
+  9  L298-L309  prose  crates/toz/src/main.rs
+ 10  L310-L333  code   crates/toz/src/main.rs — use clap::Parser;

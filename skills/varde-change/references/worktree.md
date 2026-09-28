@@ -1,71 +1,98 @@
 # Worktree isolation
 
-Put file edits in a separate git worktree, then merge the result back. Skip
-worktree isolation when the operation only reads files.
-
-The calling procedure decides *whether* to isolate. This file covers the
-mechanics and decides whether to nest.
+Mechanics for editing in a separate git worktree and merging back. The calling
+procedure decides *whether* to isolate; read-only work never does.
 
 ## Who owns the worktree
 
-`scripts/worktree-create.sh` handles nested worktrees. Inside an existing linked
-worktree, it does not create another one. It prints `created=false` and reuses
-the current worktree. Otherwise, it creates a fresh one and prints
-`created=true`. Use this rule:
+> `created=true`: you **own** the worktree — finish per the caller's selected
+> Merge, Push and open PR, or Keep as is action.
+> `created=false`: you're inside a caller's linked worktree — reuse it,
+> **never** merge or clean up; the owner does that.
 
-> Run `scripts/worktree-create.sh <id> [base]`. Do all edits inside the printed
-> `path=`. If `created=true`, you **own** the worktree: merge and then clean up
-> when done. If `created=false`, you reuse a caller's worktree: **never** merge
-> or clean up; the owner does that.
-
-**Merge before showing files to the user.** If you own the worktree, merge it
-before asking the user to open, review, edit, or approve anything. The user
-works in their own checkout and recognizes its paths. Keep interactive document
-and approval work there throughout.
+For Merge, merge before asking the user to open or edit files in their
+original checkout. For Keep as is or Push and open PR, retain the worktree and
+give its path when showing files; do not imply the original checkout contains
+those changes.
 
 ## Workflow
 
-1. **Create.** Run `scripts/worktree-create.sh <id> [base]`. It pins the
-   worktree to a resolved base SHA instead of a moving branch head. A concurrent
-   change to `base` cannot then shift the worktree's starting point. The script
-   prints `path=`, `branch=`, and `created=`.
-2. **Merge back.** Run `scripts/worktree-merge.sh <id> [into]`. It commits
-   uncommitted changes in the worktree, checks that the branch has commits ahead
-   of its base, and exits 2 if it does not. It then attempts `git merge --no-ff`.
-   Exit 3 means conflict. Go to step 3.
-3. **Resolve conflicts.** Follow **Resolving a conflicted merge** below. Keep
-   the worktree until resolution succeeds or you report an unresolved conflict.
-4. **Clean up.** Once the merge is complete, `scripts/worktree-cleanup.sh <id>`
-   removes the worktree and deletes its branch.
+Scripts (each has `--help`): `worktree-create.sh <id> [base]`, then edit only
+inside the printed `path=`; `worktree-merge.sh <id>` (exit 2 = nothing to
+merge, 3 = conflict → resolve below, 4 = source or destination branch missing
+or invalid — inspect the named refs before retrying, 5 = uncommitted changes —
+commit first);
+`worktree-cleanup.sh <id>` only after merge exits 0.
 
-A caller that already ran its own merge and hit conflicts can jump straight to
-step 3 without ever running `worktree-create.sh`.
+`worktree-merge.sh` can run from an integration worktree. It resolves sibling
+task worktrees from the repository's shared Git directory, then merges their
+branches into the currently checked-out integration branch.
 
-## Resolving a conflicted merge
+**Resolve conflicts** against an `intent` string explaining the worktree
+change (ask for one if the caller supplied none). Run the project's
+verification command before committing the merge. Can't resolve without
+guessing at intent, or verification fails: `git merge --abort` and report
+the unresolved hunks.
 
-Resolve conflicts with an `intent` string explaining the worktree change. If
-the calling procedure did not supply one, ask for it before resolving. Use the
-intent to resolve conflicts without guessing.
+## Review authorization for isolated tasks
 
-1. List conflicting files: `git diff --name-only --diff-filter=U`.
-2. For each, read both sides (`git show :2:<path>` for ours, `git show :3:<path>`
-   for theirs) plus enough surrounding context to understand each side's change.
-3. Preserve both sides when their changes do not overlap. For example, keep
-   additions to different sections of the same file. Choose one side only when
-   the changes are mutually exclusive. State which side won and why in the
-   merge summary.
-4. Stage the resolution with `git add <path>`. Run the project's existing
-   verification command before completing the merge commit. This can be tests,
-   typecheck, or another command the repo uses.
-5. If verification fails, or if you cannot resolve the conflict without
-   guessing at intent, abort with `git merge --abort`. Report the unresolved
-   conflict and its specific hunks. Let a human or the calling procedure
-   decide what happens next.
-6. If verification passes, complete the merge with `git commit`.
+The approval checkout is the exact repository that owns the subject; a linked
+worktree does not inherit authority merely because it shares Git storage.
+Before dispatching a task into another checkout, inspect the parent subject
+and register the worker from the approval checkout:
 
-## Gotchas
+```sh
+varde-workflow review inspect --subject <subject-id> --phase pre-edit --json
+varde-workflow review bind-worktree --subject <subject-id> --binding <task-binding-id> --expected-version <data.version> --worktree <absolute-worker-path> --scope <owned-path> [--scope <owned-path> ...] [--task <absolute-original-task.md>] --json
+```
 
-- Use pure git and bash throughout. A harness with native worktree isolation,
-  such as Claude's `Agent` `isolation: "worktree"` option, may use that for its
-  own dispatch. This procedure is for callers without that option or callers
-  that want explicit, inspectable isolation.
+Use the task's declared writes (both rename sides). For a bounded refactor
+without a task file, omit `--task` and use its approved bounded scope. A missing,
+stale, or rejected binding stops dispatch. Do not initialize a separate subject
+for each task or broaden repository identity. Include the approval checkout,
+worker path, subject and binding IDs in the executor brief. In the worker,
+start and resume use all three context flags together:
+
+```sh
+varde-workflow review check --subject <subject-id> --repository <approval-checkout> --worktree <absolute-worker-path> --binding <task-binding-id> --checkpoint start --json
+```
+
+A binding authorizes only start/resume within its task scope. The executor
+returns source commits and verification evidence; the parent alone updates
+tracked and external task files after verified source integration. The worker
+must not transition task or plan state, record parent approval, or conclude the
+parent. Run ordinary parent gates from the approval checkout.
+
+Capture worker evidence before merging; after the verified commit is integrated
+into the approval checkout, inspect again and release using its current version:
+
+```sh
+varde-workflow review inspect-worktree --subject <subject-id> --binding <task-binding-id> --json
+varde-workflow review release-worktree --subject <subject-id> --binding <task-binding-id> --expected-version <data.version> --commit <worker-commit> --json
+```
+
+Release archives separate worker evidence before cleanup. A release failure
+retains the worktree and binding for recovery. Parent completion requires all
+bindings archived and a current combined implementation review. Keep as is or
+Push and open PR retains the live binding and leaves parent completion pending
+until integration; report that state and the worktree path.
+
+Renewed approval never authorizes a stale worker to resume. Read-only inspection
+still provides its evidence and current version. Release may archive already
+integrated, clean source under current parent approval when the original scope
+remains covered. Parent task verification and bookkeeping still use the current
+contract. If execution is abandoned or the checkout is unavailable, inspect then
+archive the binding without deleting its source, branch, or worktree:
+
+```sh
+varde-workflow review abandon-worktree --subject <subject-id> --binding <task-binding-id> --expected-version <data.version> --reason "<why execution stopped>" --json
+```
+
+Abandonment needs current parent approval, retains available evidence, and
+requires a fresh combined final review. It neither integrates source nor marks
+a task done. Handle any retained source through a separately approved change.
+
+An enclosing feature checkout that owns its own plan subjects is the approval
+checkout for its serial children. Map tracked plan/task paths to that checkout's
+physical copies; keep external plans in their configured store. Do not substitute
+a main-checkout subject for a feature-checkout subject or copy approval records.

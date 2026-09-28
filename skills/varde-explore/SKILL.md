@@ -1,40 +1,26 @@
 ---
 name: varde-explore
-description: "Investigate a problem, design, module, or diff without committing to implementation — compare options, trace how code works, or write a self-contained HTML explanation. Not for planning or production changes."
+description: "Compare design options or explain how existing code works, in chat or as an HTML page. Not for planning, prototyping, or implementing."
 ---
 
 # Explore before committing
-
-Do not create a plan or production code unless the user asks.
-Read sources before forming conclusions or recommendations.
 
 ## Choose a mode
 
 | The request is | Do |
 |---|---|
-| An open question about a problem, design, tradeoff, or how some code works | Run `## Explore` below. This is the default mode. Answer in the conversation. |
-| A direct ask to explain a diff or a code area, where the answer is a document to keep | Read `references/explain.md` and follow it. It produces an HTML file. |
-
-## Explore
-
-Gather evidence directly to answer the question.
-
-1. Restate the decision or uncertainty.
-2. Read relevant source, artifacts, and project guidance.
-3. Compare credible alternatives against the same constraints.
-4. Check each assumption against existing project terminology.
-5. Summarize evidence, tradeoffs, and remaining uncertainty.
-
-For structural questions, load `references/varde-code.md`. These questions ask
-what exists, what depends on what, or how far a change would reach. If the
-optional CLI is absent or fails, use ordinary reads.
-
-Return evidence, tradeoffs, and a recommendation. Do not create planning
-artifacts, production code, or prototypes unless the user asks for them by name.
+| An open question — problem, design, tradeoff, or how code works (default) | Answer in chat, grounded in files read (cite path:line). For options, name each one, its tradeoffs, and one recommendation. For structure (what exists, what depends on what, blast radius), load `references/varde-code.md`. |
+| A direct ask to explain a diff or code area, or compare options, as a document to keep | Read `references/explain.md` and follow it. It saves an HTML file under `<working>/explanations/` by default. |
 
 ## Gotchas
 
-- A request to explain code always produces the HTML artifact. Open-ended
-  investigation never does.
-- When intent becomes concrete, offer `varde-change plan`. Transition only after
-  direct user confirmation.
+- `<working>` (local, uncommitted) and `<knowledge>` (committed): resolve once
+  before first use with `varde-workflow paths --json`; use its absolute
+  `data.working`/`data.knowledge` paths for this session and pass them to
+  subagents. If the command fails, retry it once with escalated access; if it
+  still fails, ask the user for the paths. Do not guess storage paths. A
+  location outside the repo skips git ops (`check-ignore`, `mv`, `status`);
+  use plain file ops.
+
+- Write plans, code, or prototypes only when named; offer `varde-change plan`
+  and switch only on confirmation.

@@ -1,0 +1,251 @@
+## entrypoints
+- main  crates/varde-code/examples/git_perf.rs  [process_main]
+- main  crates/varde-code/examples/parse_vs_walk.rs  [process_main]
+- main  crates/varde-code/src/main.rs  [process_main]
+
+## foundational_files
+- crates/varde-code/src/model.rs  (42 dependents, 207 refs)
+- crates/varde-code/src/parse.rs  (30 dependents, 143 refs)
+- .claude/skills/benchmark/scripts/lib.sh  (9 dependents, 45 refs)
+- crates/varde-code/src/resolve.rs  (8 dependents, 243 refs)
+- crates/varde-code/src/extract/entity.rs  (8 dependents, 202 refs)
+- crates/varde-code/src/query/noise_filter.rs  (6 dependents, 25 refs)
+- crates/varde-code/src/rules/finding.rs  (4 dependents, 42 refs)
+- crates/varde-code/src/extract/langs/role_tags.rs  (4 dependents, 16 refs)
+- crates/varde-code/src/query/entrypoints.rs  (3 dependents, 85 refs)
+- crates/varde-code/src/persist.rs  (2 dependents, 600 refs)
+- crates/varde-code/src/query/simple.rs  (2 dependents, 89 refs)
+- crates/varde-code/src/slice.rs  (1 dependents, 317 refs)
+- crates/varde-code/src/build.rs  (1 dependents, 80 refs)
+- crates/varde-code/src/query/symbols_section.rs  (1 dependents, 80 refs)
+- crates/varde-code/src/rules/test_runner.rs  (1 dependents, 76 refs)
+- crates/varde-code/src/extract/langs/c.rs  (1 dependents, 53 refs)
+- crates/varde-code/src/rules/correlate.rs  (1 dependents, 53 refs)
+- crates/varde-code/src/query/flows.rs  (1 dependents, 39 refs)
+- crates/varde-code/src/rules/rewrite.rs  (1 dependents, 38 refs)
+- crates/varde-code/src/extract/langs/ts.rs  (1 dependents, 33 refs)
+- crates/varde-code/src/extract/minhash.rs  (1 dependents, 13 refs)
+- crates/varde-code/src/scan_cli.rs  (0 dependents, 183 refs)
+- crates/varde-code/src/query/find_pattern.rs  (0 dependents, 161 refs)
+- crates/varde-code/src/hooks.rs  (0 dependents, 124 refs)
+- crates/varde-code/src/rules/mod.rs  (0 dependents, 124 refs)
+- crates/varde-code/src/main.rs  (0 dependents, 88 refs)
+- crates/varde-code/src/query/nav_map.rs  (0 dependents, 81 refs)
+- crates/varde-code/src/query/mapping.rs  (0 dependents, 78 refs)
+- crates/varde-code/src/rules/sql.rs  (0 dependents, 78 refs)
+- crates/varde-code/src/rules/pattern.rs  (0 dependents, 74 refs)
+- crates/varde-code/src/extract/langs/php.rs  (0 dependents, 64 refs)
+- crates/varde-code/src/extract/langs/elixir.rs  (0 dependents, 61 refs)
+- crates/varde-code/src/rules/dependency_facts.rs  (0 dependents, 60 refs)
+- crates/varde-code/src/complexity.rs  (0 dependents, 58 refs)
+- crates/varde-code/src/query/foundational_files.rs  (0 dependents, 53 refs)
+- crates/varde-code/src/extract/langs/ruby.rs  (0 dependents, 50 refs)
+- crates/varde-code/src/extract/langs/solidity.rs  (0 dependents, 48 refs)
+- crates/varde-code/src/extract/langs/scala.rs  (0 dependents, 47 refs)
+- crates/varde-code/src/extract/langs/mod.rs  (0 dependents, 46 refs)
+- crates/varde-code/src/extract/langs/dart.rs  (0 dependents, 45 refs)
+- crates/varde-code/src/extract/langs/cs.rs  (0 dependents, 44 refs)
+- crates/varde-code/src/query/graph.rs  (0 dependents, 44 refs)
+- crates/varde-code/src/query/mod.rs  (0 dependents, 44 refs)
+- crates/varde-code/src/extract/langs/kotlin.rs  (0 dependents, 43 refs)
+- crates/varde-code/src/watch.rs  (0 dependents, 41 refs)
+- crates/varde-code/src/extract/langs/haskell.rs  (0 dependents, 36 refs)
+- crates/varde-code/src/query/output.rs  (0 dependents, 35 refs)
+- crates/varde-code/src/extract/langs/lua.rs  (0 dependents, 34 refs)
+- crates/varde-code/src/extract/langs/python.rs  (0 dependents, 33 refs)
+- crates/varde-code/src/extract/langs/cpp.rs  (0 dependents, 32 refs)
+
+## module_layers
+cycles:
+- /Users/alec/source/varde/code-cli/crates/varde-code/src → /Users/alec/source/varde/code-cli/crates/varde-code/src/rules
+edges (9):
+- /Users/alec/source/varde/code-cli/.claude/skills/profile/scripts → /Users/alec/source/varde/code-cli/.claude/skills/benchmark/scripts  (3 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src → /Users/alec/source/varde/code-cli/crates/varde-code/src/rules  (3 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src/extract → /Users/alec/source/varde/code-cli/crates/varde-code/src  (5 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src/extract/langs → /Users/alec/source/varde/code-cli/crates/varde-code/src  (43 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src/extract/langs → /Users/alec/source/varde/code-cli/crates/varde-code/src/extract  (8 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src/query → /Users/alec/source/varde/code-cli/crates/varde-code/src  (7 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src/query → /Users/alec/source/varde/code-cli/crates/varde-code/src/extract/langs  (4 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src/resolve → /Users/alec/source/varde/code-cli/crates/varde-code/src  (6 files)
+- /Users/alec/source/varde/code-cli/crates/varde-code/src/rules → /Users/alec/source/varde/code-cli/crates/varde-code/src  (7 files)
+
+## subsystems
+- langs/complexity: crates/varde-code/src/complexity.rs, crates/varde-code/src/extract/langs/bash.rs, crates/varde-code/src/extract/langs/dart.rs, crates/varde-code/src/extract/langs/elixir.rs, crates/varde-code/src/extract/langs/haskell.rs, crates/varde-code/src/extract/langs/lua.rs, crates/varde-code/src/extract/langs/mod.rs, crates/varde-code/src/extract/langs/php.rs (+13 more)
+- langs/entity: crates/varde-code/src/extract/entity.rs, crates/varde-code/src/extract/langs/cs.rs, crates/varde-code/src/extract/langs/go.rs, crates/varde-code/src/extract/langs/java.rs, crates/varde-code/src/extract/langs/javascript.rs, crates/varde-code/src/extract/langs/kotlin.rs, crates/varde-code/src/extract/langs/python.rs, crates/varde-code/src/extract/langs/rust.rs (+6 more)
+- scripts: .claude/skills/benchmark/scripts/build_scale.sh, .claude/skills/benchmark/scripts/extract.sh, .claude/skills/benchmark/scripts/find_pattern.sh, .claude/skills/benchmark/scripts/lib.sh, .claude/skills/benchmark/scripts/other_modes.sh, .claude/skills/benchmark/scripts/symbols_in_file.sh, .claude/skills/profile/scripts/rank.sh, .claude/skills/profile/scripts/watch.sh (+1 more)
+- src/build: crates/varde-code/src/build.rs, crates/varde-code/src/extract/minhash.rs, crates/varde-code/src/persist.rs, crates/varde-code/src/query/subsystems.rs, crates/varde-code/src/resolve.rs, crates/varde-code/src/resolve/clones.rs, crates/varde-code/src/slice.rs, crates/varde-code/src/watch.rs
+- query/entrypoints: crates/varde-code/src/query/entrypoints.rs, crates/varde-code/src/query/foundational_files.rs, crates/varde-code/src/query/module_layers.rs, crates/varde-code/src/query/noise_filter.rs, crates/varde-code/src/query/symbols_section.rs
+- query/graph: crates/varde-code/src/query/graph.rs, crates/varde-code/src/query/mapping.rs, crates/varde-code/src/query/simple.rs
+- query/role_tags: crates/varde-code/src/extract/langs/role_tags.rs, crates/varde-code/src/query/flows.rs, crates/varde-code/src/query/nav_map.rs
+- langs/c: crates/varde-code/src/extract/langs/c.rs, crates/varde-code/src/extract/langs/cpp.rs
+- rules: crates/varde-code/src/rules/correlate.rs, crates/varde-code/src/rules/pattern.rs
+- src/test_runner: crates/varde-code/src/rules/test_runner.rs, crates/varde-code/src/test_cli.rs
+
+## symbols
+- parse_source  crates/varde-code/src/parse.rs  (26 callers)
+- entity  crates/varde-code/src/extract/entity.rs  (8 callers)
+- require_release_bin  .claude/skills/benchmark/scripts/lib.sh  (8 callers)
+- ExtractCtx::push_callable_boundary  crates/varde-code/src/extract/entity.rs  (8 callers)
+- time_ms  .claude/skills/benchmark/scripts/lib.sh  (7 callers)
+- min_of_3  .claude/skills/benchmark/scripts/lib.sh  (6 callers)
+- clear_varde_cache  .claude/skills/benchmark/scripts/lib.sh  (6 callers)
+- language_for_path  crates/varde-code/src/parse.rs  (5 callers)
+- EntityKind::as_i64  crates/varde-code/src/model.rs  (3 callers)
+- resolve  crates/varde-code/src/resolve.rs  (3 callers)
+- finding_id  crates/varde-code/src/rules/finding.rs  (3 callers)
+- file_id  crates/varde-code/src/query/simple.rs  (2 callers)
+- max_rev  crates/varde-code/src/persist.rs  (2 callers)
+- Entity  crates/varde-code/src/model.rs  (2 callers)
+- query_persisted_state  crates/varde-code/src/persist.rs  (2 callers)
+- load_file_states  crates/varde-code/src/persist.rs  (2 callers)
+- rebuild_graph_cache_full  crates/varde-code/src/persist.rs  (2 callers)
+- load_file_ids  crates/varde-code/src/persist.rs  (2 callers)
+- FileState::of  crates/varde-code/src/rules/finding.rs  (2 callers)
+- parse_source_for_path  crates/varde-code/src/parse.rs  (2 callers)
+- delete_deleted_files  crates/varde-code/src/persist.rs  (2 callers)
+- delete_global_rows  crates/varde-code/src/persist.rs  (2 callers)
+- index_build_version_matches  crates/varde-code/src/persist.rs  (2 callers)
+- rewrite_global  crates/varde-code/src/persist.rs  (2 callers)
+- detect  crates/varde-code/src/query/entrypoints.rs  (2 callers)
+- matches_path  crates/varde-code/src/query/simple.rs  (2 callers)
+- resolve_real_path  crates/varde-code/src/rules/finding.rs  (2 callers)
+- persist  crates/varde-code/src/persist.rs  (1 callers)
+- slice_built_through_rev  crates/varde-code/src/persist.rs  (1 callers)
+- saturating_u32  crates/varde-code/src/model.rs  (1 callers)
+- declarator_identifier  crates/varde-code/src/extract/langs/c.rs  (1 callers)
+- IncrementalChanges::load  crates/varde-code/src/build.rs  (1 callers)
+- classify_files  crates/varde-code/src/build.rs  (1 callers)
+- index_counts  crates/varde-code/src/persist.rs  (1 callers)
+- TestCoverage::load  crates/varde-code/src/query/simple.rs  (1 callers)
+- run  crates/varde-code/src/build.rs  (1 callers)
+- run_full_while_locked  crates/varde-code/src/build.rs  (1 callers)
+- run_with_force  crates/varde-code/src/build.rs  (1 callers)
+- EntityKind::from_i64  crates/varde-code/src/model.rs  (1 callers)
+- read_graph_cache  crates/varde-code/src/persist.rs  (1 callers)
+- refresh_file_slice  crates/varde-code/src/persist.rs  (1 callers)
+- slice_meta_value  crates/varde-code/src/persist.rs  (1 callers)
+- match_role_tag  crates/varde-code/src/extract/langs/role_tags.rs  (1 callers)
+- Diagnostic  crates/varde-code/src/model.rs  (1 callers)
+- language_from_name  crates/varde-code/src/parse.rs  (1 callers)
+- parse_file  crates/varde-code/src/parse.rs  (1 callers)
+- in_clause  crates/varde-code/src/persist.rs  (1 callers)
+- insert_new_files  crates/varde-code/src/persist.rs  (1 callers)
+- invalidate_derived_slice_state  crates/varde-code/src/persist.rs  (1 callers)
+- load_file_state  crates/varde-code/src/persist.rs  (1 callers)
+- load_resolved_edges  crates/varde-code/src/persist.rs  (1 callers)
+- persist_delta  crates/varde-code/src/persist.rs  (1 callers)
+- persist_full_streaming  crates/varde-code/src/persist.rs  (1 callers)
+- persist_global_graph  crates/varde-code/src/persist.rs  (1 callers)
+- rewrite_edges  crates/varde-code/src/persist.rs  (1 callers)
+- rewrite_edges_for_files  crates/varde-code/src/persist.rs  (1 callers)
+- rewrite_import_edges  crates/varde-code/src/persist.rs  (1 callers)
+- detect_process_mains  crates/varde-code/src/query/entrypoints.rs  (1 callers)
+- detect_routes  crates/varde-code/src/query/entrypoints.rs  (1 callers)
+- build_flows  crates/varde-code/src/query/flows.rs  (1 callers)
+- TestCoverage::covering  crates/varde-code/src/query/simple.rs  (1 callers)
+- load_project  crates/varde-code/src/resolve.rs  (1 callers)
+- resolve_global_from_edges  crates/varde-code/src/resolve.rs  (1 callers)
+- EnclosingLookup::lookup  crates/varde-code/src/rules/correlate.rs  (1 callers)
+- match_to_finding  crates/varde-code/src/rules/finding.rs  (1 callers)
+- plan_file_rewrites  crates/varde-code/src/rules/rewrite.rs  (1 callers)
+- substitute_with_source  crates/varde-code/src/rules/rewrite.rs  (1 callers)
+- run_pattern_rule_tests  crates/varde-code/src/rules/test_runner.rs  (1 callers)
+- run_sql_rule_tests  crates/varde-code/src/rules/test_runner.rs  (1 callers)
+- build  crates/varde-code/src/slice.rs  (1 callers)
+- ensure_fresh  crates/varde-code/src/slice.rs  (1 callers)
+
+## flows
+- main  (36 nodes)
+  main  crates/varde-code/src/main.rs
+    install_panic_hook  crates/varde-code/src/main.rs
+    init_tracing  crates/varde-code/src/main.rs
+    dispatch_command  crates/varde-code/src/main.rs
+      run_core_query  crates/varde-code/src/main.rs
+        run_query  crates/varde-code/src/main.rs
+      run_navigation_query  crates/varde-code/src/main.rs
+        run_nav_map  crates/varde-code/src/main.rs
+        run_query  crates/varde-code/src/main.rs  (↑ recurses)
+      run_control_command  crates/varde-code/src/main.rs
+        run_extract  crates/varde-code/src/main.rs
+          … 1 more call(s) below
+        run_build  crates/varde-code/src/main.rs
+        run_scan  crates/varde-code/src/main.rs
+          … 1 more call(s) below
+        run_test  crates/varde-code/src/main.rs
+          … 1 more call(s) below
+        run_rules_list  crates/varde-code/src/main.rs
+        run_rules_seed  crates/varde-code/src/main.rs
+        run_rules_remove  crates/varde-code/src/main.rs
+        run_hooks_list  crates/varde-code/src/main.rs
+        run_hooks_install  crates/varde-code/src/main.rs
+          … 2 more call(s) below
+        run_hooks_remove  crates/varde-code/src/main.rs
+          … 2 more call(s) below
+        run_watch_list  crates/varde-code/src/main.rs
+        run_watch_stop_all  crates/varde-code/src/main.rs
+        run_watch_stop  crates/varde-code/src/main.rs
+          … 1 more call(s) below
+        run_watch  crates/varde-code/src/main.rs
+          … 1 more call(s) below
+  → full tree: code_query mode=explore {"input":"main","direction":"outgoing"} for the full call tree
+- main  (5 nodes)
+  main  crates/varde-code/examples/parse_vs_walk.rs
+    load_sources  crates/varde-code/examples/parse_vs_walk.rs
+    warm_sources  crates/varde-code/examples/parse_vs_walk.rs
+    measure_parse  crates/varde-code/examples/parse_vs_walk.rs
+    measure_extract  crates/varde-code/examples/parse_vs_walk.rs
+  → full tree: code_query mode=explore {"input":"main","direction":"outgoing"} for the full call tree
+
+## hotspots
+- crates/varde-code/src/resolve.rs  (score 1011, complexity 337, churn 3)
+- crates/varde-code/src/main.rs  (score 585, complexity 195, churn 3)
+- crates/varde-code/src/persist.rs  (score 486, complexity 162, churn 3)
+- crates/varde-code/src/scan_cli.rs  (score 410, complexity 205, churn 2)
+- crates/varde-code/src/extract/langs/ts.rs  (score 408, complexity 136, churn 3)
+- crates/varde-code/src/query/find_pattern.rs  (score 404, complexity 202, churn 2)
+- crates/varde-code/src/extract/langs/javascript.rs  (score 339, complexity 113, churn 3)
+- crates/varde-code/src/slice.rs  (score 332, complexity 166, churn 2)
+- crates/varde-code/src/extract/langs/mod.rs  (score 308, complexity 154, churn 2)
+- crates/varde-code/src/extract/langs/python.rs  (score 300, complexity 150, churn 2)
+- crates/varde-code/src/hooks.rs  (score 297, complexity 99, churn 3)
+- crates/varde-code/src/extract/langs/cs.rs  (score 292, complexity 146, churn 2)
+- crates/varde-code/src/extract/langs/rust.rs  (score 282, complexity 94, churn 3)
+- crates/varde-code/src/extract/langs/kotlin.rs  (score 266, complexity 133, churn 2)
+- crates/varde-code/src/rules/mod.rs  (score 266, complexity 133, churn 2)
+- crates/varde-code/src/query/nav_map.rs  (score 261, complexity 87, churn 3)
+- crates/varde-code/src/query/entrypoints.rs  (score 258, complexity 86, churn 3)
+- crates/varde-code/src/query/mapping.rs  (score 255, complexity 85, churn 3)
+- crates/varde-code/src/extract/langs/java.rs  (score 240, complexity 80, churn 3)
+- crates/varde-code/src/extract/langs/elixir.rs  (score 208, complexity 104, churn 2)
+- crates/varde-code/src/extract/langs/swift.rs  (score 202, complexity 101, churn 2)
+- crates/varde-code/src/extract/langs/go.rs  (score 188, complexity 94, churn 2)
+- crates/varde-code/src/query/output.rs  (score 184, complexity 92, churn 2)
+- crates/varde-code/src/extract/langs/cpp.rs  (score 182, complexity 91, churn 2)
+- crates/varde-code/src/extract/langs/php.rs  (score 178, complexity 89, churn 2)
+- crates/varde-code/src/extract/langs/ruby.rs  (score 178, complexity 89, churn 2)
+- crates/varde-code/src/extract/langs/c.rs  (score 176, complexity 88, churn 2)
+- crates/varde-code/src/extract/langs/scala.rs  (score 170, complexity 85, churn 2)
+- crates/varde-code/src/query/simple.rs  (score 164, complexity 82, churn 2)
+- crates/varde-code/src/rules/pattern.rs  (score 162, complexity 81, churn 2)
+- crates/varde-code/src/build.rs  (score 159, complexity 53, churn 3)
+- crates/varde-code/src/scan.rs  (score 156, complexity 52, churn 3)
+- crates/varde-code/src/extract/langs/dart.rs  (score 154, complexity 77, churn 2)
+- crates/varde-code/src/extract/langs/solidity.rs  (score 154, complexity 77, churn 2)
+- crates/varde-code/src/extract/langs/haskell.rs  (score 148, complexity 74, churn 2)
+- crates/varde-code/src/rules/dependency_facts.rs  (score 146, complexity 146, churn 1)
+- crates/varde-code/src/watch.rs  (score 142, complexity 71, churn 2)
+- crates/varde-code/src/rules/test_runner.rs  (score 138, complexity 69, churn 2)
+- crates/varde-code/src/query/graph.rs  (score 126, complexity 63, churn 2)
+- crates/varde-code/src/cli.rs  (score 120, complexity 40, churn 3)
+- crates/varde-code/src/rules/sql.rs  (score 108, complexity 54, churn 2)
+- crates/varde-code/src/complexity.rs  (score 106, complexity 53, churn 2)
+- crates/varde-code/src/extract/langs/lua.rs  (score 106, complexity 53, churn 2)
+- crates/varde-code/src/extract/symbol.rs  (score 98, complexity 49, churn 2)
+- crates/varde-code/src/db.rs  (score 93, complexity 31, churn 3)
+- crates/varde-code/src/extract/langs/bash.rs  (score 80, complexity 40, churn 2)
+- crates/varde-code/src/query/mod.rs  (score 70, complexity 35, churn 2)
+- crates/varde-code/src/resolve/community.rs  (score 60, complexity 30, churn 2)
+- crates/varde-code/src/query/symbols_section.rs  (score 58, complexity 29, churn 2)
+- crates/varde-code/src/rules/rewrite.rs  (score 56, complexity 28, churn 2)
+
+

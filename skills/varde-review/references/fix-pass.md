@@ -1,68 +1,65 @@
 # Automated fix pass
 
-## Dirty working tree (standalone invocation only)
+Process findings in category and file order. Check eligibility before doing
+any per-finding work, including loading the complete block, validating its
+location, applying the plan gate, or backing up files:
 
-If step 2 of `references/fix.md` found a dirty `repoRoot` during a standalone
-run and the user accepted isolation, follow `references/worktree.md` with id
-`review-fix-<review_dir>` and base set to the current branch. Use the printed
-`path=` as the effective `repoRoot` for every step below. Use the `created=`
-value to determine ownership. If you own the worktree, merge and clean it up
-before human triage. This lets the user see applied fixes in their checkout.
-If the merge reports a conflict, follow `references/worktree.md` with intent
-"apply review findings from `<review_dir>`". Keep the worktree until the
-conflict is resolved.
+| Route | Eligible for automated application | Other dispositions |
+|---|---|---|
+| Standalone (`mode=standalone`) | `Label: auto-fix` with `Disposition: blank` or `fix` | Skip `dismiss`, `action-item`, and `escalated`; return other non-eligible findings that need a decision to the parent. |
+| Plan build (`mode=build`) | Any label with `Disposition: fix` | Send blank findings to parent triage without applying them; skip `dismiss`, `action-item`, and `escalated`. |
 
-Process findings in category and file order. In a standalone run, process only
-`Label: auto-fix` findings. Under a build (`mode=build`), process every finding
-regardless of label.
+Do not apply a blank plan-build finding automatically. A build-mode finding
+that the escalation gate changes to blank is also returned to the parent for
+triage during that run.
 
-For each finding:
+For a selected bounded fix, process only the supplied `finding_ids`; other
+findings remain untouched. Require the concrete approved solution and traceable
+user decision evidence for each selected ID. Missing or mismatched evidence
+returns that finding to the parent before editing. Preserve recorded decision
+history on every defer/rejection; never infer approval from disposition alone.
+
+For each eligible finding:
 
 1. Load the complete finding block.
-2. Verify every location exists and still matches the recorded location.
-3. Ask a fresh subagent to select the most reliable solution.
-4. In build mode, run the escalation gate below against the selected solution.
-   If the gate rejects it, send the finding to the human pass. Relabel it
-   `triage` if it was `auto-fix`. Leave `Disposition: blank`, record the reason,
-   and move on.
-5. Record the current diff before applying the selected solution. Leave prior
-   successful fixes in place.
+2. Verify every local file location exists and still matches the recorded
+   location. For a CI finding located at a check URL, re-read the linked check
+   result and logs instead of treating the URL as a file. For a visual finding
+   located at a review-relative screenshot, inspect that image and trace the
+   affected UI source before editing.
+3. For a selected bounded fix, use its concrete approved solution without
+   substituting another. Otherwise select the most reliable listed solution:
+   the one that mirrors a nearby pattern and touches the fewest files. If none is reliable,
+   send the finding to the human pass as in step 4 rather than inventing one.
+4. In build mode, run the gate below. On rejection, relabel `triage`, add
+   `**Escalated:**` after `Location` (values: report-format), leave
+   `Disposition:` blank, and move on.
+5. Before applying the selected solution, make a per-run backup directory under
+   `$TMPDIR` and copy each existing file it will touch there at its
+   repository-relative path. Record files that did not exist before the fix.
+   This isolates the finding without disturbing earlier successful fixes, which
+   a `git stash` or `git checkout` would also discard.
 6. Apply only the selected solution.
-7. Run the type checker and tests for the package or file in the finding's
-   `location`. For example, use `npx tsc --noEmit -p <package>` or
-   `npm test -- <affected-test-path>`. Do not run the whole-repo command unless
-   the fix touches files outside one package. Then use the full-repo
-   `npx tsc --noEmit` or `npm test`. The build already verified this code once,
-   so this scoped rerun checks the fix without rerunning the full suite for
-   every finding.
-8. Read the source task named by the finding's `location` field. If it has an
-   optional `#### Verification` subsection with `assert:` lines, run every
-   assertion and require all to pass. If the subsection is absent, skip this
-   check.
-9. On verification failure, restore only this finding's diff and leave the disposition
-   blank.
-10. On success, set `Disposition: fix`, and record the
-    verification result.
-
-If verification fails, continue with the next finding. Report each result with
-its identifier and category.
-
-A passing scoped run in step 7 proves that the fix introduced no regression. It
-does **not** prove that the reported defect is gone. Before setting
-`Disposition: fix`, confirm that the finding's defect no longer reproduces:
-
-- Prefer a check that would have failed *before* the fix. Use an existing test
-  that exercises the defect or the finding's task `assert:` lines (step 8). A
-  test that passes before and after the fix does not verify this finding.
-- If nothing exercises the defect, confirm resolution by re-reading the fixed
-  code path against the finding's `Summary`. Record that inspection confirmed
-  resolution instead of claiming a failing-then-passing test.
+7. Run the type check and tests scoped to the package in the finding's
+   `location`; for a CI URL, run the failing check's local equivalent or the
+   project's test suite. For a visual screenshot location, run checks for the
+   UI source changed and repeat the visual flow with an inspected after image
+   as in `references/visual.md`. Go full-repo when the fix spans packages.
+8. In build mode, rerun the `assert:` lines of the plan tasks (from
+   `plan_context`) whose `modifies`/`creates` cover the fixed file; standalone
+   mode skips this.
+9. On verification failure, copy the backed-up files to their original
+   repository-relative paths, delete every file that did not exist before the
+   fix, and leave the disposition blank.
+10. Confirm the defect is gone before `Disposition: fix`: prefer a check that
+    failed before the fix (existing test or step 8's `assert:` lines); one
+    passing before and after proves nothing. With none, re-read the path
+    against `Summary` and record "confirmed by inspection".
 
 ## When to defer to the user (under a build)
 
-Step 4 checks this gate using the caller's `plan_context`, which contains the
-plan goal, plan-level acceptance criteria, and `creates`/`modifies` scope.
-Before applying a solution, check both conditions:
+Check against `plan_context` (goal, plan-level criteria,
+`creates`/`modifies`):
 
 - **Spec conflict:** would the fix require the code to stop satisfying a
   plan-level acceptance criterion, or contradict something the plan explicitly
@@ -70,11 +67,10 @@ Before applying a solution, check both conditions:
 - **Scope creep:** would the fix change or break functionality outside the
   task's `creates`/`modifies` files, or introduce behavior the plan does not
   call for?
-
-If either condition is true, send the finding to the human triage pass without
-applying it. Add a bold `**Escalated:**` field right after `Location`. Use
-`spec-conflict — <why>` or `scope-creep — <why>` as its value. The human pass
-can then show the reason without deriving it again.
-
-If neither condition is true, apply and verify the solution. This covers most
-build findings, including findings labeled `triage` by the review.
+- **Human-only:** for report-categories' always-triage list
+  (`references/report-categories.md`), require the selected finding ID,
+  concrete approved solution, and traceable user decision evidence in the
+  bounded build. Matching approval satisfies this category-only gate;
+  missing or mismatched evidence escalates as `human-only — <category>`.
+  Approval never bypasses spec-conflict, scope, ownership, independent review,
+  or verification checks.

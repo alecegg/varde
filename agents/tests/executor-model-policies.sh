@@ -16,7 +16,7 @@ assert set(profiles) == {"executor", "explore", "plan", "review"}
 executor = profiles["executor"]
 expected = {
     "claude": ("sonnet", None, False),
-    "codex": ("gpt-5.6-luna", "xhigh", True),
+    "codex": ("gpt-6-luna", "xhigh", True),
     "opencode": ("deepseek/deepseek-v4-flash", None, False),
 }
 for harness, (model, effort, supports_effort) in expected.items():
@@ -30,7 +30,7 @@ claude = (root / "executor/claude.md").read_text()
 codex = (root / "executor/codex.toml").read_text()
 opencode = (root / "executor/opencode.md").read_text()
 assert 'model: "sonnet"' in claude
-assert 'model = "gpt-5.6-luna"' in codex
+assert 'model = "gpt-6-luna"' in codex
 assert 'model_reasoning_effort = "xhigh"' in codex
 assert 'model: "deepseek/deepseek-v4-flash"' in opencode
 assert all('reasoning_effort' not in text for text in (claude, opencode))

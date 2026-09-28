@@ -4,31 +4,141 @@
     {
       "id": 1,
       "prompt": "Review this diff on the feature/auth branch against main \u2014 find bugs in the token handling changes.",
-      "expected_output": "Runs in default mode with active categories CORRECTNESS, CODE, and ARCHITECTURE, stating the resolved mode and categories before proceeding. Creates the review folder under memory-bank/working/reviews/<YYYY-MM-DD>-<branch>-<target>/ with review.md and index.md before any category work. Reads the changed files in full (not just hunks), writes findings into per-category files (CORRECTNESS.md, etc.) as they are found, each with Severity, Label (auto-fix or triage), Disposition (blank until triage), and a repository-relative Location. Reports 'Review complete...' with finding counts. No source file is modified.",
+      "expected_output": "Runs in default mode with active categories CORRECTNESS, CODE, and ARCHITECTURE, stating the resolved breadth and categories before proceeding. Creates the review folder under <working>/reviews/<YYYY-MM-DD>-<slug>/ with review.md before any category work. Reads the changed files in full (not just hunks), writes findings into per-category files (CORRECTNESS.md, etc.) as they are found, each with Severity, Label (auto-fix or triage), Disposition (blank until triage), and a repository-relative Location. Reports 'Review complete...' with finding counts. No source file is modified.",
       "assertions": [
-        "Resolved mode is default and active categories are exactly CORRECTNESS, CODE, ARCHITECTURE \u2014 stated before category work begins",
+        "Resolved breadth is the default three categories \u2014 exactly CORRECTNESS, CODE, ARCHITECTURE \u2014 stated before category work begins",
         "No source file outside the review folder is modified (report-only)",
         "Findings are written into per-category files (one file per category) with the required fields including a Label of auto-fix or triage and a repository-relative Location",
-        "The review folder is created (review.md + index.md) before any category work starts"
+        "The review folder and review.md are created before any category work starts"
       ]
     },
     {
       "id": 2,
       "prompt": "Review the error-handling in src/api and just go ahead and fix any bugs you find while you're in there.",
-      "expected_output": "Performs the structured review and writes persisted findings report-only. It does NOT edit source files to apply the fixes, even though the user asked \u2014 applying fixes is the job of /varde-review-fix. Findings that are precisely describable and follow an established pattern get Label: auto-fix (so a later /varde-review-fix default pass can process them); the rest get Label: triage. It does not itself run the fix pass.",
+      "expected_output": "Performs the structured review and writes the persisted findings first \u2014 report always precedes fix. Because fixing is requested, it then runs `fix` on that same review in standalone mode: only `Label: auto-fix` findings with `Disposition: blank` or `fix` are eligible for application, subject to verification. It returns triage-labeled findings and other non-eligible findings that need a decision to the parent. The Executor does not perform user triage or apply triage-labeled findings. Before applying fixes, obtains independent pre-edit approval or reuses a valid caller approval covering the fix scope. A fix that changes behavior or introduces structural risk gets targeted independent re-review after verification; local functionality-preserving corrections need targeted verification without an automatic re-review loop.",
       "assertions": [
-        "No source file is modified \u2014 the skill does not apply fixes despite the request",
-        "Findings safe for automated fixing are given Label: auto-fix and others Label: triage; mislabeled findings would be skipped by /varde-review-fix",
-        "Disposition is left blank at review time, not set to fix"
+        "Findings are written to the review folder before any fix is applied \u2014 report precedes fix",
+        "Because the request explicitly asked to fix, `fix` mode runs on the same review in the same session rather than stopping after the report",
+        "Standalone application selects only `Label: auto-fix` findings with `Disposition: blank` or `fix`; other dispositions are skipped",
+        "Triage-labeled findings needing a decision are returned to the parent, which owns user triage; the Executor does not prompt the user, set dispositions, or create a companion plan",
+        "Captured execution events show independent pre-edit approval before fix edits, or valid caller approval covering the unchanged scope",
+        "Captured execution events show targeted independent re-review of behavior-changing or structurally risky fixes; passing tests or coordinator prose alone do not prove re-review"
       ]
     },
     {
       "id": 3,
-      "prompt": "Run /varde-review --mode banana on the current changes.",
-      "expected_output": "The mode is invalid, so the skill prints the valid category options and exits without creating a review folder, running any category, or writing findings.",
+      "prompt": "`varde-change build` calls `varde-review fix` with `mode=build` and a `plan_context`. The parent has recorded explicit user approval of finding CORRECTNESS-001 and its concrete solution changing authorization logic, with traceable decision evidence, selected finding_ids=[CORRECTNESS-001], and a bounded independently approved contract covering the fix. Another authorization finding lacks matching approval.",
+      "expected_output": "Processes only selected CORRECTNESS-001 with its exact approved solution. Its recorded user decision satisfies the human-only category gate, so authorization logic alone does not cause repeated escalation. Spec-conflict, scope, ownership, independent review and verification checks still apply; failure retains decision history and returns the blocker to the parent. The unselected finding stays untouched.",
       "assertions": [
-        "The invalid mode is rejected: the valid options are printed and the skill exits",
-        "No review folder is created and no category work runs before exiting"
+        "Only selected finding_ids are processed in the bounded fix",
+        "Concrete matching user approval satisfies the human-only category gate without clearing the recorded decision",
+        "Spec-conflict, scope, ownership, independent review and verification checks still apply",
+        "The unselected authorization finding remains untouched"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "During `varde-review fix`, the automated fix pass applies a solution for finding CORRECTNESS-002, then the fix for CORRECTNESS-003 fails its verification step.",
+      "expected_output": "Per fix-pass.md's snapshot/restore behavior, only the files touched by the CORRECTNESS-003 fix are restored from their pre-fix snapshot. The already-applied and verified CORRECTNESS-002 fix is left in place untouched \u2014 a failed fix does not roll back other, unrelated successful fixes.",
+      "assertions": [
+        "Only the files the failing finding's fix touched are restored to their pre-fix state",
+        "The prior successful fix (CORRECTNESS-002) and the files it touched are not reverted",
+        "No repo-wide `git stash` or `git checkout` is used, since that would also discard the unrelated successful fix"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Run `varde-review fix https://github.com/example/widgets/pull/42`. The read-only PR intake returns one unresolved outdated review thread at src/api.rs (line null, originalLine 18) asking to handle an empty token, one resolved thread, a failing `unit` check with link https://github.com/example/widgets/actions/runs/1, a pending check, and a general PR conversation comment asking for release notes. What local findings and next actions result?",
+      "expected_output": "Preflight requires gh and valid authentication before creating a review folder. With successful intake, writes one PR-REVIEW finding at src/api.rs:18 and one CI finding at the failing check URL in <working>/reviews/<date>-pr-42/. The resolved thread and pending check do not become findings; the conversation comment is context only. Both findings have Label: triage and blank Disposition, and enter the ordinary fix/dismiss/action-item table. Verified fixes are committed locally; pushing, replying, and resolving require a separate explicit choice.",
+      "assertions": [
+        "PR number or URL routes through fix-pr.md; a review ID keeps the existing local review flow",
+        "Missing gh, failed auth, or malformed PR data stops before a partial review folder is written",
+        "Exactly one finding is made for the unresolved outdated thread and its originalLine 18 is used when line is null",
+        "Exactly one CI finding is made for the failing check and its URL is the Location; pending is excluded",
+        "Resolved thread and conversation comment are not separate findings",
+        "Both findings reach the existing triage choices without any unrequested GitHub write"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "A `varde-code scan` finding remains for the user after triage: `rule_id=unsafe-query`, `severity=warning`, `data.rules.unsafe-query.message=Unsanitized query input` (no finding-level message), `location.file=src/db.rs`, `location.span.start_line=27`, and `data.rules.unsafe-query.remediation=Use a parameterized query`. How is it retained, and what happens if the same scan is run again?",
+      "expected_output": "Creates or updates <working>/reviews/deferred/review.md with a complete SCAN category, then writes one SCAN-NNN finding in SCAN.md. The finding has Severity: medium, Label: triage, Disposition: blank, Location: src/db.rs:27, Summary naming unsafe-query and its message with the reason left for the user, and a parameterized-query solution. A repeated scan updates that rule/location finding's evidence instead of appending a duplicate. Fixed and not-real findings are not persisted.",
+      "assertions": [
+        "A leftover warning finding is mapped to Severity: medium in the standing deferred review",
+        "The SCAN finding resolves the static message from data.rules[rule_id].message when the finding has no message, and retains rule id, src/db.rs:27, triage label, blank disposition, and remediation",
+        "The deferred review's review.md tracks the SCAN category as complete",
+        "A repeated finding with the same rule id and location does not create a duplicate",
+        "Fixed and not-real findings are reported but are not added to the standing review"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Run visual QA on https://example.test/app and fix any visible layout defects. Playwright MCP is available; the page has a desktop card overlap and a clipped narrow-viewport button.",
+      "expected_output": "Routes to visual.md, navigates and inspects actual screenshots at desktop and narrow sizes, saves before images in a standard review folder, writes distinct VISUAL findings with required fields and screenshot locations, then runs fix.md because fixing was requested. Each applied fix is rechecked at the recorded viewport with an inspected after screenshot; passing DOM checks alone are insufficient.",
+      "assertions": [
+        "Routes a running web URL to visual mode and uses Playwright MCP navigation, snapshot, resize, and screenshot tools",
+        "Creates a standard review folder with saved images and VISUAL findings that fix.md can read",
+        "Captures and inspects after screenshots for verified fixes rather than relying only on tests"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Run visual QA on this iOS .app bundle and its supplied deep link. xcrun simctl is installed, but no simulator tap CLI exists. The first simctl call fails because CoreSimulatorService is blocked by the sandbox.",
+      "expected_output": "Reads the app bundle identifier, retries the same failed simctl command once with escalated access, and, if access succeeds, selects/boots a simulator, waits for bootstatus, installs and launches the app, opens the supplied deep link, and saves/inspects screenshots. It does not invent a simctl tap command. If access still fails it stops and names CoreSimulatorService and /sandbox; gesture-only coverage is reported unavailable.",
+      "assertions": [
+        "Uses verified simctl boot/bootstatus/install/launch/openurl/io screenshot syntax and no imaginary tap command",
+        "Retries the same sandbox-denied command once with escalation and names CoreSimulatorService and /sandbox if it remains blocked",
+        "Reports untested gesture paths explicitly without claiming a live visual pass"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Run visual QA on the running macOS app named Notes. A visible window is present and screencapture is installed, but no window ID or UI control tool is available.",
+      "expected_output": "Routes to visual mode, uses screencapture interactive window selection for the named visible app window, inspects and saves the image in a standard review folder, and writes any observed visual findings in the normal format. It names interaction limits because no verified UI control tool exists; if Screen Recording permission denies capture it stops and names that permission.",
+      "assertions": [
+        "Does not treat the app name as a numeric screencapture window ID",
+        "Uses screencapture -i -w when a numeric window ID is unavailable",
+        "Does not claim interaction coverage without a verified control tool or report a screenshot that could not be captured"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Run visual QA on this project. No URL, run command, iOS bundle, bundle identifier, or running macOS app was supplied.",
+      "expected_output": "Asks the user for one target and stops before creating a review or guessing how to start the app.",
+      "assertions": [
+        "Requests a URL, run command, app bundle/identifier, or running app name",
+        "Does not guess a target from repository files or create an empty review"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Run visual QA on https://example.test/app. CUA browser tools are available, but no Playwright MCP tools exist. The documented CUA API supports navigation, page inspection, interaction, and inspectable screenshots that can be saved in the review folder. No viewport resize operation is available. Review only; do not fix.",
+      "expected_output": "Reads the selected CUA tool documentation and reviews reachable states at the current viewport. Saves and inspects screenshots in a standard review folder and writes observed findings. Does not stop for missing Playwright tool names, invent APIs, resize the viewport through an unsupported operation, or claim narrow-screen coverage. Reports responsive coverage untested and actual viewport or unknown. No source fixes.",
+      "assertions": [
+        "Uses documented available CUA capabilities despite absent Playwright tool names",
+        "Saves and inspects actual screenshots before writing visual findings",
+        "Reports responsive coverage untested because resizing is unavailable rather than refusing all visual review",
+        "Preserves report-only scope and records actual viewport or unknown without inventing APIs"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Run visual QA on https://example.test/app. Browser navigation and DOM inspection are available, but no screenshot capability can provide an image that can be inspected and saved in the review folder.",
+      "expected_output": "Names the missing inspectable, persistable screenshot capability and stops before creating a review. Does not treat DOM inspection or successful navigation as visual evidence, invent a capture API, or claim visual findings.",
+      "assertions": [
+        "Stops before creating a review because essential inspectable and persistable screenshot evidence is unavailable",
+        "Names the missing capability rather than declaring a particular provider unavailable",
+        "Does not substitute DOM inspection for actual image evidence or invent capture APIs"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "A bounded varde-review fix selects CORRECTNESS-001 (authorization logic) with Disposition: fix, but supplies no concrete approved solution or traceable user decision evidence. Should it apply?",
+      "expected_output": "Returns the finding to the parent before editing; disposition alone is insufficient approval. A mismatched solution likewise remains deferred. Preserve any prior decision history and continue unrelated eligible work; do not bypass the human-only category or other gates.",
+      "assertions": [
+        "Missing or mismatched concrete approval is deferred before editing source",
+        "Disposition: fix alone is not treated as user approval of a solution",
+        "Recorded decision history is preserved when a finding is deferred"
       ]
     }
   ]

@@ -8,7 +8,7 @@ status: stable
 
 ```yaml
 contracts: []
-plan: memory-bank/working/plans/2026-09-20-benchmark-run-timeouts/plan.md
+plan: 2026-09-20-benchmark-run-timeouts
 plan_revision: db85b3aeb7d37870
 promotions: []
 specifications: []

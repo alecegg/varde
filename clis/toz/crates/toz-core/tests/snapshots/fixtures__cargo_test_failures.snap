@@ -1,0 +1,9 @@
+---
+source: crates/toz-core/tests/fixtures.rs
+expression: outline(text)
+---
+strategy: Test
+chunks: 3
+  0  L1-L10  prose  running 4 tests
+  1  L11-L26  prose  FAIL tests::wrong_expectation
+  2  L27-L33  prose  test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
