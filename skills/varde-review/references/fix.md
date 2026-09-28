@@ -1,5 +1,28 @@
 # Fix mode
 
+## One selected standalone finding
+
+For an explicit request to fix one already recorded standalone finding, read
+its category file and confirm the ID, current location, and one concrete
+solution. Route a settled fix to bounded `varde-change` in the same turn; do
+not create another report, run the automated pass below, or create a task or
+companion plan. If the solution is ambiguous or required human-only approval
+is missing, use Parent triage below. Plan-owned findings keep their existing
+task flow.
+For an `auto-fix` finding with one reliable solution, the user's named fix
+request supplies decision evidence; a `triage` finding needs approval of its
+specific solution.
+
+Pass the review folder, finding ID, selected solution, and decision evidence
+to the bounded contract. Scope both the category file and `review.md` (use
+`--artifact` for each file outside the repository). Apply the normal pre-edit
+gate. After source verification, change only that finding's `Disposition` to
+`fix`, append a decision note linking the bounded subject and fix evidence,
+and recompute `review.md`'s `triage_status` (`complete` if no unresolved
+findings remain, otherwise `partial`). Then obtain final review and run the
+complete checkpoint over source and review edits. Leave other findings
+untouched.
+
 The parent owns review orchestration and user triage. An Executor applies
 findings only; it never prompts the user, changes a blank disposition based on
 its own judgment, or creates a companion plan. Read and edit the review's
@@ -21,11 +44,12 @@ unverified, rejected, unapplied, or otherwise unresolved finding to the parent
 with its identifier, reason, and any `Escalated:` note. The parent presents
 the triage table and records the user's decision.
 
-For a follow-up fix after triage, the parent creates a bounded build task with
-the selected `finding_ids`, the concrete approved solution for each ID, and
-traceable user decision evidence, then dispatches it through `varde-change
-build`. The Executor applies only those IDs and solutions; missing or
-mismatched approval returns to the parent.
+For a follow-up fix after triage, a single standalone finding uses the route
+above. For plan-owned or multiple selected findings, the parent creates a
+bounded build task with the selected `finding_ids`, the concrete approved
+solution for each ID, and traceable user decision evidence, then dispatches it
+through `varde-change build`. The Executor applies only those IDs and solutions;
+missing or mismatched approval returns to the parent.
 Do not rerun review-fix over the whole folder for a user-selected finding.
 
 ## Source routing
@@ -79,8 +103,9 @@ The user may choose `fix`, `dismiss` with a reason, `action-item`, or `discuss`
 (leave `Disposition: blank`). The parent records dismissals and reasons or
 creates companion-plan tasks for action-items. For a chosen fix, the parent
 records `Disposition: fix` and the chosen concrete solution with user decision
-evidence, then creates a bounded `varde-change build` task carrying those
-approvals and selected `finding_ids`. Keep that decision history when a later
+evidence, then uses the single-finding route above or creates a bounded
+`varde-change build` task carrying those approvals and selected `finding_ids`
+for plan-owned or multiple findings. Keep that decision history when a later
 scope/spec/verification blocker prevents application; a disposition alone is
 not approval of a particular solution.
 Recommend `fix` for high severity or a contained, high-confidence change at

@@ -33,13 +33,13 @@ done
 mkdir -p "$TEST_ROOT/dry"
 HOME="$TEST_ROOT/dry" PATH="$SYSTEM_PATH" \
   "$ROOT_DIR/varde" sync --agents claude --dry-run >"$TEST_ROOT/dry.out" 2>&1
-grep -Fq "would run: cargo install --path $ROOT_DIR/clis/code/crates/varde-code --locked --target-dir $ROOT_DIR/clis/code/target" "$TEST_ROOT/dry.out" ||
+grep -Fq "would run: cargo install --path $ROOT_DIR/clis/code/crates/varde-code --locked --force --target-dir $ROOT_DIR/clis/code/target" "$TEST_ROOT/dry.out" ||
   fail "dry run omitted varde-code command"
-grep -Fq "would run: cargo install --path $ROOT_DIR/clis/workflow/varde-workflow --locked --target-dir $ROOT_DIR/clis/workflow/target" "$TEST_ROOT/dry.out" ||
+grep -Fq "would run: cargo install --path $ROOT_DIR/clis/workflow/varde-workflow --locked --force --target-dir $ROOT_DIR/clis/workflow/target" "$TEST_ROOT/dry.out" ||
   fail "dry run omitted varde-workflow command"
-grep -Fq "would run: cargo install --path $ROOT_DIR/clis/toz/crates/toz --locked --target-dir $ROOT_DIR/clis/toz/target" "$TEST_ROOT/dry.out" ||
+grep -Fq "would run: cargo install --path $ROOT_DIR/clis/toz/crates/toz --locked --force --target-dir $ROOT_DIR/clis/toz/target" "$TEST_ROOT/dry.out" ||
   fail "dry run omitted toz command"
-grep -Fq "would run: cargo install --path $ROOT_DIR/clis/learn/crates/varde-learn --locked --target-dir $ROOT_DIR/clis/learn/target" "$TEST_ROOT/dry.out" ||
+grep -Fq "would run: cargo install --path $ROOT_DIR/clis/learn/crates/varde-learn --locked --force --target-dir $ROOT_DIR/clis/learn/target" "$TEST_ROOT/dry.out" ||
   fail "dry run omitted varde-learn command"
 [ -z "$(find "$TEST_ROOT/dry" -mindepth 1 -print -quit)" ] || fail "dry run wrote to HOME"
 

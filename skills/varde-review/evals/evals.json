@@ -140,6 +140,27 @@
         "Disposition: fix alone is not treated as user approval of a solution",
         "Recorded decision history is preserved when a finding is deferred"
       ]
+    },
+    {
+      "id": 14,
+      "prompt": "Fix the already recorded standalone review finding CORRECTNESS-001 in <working>/reviews/api/CORRECTNESS.md. It has one settled, user-approved solution and location src/api/token.rs:42. No other finding is selected.",
+      "expected_output": "Read the named finding and route its single settled fix through bounded varde-change in the same turn. Keep the review folder, finding ID, concrete solution, and user decision evidence in the bounded contract; include the category file and review.md as external artifacts in the review subject. Do not create another report, run the full review-fix pass, or create a plan or task file. After source verification, update only CORRECTNESS-001 disposition, add the bounded subject link, and recompute review.md triage_status. The final review and complete checkpoint cover source and review edits. Leave other findings unchanged.",
+      "assertions": [
+        "Single standalone finding routes to bounded varde-change without a new review or task file",
+        "The source finding, category file, and review.md remain traceable in the bounded contract and artifact scope",
+        "Only the selected finding is updated, and review.md triage_status is recomputed after source verification",
+        "Pre-edit and final review gates still apply"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Fix these review findings: one is plan-owned, and another standalone finding has two unresolved solution choices. Can the direct single-finding route process both?",
+      "expected_output": "No. The plan-owned finding keeps its plan task flow. The standalone finding needs a concrete solution decision before a bounded fix; the direct route does not process a batch, infer approval from Disposition: fix, or bypass human-only triage.",
+      "assertions": [
+        "Plan-owned findings retain the existing bounded task flow",
+        "Unsettled standalone solutions return to triage",
+        "The direct route does not process multiple findings or bypass approval gates"
+      ]
     }
   ]
 }

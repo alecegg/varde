@@ -508,6 +508,7 @@ mod tests {
                     kind: "run",
                     source: label,
                     source_key: label,
+                    legacy_source_key: None,
                     bytes: body.len(),
                     exit_code: Some(0),
                     session: None,

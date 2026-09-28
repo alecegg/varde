@@ -6,13 +6,16 @@ error messages, log output, and wire formats stay unchanged.
 
 Apply `references/review-gates.md` before implementation edits and at
 completion. Reuse an unchanged approved plan verdict supplied by the caller.
+For a bounded refactor without a task file, use its contract scope and a stable
+change ID wherever this posture names task scope or ID.
 
 ## Bootstrap
 
 1. Read `<knowledge>/pattern/` if it exists.
 2. Select the explicit target (path, glob, or free-text direction), else the
    review findings the task addresses (confirm each still applies at its
-   listed location), else the task's structural goal. If none is given, ask.
+   listed location), else the task's or contract's structural goal. If none is
+   given, ask.
 3. Record the target branch and SHA. Inspect its status and diffs for the
    selected paths before creating a worktree. A new worktree excludes
    uncommitted edits. Leave those edits untouched in the original checkout;
@@ -25,8 +28,8 @@ completion. Reuse an unchanged approved plan verdict supplied by the caller.
    merge and clean it up; `created=false` means the caller owns those actions.
    On resume, confirm the recorded branch and path before reuse.
    When the printed path differs from the subject's approval checkout, load
-   `references/worktree.md`, bind its approved task scope before editing, and
-   use that binding context for start/resume checks. The original task file is
+   `references/worktree.md`, bind its approved scope before editing, and use
+   that binding context for start/resume checks. If there is a task file, it is
    reference material; return evidence for parent-owned state updates.
 5. Find each target file's covering tests (`tests_for_file`, naming convention,
    or grep for test-directory imports) and read them in full. If none exist,
@@ -50,22 +53,24 @@ completion. Reuse an unchanged approved plan verdict supplied by the caller.
    or grep); more than one means it is not an inline target.
 6. Rename only when the rename is the change, never as a side effect of
    another one.
-7. Outside a parallel wave, follow `build-execution.md` Completion step 5 and
-   commit the task's source paths once, excluding task bookkeeping in an isolated worker. If you
+7. Outside a parallel wave, commit verified source paths once. For a task,
+   follow `build-execution.md` Completion step 5; without a task, use the
+   bounded change ID in the commit message and write no task bookkeeping. If you
    own the worktree, return to the target checkout and confirm its branch and
    SHA are unchanged. Preserve its uncommitted edits; if the merge would
    overwrite one, keep the worktree and branch and stop. Otherwise run
    `scripts/worktree-merge.sh <task-id>-refactor`, inspect and release its
-   binding against the integrated task commit, then clean it up with
+   binding against the integrated source commit, then clean it up with
    `scripts/worktree-cleanup.sh <task-id>-refactor`. If the caller owns the
    worktree, report the commit and leave merge and cleanup to that owner.
-   The parent updates all tracked or external task files only after integration
-   and release. A caller-owned worktree returns pending state with its binding.
-   During a parallel wave, leave task files to the orchestrator per
-   `references/build-parallel.md`. For a non-parallel isolated refactor, mark its task done only after the
-   worktree owner has merged the task commit successfully.
+   For a task, the parent updates its files only after integration and release;
+   during a parallel wave, leave them to the orchestrator per
+   `references/build-parallel.md`. A caller-owned worktree returns pending state
+   with its binding. Mark a task done only after its source commit is integrated.
+   Without a task, run the bounded route's complete review checkpoint after
+   integration and binding release.
 
-Verify with the independently approved checks and the task's
+Verify with the independently approved checks and, when present, the task's
 `#### Verification` asserts. Include broad checks when affected consumers,
 shared behavior, or unresolved coverage uncertainty justify them. Complete
 required repository checks; do not repeat the full suite after each task

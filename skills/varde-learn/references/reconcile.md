@@ -22,10 +22,11 @@ An item's recorded summary is not proof that the problem is fixed.
 3. For an occurrence without Git context, use named current evidence such as a
    present file, command result, or user-provided observation. Do not invent a
    repository or SHA, or use Git history to fill the gap.
-4. State which occurrences the evidence covers and propose `resolved` or
-   `archived`. Ask the user to confirm the status change; leave the item
-   unchanged while evidence is missing or confirmation is pending.
-5. After confirmation, record the reason through the CLI:
+4. State which occurrences the evidence covers and whether `resolved` or
+   `archived` fits. An explicit user request to reconcile or update the item
+   authorizes an evidence-supported, unambiguous status. Ask when evidence is
+   missing, more than one status fits, or the action is destructive.
+5. When authorized and supported, record the reason through the CLI:
 
    ```sh
    varde-learn friction set-status 42 resolved --reason "The current check now verifies the required path." --json

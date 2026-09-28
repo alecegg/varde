@@ -9,6 +9,7 @@ mod adapter;
 mod grade;
 mod run;
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -111,6 +112,36 @@ struct EvalCase {
 
 /// Run every selected eval x config x run, validating inputs up front.
 pub fn run_output(req: &OutputRequest) -> Result<OutputReport, LearnError> {
+    let (skill_dir, evals) = validate_output_request(req)?;
+    let workspace = req.workspace.clone().unwrap_or_else(|| {
+        let mut name = skill_dir.clone().into_os_string();
+        name.push("-workspace");
+        PathBuf::from(name)
+    });
+    let iteration_dir = workspace.join(format!("iteration-{}", req.iteration));
+    fs::create_dir_all(&iteration_dir).map_err(|err| {
+        LearnError::Usage(format!(
+            "failed to create workspace {}: {err}",
+            iteration_dir.display()
+        ))
+    })?;
+
+    let records = execute_selected_evals(req, &skill_dir, &evals, &iteration_dir)?;
+    let benchmark = write_benchmark(req, &skill_dir, &records, &iteration_dir)?;
+
+    Ok(OutputReport {
+        iteration_dir,
+        records,
+        benchmark,
+    })
+}
+
+fn validate_output_request(req: &OutputRequest) -> Result<(PathBuf, Vec<EvalCase>), LearnError> {
+    if req.runs == 0 {
+        return Err(LearnError::Usage(
+            "--runs must be a positive integer".to_string(),
+        ));
+    }
     if req.timeout_seconds == 0 {
         return Err(LearnError::Usage(
             "--timeout-seconds must be a positive integer".to_string(),
@@ -161,20 +192,15 @@ pub fn run_output(req: &OutputRequest) -> Result<OutputReport, LearnError> {
             return Err(LearnError::Usage(format!("evaluation not found: {wanted}")));
         }
     }
+    Ok((skill_dir, evals))
+}
 
-    let workspace = req.workspace.clone().unwrap_or_else(|| {
-        let mut name = skill_dir.clone().into_os_string();
-        name.push("-workspace");
-        PathBuf::from(name)
-    });
-    let iteration_dir = workspace.join(format!("iteration-{}", req.iteration));
-    fs::create_dir_all(&iteration_dir).map_err(|err| {
-        LearnError::Usage(format!(
-            "failed to create workspace {}: {err}",
-            iteration_dir.display()
-        ))
-    })?;
-
+fn execute_selected_evals(
+    req: &OutputRequest,
+    skill_dir: &Path,
+    evals: &[EvalCase],
+    iteration_dir: &Path,
+) -> Result<Vec<RunRecord>, LearnError> {
     let configs: &[Config] = if req.no_baseline {
         &[Config::WithSkill]
     } else {
@@ -182,23 +208,23 @@ pub fn run_output(req: &OutputRequest) -> Result<OutputReport, LearnError> {
     };
 
     let mut records = Vec::new();
-    for eval in &evals {
+    for eval in evals {
         if !req.eval_ids.is_empty() && !req.eval_ids.iter().any(|id| id == &eval.id) {
             continue;
         }
         validate_skill_file(
-            &skill_dir,
+            skill_dir,
             eval.setup_script.as_deref(),
             "setup_script not found",
         )?;
         validate_skill_file(
-            &skill_dir,
+            skill_dir,
             eval.verification_script.as_deref(),
             "verification_script not found",
         )?;
         for file in &eval.files {
             validate_skill_file(
-                &skill_dir,
+                skill_dir,
                 Some(file.as_str()),
                 &format!("input file not found for eval {}", eval.id),
             )?;
@@ -208,7 +234,7 @@ pub fn run_output(req: &OutputRequest) -> Result<OutputReport, LearnError> {
         for &cfg in configs {
             for run in 1..=req.runs {
                 let record = execute_run(
-                    &skill_dir,
+                    skill_dir,
                     eval,
                     cfg,
                     run,
@@ -221,8 +247,16 @@ pub fn run_output(req: &OutputRequest) -> Result<OutputReport, LearnError> {
             }
         }
     }
+    Ok(records)
+}
 
-    let mut benchmark = build_benchmark(&skill_dir, req.iteration, &records);
+fn write_benchmark(
+    req: &OutputRequest,
+    skill_dir: &Path,
+    records: &[RunRecord],
+    iteration_dir: &Path,
+) -> Result<Value, LearnError> {
+    let mut benchmark = build_benchmark(skill_dir, req.iteration, records);
     benchmark["harness"] = json!(req.harness.as_str());
     benchmark["model"] = json!(req.model.as_deref().or(req.harness.default_model()));
     benchmark["judge_model"] = json!(
@@ -238,11 +272,7 @@ pub fn run_output(req: &OutputRequest) -> Result<OutputReport, LearnError> {
     )
     .map_err(|err| LearnError::Usage(format!("failed to write benchmark.json: {err}")))?;
 
-    Ok(OutputReport {
-        iteration_dir,
-        records,
-        benchmark,
-    })
+    Ok(benchmark)
 }
 
 /// Ports the `agg()`/delta jq pipeline at the tail of
@@ -468,11 +498,18 @@ fn load_evals(skill_dir: &Path) -> Result<Vec<EvalCase>, LearnError> {
     if evals.is_empty() {
         return Err(LearnError::Usage(format!("no evals in {}", path.display())));
     }
-    evals
+    let evals: Vec<EvalCase> = evals
         .iter()
         .enumerate()
         .map(|(index, item)| parse_eval_case(item, index))
-        .collect()
+        .collect::<Result<_, _>>()?;
+    let mut ids = HashSet::new();
+    for eval in &evals {
+        if !ids.insert(&eval.id) {
+            return Err(LearnError::Usage(format!("duplicate eval id: {}", eval.id)));
+        }
+    }
+    Ok(evals)
 }
 
 fn parse_eval_case(item: &Value, index: usize) -> Result<EvalCase, LearnError> {
@@ -481,6 +518,14 @@ fn parse_eval_case(item: &Value, index: usize) -> Result<EvalCase, LearnError> {
         Some(Value::Number(n)) => n.to_string(),
         _ => (index + 1).to_string(),
     };
+    if id.is_empty()
+        || id == "."
+        || id == ".."
+        || id.contains(['/', '\\'])
+        || id.chars().any(char::is_control)
+    {
+        return Err(LearnError::Usage(format!("invalid eval id: {id:?}")));
+    }
     let prompt = item
         .get("prompt")
         .and_then(Value::as_str)

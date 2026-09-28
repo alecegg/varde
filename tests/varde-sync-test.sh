@@ -274,7 +274,7 @@ test_learn_cli_dry_run_prints_install_line() {
   local output="$TEMP_DIR/learn-cli-dry.out"
   mkdir -p "$home"
   HOME="$home" "$ROOT_DIR/varde" sync --dry-run --agents claude >"$output"
-  assert_contains "would run: cargo install --path $ROOT_DIR/clis/learn/crates/varde-learn --locked --target-dir $ROOT_DIR/clis/learn/target" "$output"
+  assert_contains "would run: cargo install --path $ROOT_DIR/clis/learn/crates/varde-learn --locked --force --target-dir $ROOT_DIR/clis/learn/target" "$output"
 }
 
 test_no_cli_warns_varde_learn_missing() {

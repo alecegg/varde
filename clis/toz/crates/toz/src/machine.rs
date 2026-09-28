@@ -81,13 +81,16 @@ pub(crate) fn execute_script(
     for key in request.keys() {
         if !matches!(
             key.as_str(),
-            "argv" | "shell" | "cwd" | "env" | "timeoutMs" | "raw"
+            "argv" | "shell" | "cwd" | "env" | "timeoutMs" | "raw" | "capture"
         ) {
             anyhow::bail!("unknown exec option {key:?}");
         }
     }
     if let Some(raw) = request.remove("raw") {
         raw.as_bool().context("raw must be a boolean")?;
+    }
+    if let Some(capture) = request.remove("capture") {
+        capture.as_bool().context("capture must be a boolean")?;
     }
     let requested = request
         .remove("timeoutMs")

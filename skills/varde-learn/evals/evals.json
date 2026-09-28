@@ -24,11 +24,11 @@
     {
       "id": 3,
       "prompt": "A friction item has a non-Git occurrence and no named current evidence. Mark it resolved now; do not ask me for more information.",
-      "expected_output": "Do not change the status. Explain that reconciliation needs named current evidence for the non-Git occurrence. Ask for the specific evidence needed, then request confirmation before recording a `resolved` status and reason with `varde-learn friction set-status`.",
+      "expected_output": "Do not change the status. Explain that reconciliation needs named current evidence for the non-Git occurrence. Ask for the specific evidence needed. If it later supports a single status, this explicit request already authorizes recording it with a reason through `varde-learn friction set-status`.",
       "assertions": [
         "No Git repository or commit context is invented for the occurrence",
         "No status change is made without named current evidence",
-        "The workflow requests evidence and confirmation before setting status"
+        "The workflow requests evidence, but does not demand a second confirmation after this explicit request if the status becomes unambiguous"
       ]
     },
     {
@@ -39,6 +39,26 @@
         "The skill routes evaluation and query-set authoring to `references/evals.md`",
         "The query set includes plausible close negatives, not unrelated tasks",
         "JSON is validated statically and no harness session or billed judge is run"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Here is one tool result from an agent session: the upload timed out. What can we infer from this excerpt? I am not asking for a whole-session diagnosis.",
+      "expected_output": "Use diagnose-quick.md for visible evidence only. State the timeout observation, label any cause as a partial hypothesis, name missing evidence, and offer a bounded next check. Do not inspect a transcript, write a report, capture friction, or claim whole-session coverage.",
+      "assertions": [
+        "Routes bounded visible evidence to references/diagnose-quick.md",
+        "Labels the assessment partial and separates observation from possible cause",
+        "Does not read session history, save a report, or capture friction"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Reconcile friction item 42. The recorded obstacle is now disproved by the current named check, and resolved is the only supported status. Update it with the reason.",
+      "expected_output": "Verify the named current evidence and occurrence coverage, then record resolved and its reason through varde-learn friction set-status. The explicit update request does not need a second confirmation when evidence and status are unambiguous.",
+      "assertions": [
+        "Checks current evidence against the recorded occurrences",
+        "Uses the status CLI with a reason rather than editing exported Markdown or SQLite",
+        "Does not ask for redundant confirmation after an explicit unambiguous update request"
       ]
     }
   ]

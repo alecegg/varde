@@ -33,6 +33,7 @@ mod commands {
     pub mod search;
     pub mod set_field;
     pub mod show;
+    pub mod spec_inventory;
     pub mod transition;
     pub mod update;
     pub mod validate;
@@ -40,7 +41,7 @@ mod commands {
 
 use anyhow::Result;
 use clap::Parser;
-use cli::{Cli, Command, ConceptCommand};
+use cli::{Cli, Command, ConceptCommand, SpecCommand};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -59,6 +60,9 @@ fn main() -> Result<()> {
         Command::Lint(args) => commands::lint::run(args)?,
         Command::Paths(args) => commands::paths::run(args)?,
         Command::Config(args) => commands::config::run(args)?,
+        Command::Spec(args) => match args.command {
+            SpecCommand::Inventory(inventory) => commands::spec_inventory::run(inventory)?,
+        },
     }
     Ok(())
 }

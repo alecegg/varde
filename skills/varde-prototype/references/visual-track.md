@@ -20,7 +20,8 @@ libraries) need the user's explicit agreement.
 
 ## Round 1 — Variants
 
-Skip variants only when the user already gave a specific direction.
+If the user already gave a specific direction, skip variants, write `v1.html`
+from that direction, and continue with the rounds below.
 
 1. **Pick N.** 2–3 close variants (narrow) or 3–5 unrelated shapes (wide);
    default 3, max 5; state N.
@@ -33,9 +34,10 @@ Skip variants only when the user already gave a specific direction.
    never an embedded or scaled preview.
 4. **Say** the switcher bar opens the others at full fidelity.
 5. **Ask the user to pick** a winner or a hybrid ("the header from B with the
-   sidebar from C"). A hybrid pick is the answer.
-6. **Seed `v1.html`** from the winner, applying any hybrid instructions, and
-   continue with the rounds below.
+   sidebar from C"). End round 1 here; do not write `v1.html` before the user
+   selects a direction.
+6. **After the selection, seed `v1.html`** from the winner, applying any hybrid
+   instructions, and continue with the rounds below.
 
 ## Rounds
 

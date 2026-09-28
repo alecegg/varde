@@ -643,8 +643,13 @@ fn strip_hooks(current: &str) -> Result<String> {
     for (event, list) in events.iter_mut() {
         if let Some(arr) = list.as_array_mut() {
             let before = arr.len();
-            arr.retain(|entry| !mentions_toz(entry));
-            changed |= arr.len() != before;
+            let mut removed = false;
+            arr.retain_mut(|entry| {
+                let (keep, entry_changed) = strip_owned_hooks(entry);
+                removed |= entry_changed;
+                keep
+            });
+            changed |= removed || arr.len() != before;
             if arr.is_empty() {
                 empty_events.push(event.clone());
             }
@@ -693,7 +698,7 @@ fn strip_block(current: &str) -> String {
 }
 
 /// Merge toz's hook entries into an existing Claude-Code-style hooks file. For each event,
-/// any existing entry whose command mentions `toz ` is replaced; others are kept.
+/// owned nested commands are replaced; foreign commands and entries are kept.
 fn merge_hooks(current: &str, ours: &str) -> Result<String> {
     let mut doc: Value = if current.trim().is_empty() {
         json!({"hooks": {}})
@@ -711,24 +716,27 @@ fn merge_hooks(current: &str, ours: &str) -> Result<String> {
             *list = json!([]);
         }
         let arr = list.as_array_mut().unwrap();
-        arr.retain(|entry| !mentions_toz(entry));
+        arr.retain_mut(|entry| strip_owned_hooks(entry).0);
         arr.extend(entries.as_array().unwrap().iter().cloned());
     }
     Ok(serde_json::to_string_pretty(&doc)? + "\n")
 }
 
-fn mentions_toz(entry: &Value) -> bool {
-    entry["hooks"]
-        .as_array()
-        .map(|hs| {
-            hs.iter().any(|h| {
-                h["command"]
-                    .as_str()
-                    .map(is_owned_hook_command)
-                    .unwrap_or(false)
-            })
-        })
-        .unwrap_or(false)
+fn strip_owned_hooks(entry: &mut Value) -> (bool, bool) {
+    let Some(hooks) = entry["hooks"].as_array_mut() else {
+        return (true, false);
+    };
+    let before = hooks.len();
+    hooks.retain(|hook| {
+        !hook["command"]
+            .as_str()
+            .map(is_owned_hook_command)
+            .unwrap_or(false)
+    });
+    (
+        before == hooks.len() || !hooks.is_empty(),
+        before != hooks.len(),
+    )
 }
 
 fn is_owned_hook_command(command: &str) -> bool {
@@ -1043,6 +1051,26 @@ mod tests {
         assert_eq!(v["hooks"]["Stop"][0]["hooks"][0]["command"], "echo bye");
         assert!(once.contains("note --harness codex"));
         assert!(once.contains("capture --hook --harness codex"));
+    }
+
+    #[test]
+    fn mixed_hook_entry_keeps_foreign_command_on_merge_and_strip() {
+        let existing = r#"{"hooks":{"PostToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"toz capture --hook --harness codex"},{"type":"command","command":"echo foreign"}]}]}}"#;
+        let ours = render(include_str!("../assets/codex/hooks.json")).unwrap();
+        let merged = merge_hooks(existing, &ours).unwrap();
+        let merged_doc: Value = serde_json::from_str(&merged).unwrap();
+        assert!(merged_doc["hooks"]["PostToolUse"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["matcher"] == "Bash"
+                && entry["hooks"][0]["command"] == "echo foreign"));
+        let stripped: Value = serde_json::from_str(&strip_hooks(existing).unwrap()).unwrap();
+        assert_eq!(stripped["hooks"]["PostToolUse"][0]["matcher"], "Bash");
+        assert_eq!(
+            stripped["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
+            "echo foreign"
+        );
     }
 
     #[test]

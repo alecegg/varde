@@ -49,6 +49,14 @@ if "$SKILLS_DIR/install.sh" -f -d "$subset_target" \
   -s 'varde-change varde-review' >/dev/null 2>&1; then
   fail "combined invalid selection was accepted"
 fi
+for invalid_subset in '' ',' ',varde-change' 'varde-change,' 'varde-change,,varde-review'; do
+  invalid_target="$TEST_ROOT/invalid-subset"
+  if "$SKILLS_DIR/install.sh" -f -d "$invalid_target" \
+    -s "$invalid_subset" >/dev/null 2>&1; then
+    fail "invalid -s subset '$invalid_subset' was accepted"
+  fi
+  [ ! -e "$invalid_target" ] || fail "invalid -s subset created a target"
+done
 
 dup_target="$TEST_ROOT/dup"
 dup_output="$("$SKILLS_DIR/install.sh" -f -d "$dup_target" -s varde-change,varde-change)"
@@ -114,6 +122,63 @@ after="$(cksum "$unmarked_target/varde-diagnose/local.txt")"
 dry_output="$("$SKILLS_DIR"/install.sh -n -f -d "$TEST_ROOT/dry")"
 dry_skills="$(printf '%s\n' "$dry_output" | sed -n "s#.* -> $TEST_ROOT/dry/\(varde-[^/]*\)/.*#\1#p" | sort -u)"
 [ "$dry_skills" = "$(expected_set)" ] || fail "dry-run destinations differ"
+[ ! -e "$TEST_ROOT/dry" ] || fail "dry run created a target"
+
+dry_missing_source="$TEST_ROOT/dry-missing-source"
+mkdir -p "$dry_missing_source"
+if "$SKILLS_DIR/install.sh" -n -f -d "$TEST_ROOT/dry-missing-target" \
+  -l "$dry_missing_source" -s varde-change \
+  </dev/null >"$TEST_ROOT/dry-missing.out" 2>&1; then
+  fail "dry run accepted a missing canonical skill"
+fi
+grep -Fq "Missing canonical skill: $dry_missing_source/varde-change" \
+  "$TEST_ROOT/dry-missing.out" || fail "dry run omitted missing canonical error"
+if grep -Fq 'Would link' "$TEST_ROOT/dry-missing.out"; then
+  fail "dry run proposed linking a missing canonical skill"
+fi
+[ ! -e "$TEST_ROOT/dry-missing-target" ] || fail "missing canonical dry run created a target"
+
+dry_link_source="$TEST_ROOT/dry-link-source"
+dry_link_target="$TEST_ROOT/dry-link-target"
+mkdir -p "$dry_link_source/varde-change" "$dry_link_target"
+printf '# canonical\n' > "$dry_link_source/varde-change/SKILL.md"
+ln -s "$dry_link_source/varde-change" "$dry_link_target/varde-change"
+dry_link_output="$("$SKILLS_DIR/install.sh" -n -f -d "$dry_link_target" \
+  -l "$dry_link_source" -s varde-change </dev/null)"
+printf '%s\n' "$dry_link_output" | grep -Fq "Already linked varde-change -> $dry_link_target/varde-change" ||
+  fail "dry run missed an already linked skill"
+if printf '%s\n' "$dry_link_output" | grep -Fq 'Would link'; then
+  fail "dry run proposed relinking an already linked skill"
+fi
+[ "$(readlink "$dry_link_target/varde-change")" = "$dry_link_source/varde-change" ] ||
+  fail "dry run changed an existing link"
+
+dry_unowned_target="$TEST_ROOT/dry-unowned"
+mkdir -p "$dry_unowned_target/varde-change"
+printf 'keep\n' > "$dry_unowned_target/varde-change/local.txt"
+dry_unowned_output="$("$SKILLS_DIR/install.sh" -n -m -d "$dry_unowned_target" \
+  -s varde-change </dev/null)"
+printf '%s\n' "$dry_unowned_output" | grep -Fq "Preserved unowned $dry_unowned_target/varde-change" ||
+  fail "managed dry run missed an unowned skill"
+if printf '%s\n' "$dry_unowned_output" | grep -Fq 'Would install'; then
+  fail "managed dry run proposed replacing an unowned skill"
+fi
+[ "$(cat "$dry_unowned_target/varde-change/local.txt")" = keep ] ||
+  fail "managed dry run changed an unowned skill"
+
+"$SKILLS_DIR/install.sh" -n -d "$dry_unowned_target" -s varde-change \
+  </dev/null >"$TEST_ROOT/dry-notty.out" 2>&1 ||
+  fail "non-TTY dry run failed instead of reporting the conditional replacement"
+grep -Fq "Would ask to overwrite existing $dry_unowned_target/varde-change; real install without a TTY would refuse" \
+  "$TEST_ROOT/dry-notty.out" || fail "dry run omitted conditional non-TTY refusal"
+if grep -Fq 'Would install' "$TEST_ROOT/dry-notty.out"; then
+  fail "dry run proposed replacing a skill that would be refused"
+fi
+[ "$(cat "$dry_unowned_target/varde-change/local.txt")" = keep ] ||
+  fail "non-TTY dry run changed an existing skill"
+if find "$TEST_ROOT" -name '.varde-skill.*' -o -name '.varde-skill-backup.*' | grep -q .; then
+  fail "dry run left a staging directory"
+fi
 
 fixture_root="$TEST_ROOT/installer-fixture"
 fixture_target="$TEST_ROOT/filtered-target"
@@ -126,8 +191,6 @@ printf '%s\n' '#!/usr/bin/env bash' > "$fixture_root/varde-change/scripts/tool.s
 printf '%s\n' excluded > "$fixture_root/varde-change/evals/unreadable"
 printf '%s\n' excluded > "$fixture_root/varde-change/generated-workspace/unreadable"
 chmod 750 "$fixture_root/varde-change/scripts/tool.sh"
-chmod 000 "$fixture_root/varde-change/evals" \
-  "$fixture_root/varde-change/generated-workspace"
 "$fixture_root/install.sh" -f -d "$fixture_target" -s varde-change >/dev/null
 [ -x "$fixture_target/varde-change/scripts/tool.sh" ] ||
   fail "filtered installation lost executable permissions"
@@ -203,3 +266,71 @@ ln -s "$link_target" "$link_destination/varde-change"
   fail "-f did not replace skill symlink"
 [ "$(cat "$link_target/local.txt")" = 'external content' ] ||
   fail "skill symlink target was modified"
+
+# Source-package symlinks are rejected before copy, preview, or canonical link.
+printf 'keep\n' > "$fixture_target/varde-change/local.txt"
+ln -s "$link_target/local.txt" "$fixture_root/varde-change/scripts/outside"
+if "$fixture_root/install.sh" -f -d "$fixture_target" -s varde-change \
+  >"$TEST_ROOT/copy-symlink.out" 2>&1; then
+  fail "copy accepted a symlink in the source package"
+fi
+grep -Fq 'Symlink in skill package:' "$TEST_ROOT/copy-symlink.out" ||
+  fail "copy did not report the source symlink"
+grep -Fq '/varde-change/scripts/outside' "$TEST_ROOT/copy-symlink.out" ||
+  fail "copy did not name the source symlink"
+[ "$(cat "$fixture_target/varde-change/local.txt")" = keep ] ||
+  fail "symlink rejection replaced the existing target"
+if "$fixture_root/install.sh" -n -f -d "$TEST_ROOT/dry-symlink" -s varde-change \
+  >"$TEST_ROOT/dry-symlink.out" 2>&1; then
+  fail "dry run accepted a symlink in the source package"
+fi
+if grep -Fq 'Would install' "$TEST_ROOT/dry-symlink.out"; then
+  fail "dry run previewed a rejected source package"
+fi
+[ ! -e "$TEST_ROOT/dry-symlink" ] || fail "dry run created a symlink target directory"
+rm "$fixture_root/varde-change/scripts/outside"
+
+ln -s "$link_target/local.txt" "$fixture_root/varde-change/evals/outside"
+if "$fixture_root/install.sh" -f -d "$TEST_ROOT/eval-symlink" -s varde-change \
+  >"$TEST_ROOT/eval-symlink.out" 2>&1; then
+  fail "copy ignored a symlink in excluded evals"
+fi
+rm "$fixture_root/varde-change/evals/outside"
+
+mkdir -p "$TEST_ROOT/find-failure-bin"
+cat > "$TEST_ROOT/find-failure-bin/find" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == */installer-fixture/varde-change ]] &&
+   [ "$2" = -type ] && [ "$3" = l ]; then
+  exit 17
+fi
+exec /usr/bin/find "$@"
+EOF
+chmod +x "$TEST_ROOT/find-failure-bin/find"
+if PATH="$TEST_ROOT/find-failure-bin:$PATH" \
+  "$fixture_root/install.sh" -f -d "$fixture_target" -s varde-change \
+  >"$TEST_ROOT/scan-failure.out" 2>&1; then
+  fail "copy accepted a source package it could not fully scan"
+fi
+[ "$(cat "$fixture_target/varde-change/local.txt")" = keep ] ||
+  fail "source scan failure replaced the existing target"
+
+ln -s "$link_target/local.txt" "$link_source/varde-change/outside"
+if "$SKILLS_DIR/install.sh" -f -d "$link_destination" -s varde-change \
+  -l "$link_source" >"$TEST_ROOT/link-symlink.out" 2>&1; then
+  fail "canonical link accepted a symlink in its source package"
+fi
+[ "$(readlink "$link_destination/varde-change")" = "$link_source/varde-change" ] ||
+  fail "symlink rejection replaced an already linked target"
+rm "$link_source/varde-change/outside"
+
+ln -s "$link_source/varde-change" "$link_source/varde-review"
+if "$SKILLS_DIR/install.sh" -n -f -d "$TEST_ROOT/root-symlink" -s varde-review \
+  -l "$link_source" >"$TEST_ROOT/root-symlink.out" 2>&1; then
+  fail "canonical link preview accepted a symlinked package root"
+fi
+grep -Fq 'Symlink in skill package:' "$TEST_ROOT/root-symlink.out" ||
+  fail "root symlink rejection did not report the symlink"
+grep -Fq '/varde-review' "$TEST_ROOT/root-symlink.out" ||
+  fail "root symlink rejection did not name the package"
+[ ! -e "$TEST_ROOT/root-symlink" ] || fail "root symlink preview created a target"

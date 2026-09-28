@@ -9,9 +9,21 @@ use toz_core::capture::{self, CaptureInput, Outcome};
 use toz_core::config::WorkspaceAccess;
 use toz_core::fetch::{self, FetchOpts};
 use toz_core::index;
+use toz_core::metadata;
 use toz_core::profile;
+use toz_core::redact::Redactor;
 use toz_core::search::{self, QueryResult, SearchOpts};
 use toz_core::{Config, Project, Store};
+
+fn safe_metadata(cfg: &Config, value: &str) -> Result<String> {
+    let redactor = Redactor::from_config(&cfg.redact)?;
+    Ok(metadata::sanitize_text(&redactor, value))
+}
+
+fn safe_url(cfg: &Config, url: &str) -> Result<String> {
+    let redactor = Redactor::from_config(&cfg.redact)?;
+    Ok(metadata::sanitize_url(&redactor, url))
+}
 
 pub fn dispatch(cli: Cli) -> Result<i32> {
     if let Some(dir) = &cli.global.fallback_dir {
@@ -57,6 +69,7 @@ fn dispatch_loaded(
         Command::Fetch(a) => cmd_fetch(cfg, project, g, a),
         Command::Stats(a) => cmd_stats(project, g, a),
         Command::Purge(a) => cmd_purge(project, g, a),
+        Command::MigrateMetadata => cmd_migrate_metadata(cfg, project, g),
         Command::Doctor => cmd_doctor(cfg, project, g),
         Command::Profile(a) => cmd_profile(cfg, project, g, a),
         Command::Event(_) => unreachable!("event returned before loading configuration"),
@@ -85,6 +98,7 @@ fn cmd_query(cfg: &Config, project: &Project, g: &GlobalOpts, a: QueryArgs) -> R
             bail!("--list cannot be combined with search or capture options");
         }
         return cmd_list(
+            cfg,
             project,
             g,
             ListArgs {
@@ -253,7 +267,10 @@ fn cmd_index(cfg: &Config, project: &Project, g: &GlobalOpts, a: IndexArgs) -> R
     if a.paths.len() == 1 && a.paths[0].as_os_str() == "-" {
         return index_stdin(cfg, &mut store, g, &a, sess.as_deref());
     }
-    let files = index_paths(&a)?;
+    let files = match index_paths(&a) {
+        Ok(files) => files,
+        Err(error) => bail!("{}", safe_metadata(cfg, &format!("{error:#}"))?),
+    };
     index_files(cfg, &mut store, g, &a, &files, sess.as_deref())
 }
 
@@ -271,7 +288,7 @@ fn index_stdin(
         .context("reading stdin")?;
     let source = a.label.clone().unwrap_or_else(|| "stdin".into());
     let outcome = index::index_bytes(cfg, store, &raw, &source, a.label.as_deref(), sess)?;
-    report_index(g, &source, outcome)
+    report_index(cfg, g, &source, outcome)
 }
 
 fn index_paths(a: &IndexArgs) -> Result<Vec<std::path::PathBuf>> {
@@ -339,10 +356,13 @@ fn index_files(
     for f in files {
         match index::index_file(cfg, store, f, label, sess) {
             Ok(outcome) => {
-                worst = worst.max(report_index(g, &f.display().to_string(), outcome)?);
+                worst = worst.max(report_index(cfg, g, &f.display().to_string(), outcome)?);
             }
             Err(e) => {
-                println!("varde-toz: {}: {e:#}", f.display());
+                println!(
+                    "varde-toz: {}",
+                    safe_metadata(cfg, &format!("{}: {e:#}", f.display()))?
+                );
                 worst = 1;
             }
         }
@@ -382,14 +402,17 @@ fn glob_pattern(glob: &str) -> Result<regex::Regex> {
     regex::Regex::new(&s).with_context(|| format!("invalid glob {glob:?}"))
 }
 
-fn report_index(g: &GlobalOpts, what: &str, outcome: Outcome) -> Result<i32> {
+fn report_index(cfg: &Config, g: &GlobalOpts, what: &str, outcome: Outcome) -> Result<i32> {
     match outcome {
         Outcome::Captured(p) => {
             emit_preview(g, &p)?;
             Ok(0)
         }
         Outcome::Skipped { rule } => {
-            println!("varde-toz: {what}: not indexed ({rule})");
+            println!(
+                "varde-toz: {}: not indexed ({rule})",
+                safe_metadata(cfg, what)?
+            );
             Ok(1)
         }
         Outcome::PassThrough => unreachable!("index always forces capture"),
@@ -420,7 +443,7 @@ fn cmd_fetch(cfg: &Config, project: &Project, g: &GlobalOpts, a: FetchArgs) -> R
     let mut worst = 0;
     for (url, result) in urls.iter().zip(results) {
         if urls.len() > 1 {
-            println!("=== {url} ===");
+            println!("=== {} ===", safe_url(cfg, url)?);
         }
         worst = worst.max(report_fetch(
             cfg,
@@ -486,13 +509,13 @@ fn report_fetch(
 ) -> Result<i32> {
     let mut fetched = match result {
         Some(Ok(fetched)) => fetched,
-        Some(Err(e)) => {
-            println!("varde-toz: {e}");
+        Some(Err(_)) => {
+            println!("varde-toz: fetch failed for {}", safe_url(cfg, url)?);
             return Ok(1);
         }
         None => return Ok(0),
     };
-    if report_cached_fetch(&fetched, project, g, store, url)? {
+    if report_cached_fetch(cfg, &fetched, project, g, store, url)? {
         return Ok(0);
     }
     match fetch::store_fetched(cfg, store, &project.key, &mut fetched, label, sess)? {
@@ -501,7 +524,7 @@ fn report_fetch(
             Ok(0)
         }
         Outcome::Skipped { rule } => {
-            println!("varde-toz: {url}: not stored ({rule})");
+            println!("varde-toz: {}: not stored ({rule})", safe_url(cfg, url)?);
             Ok(1)
         }
         Outcome::PassThrough => unreachable!("fetch always forces capture"),
@@ -509,6 +532,7 @@ fn report_fetch(
 }
 
 fn report_cached_fetch(
+    cfg: &Config,
     fetched: &fetch::Fetched,
     project: &Project,
     g: &GlobalOpts,
@@ -516,7 +540,9 @@ fn report_cached_fetch(
     url: &str,
 ) -> Result<bool> {
     // A cache hit whose capture still exists in this project needs no new store entry.
-    if !fetched.from_cache || fetched.meta.project_key.as_deref() != Some(&project.key) {
+    let project_identity = metadata::project_identity(&project.key)?;
+    if !fetched.from_cache || fetched.meta.project_key.as_deref() != Some(project_identity.as_str())
+    {
         return Ok(false);
     }
     let Some(handle) = &fetched.meta.handle else {
@@ -532,7 +558,7 @@ fn report_cached_fetch(
     if g.json {
         println!(
             "{}",
-            json!({"handle": handle, "cached": true, "fetched_at": fetched.meta.fetched_at, "url": url})
+            json!({"handle": handle, "cached": true, "fetched_at": fetched.meta.fetched_at, "url": safe_url(cfg, url)?})
         );
     } else {
         println!(
@@ -695,6 +721,32 @@ fn confirm(prompt: &str, yes: bool) -> Result<bool> {
     Ok(matches!(line.trim(), "y" | "Y" | "yes"))
 }
 
+fn cmd_migrate_metadata(cfg: &Config, project: &Project, g: &GlobalOpts) -> Result<i32> {
+    let redactor = Redactor::from_config(&cfg.redact)?;
+    let mut captures = 0;
+    let mut stores = 0;
+    for (_, path) in toz_core::project::all_store_dbs(project)? {
+        let mut store =
+            Store::open(&path).with_context(|| format!("opening store {}", path.display()))?;
+        captures += store
+            .migrate_legacy_metadata(&redactor)
+            .with_context(|| format!("migrating store {}", path.display()))?;
+        stores += 1;
+    }
+    let cached_pages = fetch::migrate_legacy_cache(cfg)?;
+    if g.json {
+        println!(
+            "{}",
+            json!({"stores": stores, "captures": captures, "cached_pages": cached_pages})
+        );
+    } else {
+        println!(
+            "varde-toz: migrated {captures} capture(s) across {stores} store(s) and {cached_pages} cached page(s)"
+        );
+    }
+    Ok(0)
+}
+
 fn cmd_purge(project: &Project, g: &GlobalOpts, a: PurgeArgs) -> Result<i32> {
     let targets: Vec<(String, std::path::PathBuf)> = if a.global {
         toz_core::project::all_store_dbs(project)?
@@ -702,7 +754,16 @@ fn cmd_purge(project: &Project, g: &GlobalOpts, a: PurgeArgs) -> Result<i32> {
         vec![(project.key.clone(), project.db_path()?)]
     };
     let targets: Vec<_> = targets.into_iter().filter(|(_, p)| p.exists()).collect();
-    if targets.is_empty() {
+    let cached_pages = if a.global && a.older_than.is_none() {
+        match std::fs::read_dir(fetch::cache_dir()?) {
+            Ok(mut entries) => entries.next().transpose()?.is_some(),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+            Err(err) => return Err(err.into()),
+        }
+    } else {
+        false
+    };
+    if targets.is_empty() && !cached_pages {
         println!("varde-toz: nothing to purge");
         return Ok(0);
     }
@@ -745,7 +806,7 @@ fn purge_stores(
     targets: &[(String, std::path::PathBuf)],
 ) -> Result<i32> {
     let what = if a.global {
-        format!("delete ALL {} toz store(s)", targets.len())
+        format!("delete ALL {} toz store(s) and cached pages", targets.len())
     } else {
         format!("delete the toz store for {}", project.key)
     };
@@ -763,7 +824,7 @@ fn purge_stores(
         }
     }
     if a.global {
-        let swept = fetch::cache_sweep(0)?;
+        let swept = fetch::cache_clear()?;
         if !g.json {
             println!("removed {swept} cached page(s)");
         }
@@ -2184,7 +2245,7 @@ fn cmd_search(cfg: &Config, project: &Project, g: &GlobalOpts, a: SearchArgs) ->
         include_superseded: a.all,
         recency_floor: None,
     };
-    let results = if a.global {
+    let mut results = if a.global {
         search_all_projects(project, &a, &opts)?
     } else {
         let Some(results) = search_project(cfg, project, g, &a, &opts)? else {
@@ -2192,6 +2253,11 @@ fn cmd_search(cfg: &Config, project: &Project, g: &GlobalOpts, a: SearchArgs) ->
         };
         results
     };
+    for result in &mut results {
+        for hit in &mut result.hits {
+            hit.label = safe_metadata(cfg, &hit.label)?;
+        }
+    }
     print_results(g, &results, a.global)?;
     Ok(0)
 }
@@ -2423,7 +2489,7 @@ fn cmd_script(cfg: &Config, project: &Project, g: &GlobalOpts, a: RunArgs) -> Re
     }
 
     let limits = script_limits(cfg, &a);
-    let (meta, src) = script_input(project, &a)?;
+    let (meta, src) = script_input(cfg, project, &a)?;
     let scratch = tempfile::tempdir().context("creating script scratch directory")?;
     let policy = cfg
         .sandbox
@@ -2488,6 +2554,7 @@ fn script_limits(cfg: &Config, a: &RunArgs) -> toz_core::script::Limits {
 }
 
 fn script_input(
+    cfg: &Config,
     project: &Project,
     a: &RunArgs,
 ) -> Result<(
@@ -2513,7 +2580,7 @@ fn script_input(
         }
         let meta = toz_core::script::Meta {
             handle: row.handle.clone(),
-            label: row.label.clone(),
+            label: safe_metadata(cfg, &row.label)?,
             bytes: row.bytes,
             lines: store.line_count(row.id, &a.stream)?,
             exit_code: row.exit_code,
@@ -2663,7 +2730,7 @@ fn parse_range(s: &str) -> Result<(usize, usize)> {
     Ok((a.parse()?, b.parse()?))
 }
 
-fn cmd_list(project: &Project, g: &GlobalOpts, a: ListArgs) -> Result<i32> {
+fn cmd_list(cfg: &Config, project: &Project, g: &GlobalOpts, a: ListArgs) -> Result<i32> {
     let path = project.db_path()?;
     if !path.exists() {
         if g.json {
@@ -2676,12 +2743,12 @@ fn cmd_list(project: &Project, g: &GlobalOpts, a: ListArgs) -> Result<i32> {
     if g.json {
         let v: Vec<Value> = rows
             .iter()
-            .map(|r| {
-                json!({"handle": r.handle, "label": r.label, "kind": r.kind, "source": r.source, "bytes": r.bytes,
+            .map(|r| -> Result<Value> {
+                Ok(json!({"handle": r.handle, "label": safe_metadata(cfg, &r.label)?, "kind": r.kind, "source": safe_metadata(cfg, &r.source)?, "bytes": r.bytes,
                     "chunks": r.chunk_count, "exit_code": r.exit_code, "created_at": r.created_at,
-                    "superseded": r.superseded_by.is_some(), "session": r.session, "state": r.state})
+                    "superseded": r.superseded_by.is_some(), "session": r.session, "state": r.state}))
             })
-            .collect();
+            .collect::<Result<_>>()?;
         println!("{}", serde_json::to_string(&v)?);
         return Ok(0);
     }
@@ -2699,7 +2766,7 @@ fn cmd_list(project: &Project, g: &GlobalOpts, a: ListArgs) -> Result<i32> {
             capture::fmt_bytes(r.bytes as usize),
             r.chunk_count,
             age,
-            toz_core::chunk::truncate(&r.label, 70),
+            toz_core::chunk::truncate(&safe_metadata(cfg, &r.label)?, 70),
             sup
         );
     }
@@ -2712,5 +2779,53 @@ fn fmt_age(secs: i64) -> String {
         s if s < 3600 => format!("{}m ago", s / 60),
         s if s < 86400 => format!("{}h ago", s / 3600),
         s => format!("{}d ago", s / 86400),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn global_purge_clears_cache_without_a_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let previous_config = std::env::var_os("VARDE_TOZ_CONFIG_DIR");
+        let previous_varde = std::env::var_os("VARDE_CONFIG_DIR");
+        std::env::set_var("VARDE_TOZ_CONFIG_DIR", dir.path());
+        std::env::set_var("VARDE_CONFIG_DIR", dir.path().join("varde"));
+
+        let cache = dir.path().join("cache");
+        std::fs::create_dir(&cache).unwrap();
+        std::fs::write(cache.join("page.meta"), "{}").unwrap();
+        std::fs::write(cache.join("page.body"), "body").unwrap();
+        let project = Project {
+            root: dir.path().join("project"),
+            key: "purge-test".into(),
+        };
+        std::fs::create_dir(&project.root).unwrap();
+        assert!(!project.db_path().unwrap().exists());
+        let cli = Cli::try_parse_from([
+            "varde-toz",
+            "--project",
+            project.root.to_str().unwrap(),
+            "--json",
+            "purge",
+            "--global",
+            "--yes",
+        ])
+        .unwrap();
+        let result = dispatch(cli);
+        match previous_config {
+            Some(value) => std::env::set_var("VARDE_TOZ_CONFIG_DIR", value),
+            None => std::env::remove_var("VARDE_TOZ_CONFIG_DIR"),
+        }
+        match previous_varde {
+            Some(value) => std::env::set_var("VARDE_CONFIG_DIR", value),
+            None => std::env::remove_var("VARDE_CONFIG_DIR"),
+        }
+        assert_eq!(result.unwrap(), 0);
+        assert!(!cache.join("page.meta").exists());
+        assert!(!cache.join("page.body").exists());
     }
 }

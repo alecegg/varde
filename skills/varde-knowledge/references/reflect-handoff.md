@@ -4,7 +4,9 @@ Carries this session's context to the next. To resume, skip to
 **Resume a handoff**.
 
 **Links** are the paths needed to resume without rediscovery, as
-`{target, kind, content_hashes}`:
+`{target, kind, integrity}`. Use `integrity: none` by default; add
+`content_hashes` with `integrity: snapshot` when the user requests drift
+detection or the handoff is long-lived or high risk:
 
 | `kind` | Target |
 |---|---|
@@ -28,10 +30,9 @@ Carries this session's context to the next. To resume, skip to
    writing. If the user named a focus for the next session, tailor **What's
    left** and **Suggested next skill** to it.
 3. **Save it.** Prefer explicit relevant file links inside and outside the
-   repository. Reserve complete directory snapshots for small owned artifact
-   folders, such as one review folder. For a large target, select and link the
-   relevant files instead; never omit files while claiming full-directory
-   coverage. Resolve each target independently of the handoff's location;
+   repository. For a large target, select and link the relevant files instead;
+   never imply full-directory coverage from a partial list. Resolve each
+   target independently of the handoff's location;
    store absolute target paths. Confirm each exists; drop and report a missing
    one. Write to `<working>/handoffs/<YYYY-MM-DD>-<slug>/handoff.md` (UTC date,
    kebab-case slug) with this frontmatter:
@@ -40,18 +41,18 @@ Carries this session's context to the next. To resume, skip to
    - `timestamp`: ISO-8601 UTC
    - `cwd` and `keywords` (short comma-separated list)
    - `repo_root`, `branch`, `head_sha`, and `dirty` from step 1
-   - `links`: `[{target, kind, content_hashes}]`; store a snapshot of each
-     target's current files, including staged and unstaged edits. Each entry
-     in `content_hashes` is `{path, hash}`. For a file target, use `path: .`;
-     for a directory target (such as a review folder), recursively list every
-     file with its path relative to the target, sorted by path. Use a stable
-     content hash for each current file. Determine Git membership from the
-     target's own location, not the handoff or session directory:
-     `git hash-object --no-filters -- <path>` in that worktree reads current
-     contents; for external targets, hash raw file bytes with SHA-256. Preserve the algorithm in each value as
-     `git-blob:<object-id>` or `sha256:<64 lowercase hex characters>`. On resume,
-     compare the full path-to-hash list so added, removed, renamed, or edited
-     files are detected.
+   - `links`: `[{target, kind, integrity: none}]` by default. These links
+     identify targets but do not claim unchanged content on resume.
+   - For `integrity: snapshot`, add `content_hashes` for all current files,
+     including staged and unstaged edits. Reserve directory snapshots for
+     small owned artifact folders, such as one review folder. Each entry is
+     `{path, hash}`; use `path: .` for a file, or recursively list every file
+     relative to a directory target, sorted by path. Determine Git membership
+     from the target's own location: `git hash-object --no-filters -- <path>`
+     reads current worktree contents; hash external files' raw bytes with
+     SHA-256. Store `git-blob:<object-id>` or `sha256:<64 lowercase hex
+     characters>`. On resume, compare complete path-to-hash lists to detect
+     added, removed, renamed, or edited files.
 
    Report the handoff ID (its folder name, `<YYYY-MM-DD>-<slug>`) and path.
 
@@ -95,12 +96,13 @@ The body does not restate frontmatter.
    target independently of the handoff's location; legacy relative targets
    resolve against recorded `cwd`. Label each link `modified`, `missing`,
    `unchanged`, or `unknown`; labels never block. Missing target → `missing`.
-   With `content_hashes`, recompute the complete path-to-hash list using each
+   With `integrity: none`, label an existing target `unknown` and re-read it
+   before acting. With `content_hashes`, recompute the complete path-to-hash list using each
    snapshot's recorded algorithm (`git-blob` or raw-byte `sha256`), regardless
    of where the handoff is stored. Changed list → `modified`; identical list
    → `unchanged`. This detects committed, staged, unstaged, untracked, and
    ignored edits for the selected file or complete directory target.
-   For legacy links without snapshots, find the target's Git root independently.
+   For legacy links without `integrity` or snapshots, find the target's Git root independently.
    If it matches recorded `repo_root`, the target is a tracked file, and `head_sha`
    resolves to a commit there, run from that root:
    `git diff <head_sha> -- <repo-relative-target>`.

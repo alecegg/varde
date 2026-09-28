@@ -33,8 +33,13 @@ for path in gate_paths[1:]:
         raise SystemExit(f"FAIL: vendored review gate differs: {path}")
 checks += len(gate_paths) - 1
 
-# Core gates remain mandatory; each branch is loaded only for its operation.
+# Core gates remain mandatory outside the mechanical exception; each branch is
+# loaded only for its operation.
 contains(gate_paths[0],
+    "Mechanical edit exception", "entire diff", "exact operational meaning",
+    "mixed or uncertain diffs", "targeted checks", "Existing review subjects",
+    "Skill edits still get `varde-agent-doc-authoring` review",
+    "commands, paths, conditions, instruction meaning, output contracts, configuration, code, or tests",
     "review init --subject <safe-id> --contract <contract.json>",
     "review inspect --subject <subject-id> --phase pre-edit --json",
     "review record --subject <subject-id>",
@@ -71,6 +76,7 @@ for branch, needles in branches.items():
             raise SystemExit(f"FAIL: vendored gate branch differs: {relative}")
         contains(relative, *needles)
 contains("skills/varde-change/references/build-micro-change.md",
+    "mechanical edit exception", "entire diff", "An existing review subject",
     "review init --subject <safe-id>",
     "--checkpoint start",
     "complete",

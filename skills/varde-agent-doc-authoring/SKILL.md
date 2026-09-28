@@ -12,8 +12,8 @@ verdict through execution and completion, including changes made by this skill.
 
 | Task | Read first | Then read only when needed |
 |---|---|---|
-| Author or revise a skill | `references/authoring.md`, `references/specification.md` | `references/workflow-skills.md` for ordered workflows |
-| Review a skill or agent document | Review section below | `references/reviewing.md` for supplementary checks; `references/workflow-skills.md` for workflow skills; `references/specification.md` for frontmatter failures |
+| Author or revise a skill | `references/authoring.md`, `references/specification.md`, `references/reviewing.md` | `references/workflow-skills.md` for ordered workflows |
+| Review a skill or agent document | Review section below, `references/reviewing.md` | `references/workflow-skills.md` for workflow skills; `references/specification.md` for frontmatter failures |
 | Improve triggering | `references/specification.md`, sibling skills' SKILL.md descriptions | — |
 
 ## Author or revise
@@ -67,5 +67,7 @@ correctness defects from value judgments and mark untested effects as uncertain.
 ## Gotchas
 
 - Keep each skill independently usable: every reference it loads is its own.
-- A reference pointer must name a real local file. Illustrative paths belong in prose, not instruction links.
+- For actionable local files, use a relative Markdown link or a backticked file
+  path under `references/`, `scripts/`, or `assets/`. Name files used in fenced
+  commands nearby in one of those forms; bare paths in prose or commands are unchecked.
 - Check authored files for stray literal `</content>` lines.

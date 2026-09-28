@@ -3,6 +3,7 @@
 
 use crate::capture::{self, CaptureInput, Outcome};
 use crate::config::Config;
+use crate::metadata;
 use crate::store::Store;
 use anyhow::{Context, Result};
 use std::fs::Metadata;
@@ -94,10 +95,20 @@ pub fn refresh_stale(
             [row.id],
             |record| record.get(0),
         )?;
-        let label = if stored_source_key == capture::source_key(&row.source) {
+        let default_key = capture::source_key(&row.source);
+        let label = if stored_source_key == default_key
+            || stored_source_key
+                == metadata::identity_at(store.path().parent().unwrap(), &default_key)?
+        {
             None
-        } else {
+        } else if stored_source_key == row.label
+            || stored_source_key
+                == metadata::identity_at(store.path().parent().unwrap(), &row.label)?
+        {
             Some(row.label.as_str())
+        } else {
+            // The original explicit label was redacted and cannot be reconstructed.
+            continue;
         };
         if index_file(cfg, store, Path::new(&row.source), label, session).is_ok() {
             refreshed.push(row.source.clone());
@@ -125,6 +136,37 @@ pub fn index_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sensitive_index_path_is_masked_and_requires_explicit_reindex() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault-123.txt");
+        std::fs::write(&path, "original body").unwrap();
+        let mut store = Store::open(&dir.path().join("toz.db")).unwrap();
+        let mut cfg = Config::default();
+        cfg.redact.patterns.push("vault-[0-9]+".into());
+        index_file(&cfg, &mut store, &path, None, None).unwrap();
+        let row = store.list(1, false).unwrap().remove(0);
+        assert!(!row.source.contains("vault-123"));
+        std::fs::write(&path, "changed body").unwrap();
+        assert!(refresh_stale(&cfg, &mut store, None).unwrap().is_empty());
+        index_file(&cfg, &mut store, &path, None, None).unwrap();
+        assert_eq!(store.list(1, false).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn redacted_explicit_index_label_does_not_create_a_second_live_capture() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ordinary.txt");
+        std::fs::write(&path, "original body").unwrap();
+        let mut store = Store::open(&dir.path().join("toz.db")).unwrap();
+        let mut cfg = Config::default();
+        cfg.redact.patterns.push("vault-[0-9]+".into());
+        index_file(&cfg, &mut store, &path, Some("label vault-123"), None).unwrap();
+        std::fs::write(&path, "changed body").unwrap();
+        assert!(refresh_stale(&cfg, &mut store, None).unwrap().is_empty());
+        assert_eq!(store.list(10, false).unwrap().len(), 1);
+    }
 
     #[test]
     fn stale_tracks_content_not_just_mtime() {

@@ -30,7 +30,7 @@ Usage: $(basename "$0") [-d target_dir] [-s skill1,skill2,...] [-l source_dir] [
   -l source_dir   Link skills from this canonical directory into the target
   -f              Overwrite existing installs without prompting
   -m              Overwrite only varde-managed installs; preserve unowned dirs
-  -n              Show planned writes without changing files
+  -n              Preview install decisions without changing files
   -h              Show this help
 
 Default target: $DEFAULT_TARGET
@@ -39,6 +39,7 @@ EOF
 
 TARGET="$DEFAULT_TARGET"
 SKILLS=""
+SKILLS_SPECIFIED=0
 LINK_SOURCE=""
 FORCE=0
 MANAGED=0
@@ -55,6 +56,7 @@ parse_arguments() {
       -s)
         [ "$#" -ge 2 ] || { echo "-s requires a value" >&2; exit 1; }
         SKILLS="$2"
+        SKILLS_SPECIFIED=1
         shift 2
         ;;
       -l)
@@ -90,7 +92,10 @@ validate_install_options() {
 }
 
 select_default_skills() {
-  if [ -n "$SKILLS" ]; then
+  if [ "$SKILLS_SPECIFIED" -eq 1 ]; then
+    case "$SKILLS" in
+      ""|,*|*,|*,,*) echo "-s requires nonempty comma-separated skill names" >&2; exit 1 ;;
+    esac
     IFS=',' read -ra RAW_SELECTED <<< "$SKILLS"
     SELECTED=()
     local skill already existing
@@ -135,7 +140,8 @@ copy_skill_tree() {
     if [ -d "$source_path" ] && [ ! -L "$source_path" ]; then
       mkdir -p "$target_path" || exit 1
     elif [ -L "$source_path" ]; then
-      cp -Pp "$source_path" "$target_path" || exit 1
+      echo "Symlink in skill package: $source_path" >&2
+      exit 1
     elif [ -f "$source_path" ]; then
       cp -p "$source_path" "$target_path" || exit 1
     else
@@ -236,36 +242,10 @@ confirm_replace() {
 }
 
 install_skill() {
-  local skill="$1" source_dir destination staged backup="" confirm_status
+  local skill="$1" source_dir destination staged backup=""
   ITEM_INSTALLED=0
   source_dir="$SCRIPT_DIR/$skill"
   destination="$TARGET/$skill"
-  if [ -n "$LINK_SOURCE" ] && [ ! -f "$LINK_SOURCE/$skill/SKILL.md" ]; then
-    echo "Missing canonical skill: $LINK_SOURCE/$skill" >&2
-    return 1
-  fi
-  if [ -n "$LINK_SOURCE" ] && [ -L "$destination" ] &&
-     [ "$(readlink "$destination")" = "$LINK_SOURCE/$skill" ]; then
-    echo "Already linked $skill -> $destination"
-    return
-  fi
-  if destination_exists "$destination" && [ "$MANAGED" -eq 1 ] && ! is_varde_managed_skill "$destination"; then
-    echo "Preserved unowned $destination"
-    return
-  fi
-  if destination_exists "$destination" && [ "$FORCE" -ne 1 ] && [ "$MANAGED" -ne 1 ]; then
-    if confirm_replace "$destination"; then
-      :
-    else
-      confirm_status=$?
-      if [ "$confirm_status" -eq 1 ]; then
-        echo "Skipped $skill"
-        return
-      fi
-      return "$confirm_status"
-    fi
-  fi
-
   staged="$(mktemp -d "$TARGET/.varde-skill.XXXXXX")" || return 1
   if [ -n "$LINK_SOURCE" ]; then
     rmdir "$staged" || return 1
@@ -298,12 +278,63 @@ install_skill() {
   else echo "Installed $skill -> $destination"; fi
 }
 
+preflight_skill_install() {
+  local skill="$1" destination="$TARGET/$1" confirm_status source_root symlink
+  PREFLIGHT_ACTION=install
+  if [ -n "$LINK_SOURCE" ] && [ ! -f "$LINK_SOURCE/$skill/SKILL.md" ]; then
+    echo "Missing canonical skill: $LINK_SOURCE/$skill" >&2
+    return 1
+  fi
+  source_root="${LINK_SOURCE:-$SCRIPT_DIR}/$skill"
+  symlink="$(find "$source_root" -type l -print -quit)" || return 1
+  if [ -n "$symlink" ]; then
+    echo "Symlink in skill package: $symlink" >&2
+    return 1
+  fi
+  if [ -n "$LINK_SOURCE" ] && [ -L "$destination" ] &&
+     [ "$(readlink "$destination")" = "$LINK_SOURCE/$skill" ]; then
+    echo "Already linked $skill -> $destination"
+    PREFLIGHT_ACTION=skip
+    return
+  fi
+  if destination_exists "$destination" && [ "$MANAGED" -eq 1 ] && ! is_varde_managed_skill "$destination"; then
+    echo "Preserved unowned $destination"
+    PREFLIGHT_ACTION=skip
+    return
+  fi
+  if destination_exists "$destination" && [ "$FORCE" -ne 1 ] && [ "$MANAGED" -ne 1 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      if [ ! -t 0 ]; then
+        echo "Would ask to overwrite existing $destination; real install without a TTY would refuse (use -f or -m)"
+        PREFLIGHT_ACTION=skip
+        return
+      fi
+      echo "Would ask to overwrite existing $destination; installation depends on confirmation"
+      PREFLIGHT_ACTION=skip
+      return
+    fi
+    if confirm_replace "$destination"; then
+      :
+    else
+      confirm_status=$?
+      if [ "$confirm_status" -eq 1 ]; then
+        echo "Skipped $skill"
+        PREFLIGHT_ACTION=skip
+        return
+      fi
+      return "$confirm_status"
+    fi
+  fi
+}
+
 install_selected_skills() {
   local skill source_dir destination
   for skill in "${SELECTED[@]-}"; do
     [ -n "$skill" ] || continue
     source_dir="$SCRIPT_DIR/$skill"
     destination="$TARGET/$skill"
+    preflight_skill_install "$skill" || install_failure "$skill" "$destination"
+    [ "$PREFLIGHT_ACTION" = install ] || continue
     if [ "$DRY_RUN" -eq 1 ]; then
       preview_skill_install "$source_dir" "$destination"
     else

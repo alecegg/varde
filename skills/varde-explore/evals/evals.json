@@ -58,6 +58,17 @@
         "Does not treat 'how does it work' as a request for the explain-mode artifact"
       ],
       "setup_script": "evals/setup-explore-fixture.sh"
+    },
+    {
+      "id": 6,
+      "prompt": "Thanks for explaining the retry logic. Go ahead and plan the new backoff policy and implement it now.",
+      "expected_output": "The explicit follow-up authorizes starting the matching varde-change route in this turn. The agent uses the source-grounded exploration as context and does not ask the user to confirm the same request again; unresolved choices still follow the plan's own gates.",
+      "assertions": [
+        "Starts the matching varde-change route for the explicit request in the same turn",
+        "Does not ask for a second confirmation of the user's explicit request",
+        "Follows varde-change's planning and implementation checks rather than treating the exploration answer as an implementation contract"
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh"
     }
   ]
 }

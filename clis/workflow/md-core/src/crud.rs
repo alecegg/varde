@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 #[cfg(unix)]
 use std::fs::File;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 #[cfg(any(test, not(unix)))]
@@ -51,17 +53,22 @@ impl Drop for TempStage {
 
 fn write_temp_stage_with(
     bytes: &[u8],
+    private: bool,
     mut candidate_path: impl FnMut() -> PathBuf,
 ) -> std::io::Result<TempStage> {
     use std::io::Write;
 
     loop {
         let path = candidate_path();
-        let mut file = match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        if private {
+            options.mode(0o600);
+        }
+        #[cfg(not(unix))]
+        let _ = private;
+        let mut file = match options.open(&path) {
             Ok(file) => file,
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
@@ -77,8 +84,8 @@ fn write_temp_stage_with(
     }
 }
 
-fn write_temp_stage(path: &Path, bytes: &[u8]) -> std::io::Result<TempStage> {
-    write_temp_stage_with(bytes, || unique_temp_path(path))
+fn write_temp_stage(path: &Path, bytes: &[u8], private: bool) -> std::io::Result<TempStage> {
+    write_temp_stage_with(bytes, private, || unique_temp_path(path))
 }
 
 /// Resolve `slug`'s on-disk path in `bundle`, mapping a non-kebab-case
@@ -218,7 +225,15 @@ pub(crate) fn relative_slug(bundle: &Path, path: &Path) -> String {
 /// process id, timestamp, and atomic nonce; collisions retry without touching
 /// existing paths, and the owned stage is removed on every failure path.
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let stage = write_temp_stage(path, bytes)?;
+    let previous_permissions = match std::fs::metadata(path) {
+        Ok(metadata) => Some(metadata.permissions()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let stage = write_temp_stage(path, bytes, previous_permissions.is_some())?;
+    if let Some(permissions) = previous_permissions {
+        std::fs::set_permissions(&stage.path, permissions)?;
+    }
     std::fs::rename(&stage.path, path)
 }
 
@@ -228,7 +243,7 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// silently overwriting it. Used by `create`, whose contract is "never
 /// overwrite" (a plain rename cannot honor that under concurrent creates).
 pub(crate) fn atomic_create(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let stage = write_temp_stage(path, bytes)?;
+    let stage = write_temp_stage(path, bytes, false)?;
     std::fs::hard_link(&stage.path, path)
 }
 
@@ -874,7 +889,7 @@ mod tests {
 
         let mut candidates = [occupied.clone(), fresh.clone()].into_iter();
         let mut attempts = 0;
-        let stage = write_temp_stage_with(b"stage contents", || {
+        let stage = write_temp_stage_with(b"stage contents", false, || {
             attempts += 1;
             candidates.next().unwrap()
         })

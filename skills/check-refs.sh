@@ -157,17 +157,16 @@ for skill in sorted(d for d in os.listdir(root) if d.startswith('varde-')):
                               % (skill, rel, link))
 
 if broken:
-    print("Backticked reference paths that resolve to no file:", file=sys.stderr)
+    print("Broken checked reference pointers (backticked candidates or relative Markdown links):", file=sys.stderr)
     for entry in sorted(set(broken)):
         print("  " + entry, file=sys.stderr)
-    print("Fix: point at the real file, or drop the backticks if the path is", file=sys.stderr)
-    print("illustrative prose (e.g. naming another skill's internals).", file=sys.stderr)
+    print("Fix: point at the real file; keep illustrative paths in plain prose.", file=sys.stderr)
     raise SystemExit(1)
 PYEOF
 then
   exit 1
 fi
-echo "All backticked reference paths resolve."
+echo "Checked backticked file paths and relative Markdown links resolve; bare paths in prose or commands are not checked."
 
 # Third invariant: every shipped script is named by a markdown file in its own
 # skill. An agent learns a script exists only where a document names it — in

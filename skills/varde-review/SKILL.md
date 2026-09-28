@@ -5,7 +5,10 @@ description: "Review code or a running UI and act on findings: report without ed
 
 # Review and improve code
 
-Reporting is the default. When the user explicitly asks to fix, write the report, then run `fix` on that review in the same session.
+Reporting is the default. When a new review also asks for fixes, write the
+report, then run `fix` on that review in the same session. A request to fix one
+already recorded standalone finding follows `references/fix.md`'s single-finding
+route when its solution is settled.
 
 The harness invokes this workflow as a skill. `varde-review` is not a shell
 executable. Check that the harness has this skill installed instead of using
@@ -19,6 +22,7 @@ verdict through execution and completion, including changes made by this skill.
 | The request is | Read |
 |---|---|
 | Review a diff, branch, or code area and write down what is wrong | `references/report.md` |
+| Fix one named, already recorded standalone finding | `references/fix.md` (single-finding route) |
 | Apply the findings an earlier review already wrote down | `references/fix.md` |
 | Address review threads or failing checks on an open GitHub PR | `references/fix.md` (PR source routes to `references/fix-pr.md`) |
 | Inspect a running web, iOS simulator, or macOS app visually and through its interactions | `references/visual.md` |

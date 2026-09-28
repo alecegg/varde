@@ -101,7 +101,8 @@ if [ "$DRY_RUN" -ne 1 ]; then
 fi
 
 is_varde_managed() {
-  [ -f "$1" ] && [ ! -L "$1" ] && grep -Fq "$OWNERSHIP_MARKER" "$1"
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  grep -Fqx -e "<!-- $OWNERSHIP_MARKER -->" -e "# $OWNERSHIP_MARKER" "$1"
 }
 
 mark_varde_managed() {

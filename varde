@@ -240,10 +240,10 @@ if [ "$NO_CLI" -eq 0 ]; then
       varde-learn) cli_path=clis/learn/crates/varde-learn; cli_target=clis/learn/target ;;
     esac
     if [ "$DRY_RUN" -eq 1 ]; then
-      echo "would run: cargo install --path $ROOT_DIR/$cli_path --locked --target-dir $ROOT_DIR/$cli_target"
+      echo "would run: cargo install --path $ROOT_DIR/$cli_path --locked --force --target-dir $ROOT_DIR/$cli_target"
     else
       install_root=$(cargo_install_root "$ROOT_DIR/$cli_path")
-      cargo install --path "$ROOT_DIR/$cli_path" --locked --target-dir "$ROOT_DIR/$cli_target"
+      cargo install --path "$ROOT_DIR/$cli_path" --locked --force --target-dir "$ROOT_DIR/$cli_target"
       installed_cli="$install_root/bin/$cli"
       selected_cli=$(command -v "$cli" || true)
       resolved_installed=$(realpath "$installed_cli" 2>/dev/null || true)

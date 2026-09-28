@@ -20,14 +20,17 @@ any_fail() {
   jq -e '(.results | length) > 0 and (any(.results[]; .verdict == "FAIL"))' >/dev/null
 }
 
-# --- eval 1 PASS: expected variant-a.html / variant-b.html, <a href>, no <script> ---
+# --- eval 1 PASS: three linked variants, <a href>, no <script> ---
 sbox="$TEST_ROOT/eval1-pass"
 mkdir -p "$sbox/memory-bank/working/prototypes/dashboard-layout"
 cat > "$sbox/memory-bank/working/prototypes/dashboard-layout/variant-a.html" <<'HTML'
-<html><body><a href="variant-b.html">B</a></body></html>
+<html><body><a href="variant-b.html">B</a><a href="variant-c.html">C</a></body></html>
 HTML
 cat > "$sbox/memory-bank/working/prototypes/dashboard-layout/variant-b.html" <<'HTML'
-<html><body><a href="variant-a.html">A</a></body></html>
+<html><body><a href="variant-a.html">A</a><a href="variant-c.html">C</a></body></html>
+HTML
+cat > "$sbox/memory-bank/working/prototypes/dashboard-layout/variant-c.html" <<'HTML'
+<html><body><a href="variant-a.html">A</a><a href="variant-b.html">B</a></body></html>
 HTML
 
 result=$(cd "$sbox" && EVAL_ID=1 /bin/bash "$VERIFIER")

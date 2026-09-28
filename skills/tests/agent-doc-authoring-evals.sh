@@ -39,9 +39,8 @@ cat > "$sandbox/stale-notes.md" <<'REPORT'
 1. Pre-existing file that predates the run; must not count as the report.
 2. Second entry.
 REPORT
-sleep 1
+touch -t 202001010000 "$sandbox/stale-notes.md"
 run_start="$(date +%s)"
-sleep 1
 cat > "$sandbox/audit-report.md" <<'REPORT'
 # Audit report
 

@@ -52,6 +52,7 @@ varde-workflow concept map --bundle <dir> [--json]
 varde-workflow concept list [--bundle <dir>] [--include-deprecated] [--limit <n>] [--offset <n>] [--all] [--json]
 varde-workflow concept search [--field key=value]... [--text <query>] [--limit <n>] [--bundle <dir>] [--json]
 varde-workflow lint [--bundle <dir>] [--require-index] [--limit <n>] [--offset <n>] [--all] [--json]
+varde-workflow spec inventory --repository <root> --knowledge <dir> --working <dir> [--refresh] [--acknowledge-architecture-path <path>] [--json]
 varde-workflow validate <artifact> [--json]
 varde-workflow recover [--root <dir>] [--json]
 varde-workflow graph <plan> [--limit <n>] [--offset <n>] [--all] [--json]
@@ -103,6 +104,18 @@ List, lint, and graph outputs return at most 100 records per collection.
 Use `--offset` for the next page or `--all` explicitly. JSON output uses
 the shared `{schema_version, ok, outcome, data, meta}` envelope. Failures
 store their typed error under `data.error`.
+
+`spec inventory` classifies domain specs against current nonignored source
+paths and provenance. It caches verified results under the supplied working
+directory, rechecks changed inputs before reusing unaffected domains, and
+periodically performs full validation. `--refresh` forces a full check after
+spec regeneration. Warm `unclassified_paths` lists changed paths outside domain
+roots; full checks list all of them. An unknown new path outside architecture
+roots yields `architecture_status: inspect` and appears in
+`architecture_inspect_paths`. After inspecting an unrelated path,
+`--acknowledge-architecture-path` records its current hash and clears that
+status; a content change requires inspection again. Its cache is advisory;
+`conclude` still validates source hashes and covered paths independently.
 
 ## Memory locations
 

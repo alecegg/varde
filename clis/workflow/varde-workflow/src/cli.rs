@@ -77,6 +77,38 @@ pub enum Command {
     Paths(PathsArgs),
     /// Show or edit user-wide settings
     Config(ConfigArgs),
+    /// Inspect specification source inventory and its verified cache
+    Spec(SpecArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SpecArgs {
+    #[command(subcommand)]
+    pub command: SpecCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SpecCommand {
+    /// Classify domain specifications against current repository sources
+    Inventory(SpecInventoryArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SpecInventoryArgs {
+    #[arg(long)]
+    pub repository: PathBuf,
+    #[arg(long)]
+    pub knowledge: PathBuf,
+    #[arg(long)]
+    pub working: PathBuf,
+    /// Force full source and provenance validation
+    #[arg(long)]
+    pub refresh: bool,
+    /// Record inspected paths as non-architecture inputs at their current content hash
+    #[arg(long = "acknowledge-architecture-path")]
+    pub acknowledge_architecture_paths: Vec<PathBuf>,
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]

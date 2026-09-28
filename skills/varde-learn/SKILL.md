@@ -1,6 +1,6 @@
 ---
 name: varde-learn
-description: "Diagnose a past or current agent session, capture observed friction, reconcile evidence, distill recurring issues, track recurrence, or create and evaluate skill tests. Not for durable project notes, plans, general code changes, or reviews."
+description: "Diagnose an agent session or briefly triage supplied agent-session evidence; capture or reconcile friction, distill recurring issues, track recurrence, or create skill tests. Not for project notes, plans, code changes, or reviews."
 ---
 
 # Maintain friction and skill evaluations
@@ -13,6 +13,7 @@ skill output evaluations and trigger query sets.
 | Request | Read |
 |---|---|
 | Capture an observed friction event | `references/capture.md` |
+| Triage supplied agent-session evidence without a session-wide diagnosis | `references/diagnose-quick.md` |
 | Diagnose an existing or current agent session | `references/diagnose.md` |
 | Reconcile an item against evidence | `references/reconcile.md` |
 | Distill recurring friction into an improvement | `references/distill.md` |

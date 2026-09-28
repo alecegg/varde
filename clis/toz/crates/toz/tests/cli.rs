@@ -55,6 +55,245 @@ fn capture_text(e: &Env, label: &str, body: String) -> String {
 }
 
 #[test]
+fn capture_metadata_redacts_source_and_label_without_losing_identity() {
+    let e = env();
+    std::fs::write(
+        e.cfg_path.join("config.toml"),
+        "[redact]\npatterns = ['vault-[0-9]+']\n",
+    )
+    .unwrap();
+    let source = "task vault-123";
+    let first = toz(&e)
+        .args(["capture", "--source", source, "--force"])
+        .write_stdin("first distinct body\n")
+        .output()
+        .unwrap();
+    assert!(first.status.success());
+    assert!(!String::from_utf8_lossy(&first.stdout).contains("vault-123"));
+
+    let second = toz(&e)
+        .args(["capture", "--source", "task vault-456", "--force"])
+        .write_stdin("second distinct body\n")
+        .output()
+        .unwrap();
+    assert!(second.status.success());
+    let listed = toz(&e)
+        .args(["query", "--list", "--json"])
+        .output()
+        .unwrap();
+    assert!(listed.status.success());
+    let rows: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 2);
+    assert!(!String::from_utf8_lossy(&listed.stdout).contains("vault-123"));
+    assert!(!String::from_utf8_lossy(&listed.stdout).contains("vault-456"));
+    let project = toz_core::project::Project::resolve(Some(e.project.path())).unwrap();
+    let store = toz_core::store::Store::open_readonly(&e.cfg_path.join(project.key).join("toz.db"))
+        .unwrap();
+    let stored = store.list(10, false).unwrap();
+    assert_eq!(stored.len(), 2);
+    assert!(stored.iter().all(|row| !row.source.contains("vault-")));
+}
+
+#[test]
+fn redacted_capture_supersedes_legacy_source_and_hides_legacy_metadata() {
+    let e = env();
+    let source = "task vault-123";
+    let legacy = toz(&e)
+        .args(["capture", "--source", source, "--force"])
+        .write_stdin("legacy body\n")
+        .output()
+        .unwrap();
+    assert!(legacy.status.success());
+    std::fs::write(
+        e.cfg_path.join("config.toml"),
+        "[redact]\npatterns = ['vault-[0-9]+']\n",
+    )
+    .unwrap();
+    let current = toz(&e)
+        .args(["capture", "--source", source, "--force"])
+        .write_stdin("current body\n")
+        .output()
+        .unwrap();
+    assert!(current.status.success());
+    let listed = toz(&e)
+        .args(["query", "--list", "--json"])
+        .output()
+        .unwrap();
+    assert!(listed.status.success());
+    let rows: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 1);
+    let all = toz(&e)
+        .args(["query", "--list", "--all", "--json"])
+        .output()
+        .unwrap();
+    assert!(all.status.success());
+    assert!(!String::from_utf8_lossy(&all.stdout).contains("vault-123"));
+    let searched = toz(&e).args(["query", "--all", "legacy"]).output().unwrap();
+    assert!(searched.status.success());
+    assert!(!String::from_utf8_lossy(&searched.stdout).contains("vault-123"));
+    let legacy_handle = String::from_utf8_lossy(&legacy.stdout)
+        .split("handle ")
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string();
+    let (_, script_label) = script_result(
+        &e,
+        &[
+            "--handle",
+            &legacy_handle,
+            "--code",
+            "print(vardeToz.handle.label)",
+        ],
+        None,
+    );
+    assert!(!script_label.contains("vault-123"));
+}
+
+#[test]
+fn migrate_metadata_rewrites_legacy_capture_without_changing_handle_or_supersession() {
+    let e = env();
+    std::fs::write(
+        e.cfg_path.join("config.toml"),
+        "[redact]\npatterns = ['vault-[0-9]+']\n",
+    )
+    .unwrap();
+    let label = "task vault-123";
+    let handle = capture_text(&e, label, "original body\n".into());
+    let project = toz_core::project::Project::resolve(Some(e.project.path())).unwrap();
+    let path = e.cfg_path.join(&project.key).join("toz.db");
+    let store = toz_core::store::Store::open(&path).unwrap();
+    store
+        .conn()
+        .execute(
+            "UPDATE captures SET label = ?1, source = ?1, source_key = ?1 WHERE handle = ?2",
+            [label, handle.as_str()],
+        )
+        .unwrap();
+    drop(store);
+
+    toz(&e).arg("migrate-metadata").assert().success();
+    let store = toz_core::store::Store::open_readonly(&path).unwrap();
+    let row = store.get_by_handle(&handle).unwrap().unwrap();
+    assert!(!row.label.contains("vault-123"));
+    assert!(!row.source.contains("vault-123"));
+    let key: String = store
+        .conn()
+        .query_row(
+            "SELECT source_key FROM captures WHERE handle = ?1",
+            [&handle],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(key.len(), 64);
+    drop(store);
+    toz(&e)
+        .args(["query", "--handle", &handle])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("original body"));
+    toz(&e).arg("migrate-metadata").assert().success();
+
+    let newer = capture_text(&e, label, "new body\n".into());
+    let store = toz_core::store::Store::open_readonly(&path).unwrap();
+    let original = store.get_by_handle(&handle).unwrap().unwrap();
+    let current = store.get_by_handle(&newer).unwrap().unwrap();
+    assert_eq!(original.superseded_by, Some(current.id));
+}
+
+#[test]
+fn fetch_messages_hide_url_credentials_and_query_values() {
+    let e = env();
+    let output = toz(&e)
+        .args([
+            "fetch",
+            "https://alice:pass@bad host/a?token=secret-one",
+            "https://bob:pass@bad host/b?token=secret-two",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    for secret in ["alice", "bob", "pass", "secret-one", "secret-two"] {
+        assert!(!text.contains(secret), "{text}");
+    }
+}
+
+#[test]
+fn fetch_cache_reuses_capture_with_private_project_identity() {
+    use std::io::{Read, Write};
+
+    let e = env();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::WouldBlock
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(error) => panic!("fetch server did not receive request: {error}"),
+            }
+        };
+        let mut request = [0u8; 2048];
+        stream.read(&mut request).unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 11\r\nConnection: close\r\n\r\nhello world")
+            .unwrap();
+    });
+    let url = format!("http://127.0.0.1:{port}/docs?token=opaque-value");
+    let first = toz(&e).args(["fetch", &url]).output().unwrap();
+    server.join().unwrap();
+    assert!(
+        first.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let second = toz(&e).args(["fetch", &url]).output().unwrap();
+    assert!(
+        second.status.success(),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let output = String::from_utf8_lossy(&second.stdout);
+    assert!(output.contains("cached"), "{output}");
+    assert!(!output.contains("opaque-value"));
+    let cache = std::fs::read_dir(e.cfg_path.join("cache")).unwrap();
+    for entry in cache {
+        let bytes = std::fs::read(entry.unwrap().path()).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("opaque-value"));
+        assert!(!String::from_utf8_lossy(&bytes).contains(
+            &toz_core::project::Project::resolve(Some(e.project.path()))
+                .unwrap()
+                .key
+        ));
+    }
+}
+
+#[test]
+fn index_path_errors_hide_configured_secrets() {
+    let e = env();
+    std::fs::write(
+        e.cfg_path.join("config.toml"),
+        "[redact]\npatterns = ['vault-[0-9]+']\n",
+    )
+    .unwrap();
+    let path = e.project.path().join("vault-123.txt");
+    let output = toz(&e).arg("index").arg(&path).output().unwrap();
+    assert!(!output.status.success());
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("vault-123"));
+}
+
+#[test]
 fn canonical_environment_and_script_alias_preserve_legacy_access() {
     let e = env();
     let h = capture_text(&e, "legacy", "legacy capture\n".into());
@@ -1211,7 +1450,7 @@ fn sandboxed_script_command_captures_short_output_and_cannot_read_store_db() {
     let (_, denied) = script_result(&e, &["--code", &read_private], None);
     assert_eq!(denied, "1\n");
 
-    let (_, text) = script_result(&e, &["--code", "let r=toz.exec({shell:'printf short'}); print(JSON.stringify({capture:r.capture,stdout:r.stdout}))"], None);
+    let (_, text) = script_result(&e, &["--code", "let r=toz.exec({shell:'printf short',capture:true}); print(JSON.stringify({capture:r.capture,stdout:r.stdout}))"], None);
     let result: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(result["stdout"], "short");
     assert_eq!(result["capture"]["state"], "captured");

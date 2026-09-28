@@ -319,42 +319,59 @@ pub(crate) fn parse_events(trace: &[u8]) -> Result<Vec<Value>, ()> {
 /// match, not its wording.
 fn parse_claude(trace: &[u8], skill: &str) -> Result<bool, ()> {
     let events = parse_events(trace)?;
+    validate_claude_types(&events)?;
+    validate_claude_assistant_content(&events)?;
+    validate_claude_result(&events)?;
+    Ok(claude_skill_hit(&events, skill))
+}
 
-    for event in &events {
+fn validate_claude_types(events: &[Value]) -> Result<(), ()> {
+    for event in events {
         let obj = event.as_object().ok_or(())?;
         let ty = obj.get("type").and_then(Value::as_str).ok_or(())?;
         if !["system", "assistant", "user", "result"].contains(&ty) {
             return Err(());
         }
     }
+    Ok(())
+}
 
-    for event in &events {
+fn validate_claude_assistant_content(events: &[Value]) -> Result<(), ()> {
+    for event in events {
         if event.get("type").and_then(Value::as_str) != Some("assistant") {
             continue;
         }
         let message = event.get("message").and_then(Value::as_object).ok_or(())?;
         let content = message.get("content").and_then(Value::as_array).ok_or(())?;
         for item in content {
-            match item.get("type").and_then(Value::as_str) {
-                Some("tool_use") => {
-                    let name = item.get("name").and_then(Value::as_str).ok_or(())?;
-                    let input = item.get("input").and_then(Value::as_object).ok_or(())?;
-                    if name == "Skill" && input.get("skill").and_then(Value::as_str).is_none() {
-                        return Err(());
-                    }
-                }
-                Some("text") => {
-                    if let Some(text) = item.get("text").and_then(Value::as_str)
-                        && contains_auth_phrase(text)
-                    {
-                        return Err(());
-                    }
-                }
-                _ => {}
-            }
+            validate_claude_content_item(item)?;
         }
     }
+    Ok(())
+}
 
+fn validate_claude_content_item(item: &Value) -> Result<(), ()> {
+    match item.get("type").and_then(Value::as_str) {
+        Some("tool_use") => {
+            let name = item.get("name").and_then(Value::as_str).ok_or(())?;
+            let input = item.get("input").and_then(Value::as_object).ok_or(())?;
+            if name == "Skill" && input.get("skill").and_then(Value::as_str).is_none() {
+                return Err(());
+            }
+        }
+        Some("text") => {
+            if let Some(text) = item.get("text").and_then(Value::as_str)
+                && contains_auth_phrase(text)
+            {
+                return Err(());
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_claude_result(events: &[Value]) -> Result<(), ()> {
     let assistant_count = events
         .iter()
         .filter(|event| event.get("type").and_then(Value::as_str) == Some("assistant"))
@@ -376,8 +393,11 @@ fn parse_claude(trace: &[u8], skill: &str) -> Result<bool, ()> {
     if !succeeded {
         return Err(());
     }
+    Ok(())
+}
 
-    Ok(events.iter().any(|event| {
+fn claude_skill_hit(events: &[Value], skill: &str) -> bool {
+    events.iter().any(|event| {
         event.get("type").and_then(Value::as_str) == Some("assistant")
             && event
                 .get("message")
@@ -394,7 +414,7 @@ fn parse_claude(trace: &[u8], skill: &str) -> Result<bool, ()> {
                                 == Some(skill)
                     })
                 })
-    }))
+    })
 }
 
 /// Port of `parse_opencode` (run-evals.sh:123-144). See `parse_claude` for
@@ -544,7 +564,37 @@ fn opencode_has_terminal_event(events: &[Value]) -> Result<bool, ()> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_opencode;
+    use super::{parse_claude, parse_opencode};
+
+    #[test]
+    fn claude_preserves_content_and_result_boundaries() {
+        let ignored = r#"{"type":"assistant","message":{"content":[{"type":"image"}]}}"#;
+        let missing_skill = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{}}]}}"#;
+        let skill = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"target"}}]}}"#;
+        let result = r#"{"type":"result","subtype":"success","is_error":false}"#;
+        let trace = |events: &[&str]| events.join("\n");
+
+        assert_eq!(
+            parse_claude(trace(&[ignored, result]).as_bytes(), "target"),
+            Ok(false)
+        );
+        assert_eq!(
+            parse_claude(trace(&[missing_skill, result]).as_bytes(), "target"),
+            Err(())
+        );
+        assert_eq!(
+            parse_claude(trace(&[skill, result, result]).as_bytes(), "target"),
+            Err(())
+        );
+        assert_eq!(
+            parse_claude(trace(&[skill, result]).as_bytes(), "other"),
+            Ok(false)
+        );
+        assert_eq!(
+            parse_claude(trace(&[skill, result]).as_bytes(), "target"),
+            Ok(true)
+        );
+    }
 
     #[test]
     fn opencode_rejects_missing_skill_id_and_unfinished_final_text() {

@@ -2,6 +2,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
 
 pub fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_varde-workflow")
@@ -32,34 +35,33 @@ pub fn json_data(bytes: &[u8]) -> serde_json::Value {
 
 /// A fresh, empty bundle directory unique to this test run.
 pub fn temp_bundle(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "ck-test-{tag}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    create_temp_dir("ck-test", tag)
 }
 
 /// A directory holding input documents, kept separate from any bundle.
 /// Only some test crates use it; shared helpers may be unused per crate.
 #[allow(dead_code)]
 pub fn temp_inputs(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "ck-inputs-{tag}-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    create_temp_dir("ck-inputs", tag)
+}
+
+fn create_temp_dir(prefix: &str, tag: &str) -> PathBuf {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    loop {
+        let nonce = NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "{prefix}-{tag}-{}-{timestamp}-{nonce}",
+            std::process::id()
+        ));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return dir,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("could not create {}: {error}", dir.display()),
+        }
+    }
 }
 
 #[allow(dead_code)]

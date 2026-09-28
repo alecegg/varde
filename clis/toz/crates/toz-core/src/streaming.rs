@@ -2,6 +2,7 @@
 
 use crate::capture::{self, CaptureInput, Outcome, Preview, Section};
 use crate::chunk::{self, Chunk};
+use crate::metadata;
 use crate::redact::{NeverCapture, Redactor};
 use crate::store::NewCapture;
 use crate::{Config, Store};
@@ -110,12 +111,16 @@ fn run_large(
     let label = input
         .label
         .map(str::to_string)
-        .unwrap_or_else(|| chunk::truncate(&key, 120));
+        .unwrap_or_else(|| chunk::truncate(key, 120));
+    let safe_label = metadata::sanitize_text(&redactor, &label);
+    let safe_source = metadata::sanitize_text(&redactor, input.source);
+    let private_key = metadata::identity_at(store.path().parent().unwrap(), sk)?;
     let cap = NewCapture {
-        label: &label,
+        label: &safe_label,
         kind: input.kind,
-        source: input.source,
-        source_key: sk,
+        source: &safe_source,
+        source_key: &private_key,
+        legacy_source_key: Some(sk),
         bytes,
         exit_code: input.exit_code,
         session: input.session,
@@ -124,7 +129,7 @@ fn run_large(
         file_mtime: input.file_mtime,
         file_hash: input.file_hash.as_deref(),
     };
-    let mut preview = empty_preview(&label, bytes, input.exit_code);
+    let mut preview = empty_preview(&safe_label, bytes, input.exit_code);
     let mut stderr_signatures = capture::StderrSignatures::new(cfg.preview_tail);
     preview.handle = store.insert_capture_with(&cap, |append| {
         ingest(
@@ -338,6 +343,34 @@ fn append_stderr_lines(
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn large_capture_masks_metadata_before_storage_and_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(&dir.path().join("toz.db")).unwrap();
+        let mut cfg = Config::default();
+        cfg.redact.patterns.push("vault-[0-9]+".into());
+        let body = "ordinary output\n".repeat(90_000);
+        let mut stdout = Cursor::new(body.as_bytes());
+        let mut stderr = Cursor::new(&[][..]);
+        let mut input = CaptureInput::new(&[], "task vault-123", "run");
+        input.label = Some("label vault-123");
+        let Outcome::Captured(preview) = run(
+            &cfg,
+            &mut store,
+            input,
+            &mut stdout,
+            &mut stderr,
+            body.len(),
+        )
+        .unwrap() else {
+            panic!("expected capture");
+        };
+        let row = store.get_by_handle(&preview.handle).unwrap().unwrap();
+        assert!(!row.source.contains("vault-123"));
+        assert!(!row.label.contains("vault-123"));
+        assert!(!preview.render().contains("vault-123"));
+    }
 
     #[test]
     fn oversized_stderr_line_rolls_back_already_appended_stdout() {

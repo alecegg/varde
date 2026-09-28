@@ -32,6 +32,13 @@ skill = text("skills/varde-learn/SKILL.md")
 reference_path = root / "skills/varde-learn/references/diagnose.md"
 if "references/diagnose.md" not in skill or not reference_path.is_file():
     raise SystemExit("FAIL: the varde-learn skill does not route diagnosis to a real reference")
+quick_path = root / "skills/varde-learn/references/diagnose-quick.md"
+if "references/diagnose-quick.md" not in skill or not quick_path.is_file():
+    raise SystemExit("FAIL: bounded visible-evidence triage lacks its own reference")
+contains("skills/varde-learn/references/diagnose-quick.md",
+    "supplied", "partial", "do not open a session transcript",
+    "references/diagnose.md", "independent analyst", "do not save a diagnosis report",
+)
 reference = reference_path.read_text(encoding="utf-8")
 checks += 1
 capture = text("skills/varde-learn/references/diagnose-capture.md")

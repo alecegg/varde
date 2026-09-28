@@ -385,6 +385,88 @@ fn timeout_seconds_zero_is_rejected() {
 }
 
 #[test]
+fn zero_runs_is_rejected() {
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().unwrap();
+    write_output_skill(skill_dir.path(), &single_eval_json("one"));
+
+    mock.command()
+        .args([
+            "eval",
+            "output",
+            "--harness",
+            "claude",
+            skill_dir.path().to_str().unwrap(),
+            "--runs",
+            "0",
+        ])
+        .assert()
+        .code(2)
+        .stderr(contains("--runs must be a positive integer"));
+}
+
+#[test]
+fn unsafe_eval_ids_are_rejected_before_model_call() {
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().unwrap();
+    let workspace = tempdir().unwrap();
+    let calls = workspace.path().join("calls.txt");
+
+    for id in ["", ".", "..", "x/../../escape", "x\\y", "line\nbreak"] {
+        let evals = serde_json::json!({
+            "skill_name": "fixture",
+            "evals": [{"id": id, "prompt": "test"}],
+        });
+        write_output_skill(skill_dir.path(), &evals.to_string());
+        mock.command()
+            .env("MOCK_CWD_FILE", &calls)
+            .args([
+                "eval",
+                "output",
+                "--harness",
+                "claude",
+                skill_dir.path().to_str().unwrap(),
+                "--workspace",
+                workspace.path().to_str().unwrap(),
+                "--no-baseline",
+            ])
+            .assert()
+            .code(2)
+            .stderr(contains("invalid eval id"));
+        assert!(!calls.exists(), "unsafe ID reached model: {id:?}");
+    }
+}
+
+#[test]
+fn duplicate_eval_ids_are_rejected_before_model_call() {
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().unwrap();
+    write_output_skill(
+        skill_dir.path(),
+        r#"{"skill_name":"fixture","evals":[{"id":"one","prompt":"first"},{"id":"one","prompt":"second"}]}"#,
+    );
+    let workspace = tempdir().unwrap();
+    let calls = workspace.path().join("calls.txt");
+
+    mock.command()
+        .env("MOCK_CWD_FILE", &calls)
+        .args([
+            "eval",
+            "output",
+            "--harness",
+            "claude",
+            skill_dir.path().to_str().unwrap(),
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "--no-baseline",
+        ])
+        .assert()
+        .code(2)
+        .stderr(contains("duplicate eval id: one"));
+    assert!(!calls.exists(), "duplicate ID reached model");
+}
+
+#[test]
 // parity: "missing declared input did not abort the eval"
 // parity: "missing input reached a Claude model call"
 // parity: "missing input failure did not identify the eval input"

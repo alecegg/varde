@@ -13,7 +13,7 @@ Report whether architecture was written or left unchanged.
 "Only <domain>" limits domain documents; the shared architecture document
 is an additional output when stale. If the user explicitly forbids an
 architecture edit, leave it unchanged and report the stale state.
-Read other domain roots for overlap and unmatched-file classification without
+Read other domain roots for overlap and `unclassified_paths` classification without
 regenerating their documents.
 
 1. **Find domains needing updates.** Full procedure: `references/spec-plan.md`.
@@ -47,8 +47,8 @@ regenerating their documents.
    `<knowledge>/specs/<slug>.md`). Deletion is confined to `specs/`,
    to documents you have confirmed are orphans, and never to the architecture
    document.
-5. **Write the index**, after domain generation finishes. Format:
-   `references/spec-format.md`.
+5. **Render the index** after domain generation finishes. Format:
+   `references/spec-format.md`. Write it only when bytes differ.
 6. **Verify.** Compare each generated spec with the source it describes:
    - writes stay under `<knowledge>/specs/`
    - spot-check operations, types, and invariants, and mark unverified areas
@@ -57,8 +57,12 @@ regenerating their documents.
    - links resolve
    - If `varde-workflow` is on PATH, run `varde-workflow lint --bundle
      <knowledge>` and report findings; lint does not block.
+   - After changed specifications pass these checks, refresh the verified
+     inventory with `varde-workflow spec inventory --repository <repo-root>
+     --knowledge <knowledge> --working <working> --refresh --json` when the
+     command is available. Report a refresh failure; do not claim a cache hit.
 7. **Report the summary.** Output: the Domain/Written/Failed/Skipped table,
    then the architecture decision and any extra write, orphans, overlapping
-   and unmatched source paths, broken links, drift, and degraded checks.
+   and unmatched/unclassified paths, broken links, drift, and degraded checks.
 8. **Record lessons.** Record real obstacles through `varde-learn` and durable
    decisions through `varde-knowledge`.

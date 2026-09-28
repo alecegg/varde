@@ -55,7 +55,7 @@ Verify committed output byte-for-byte:
 Verification regenerates into a temporary directory.
 Every missing, unexpected, or stale path is reported exactly.
 
-The default installed catalogue contains eight packages:
+The default installed catalogue contains ten packages:
 
 - `varde-explore`
 - `varde-change`
@@ -65,6 +65,8 @@ The default installed catalogue contains eight packages:
 - `varde-learn`
 - `varde-prototype`
 - `varde-agent-doc-authoring`
+- `varde-manage`
+- `varde-toz`
 
 Agent instructions select modes within those installed packages.
 

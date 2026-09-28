@@ -24,8 +24,9 @@ bug.
 | Plan a new feature before building | `references/plan-start.md` |
 | Resume planning with no feature named | `references/plan-resume.md` |
 | One task file assigned by an orchestrator (executor) | `references/build-execution.md` |
-| A bounded change with settled scope and verification, even across several files | `references/build-micro-change.md` |
-| A plan, ad-hoc change, refactor, or spike | `references/build-plan.md` |
+| A settled single-outcome refactor | `references/build-micro-change.md`, then `references/build-posture-refactor.md` |
+| A settled single-outcome change with known verification, regardless of file count | `references/build-micro-change.md` |
+| A named plan, multiple dependent outcomes, unresolved design, or spike | `references/build-plan.md` |
 | Diagnose why something fails, without fixing it | `references/build-posture-debug.md` (`diagnose`) |
 | Fix a named bug or regression, no mode given | `references/build-posture-debug.md` (`fix`) |
 | Report evidence for finished work without changing anything | `references/verify.md` |

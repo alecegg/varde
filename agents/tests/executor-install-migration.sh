@@ -53,6 +53,16 @@ for harness in claude codex opencode; do
     exit 1
   }
 
+  mention_only="$TEST_ROOT/mention-only-$harness"
+  mkdir -p "$mention_only"
+  printf 'This custom agent discusses varde-managed-agent labels.\n' >"$mention_only/plan.$extension"
+  cp "$mention_only/plan.$extension" "$mention_only/before"
+  "$AGENTS_DIR/install.sh" -t "$harness" -d "$mention_only" -a plan -m >/dev/null
+  cmp "$mention_only/before" "$mention_only/plan.$extension" || {
+    echo "FAIL: marker mention replaced an unowned plan for $harness" >&2
+    exit 1
+  }
+
   # A default (-f) install writes the ownership marker without -m, so a
   # later -m run can recognize the file as varde-managed and update it.
   marker_check="$TEST_ROOT/marker-$harness"

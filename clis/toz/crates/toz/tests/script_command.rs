@@ -210,3 +210,89 @@ fn script_command_large_output_returns_capture_handle() {
     let shown = query_text(&e.config, &e.project, fields[2]);
     assert!(shown.len() >= 69_000);
 }
+
+fn command_result(e: &Env, request: &str) -> serde_json::Value {
+    let code = format!("const r=toz.exec({request}); print(JSON.stringify(r))");
+    serde_json::from_str(e.script_text(&code, &[]).trim()).unwrap()
+}
+
+#[test]
+fn script_command_short_output_is_inline_without_handle() {
+    let e = Env::new();
+    let result = command_result(&e, "{shell:'printf short'}");
+    assert_eq!(result["stdout"], "short");
+    assert_eq!(result["capture"]["state"], "inline");
+    assert!(result["capture"].get("handle").is_none());
+    assert_eq!(result["raw"]["state"], "not_requested");
+    assert_eq!(result["truncated"], false);
+}
+
+#[test]
+fn script_command_threshold_uses_combined_output_bytes() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "threshold = 4\n").unwrap();
+    let inline = command_result(&e, "{shell:'printf ab; printf cd >&2'}");
+    assert_eq!(inline["capture"]["state"], "inline");
+    assert_eq!(inline["stdout"], "ab");
+    assert_eq!(inline["stderr"], "cd");
+    let captured = command_result(&e, "{shell:'printf abc; printf cd >&2'}");
+    assert_eq!(captured["capture"]["state"], "captured");
+    let handle = captured["capture"]["handle"].as_str().unwrap();
+    assert!(query_text(&e.config, &e.project, handle).contains("abc"));
+}
+
+#[test]
+fn script_command_capture_option_forces_searchable_handle() {
+    let e = Env::new();
+    let result = command_result(&e, "{shell:'printf short',capture:true}");
+    assert_eq!(result["capture"]["state"], "captured");
+    let handle = result["capture"]["handle"].as_str().unwrap();
+    assert_eq!(query_text(&e.config, &e.project, handle), "short\n");
+}
+
+#[test]
+fn script_command_raw_option_forces_searchable_handle() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "[raw]\nenabled = true\n").unwrap();
+    let result = command_result(&e, "{shell:'printf raw-bytes',raw:true}");
+    assert_eq!(result["capture"]["state"], "captured");
+    assert_eq!(result["raw"]["state"], "stored");
+    let handle = result["capture"]["handle"].as_str().unwrap();
+    assert_eq!(query_text(&e.config, &e.project, handle), "raw-bytes\n");
+    let raw_handle = result["raw"]["handle"].as_str().unwrap();
+    let output = e
+        .command()
+        .args(["query", "--raw", raw_handle])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"raw-bytes");
+}
+
+#[test]
+fn script_command_never_capture_overrides_both_force_options() {
+    let e = Env::new();
+    std::fs::write(
+        e.config.join("config.toml"),
+        "[capture]\nnever = ['*blocked-source*']\n[raw]\nenabled = true\n",
+    )
+    .unwrap();
+    let result = command_result(&e, "{shell:'printf blocked-source',capture:true,raw:true}");
+    assert_eq!(result["stdout"], "blocked-source");
+    assert_eq!(result["capture"]["state"], "excluded");
+    assert_eq!(result["capture"]["rule"], "never-capture");
+    assert_eq!(result["raw"]["state"], "excluded");
+    assert!(result["capture"].get("handle").is_none());
+    assert!(result["raw"].get("handle").is_none());
+}
+
+#[test]
+fn script_command_preview_cap_forces_capture_with_high_threshold() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "threshold = 1000000\n").unwrap();
+    let result = command_result(&e, "{shell:'yes x | head -c 70000'}");
+    assert_eq!(result["capture"]["state"], "captured");
+    assert_eq!(result["truncated"], true);
+    let handle = result["capture"]["handle"].as_str().unwrap();
+    assert!(query_text(&e.config, &e.project, handle).len() >= 69_000);
+}

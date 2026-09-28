@@ -18,12 +18,12 @@ validator = runpy.run_path(str(VALIDATOR))
 
 
 class FrontmatterTests(unittest.TestCase):
-    def validate(self, extra, valid=True):
+    def validate(self, extra, valid=True, description='description: "Example skill"\n'):
         with tempfile.TemporaryDirectory() as tmp:
             skill = Path(tmp) / 'sample'
             skill.mkdir()
             (skill / 'SKILL.md').write_text(
-                '---\nname: sample\ndescription: Example skill\n' + extra + '---\n# Sample\n'
+                '---\nname: sample\n' + description + extra + '---\n# Sample\n'
             )
             result = subprocess.run(
                 [sys.executable, str(VALIDATOR), '--json', str(skill)],
@@ -52,6 +52,19 @@ class FrontmatterTests(unittest.TestCase):
         self.validate('metadata:\n  owner: one\n')
         data = self.validate('1: foo\nextra: bar\n')
         self.assertEqual(len(data['warnings']), 2)
+
+    def test_description_physical_line(self):
+        self.validate('', description='description: "A single line"\n')
+        for description in (
+            'description: Plain text\n',
+            "description: 'Single quoted'\n",
+            'description: >\n  Folded text\n',
+            'description: |\n  Literal text\n',
+            'description: "First line\n  second line"\n',
+            'description: &value "Anchored"\n',
+        ):
+            with self.subTest(description=description):
+                self.validate('', valid=False, description=description)
 
     def test_merge_overrides_and_aliases(self):
         for extra in (

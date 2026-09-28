@@ -85,7 +85,7 @@ The command only delegates installation. Module READMEs remain authoritative
 for installer options and development. Installed skill descriptions remain the
 authoritative routing surface.
 
-Varde installs eight user-facing skills by default:
+Varde installs ten user-facing skills by default:
 
 | Skill | Primary intent |
 |---|---|
@@ -97,6 +97,8 @@ Varde installs eight user-facing skills by default:
 | `varde-learn` | Real friction capture, reconciliation, distillation, and skill evaluations |
 | `varde-prototype` | Throwaway visual and logic prototypes |
 | `varde-agent-doc-authoring` | Instructions and references for agents |
+| `varde-manage` | Installation, configuration, and rule setup |
+| `varde-toz` | Query and analyze captured tool output |
 
 Natural language selects each skill and internal mode.
 Ask for exploration before choosing implementation direction.

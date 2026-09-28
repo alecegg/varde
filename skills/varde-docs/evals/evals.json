@@ -98,6 +98,17 @@
       ],
       "setup_script": "evals/setup-docs-eval.sh",
       "verification_script": "evals/verify-docs-eval.sh"
+    },
+    {
+      "id": 10,
+      "prompt": "Check whether the billing spec needs regeneration. A verified inventory cache says billing is up to date, another domain is unchanged, and the rendered specs index is byte-identical. Report the result.",
+      "expected_output": "Use the current verified inventory verdict, including unclassified/overlapping paths and architecture candidates. Skip reading and rehashing unrelated domains, do not regenerate billing without a forced request, and leave the byte-identical index untouched. Report the skipped domain and cache decision; if the cache is stale or unavailable, recompute instead of trusting it.",
+      "assertions": [
+        "Uses only a verified current cache result to skip unchanged domain recomputation",
+        "Still inspects architecture candidates and unclassified/overlapping paths",
+        "Does not rewrite byte-identical specs/index.md",
+        "Falls back to current-source verification when cache cannot be trusted"
+      ]
     }
   ]
 }

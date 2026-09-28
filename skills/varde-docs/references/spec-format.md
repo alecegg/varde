@@ -103,8 +103,9 @@ none exist.
 ## Index
 
 `<knowledge>/specs/index.md` lists every domain document by its frontmatter
-domain, including architecture, with a link to each. Write it
+domain, including architecture, with a link to each. Render it
 deterministically after domain generation, preserving hand-authored entries.
 Its only frontmatter field is `source_commit: <git rev-parse HEAD at the end
-of this run>`; write it every run, with or without `varde-code`, so the next
-run can scope incrementally from it.
+of this run>`. Write it when rendered bytes differ; a no-op run leaves the
+existing file untouched. Without the inventory cache, `source_commit` still
+scopes the next manual run.

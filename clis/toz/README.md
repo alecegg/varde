@@ -40,6 +40,8 @@ Search results are ranked and show short snippets with line numbers. Use `--glob
 
 Exact bytes are a separate, opt-in store. Enable `[raw] enabled = true`, request raw retention in `vardeToz.exec({raw: true, ...})`, then use `varde-toz query --raw <raw-handle> --stream stdout|stderr`. Raw handles expire after the configured lifetime. Never-capture rules exclude content from both stores.
 
+New capture sources and labels apply configured redaction before storage or display. Fetch metadata and messages hide URL credentials and query values. Run `varde-toz migrate-metadata` to redact older metadata in stores reachable from the current configuration and the shared fetch cache. It preserves capture handles and separate raw output. An indexed file whose path or explicit label was redacted needs manual reindexing after changes.
+
 ## Index files and web pages
 
 Use `index` for local material and `fetch` for a web page you want to search alongside captured output. Both return a handle that works with `query`:
@@ -59,13 +61,21 @@ Project searches refresh indexed files when their contents change. `fetch` cache
 varde-toz run --script - <<'JS'
 const files = vardeToz.exec({argv: ['/bin/ls', '-la']});
 const location = vardeToz.exec({argv: ['/bin/pwd']});
-print(JSON.stringify({files: files.capture, directory: location.stdout.trim()}));
+print(JSON.stringify({files: files.capture.handle || files.stdout, directory: location.stdout.trim()}));
 JS
 ```
 
-`--code '<js>'` accepts a one-liner. A heredoc avoids shell quoting problems. `run` executes the script in QuickJS. By default, its command subprocesses inherit the permissions of the process that launched toz. `vardeToz.exec()` accepts `argv` or `shell`, plus optional `cwd`, `env`, `timeoutMs`, and `raw`. A nonzero command exit is returned in `exitCode`; startup errors raise a script exception.
+`--code '<js>'` accepts a one-liner. A heredoc avoids shell quoting problems. `run` executes the script in QuickJS. By default, its command subprocesses inherit the permissions of the process that launched toz. `vardeToz.exec()` accepts `argv` or `shell`, plus optional `cwd`, `env`, `timeoutMs`, `capture`, and `raw`. A nonzero command exit is returned in `exitCode`; startup errors raise a script exception.
 
-The trusted toz parent stores complete searchable stdout and stderr from each command, including short output, unless a never-capture rule excludes it. The script sees bounded `stdout` and `stderr` previews, a `truncated` flag, and capture handles. Its printed result is stored and returned as a handle when allowed. Use `query` to read that result.
+After each command finishes, the parent compares combined stdout and stderr
+bytes with the configured capture threshold, capped at the 64 KiB inline
+preview limit. Short output returns complete `stdout`/`stderr`,
+`capture.state: "inline"`, and no handle; larger output is stored with a
+searchable handle and bounded previews. `capture: true` forces searchable
+capture for short output. `raw: true` also forces searchable capture and
+requests exact-byte retention when enabled. Never-capture rules override both.
+The script's printed result is captured separately and can return its own
+handle. Use `query` to read captured output.
 
 Pass an existing capture with `--handle` to analyze it without bringing its body into the agent context:
 
@@ -112,7 +122,12 @@ Those tool calls remain eligible for toz's capture hook because the hook runs ou
 
 Default project databases live under `~/.config/varde-toz/<project-key>/toz.db`. Database files use `0600`; parent directories use `0700`. Harness adapters can supply an external store through `VARDE_TOZ_FALLBACK_DIR` when their own sandbox blocks the default location. The CLI accepts `--fallback-dir`; manual calls must use the same fallback to retrieve captures. `VARDE_TOZ_CONFIG_DIR` relocates all state and takes precedence.
 
-Capture hooks pass output under the default 4 KiB threshold through unchanged. Above it, they save normalized, redacted text and return a preview. `vardeToz.exec()` inside a script captures regardless of size, subject to never-capture rules. The normal store strips ANSI escapes, normalizes line endings, and replaces invalid UTF-8. Raw retention requires an explicit request and is disabled by default.
+Capture hooks pass output under the default 4 KiB threshold through unchanged.
+Above it, they save normalized, redacted text and return a preview.
+`vardeToz.exec()` uses the completed command's actual byte count and the same
+configured threshold, capped at 64 KiB. The normal store strips ANSI escapes,
+normalizes line endings, and replaces invalid UTF-8. Raw retention requires an
+explicit request and is disabled by default.
 
 `varde-toz capture --defer-index` uses the same chunk store but postpones full-text indexing until the first term search. Line-range reads and scripts can use the handle immediately. Use it when capture latency matters more than the first search latency; ordinary captures still index as they are stored.
 

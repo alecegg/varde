@@ -3,6 +3,8 @@
 mod common;
 
 use common::{bin, temp_bundle, temp_inputs};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 
 const DOC: &str = "---\nschema_version: 1\nartifact_type: decision\nid: use-rust\nrelationships: []\nprovenance:\n  source: test\ntype: decision\n---\n# Body\n";
@@ -49,6 +51,57 @@ mod update {
 
         let written = std::fs::read(bundle.join("use-rust.md")).unwrap();
         assert_eq!(written, DOC2.as_bytes());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn update_and_set_field_preserve_private_mode() {
+        let bundle = temp_bundle("update-private-mode");
+        let inputs = temp_inputs("update-private-mode");
+        fixture(&bundle);
+        let target = bundle.join("use-rust.md");
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let input = inputs.join("doc2.md");
+        std::fs::write(&input, DOC2).unwrap();
+
+        let update = Command::new(bin())
+            .args(["concept", "update", "--bundle"])
+            .arg(&bundle)
+            .arg("use-rust")
+            .arg("--expected-version")
+            .arg(varde_workflow_core::occ::version(DOC.as_bytes()))
+            .arg("--file")
+            .arg(&input)
+            .output()
+            .unwrap();
+        assert!(
+            update.status.success(),
+            "{}",
+            String::from_utf8_lossy(&update.stderr)
+        );
+        assert_eq!(
+            std::fs::metadata(&target).unwrap().permissions().mode() & 0o7777,
+            0o600
+        );
+
+        let field = Command::new(bin())
+            .args(["concept", "set-field", "--bundle"])
+            .arg(&bundle)
+            .arg("use-rust")
+            .arg("--expected-version")
+            .arg(varde_workflow_core::occ::version(DOC2.as_bytes()))
+            .args(["status", "stable"])
+            .output()
+            .unwrap();
+        assert!(
+            field.status.success(),
+            "{}",
+            String::from_utf8_lossy(&field.stderr)
+        );
+        assert_eq!(
+            std::fs::metadata(&target).unwrap().permissions().mode() & 0o7777,
+            0o600
+        );
     }
 
     #[test]

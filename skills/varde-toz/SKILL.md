@@ -27,11 +27,19 @@ A preview may come from a matching output profile: a TOC or head preview, or a s
 ```sh
 varde-toz run --script - <<'JS'
 const result = vardeToz.exec({argv: ['/bin/ls', '-la']});
-print(result.exitCode, JSON.stringify(result.capture));
+print(result.exitCode, result.capture.handle || result.stdout);
 JS
 ```
 
-Use `--code '<js>'` for a one-liner. The parent stores complete searchable output from each `vardeToz.exec()` call, including short output, unless a never-capture rule excludes it. The script receives bounded previews and capture handles. Its printed result returns as a handle when allowed. `vardeToz.exec()` accepts `argv` or `shell` plus optional `cwd`, `env`, and `timeoutMs`.
+Use `--code '<js>'` for a one-liner. After each `vardeToz.exec()` command,
+the parent compares combined stdout and stderr bytes with the configured
+capture threshold (capped at the 64 KiB inline limit). Short output is complete
+in `stdout`/`stderr`, with `capture.state: "inline"` and no handle; larger
+output gets a searchable handle and bounded previews. `capture: true` forces
+a searchable handle for short output; `raw: true` also forces one and requests
+raw retention. Never-capture rules override both. The script's printed result
+is captured separately and may return its own handle. `vardeToz.exec()` accepts
+`argv` or `shell` plus optional `cwd`, `env`, `timeoutMs`, `capture`, and `raw`.
 
 For analysis, pass `--handle <H>` to `run` and use `vardeToz.eachLine(fn)`, `vardeToz.text()`, and `vardeToz.handle`. Prefer `eachLine` for large captures. `print(...)` and `console.log(...)` produce the result. Commands and capture reads can be mixed in one script. `--stream stderr` selects the other stream; `--partial` permits a still-running capture. `--timeout-ms` and `--memory-mb` adjust script limits.
 

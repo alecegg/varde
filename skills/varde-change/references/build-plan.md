@@ -4,10 +4,10 @@
 
 | The request is | Start |
 |---|---|
-| An ask to build, with no plan named | Discover ready plans per `references/build-plan-run.md`, present them, then run the one selected. |
+| An ask to build an existing plan, with no plan named | Discover ready plans per `references/build-plan-run.md`, present them, then run the one selected. |
 | A named plan with no task files and one bounded outcome | Write one task from `assets/TASK-TEMPLATE.md` (plan AC → its Verification); otherwise decompose per step 4. |
-| Any other ad-hoc description — "add a --json flag to the export command" | No plan exists: create one (step 2), confirm it once, then decompose and run it. |
-| A behavior-preserving cleanup of a named target | Run the whole pass under the refactor posture (step 4). |
+| An ad-hoc request with dependent outcomes or unresolved design | No plan exists: create one (step 2), confirm it once, then decompose and run it. |
+| A planned behavior-preserving cleanup | Run the whole pass under the refactor posture (step 4). |
 
 A user may ask to stop before `references/build-plan-finish.md`.
 
@@ -23,8 +23,10 @@ location, each delegated to an `executor` per `references/build-dispatch.md`.
 2. **Select or create the plan.** Build a named plan. For an ad-hoc
    description, derive a plan-id, create a fresh plan directory, and write a
    minimal `plan.md` — best-guess Problem/Solution and a few Given/When/Then
-   plan-level acceptance criteria — and confirm it in one turn. For a large or
-   uncertain change, recommend `varde-change plan` instead.
+   plan-level acceptance criteria — and confirm it in one turn. A settled
+   single-outcome change with known verification uses
+   `references/build-micro-change.md` instead, regardless of file count. For
+   an uncertain change, recommend `varde-change plan` instead.
 
 3. **Choose the execution location.** Default to the current checkout and stage
    only task-owned paths. Run `git check-ignore -q

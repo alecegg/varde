@@ -1,0 +1,74 @@
+name: Release binaries
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: macos-15
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Build CLI binaries
+        run: |
+          cargo build --locked --release --manifest-path clis/code/Cargo.toml --package varde-code --bin varde-code
+          cargo build --locked --release --manifest-path clis/workflow/Cargo.toml --package varde-workflow --bin varde-workflow
+          cargo build --locked --release --manifest-path clis/toz/Cargo.toml --package varde-toz --bin varde-toz
+          cargo build --locked --release --manifest-path clis/learn/Cargo.toml --package varde-learn --bin varde-learn
+      - name: Package binaries and notices
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p package dist
+          cp clis/code/target/release/varde-code package/
+          cp clis/workflow/target/release/varde-workflow package/
+          cp clis/toz/target/release/varde-toz package/
+          cp clis/learn/target/release/varde-learn package/
+          cp LICENSE clis/code/THIRD-PARTY-LICENSES.md package/
+          tar -czf "dist/varde-${TARGET}.tar.gz" -C package .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binaries-*
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          test "$(find . -maxdepth 1 -name 'varde-*.tar.gz' | wc -l)" -eq 4
+          sha256sum varde-*.tar.gz > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - name: Attach release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/varde-*.tar.gz dist/SHA256SUMS --clobber

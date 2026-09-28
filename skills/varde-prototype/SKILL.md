@@ -48,5 +48,7 @@ Ambiguous: pages/components → Visual; states/data → Logic; say which.
   still fails, ask the user for the paths. Do not guess storage paths. A
   location outside the repo skips git ops (`check-ignore`, `mv`, `status`);
   use plain file ops.
-- Prototype files are throwaway. Use `varde-change plan` and `varde-change build`
-  for plans, tasks, and production code.
+- Prototype files are throwaway. If the user explicitly asks to plan or build
+  afterward, start the matching `varde-change` route in the same turn without
+  reconfirming the request. Settled work uses bounded build; unresolved choices
+  follow the plan's own approval gates. Otherwise, offer the next step and wait.

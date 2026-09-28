@@ -1,17 +1,18 @@
 //! `toz fetch`: HTTP GET → readable text → capture, with a TTL'd disk cache.
 //!
-//! Cache layout: `<config_dir>/cache/<blake3(url)>.meta` (JSON) + `.body` (the converted text).
+//! Cache layout: `<config_dir>/cache/<keyed-hash(url)>.meta` (JSON) + `.body` (the converted text).
 //! The body is cached post-conversion so a hit costs one file read. `meta.handle` remembers
 //! where the page was stored so a hit can point at the existing capture instead of re-storing.
 
 use crate::capture::{self, CaptureInput, Outcome};
 use crate::config::{config_dir, Config};
+use crate::metadata;
 use crate::redact::Redactor;
 use crate::store::Store;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub const DEFAULT_TTL_SECS: u64 = 24 * 3600;
@@ -128,6 +129,8 @@ pub struct CacheMeta {
 /// A page ready to store: converted text plus provenance.
 #[derive(Debug, Clone)]
 pub struct Fetched {
+    /// Original request URL, held only in memory for capture identity and cache lookup.
+    pub request_url: String,
     pub meta: CacheMeta,
     pub text: String,
     pub from_cache: bool,
@@ -139,7 +142,7 @@ pub fn cache_dir() -> Result<PathBuf> {
 
 fn cache_paths(url: &str) -> Result<(PathBuf, PathBuf)> {
     let dir = cache_dir()?;
-    let key = blake3::hash(url.as_bytes()).to_hex().to_string();
+    let key = metadata::cache_key(url)?;
     Ok((
         dir.join(format!("{key}.meta")),
         dir.join(format!("{key}.body")),
@@ -156,6 +159,9 @@ pub fn normalize_url(url: &str) -> String {
 }
 
 pub fn cache_get(url: &str, ttl_secs: u64) -> Option<Fetched> {
+    if ttl_secs == 0 {
+        return None;
+    }
     let (mp, bp) = cache_paths(url).ok()?;
     let meta: CacheMeta = serde_json::from_slice(&std::fs::read(mp).ok()?).ok()?;
     let age = crate::store::now() - meta.fetched_at;
@@ -164,6 +170,7 @@ pub fn cache_get(url: &str, ttl_secs: u64) -> Option<Fetched> {
     }
     let text = std::fs::read_to_string(bp).ok()?;
     Some(Fetched {
+        request_url: url.to_string(),
         meta,
         text,
         from_cache: true,
@@ -171,7 +178,11 @@ pub fn cache_get(url: &str, ttl_secs: u64) -> Option<Fetched> {
 }
 
 pub fn cache_put(f: &Fetched) -> Result<()> {
-    let (mp, bp) = cache_paths(&f.meta.url)?;
+    cache_put_with_config(f, &Config::default())
+}
+
+fn cache_put_with_config(f: &Fetched, cfg: &Config) -> Result<()> {
+    let (mp, bp) = cache_paths(&f.request_url)?;
     let dir = mp.parent().unwrap();
     std::fs::create_dir_all(dir)?;
     #[cfg(unix)]
@@ -179,9 +190,125 @@ pub fn cache_put(f: &Fetched) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
     }
+    let redactor = Redactor::from_config(&cfg.redact)?;
+    let mut meta = f.meta.clone();
+    sanitize_cache_meta(&mut meta, &redactor);
     std::fs::write(&bp, &f.text)?;
-    std::fs::write(&mp, serde_json::to_vec(&f.meta)?)?;
+    std::fs::write(&mp, serde_json::to_vec(&meta)?)?;
     Ok(())
+}
+
+fn sanitize_cache_meta(meta: &mut CacheMeta, redactor: &Redactor) {
+    meta.url = metadata::sanitize_url(redactor, &meta.url);
+    meta.final_url = metadata::sanitize_url(redactor, &meta.final_url);
+    meta.content_type = metadata::sanitize_text(redactor, &meta.content_type);
+    meta.title = meta
+        .title
+        .as_ref()
+        .map(|value| metadata::sanitize_text(redactor, &value));
+    meta.etag = meta
+        .etag
+        .as_ref()
+        .map(|value| metadata::sanitize_text(redactor, &value));
+}
+
+/// Move old URL-hashed cache entries to private keyed names and scrub their metadata.
+/// Entries already using keyed names are left alone. A completed keyed pair wins over a
+/// duplicate legacy pair, so an interrupted migration can be safely retried.
+pub fn migrate_legacy_cache(cfg: &Config) -> Result<usize> {
+    let dir = cache_dir()?;
+    migrate_legacy_cache_in(&dir, cfg, cache_paths, metadata::project_identity)
+}
+
+fn migrate_legacy_cache_in(
+    dir: &Path,
+    cfg: &Config,
+    cache_paths_for: impl Fn(&str) -> Result<(PathBuf, PathBuf)>,
+    project_identity_for: impl Fn(&str) -> Result<String>,
+) -> Result<usize> {
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(err) => return Err(err.into()),
+    };
+    let redactor = Redactor::from_config(&cfg.redact)?;
+    let mut migrated = 0;
+    for entry in entries {
+        let path = entry?.path();
+        if path.extension().and_then(|part| part.to_str()) != Some("meta") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|part| part.to_str()) else {
+            continue;
+        };
+        let bytes = std::fs::read(&path).context("reading fetch cache metadata")?;
+        let mut meta: CacheMeta =
+            serde_json::from_slice(&bytes).context("parsing fetch cache metadata")?;
+        // Current entries use a keyed filename. The old filename was the plain BLAKE3
+        // hash of the original URL, which is still available inside old metadata.
+        if stem != blake3::hash(meta.url.as_bytes()).to_hex().as_str() {
+            continue;
+        }
+        let (target_meta, target_body) = cache_paths_for(&meta.url)?;
+        let source_body = path.with_extension("body");
+        if target_meta.exists() {
+            validate_keyed_pair(&target_meta, &target_body)?;
+        } else {
+            anyhow::ensure!(source_body.is_file(), "incomplete legacy fetch cache entry");
+            if target_body.exists() {
+                anyhow::ensure!(
+                    std::fs::read(&source_body)? == std::fs::read(&target_body)?,
+                    "conflicting keyed fetch cache body"
+                );
+            } else {
+                match std::fs::hard_link(&source_body, &target_body) {
+                    Ok(()) => {}
+                    Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                        anyhow::ensure!(
+                            std::fs::read(&source_body)? == std::fs::read(&target_body)?,
+                            "conflicting keyed fetch cache body"
+                        );
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+
+            sanitize_cache_meta(&mut meta, &redactor);
+            meta.project_key = meta
+                .project_key
+                .map(|key| project_identity_for(&key))
+                .transpose()?;
+            let mut temp = tempfile::NamedTempFile::new_in(&dir)?;
+            serde_json::to_writer(&mut temp, &meta)?;
+            temp.as_file().sync_all()?;
+            match temp.persist_noclobber(&target_meta) {
+                Ok(_) => {}
+                Err(err) if err.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    validate_keyed_pair(&target_meta, &target_body)?;
+                }
+                Err(err) => return Err(err.error.into()),
+            }
+        }
+        remove_if_present(&source_body)?;
+        remove_if_present(&path)?;
+        migrated += 1;
+    }
+    Ok(migrated)
+}
+
+fn validate_keyed_pair(meta_path: &Path, body_path: &Path) -> Result<()> {
+    anyhow::ensure!(body_path.is_file(), "incomplete keyed fetch cache entry");
+    let bytes = std::fs::read(meta_path)?;
+    serde_json::from_slice::<CacheMeta>(&bytes).context("invalid keyed fetch cache metadata")?;
+    Ok(())
+}
+
+fn remove_if_present(path: &Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
 }
 
 /// Delete cache entries older than `max_age_secs`. Returns how many were removed.
@@ -206,6 +333,31 @@ pub fn cache_sweep(max_age_secs: i64) -> Result<usize> {
             let _ = std::fs::remove_file(&p);
             let _ = std::fs::remove_file(p.with_extension("body"));
             n += 1;
+        }
+    }
+    Ok(n)
+}
+
+/// Delete every cached page, including pages fetched in the current second.
+pub fn cache_clear() -> Result<usize> {
+    let dir = cache_dir()?;
+    let rd = match std::fs::read_dir(&dir) {
+        Ok(rd) => rd,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(err) => return Err(err.into()),
+    };
+    let mut n = 0;
+    for entry in rd {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("meta") {
+            std::fs::remove_file(&path)?;
+            n += 1;
+        } else if path.extension().and_then(|ext| ext.to_str()) != Some("body") {
+            continue;
+        }
+        let body = path.with_extension("body");
+        if body.exists() {
+            std::fs::remove_file(body)?;
         }
     }
     Ok(n)
@@ -267,6 +419,7 @@ fn fetched_response(url: &str, resp: reqwest::blocking::Response) -> Result<Fetc
     let body = String::from_utf8_lossy(&decoded);
     let (text, title) = to_text(&mime, &body, &final_url);
     Ok(Fetched {
+        request_url: url.to_string(),
         meta: CacheMeta {
             url: url.to_string(),
             final_url,
@@ -427,7 +580,7 @@ pub fn store_fetched(
     label: Option<&str>,
     session: Option<&str>,
 ) -> Result<Outcome> {
-    let source = f.meta.url.clone();
+    let source = f.request_url.clone();
     let mut input = CaptureInput::new(f.text.as_bytes(), &source, "fetch");
     input.label = label;
     input.session = session;
@@ -435,11 +588,11 @@ pub fn store_fetched(
     let outcome = capture::run(cfg, store, input, &[])?;
     if let Outcome::Captured(p) = &outcome {
         f.meta.handle = Some(p.handle.clone());
-        f.meta.project_key = Some(project_key.to_string());
+        f.meta.project_key = Some(metadata::project_identity(project_key)?);
         let text = crate::chunk::strip_ansi(&f.text);
         let (text, _) = Redactor::from_config(&cfg.redact)?.apply(&text);
         let cached = Fetched { text, ..f.clone() };
-        cache_put(&cached)?;
+        cache_put_with_config(&cached, cfg)?;
     }
     Ok(outcome)
 }
@@ -682,6 +835,204 @@ sensible default so the minimal program is just a few lines long and reads clear
         assert_eq!(normalize_url("https://a/b?q=1"), "https://a/b?q=1");
     }
 
+    fn write_legacy_cache(dir: &Path, meta: &CacheMeta, body: &str) -> (PathBuf, PathBuf) {
+        let key = blake3::hash(meta.url.as_bytes()).to_hex();
+        let cache = dir.join("cache");
+        std::fs::create_dir_all(&cache).unwrap();
+        let meta_path = cache.join(format!("{key}.meta"));
+        let body_path = cache.join(format!("{key}.body"));
+        std::fs::write(&meta_path, serde_json::to_vec(meta).unwrap()).unwrap();
+        std::fs::write(&body_path, body).unwrap();
+        (meta_path, body_path)
+    }
+
+    fn test_keyed_hash(domain: &str, value: &str) -> String {
+        let mut hash = blake3::Hasher::new_keyed(&[7; 32]);
+        hash.update(domain.as_bytes());
+        hash.update(&[0]);
+        hash.update(value.as_bytes());
+        hash.finalize().to_hex().to_string()
+    }
+
+    fn test_cache_paths(dir: &Path, url: &str) -> (PathBuf, PathBuf) {
+        let meta = dir
+            .join("cache")
+            .join(format!("{}.meta", test_keyed_hash("fetch-cache", url)));
+        let body = meta.with_extension("body");
+        (meta, body)
+    }
+
+    fn migrate_test_cache(dir: &Path, cfg: &Config) -> Result<usize> {
+        migrate_legacy_cache_in(
+            &dir.join("cache"),
+            cfg,
+            |url| Ok(test_cache_paths(dir, url)),
+            |key| Ok(test_keyed_hash("fetch-project", key)),
+        )
+    }
+
+    #[test]
+    fn legacy_cache_migration_redacts_metadata_and_preserves_cache_hit() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = "https://alice:password@example.com/docs?token=secret123";
+        let legacy = CacheMeta {
+            url: url.into(),
+            final_url: "https://bob:other@example.com/next?ticket=private456".into(),
+            content_type: "text/plain; secret=hidden789".into(),
+            fetched_at: crate::store::now(),
+            title: Some("secret123 at https://alice:password@example.com/x?key=private456".into()),
+            etag: Some("secret123".into()),
+            handle: Some("same-handle".into()),
+            project_key: Some("readable-project-key".into()),
+        };
+        let (old_meta, old_body) = write_legacy_cache(dir.path(), &legacy, "cached body");
+        let mut cfg = Config::default();
+        cfg.redact
+            .patterns
+            .push("secret123|private456|hidden789".into());
+
+        migrate_test_cache(dir.path(), &cfg).unwrap();
+        assert!(!old_meta.exists());
+        assert!(!old_body.exists());
+        let (new_meta, new_body) = test_cache_paths(dir.path(), url);
+        let raw = std::fs::read_to_string(&new_meta).unwrap();
+        for secret in [
+            "alice",
+            "password",
+            "bob",
+            "other",
+            "secret123",
+            "private456",
+            "hidden789",
+            "readable-project-key",
+        ] {
+            assert!(!raw.contains(secret), "{raw}");
+        }
+        assert_eq!(std::fs::read_to_string(&new_body).unwrap(), "cached body");
+        let migrated: CacheMeta = serde_json::from_str(&raw).unwrap();
+        assert_eq!(migrated.handle.as_deref(), Some("same-handle"));
+        assert_eq!(migrated.fetched_at, legacy.fetched_at);
+        assert_eq!(
+            migrated.project_key.as_deref(),
+            Some(test_keyed_hash("fetch-project", "readable-project-key").as_str())
+        );
+        migrate_test_cache(dir.path(), &cfg).unwrap();
+        assert_eq!(std::fs::read_to_string(&new_meta).unwrap(), raw);
+        assert_eq!(std::fs::read_to_string(&new_body).unwrap(), "cached body");
+        assert!(!old_meta.exists());
+        assert!(!old_body.exists());
+    }
+
+    #[test]
+    fn legacy_cache_migration_recovers_partial_and_keeps_existing_keyed_pair() {
+        let dir = tempfile::tempdir().unwrap();
+        let url = "https://example.com/docs?token=private";
+        let legacy = CacheMeta {
+            url: url.into(),
+            final_url: url.into(),
+            content_type: "text/plain".into(),
+            fetched_at: crate::store::now(),
+            title: None,
+            etag: None,
+            handle: Some("old-handle".into()),
+            project_key: None,
+        };
+        let (old_meta, old_body) = write_legacy_cache(dir.path(), &legacy, "same body");
+        let (new_meta, new_body) = test_cache_paths(dir.path(), url);
+        std::fs::write(&new_body, "same body").unwrap();
+        assert_eq!(
+            migrate_test_cache(dir.path(), &Config::default()).unwrap(),
+            1
+        );
+        assert!(new_meta.exists());
+        assert!(!old_meta.exists());
+        assert!(!old_body.exists());
+
+        let (old_meta, old_body) = write_legacy_cache(dir.path(), &legacy, "old body");
+        let metadata_before = std::fs::read(&new_meta).unwrap();
+        let body_before = std::fs::read(&new_body).unwrap();
+        assert_eq!(
+            migrate_test_cache(dir.path(), &Config::default()).unwrap(),
+            1
+        );
+        assert_eq!(std::fs::read(&new_meta).unwrap(), metadata_before);
+        assert_eq!(std::fs::read(&new_body).unwrap(), body_before);
+        assert!(!old_meta.exists());
+        assert!(!old_body.exists());
+    }
+
+    #[test]
+    fn legacy_cache_migration_reports_invalid_metadata_without_removing_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("cache");
+        std::fs::create_dir_all(&cache).unwrap();
+        let broken = cache.join("broken.meta");
+        std::fs::write(&broken, b"{invalid JSON").unwrap();
+
+        let error = migrate_test_cache(dir.path(), &Config::default()).unwrap_err();
+        assert!(error.to_string().contains("parsing fetch cache metadata"));
+        assert!(broken.exists());
+    }
+
+    #[test]
+    fn cache_does_not_persist_request_secrets_and_rehydrates_lookup_url() {
+        let _env_guard = CONFIG_ENV.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("TOZ_CONFIG_DIR", dir.path());
+        let url = "https://alice:password@example.com/docs?token=secret123";
+        assert_ne!(
+            cache_paths(url).unwrap(),
+            cache_paths("https://alice:password@example.com/docs?token=other").unwrap()
+        );
+        let f = Fetched {
+            request_url: url.into(),
+            meta: CacheMeta {
+                url: url.into(),
+                final_url: "https://bob:other@example.com/next?ticket=private456".into(),
+                content_type: "text/plain; secret=hidden789".into(),
+                fetched_at: crate::store::now(),
+                title: Some(
+                    "secret123 at https://alice:password@example.com/x?key=private456".into(),
+                ),
+                etag: Some("secret123".into()),
+                handle: None,
+                project_key: None,
+            },
+            text: "body".into(),
+            from_cache: false,
+        };
+        let mut cfg = Config::default();
+        cfg.redact
+            .patterns
+            .push("secret123|private456|hidden789".into());
+        cache_put_with_config(&f, &cfg).unwrap();
+        let entries: Vec<_> = std::fs::read_dir(cache_dir().unwrap()).unwrap().collect();
+        assert_eq!(entries.len(), 2);
+        for entry in entries {
+            let entry = entry.unwrap();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            assert!(!name.contains("secret123"));
+            if entry.path().extension().and_then(|s| s.to_str()) == Some("meta") {
+                let raw = std::fs::read_to_string(entry.path()).unwrap();
+                for secret in [
+                    "alice",
+                    "password",
+                    "bob",
+                    "other",
+                    "secret123",
+                    "private456",
+                    "hidden789",
+                ] {
+                    assert!(!raw.contains(secret), "{raw}");
+                }
+            }
+        }
+        let hit = cache_get(url, 60).unwrap();
+        assert_eq!(hit.request_url, url);
+        assert_eq!(hit.text, "body");
+        std::env::remove_var("TOZ_CONFIG_DIR");
+    }
+
     #[test]
     fn cache_roundtrip_and_ttl() {
         let _env_guard = CONFIG_ENV
@@ -690,6 +1041,7 @@ sensible default so the minimal program is just a few lines long and reads clear
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("TOZ_CONFIG_DIR", dir.path());
         let f = Fetched {
+            request_url: "https://x/y".into(),
             meta: CacheMeta {
                 url: "https://x/y".into(),
                 final_url: "https://x/y".into(),
@@ -708,9 +1060,39 @@ sensible default so the minimal program is just a few lines long and reads clear
         assert!(hit.from_cache);
         assert_eq!(hit.text, "body");
         assert_eq!(hit.meta.handle.as_deref(), Some("abcd"));
+        assert!(cache_get("https://x/y", 0).is_none());
         assert!(cache_get("https://x/y", 50).is_none());
         assert_eq!(cache_sweep(50).unwrap(), 1);
         assert!(cache_get("https://x/y", 3600).is_none());
+        std::env::remove_var("TOZ_CONFIG_DIR");
+    }
+
+    #[test]
+    fn clear_cache_removes_current_second_entry() {
+        let _env_guard = CONFIG_ENV
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("TOZ_CONFIG_DIR", dir.path());
+        let fetched = Fetched {
+            request_url: "https://x/current".into(),
+            meta: CacheMeta {
+                url: "https://x/current".into(),
+                final_url: "https://x/current".into(),
+                content_type: "text/plain".into(),
+                fetched_at: crate::store::now(),
+                title: None,
+                etag: None,
+                handle: None,
+                project_key: None,
+            },
+            text: "body".into(),
+            from_cache: false,
+        };
+        cache_put(&fetched).unwrap();
+        assert!(cache_get(&fetched.meta.url, 0).is_none());
+        assert_eq!(cache_clear().unwrap(), 1);
+        assert!(cache_get(&fetched.meta.url, 3600).is_none());
         std::env::remove_var("TOZ_CONFIG_DIR");
     }
 
@@ -727,6 +1109,7 @@ sensible default so the minimal program is just a few lines long and reads clear
         let secret = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
         let original = format!("credential \x1b[31m{secret}\x1b[0m\nreference=internal-4217\n");
         let mut fetched = Fetched {
+            request_url: "https://example.com/docs".into(),
             meta: CacheMeta {
                 url: "https://example.com/docs".into(),
                 final_url: "https://example.com/docs".into(),
@@ -741,7 +1124,8 @@ sensible default so the minimal program is just a few lines long and reads clear
             from_cache: false,
         };
 
-        let outcome = store_fetched(&cfg, &mut store, "project", &mut fetched, None, None).unwrap();
+        let outcome =
+            store_fetched(&cfg, &mut store, "vault-123", &mut fetched, None, None).unwrap();
         let Outcome::Captured(preview) = outcome else {
             panic!("fetch should always be captured");
         };
@@ -749,6 +1133,12 @@ sensible default so the minimal program is just a few lines long and reads clear
         assert_eq!(fetched.text, original);
 
         let cached = cache_get(&fetched.meta.url, 60).unwrap();
+        assert!(!cached
+            .meta
+            .project_key
+            .as_deref()
+            .unwrap()
+            .contains("vault-123"));
         assert!(!cached.text.contains(secret));
         assert!(!cached.text.contains("internal-4217"));
         assert!(!cached.text.contains('\x1b'));

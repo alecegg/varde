@@ -5,6 +5,7 @@ pub mod chunk;
 pub mod config;
 pub mod fetch;
 pub mod index;
+pub mod metadata;
 pub mod profile;
 pub mod project;
 pub mod rand;

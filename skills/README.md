@@ -34,9 +34,14 @@ own; link it into a harness with `-l`, or install elsewhere with `-d`:
 ```
 
 Run `./install.sh -h` for every available option.
+`-n` checks current targets and link sources without writing or prompting. An
+existing target without `-f` or `-m` is reported as conditional on confirmation;
+a real run without a TTY would refuse that replacement.
 A retired skill the installer placed, marked with `.varde-managed-skill` or
 linked to the `-l` source, is removed automatically. Directories without that
 marker are never touched.
+Skill packages cannot contain symlinks, including in author-only files. The
+installer-created `-l` link to a package is still supported.
 
 ## Skills
 
@@ -137,7 +142,8 @@ is particular to the category, as bullets in this order:
 | Auto-fix | Optional: this category's exceptions to the general principle |
 
 Run `./check-refs.sh` after editing references. It installs into a temp dir and
-fails on any pointer that would not resolve on a user's machine.
+checks candidate backticked file paths and relative Markdown links. Bare paths
+in prose or fenced commands are outside its pointer check.
 
 ## Benchmark checks
 

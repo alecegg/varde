@@ -49,6 +49,8 @@ pub enum Command {
     /// Delete this project's store (or prune with --older-than)
     #[command(hide = true)]
     Purge(PurgeArgs),
+    /// Redact legacy capture and fetch-cache metadata in place
+    MigrateMetadata,
     /// Check the install: store, FTS5, cache, plugins, conflicting plugins
     Doctor,
     /// Inspect output profiles loaded from built-in, user, and project scopes

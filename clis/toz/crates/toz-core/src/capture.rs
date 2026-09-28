@@ -5,6 +5,7 @@
 
 use crate::chunk::{self, Chunk};
 use crate::config::Config;
+use crate::metadata;
 use crate::profile::{self, PreviewKind, PreviewSpec, Profile};
 use crate::redact::{NeverCapture, Redactor};
 use crate::script;
@@ -378,11 +379,15 @@ fn capture_accepted(
     let (all_chunks, redactions, stdout_text, stderr_text) =
         prepare_text(&input, &redactor, matched);
 
+    let safe_label = metadata::sanitize_text(&redactor, &label);
+    let safe_source = metadata::sanitize_text(&redactor, input.source);
+    let private_key = metadata::identity_at(store.path().parent().unwrap(), &sk)?;
     let new = NewCapture {
-        label: &label,
+        label: &safe_label,
         kind: input.kind,
-        source: input.source,
-        source_key: &sk,
+        source: &safe_source,
+        source_key: &private_key,
+        legacy_source_key: Some(&sk),
         bytes: total,
         exit_code: input.exit_code,
         session: input.session,
@@ -397,7 +402,7 @@ fn capture_accepted(
         store,
         matched,
         &handle,
-        &label,
+        &safe_label,
         total,
         input.exit_code,
         &stdout_text,
@@ -406,7 +411,7 @@ fn capture_accepted(
     let preview = build_preview(
         cfg,
         handle,
-        label,
+        safe_label,
         total,
         input.exit_code,
         redactions,

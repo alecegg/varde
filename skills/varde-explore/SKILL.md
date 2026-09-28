@@ -14,13 +14,16 @@ description: "Compare design options or explain how existing code works, in chat
 
 ## Gotchas
 
-- `<working>` (local, uncommitted) and `<knowledge>` (committed): resolve once
-  before first use with `varde-workflow paths --json`; use its absolute
+- Resolve `<working>` (local, uncommitted) and `<knowledge>` (committed) only
+  when a route uses them; chat answers without a knowledge lookup skip this.
+  Before first use, run `varde-workflow paths --json`; use its absolute
   `data.working`/`data.knowledge` paths for this session and pass them to
   subagents. If the command fails, retry it once with escalated access; if it
   still fails, ask the user for the paths. Do not guess storage paths. A
   location outside the repo skips git ops (`check-ignore`, `mv`, `status`);
   use plain file ops.
 
-- Write plans, code, or prototypes only when named; offer `varde-change plan`
-  and switch only on confirmation.
+- If the user explicitly asks to plan or build after exploring, start the
+  matching `varde-change` route in the same turn without reconfirming the
+  request. Settled work uses bounded build; unresolved choices follow the
+  plan's own approval gates. Otherwise, offer the next step and wait.

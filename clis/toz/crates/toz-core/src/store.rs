@@ -2,6 +2,7 @@
 
 use crate::chunk::Chunk;
 use crate::config::Retention;
+use crate::redact::Redactor;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::HashMap;
@@ -112,6 +113,81 @@ impl Store {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// Rewrite old plaintext capture metadata without changing capture data or handles.
+    pub fn migrate_legacy_metadata(&mut self, redactor: &Redactor) -> Result<usize> {
+        let key_dir = self.path.parent().unwrap_or_else(|| Path::new("."));
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let rows = {
+            let mut stmt = tx.prepare("SELECT id, label, source, source_key FROM captures")?;
+            let found = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            found
+        };
+        let mut changed = 0;
+        for (id, label, source, source_key) in rows {
+            // A legacy plaintext key can itself be 64 lowercase hex characters. Check
+            // the unsanitized display fields for its origin before treating it as keyed.
+            let hex_key = source_key.len() == 64
+                && source_key
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+            let safe_key = if source_key.is_empty() {
+                source_key.clone()
+            } else if hex_key {
+                let label_candidate = label.trim();
+                let source_candidate = crate::capture::source_key(&source);
+                let candidates = [label_candidate, source_candidate.as_str()];
+                let mut already_keyed = false;
+                for candidate in candidates {
+                    if !candidate.is_empty()
+                        && crate::metadata::identity_at(key_dir, candidate)? == source_key
+                    {
+                        already_keyed = true;
+                        break;
+                    }
+                }
+                if already_keyed || !candidates.contains(&source_key.as_str()) {
+                    source_key.clone()
+                } else {
+                    crate::metadata::identity_at(key_dir, &source_key)?
+                }
+            } else {
+                crate::metadata::identity_at(key_dir, &source_key)?
+            };
+            let safe_label = crate::metadata::sanitize_text(redactor, &label);
+            let safe_source = crate::metadata::sanitize_text(redactor, &source);
+            if safe_key != source_key || safe_label != label || safe_source != source {
+                tx.execute(
+                    "UPDATE captures SET label = ?1, source = ?2, source_key = ?3 WHERE id = ?4",
+                    params![safe_label, safe_source, safe_key, id],
+                )?;
+                changed += 1;
+            }
+        }
+        tx.commit()?;
+
+        // UPDATE leaves prior values in database pages and WAL frames. Compact outside the
+        // transaction, then require a complete checkpoint so the WAL retains no old frames.
+        self.conn.execute_batch("VACUUM")?;
+        let (busy, _, _): (i64, i64, i64) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
+        anyhow::ensure!(busy == 0, "metadata migration WAL checkpoint was busy");
+        Ok(changed)
+    }
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -141,6 +217,8 @@ pub struct NewCapture<'a> {
     pub kind: &'a str,
     pub source: &'a str,
     pub source_key: &'a str,
+    /// Previous plaintext key, used only to supersede captures written before metadata hashing.
+    pub legacy_source_key: Option<&'a str>,
     pub bytes: usize,
     pub exit_code: Option<i32>,
     pub session: Option<&'a str>,
@@ -515,8 +593,9 @@ impl Store {
         if !cap.source_key.is_empty() {
             tx.execute(
                 "UPDATE captures SET superseded_by = ?1
-                 WHERE source_key = ?2 AND id != ?1 AND superseded_by IS NULL",
-                params![id, cap.source_key],
+                 WHERE (source_key = ?2 OR source_key = ?3)
+                   AND id != ?1 AND superseded_by IS NULL",
+                params![id, cap.source_key, cap.legacy_source_key],
             )?;
         }
         tx.commit()?;
@@ -1139,6 +1218,8 @@ fn fresh_handle(conn: &Connection) -> Result<String> {
 mod tests {
     use super::*;
     use crate::chunk::chunk_default;
+    use crate::config::Redact;
+    use crate::redact::Redactor;
 
     fn store() -> Store {
         let dir = std::env::temp_dir().join(format!("toz-test-{}", crate::rand::next_u64()));
@@ -1151,6 +1232,7 @@ mod tests {
             kind: "run",
             source,
             source_key: source,
+            legacy_source_key: None,
             bytes: 10,
             exit_code: Some(0),
             session: None,
@@ -1159,6 +1241,155 @@ mod tests {
             file_mtime: None,
             file_hash: None,
         }
+    }
+
+    #[test]
+    fn migrates_legacy_capture_metadata_without_changing_capture_data() {
+        let mut s = store();
+        let legacy = "run --password=old-secret";
+        let chunks: Vec<_> = chunk_default("raw output remains available\n")
+            .into_iter()
+            .map(|c| ("stdout".to_string(), c))
+            .collect();
+        let first = s.insert_capture(&cap(legacy), &chunks).unwrap();
+        let second = s.insert_capture(&cap(legacy), &chunks).unwrap();
+        let first_before = s.get_by_handle(&first).unwrap().unwrap();
+        let second_before = s.get_by_handle(&second).unwrap().unwrap();
+        let redactor = Redactor::from_config(&Redact {
+            patterns: vec!["old-secret".into()],
+            builtin: false,
+        })
+        .unwrap();
+
+        assert_eq!(s.migrate_legacy_metadata(&redactor).unwrap(), 2);
+        let first_after = s.get_by_handle(&first).unwrap().unwrap();
+        let second_after = s.get_by_handle(&second).unwrap().unwrap();
+        assert_eq!(first_after.id, first_before.id);
+        assert_eq!(first_after.superseded_by, first_before.superseded_by);
+        assert_eq!(second_after.id, second_before.id);
+        assert_eq!(first_after.label, "run --password=[redacted:user]");
+        assert_eq!(first_after.source, "run --password=[redacted:user]");
+        assert_eq!(
+            s.full_text(first_after.id, "stdout").unwrap(),
+            "raw output remains available"
+        );
+        let expected_key =
+            crate::metadata::identity_at(s.path().parent().unwrap(), legacy).unwrap();
+        let actual_key: String = s
+            .conn
+            .query_row(
+                "SELECT source_key FROM captures WHERE id = ?1",
+                params![first_after.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(actual_key, expected_key);
+        assert!(!std::fs::read(s.path())
+            .unwrap()
+            .windows(b"old-secret".len())
+            .any(|bytes| bytes == b"old-secret"));
+        let wal_path = s.path().with_extension("db-wal");
+        if wal_path.exists() {
+            assert_eq!(std::fs::metadata(wal_path).unwrap().len(), 0);
+        }
+        assert_eq!(s.migrate_legacy_metadata(&redactor).unwrap(), 0);
+    }
+
+    #[test]
+    fn migration_preserves_keyed_and_empty_source_keys() {
+        let mut s = store();
+        let keyed =
+            crate::metadata::identity_at(s.path().parent().unwrap(), "stable source").unwrap();
+        let mut keyed_capture = cap("token=old-secret");
+        keyed_capture.source_key = &keyed;
+        let keyed_handle = s.insert_capture(&keyed_capture, &[]).unwrap();
+        let mut empty_capture = cap("another old-secret");
+        empty_capture.source_key = "";
+        let empty_handle = s.insert_capture(&empty_capture, &[]).unwrap();
+        let redactor = Redactor::from_config(&Redact {
+            patterns: vec!["old-secret".into()],
+            builtin: false,
+        })
+        .unwrap();
+
+        assert_eq!(s.migrate_legacy_metadata(&redactor).unwrap(), 2);
+        for (handle, expected) in [(keyed_handle, keyed), (empty_handle, String::new())] {
+            let actual: String = s
+                .conn
+                .query_row(
+                    "SELECT source_key FROM captures WHERE handle = ?1",
+                    params![handle],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(actual, expected);
+        }
+        assert_eq!(s.migrate_legacy_metadata(&redactor).unwrap(), 0);
+    }
+
+    #[test]
+    fn migration_hashes_legacy_hex_keys_with_label_or_source_provenance() {
+        let mut s = store();
+        let label_key = "a".repeat(64);
+        let source_key = "b".repeat(64);
+        let mut explicit = cap("echo explicit");
+        explicit.label = &label_key;
+        explicit.source_key = &label_key;
+        let explicit_handle = s.insert_capture(&explicit, &[]).unwrap();
+
+        let source = format!("  {source_key}  2>&1");
+        let mut normalized = cap(&source);
+        normalized.label = "short display";
+        normalized.source_key = &source_key;
+        let source_handle = s.insert_capture(&normalized, &[]).unwrap();
+        let redactor = Redactor::from_config(&Redact {
+            patterns: vec![],
+            builtin: false,
+        })
+        .unwrap();
+
+        assert_eq!(s.migrate_legacy_metadata(&redactor).unwrap(), 2);
+        for (handle, plaintext) in [(explicit_handle, label_key), (source_handle, source_key)] {
+            let actual: String = s
+                .conn
+                .query_row(
+                    "SELECT source_key FROM captures WHERE handle = ?1",
+                    params![handle],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                actual,
+                crate::metadata::identity_at(s.path().parent().unwrap(), &plaintext).unwrap()
+            );
+        }
+        assert_eq!(s.migrate_legacy_metadata(&redactor).unwrap(), 0);
+    }
+
+    #[test]
+    fn migration_preserves_keyed_identity_when_display_fields_are_redacted() {
+        let mut s = store();
+        let keyed =
+            crate::metadata::identity_at(s.path().parent().unwrap(), "echo old-secret").unwrap();
+        let mut capture = cap("echo [redacted:user]");
+        capture.source_key = &keyed;
+        let handle = s.insert_capture(&capture, &[]).unwrap();
+        let redactor = Redactor::from_config(&Redact {
+            patterns: vec!["old-secret".into()],
+            builtin: false,
+        })
+        .unwrap();
+
+        assert_eq!(s.migrate_legacy_metadata(&redactor).unwrap(), 0);
+        let actual: String = s
+            .conn
+            .query_row(
+                "SELECT source_key FROM captures WHERE handle = ?1",
+                params![handle],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(actual, keyed);
     }
 
     #[test]

@@ -104,7 +104,7 @@ metadata. Pattern search uses the equivalent `matches*` fields.
 | `get_symbol` | `name`, `filePath?`, `kind?`, `includeBody?` | Get one symbol by name |
 | `dependencies` | `filePath`, `direction?`, `maxDepth?`, `resultsLimit?`, `resultsOffset?`, `fullResults?` | Files a file depends on |
 | `dependents` | `filePath`, `maxDepth?`, `resultsLimit?`, `resultsOffset?`, `fullResults?` | Files depending on a file |
-| `tests_for_file` | `filePath` | Test files covering a file |
+| `tests_for_file` | `filePath` | Test-path files that transitively import the target through resolved import edges |
 | `hotspots` | `resultsLimit?`, `resultsOffset?`, `fullResults?` | Risk hotspots ranked by complexity × churn (falls back to complexity alone when no file has churn) |
 | `clusters` | `minSize?`, `maxClusters?`, `seedPath?` | Community-detection (Louvain) partition of the resolution graph into densely-interconnected file clusters; each `{id, files, label, cohesion}` (`label` always `null`, `cohesion` is the fraction of touching edges kept inside). `seedPath` returns only the cluster containing that file |
 | `context_pack` | `query`, `resultsLimit?`, `resultsOffset?`, `fullResults?`, `maxTokensEstimate?`, `includeReadingOrder?` | Keyword-driven context bundle. Files match paths or symbol names; one-hop dependency neighbors follow. Symbols prioritize declarations. `files`, `symbols`, `tests`, and `readingOrder` remain available. Structural only; no doc corpus or semantic search |

@@ -15,6 +15,7 @@ use std::rc::Rc;
 use std::time::Duration;
 use toz_core::capture::{self, CaptureInput, Outcome as CaptureOutcome};
 use toz_core::raw::{RawError, RawStore};
+use toz_core::redact::NeverCapture;
 use toz_core::script::{CommandCaller, Limits, LineSource, Meta, Outcome};
 use toz_core::streaming;
 use toz_core::{Config, Project, Store};
@@ -180,8 +181,29 @@ fn capture_command(
     let mut stderr = open_worker_output(&scratch.join(format!("exec-{sequence}.stderr")))?;
     let stdout_bytes = stdout.metadata()?.len();
     let stderr_bytes = stderr.metadata()?.len();
+    let bytes = stdout_bytes.saturating_add(stderr_bytes);
     let (out, err, truncated) =
         read_command_preview(&mut stdout, &mut stderr, stdout_bytes, stderr_bytes)?;
+    let never = NeverCapture::from_config(&cfg.capture)?;
+    let excluded = never.matches(&capture::source_key(source)) || never.matches(source);
+    let force =
+        frame["capture"].as_bool().unwrap_or(false) || frame["raw"].as_bool().unwrap_or(false);
+    let inline = !force && bytes <= cfg.threshold.min(PREVIEW_BYTES as usize) as u64;
+    if excluded || inline {
+        return Ok(json!({
+            "exitCode": frame["exitCode"], "signal": frame["signal"],
+            "timedOut": frame["timedOut"], "interrupted": frame["interrupted"],
+            "stdout": String::from_utf8_lossy(&out), "stderr": String::from_utf8_lossy(&err),
+            "truncated": truncated,
+            "capture": if excluded { json!({"state":"excluded","rule":"never-capture"}) }
+                       else { json!({"state":"inline"}) },
+            "raw": if excluded && frame["raw"].as_bool().unwrap_or(false) {
+                json!({"state":"excluded"})
+            } else {
+                json!({"state":"not_requested"})
+            },
+        }));
+    }
     stdout.rewind()?;
     stderr.rewind()?;
     let raw = if frame["raw"].as_bool().unwrap_or(false) {
@@ -411,6 +433,10 @@ impl CommandCaller for WorkerCommands {
             .create_new(true)
             .open(&err_path)?;
         let raw = request.get("raw").and_then(Value::as_bool).unwrap_or(false);
+        let capture = request
+            .get("capture")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let result = machine::execute_script(request, timeout, &mut |stream, bytes| {
             if stream == "stderr" {
                 stderr.write_all(bytes)?;
@@ -423,7 +449,8 @@ impl CommandCaller for WorkerCommands {
         stderr.flush()?;
         let frame = json!({"type":"exec","sequence":sequence,"source":source,
             "exitCode":result.exit_code,"signal":result.signal,
-            "timedOut":result.timed_out,"interrupted":result.interrupted,"raw":raw});
+            "timedOut":result.timed_out,"interrupted":result.interrupted,
+            "raw":raw,"capture":capture});
         let mut protocol = self.protocol.borrow_mut();
         send_frame(&mut protocol.output, &frame)?;
         let reply =

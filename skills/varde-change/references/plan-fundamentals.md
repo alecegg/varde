@@ -31,7 +31,9 @@ add-alongside the old one and record its answer there; otherwise stay silent.
    draft's date; the plan id is its name. Use `git mv` when
    `git ls-files --error-unmatch <working>/plans/<old-plan-id>/plan.md`
    succeeds, else plain `mv`.
-   Name the final id in the confirmation turn; the user may rename it.
+   Run `varde-workflow validate <plan-dir>/plan.md --json` and fix diagnostics
+   before review. Name the final id in the confirmation turn; the user may
+   rename it.
 2. **Review before confirming.** Apply `references/review-gates.md` to the
    persisted plan and initialize a subject before implementation:
 
@@ -47,17 +49,20 @@ add-alongside the old one and record its answer there; otherwise stay silent.
    plan Progress for build and resume. Apply findings and review every
    criterion per `references/plan-acceptance-criteria.md`. Investigate
    code-answerable unknowns; return human decisions to the interview. Several
-   changes: follow `references/plan-splitting.md` instead of step 3. Preserve
-   the approved verdict for build; materially changed plans need fresh
-   inspection and independent approval.
+   changes: follow `references/plan-splitting.md` instead of step 3.
+   Revalidate after edits. Preserve the approved verdict for build;
+   materially changed plans need fresh inspection and independent approval.
 3. Ask the **final completeness check** in one turn: every assumption the user
    has not yet seen and every change step 2 made, one line each, grouped by
    what it affects, high-impact first; point at the plan file and ask
    "Anything left to resolve before we finalize?" Silence on a line the user
-   never saw is not confirmation. Wait for explicit confirmation.
-4. After confirmation, no more questions or content changes. Run
-   `varde-workflow validate <plan-dir>/plan.md --json` and fix diagnostics;
-   the plan stays `backlog`. Legal states and moves:
+   never saw is not confirmation. If the user changes the plan id, rename its
+   directory, validate at the new path, rerun step 2's review initialization
+   and independent approval, and replace the subject id in Progress. For
+   other requested changes, apply them and rerun validation and any required
+   review. Repeat this check and wait for explicit confirmation.
+4. After confirmation, no more questions or content changes. The plan stays
+   `backlog`. Legal states and moves:
    `references/varde-workflow-cli.md`.
 5. `git check-ignore -q` the plan path: ignored → local only; tracked →
    commit only its directory.

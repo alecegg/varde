@@ -14,7 +14,7 @@ description: "Record or find durable project decisions, patterns, definitions, a
 | Resume a handoff, or pick up where a previous session left off | `references/reflect-handoff.md` |
 | Check a knowledge note against current code | `references/reconcile.md` |
 
-Read only the Knowledge reference for the request. Friction capture,
+Start with the matching Knowledge reference; follow its pointers as needed. Friction capture,
 reconciliation, and distillation belong to the `varde-learn` skill; switch to
 it by name without importing its references.
 

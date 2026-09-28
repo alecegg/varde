@@ -20,7 +20,7 @@ Checks:
     plain scalars, the #1 real-world cause of silent install breakage).
   - name: required, <=64 chars, lowercase ASCII alphanumeric + hyphens,
     no leading/trailing hyphen, no `--`, matches the parent directory name.
-  - description: required, non-empty, <=1024 chars.
+  - description: required, non-empty, <=1024 chars, one double-quoted physical line.
   - compatibility: optional, <=500 chars.
   - metadata: optional, must be a string->string map.
   - allowed-tools: optional, must be a string.
@@ -153,12 +153,19 @@ def validate_skill(skill_md: Path) -> dict:
         errors.append(f"`description` must be a string, got {type(description).__name__}")
     elif len(description) > 1024:
         errors.append(f"`description` is {len(description)} chars, max is 1024")
-    if re.search(r"^description:\s*[>|]", raw_frontmatter, re.MULTILINE):
-        errors.append(
-            "`description` must be a single-line scalar, not a folded (`>`) or "
-            "literal (`|`) block — some harnesses read frontmatter with a "
-            "line-based regex and show the literal `>`/`|` as the description"
-        )
+    node = yaml.compose(raw_frontmatter)
+    for key_node, value_node in node.value:
+        if isinstance(key_node, yaml.nodes.ScalarNode) and key_node.value == "description":
+            line = raw_frontmatter.splitlines()[key_node.start_mark.line]
+            if (
+                not isinstance(value_node, yaml.nodes.ScalarNode)
+                or value_node.style != '"'
+                or value_node.start_mark.line != value_node.end_mark.line
+                or value_node.start_mark.line != key_node.start_mark.line
+                or not re.match(r'^description:\s*"', line)
+            ):
+                errors.append("`description` must be one double-quoted physical line")
+            break
 
     # compatibility
     compatibility = frontmatter.get("compatibility")

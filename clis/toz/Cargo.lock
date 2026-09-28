@@ -2531,6 +2531,7 @@ dependencies = [
  "blake3",
  "dirs",
  "dom_smoothie",
+ "getrandom 0.4.3",
  "htmd",
  "insta",
  "memmap2",

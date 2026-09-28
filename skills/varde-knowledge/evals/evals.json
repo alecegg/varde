@@ -100,6 +100,26 @@
         "evals/fixtures/knowledge/pattern/error-envelope.md"
       ],
       "verification_script": "evals/verify-knowledge-eval.sh"
+    },
+    {
+      "id": 10,
+      "prompt": "Write a short handoff for a routine unfinished task. Link the exact files needed next time; I did not request integrity snapshots.",
+      "expected_output": "Create the handoff in <working>/handoffs with absolute file targets and integrity: none for each default link. Do not hash every linked file or claim unchanged content. On resume, existing lightweight targets are unknown until re-read.",
+      "assertions": [
+        "Default links use integrity: none without content_hashes",
+        "Targets are explicit absolute paths and missing targets are reported",
+        "A resumed lightweight target is labeled unknown and re-read before acting"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Reconcile the stale claim in evals/fixtures/knowledge/pattern/legacy-polling.md against current code. If the evidence supports one correction, apply it.",
+      "expected_output": "Read the note and current code, make an unambiguous evidence-supported targeted correction, and stamp reconciled metadata. The user's explicit instruction authorizes the correction without another confirmation; if evidence does not support it, leave the note unchanged and explain why.",
+      "assertions": [
+        "Evidence in current code is checked before an edit",
+        "An unambiguous correction proceeds without redundant confirmation",
+        "The corrected note keeps history and receives reconciled metadata"
+      ]
     }
   ]
 }

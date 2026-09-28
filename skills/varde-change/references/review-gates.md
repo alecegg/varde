@@ -4,6 +4,17 @@ Apply these gates before implementation changes, including source, configuration
 documentation, fixes, refactors, and prototypes. Read-only investigation and
 workflow bookkeeping need no gate. Route edits through `varde-change`.
 
+## Mechanical edit exception
+
+An edit qualifies only if its entire diff corrects spelling, punctuation,
+whitespace, or formatting and preserves exact operational meaning. Changes to
+commands, paths, conditions, instruction meaning, output contracts,
+configuration, code, or tests, and mixed or uncertain diffs, use the full gate.
+For an exception, inspect the final diff, run targeted checks, and state why it
+qualified and what passed. Skill edits still get `varde-agent-doc-authoring`
+review. Existing review subjects keep all checkpoints. If work grows beyond
+the exception, use the full gate before making substantive changes.
+
 ## Before editing
 
 Give an independent reviewer the outcome, scope, assumptions, open questions,

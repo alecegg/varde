@@ -14,8 +14,9 @@ Do not guess.
 ## Workflow
 
 1. **Resolve scope and target.** For an explicit code area without a diff/ref
-   request, list all tracked files with `git ls-files -- <area>` and inspect
-   relevant consumers, even in a clean tree. For a diff/ref request, preserve
+   request, list tracked files with `git ls-files -- <area>` and untracked,
+   nonignored files with `git ls-files --others --exclude-standard -- <area>`;
+   inspect relevant consumers, even in a clean tree. For a diff/ref request, preserve
    changed-file scope and narrow it to any named area and its consumption path.
    Default diff target: working-tree changes vs `HEAD`, or the named ref;
    clean tree → changes since the nearest release tag
@@ -23,12 +24,13 @@ Do not guess.
    the merge base with `origin/HEAD` (`git merge-base HEAD origin/HEAD`).
    List changed files with `git diff --name-only <base>...HEAD` for a ref
    target; for uncommitted changes, use `git diff --name-only HEAD` plus
-   `git ls-files --others --exclude-standard`. Skip generated files, lockfiles,
-   and vendored code. A whole-codebase pass lists every tracked file; offer it
-   only when those files fit within three 60k-token chunks
-   (`## Split a large review`); otherwise offer to narrow to a path or commit
-   range. Stop and say so when the resolved file list is empty. State area or
-   diff scope, the resolved target, and active categories before reading code.
+   `git ls-files --others --exclude-standard`. Exclude generated files,
+   lockfiles, and vendored code only when they cannot affect the stated concern;
+   name any exclusions. A requested whole-codebase pass lists tracked and
+   untracked, nonignored files with the same commands without `<area>`, then
+   uses successive batches per `## Split a large review`. Stop and
+   say so when the resolved file list is empty. State area or diff scope, the
+   resolved target, and active categories before reading code.
 2. **Measure the read.** Before reading, total the bytes of the listed files
    and, for diff scope, the diff (`wc -c`); divide by 4 for approximate tokens. The reading
    budget is **60k tokens** (about 240 KB). Under it, review inline. Over it,
@@ -83,14 +85,17 @@ CLI is unavailable, stop the gate review and report why.
 
 ## Split a large review
 
-Split the listed files into the fewest chunks that each fit the budget, at most
-three. If three chunks cannot fit, stop and ask the user to narrow the review
-to a path or commit range.
+Split the listed files into chunks that each fit the budget; split an oversized
+file into line ranges so its full contents are covered. Review up to three
+chunks per batch, then continue until every scoped file is covered. Keep
+completed findings in the review folder between batches and report any files
+that could not be read.
 
 Give each chunk to one report-only `review` subagent with the active
-categories, the spec source, the chunk's files, and resolved absolute
+categories, the spec source, the chunk's files or line ranges, and resolved absolute
 `<working>`/`<knowledge>` paths. Each uses those paths without re-resolving and
 returns findings in the finding format after trying to disprove its own candidates, and writes
 nothing. You write every category file, verify each returned `high` or
-`critical` finding in the code, then run one cross-chunk pass for
+`critical` finding in the code, then run one cross-chunk pass after the final
+batch for
 `ARCHITECTURE` and `API-DESIGN` using dependents and the returned findings.
