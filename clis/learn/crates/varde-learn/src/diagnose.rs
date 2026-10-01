@@ -1,9 +1,10 @@
 use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use varde_learn_core::diagnose::{
-    ClaudeHookContext, CurrentOverlap, DiagnosticHarness, InspectRequest, Intake, capture, inspect,
+    CaptureFlags, ClaudeHookContext, CurrentOverlap, DiagnosticHarness, InspectRequest, Intake,
+    capture, capture_from_flags, inspect,
 };
 
 use crate::cli::{DiagnoseCaptureArgs, DiagnoseHarness, DiagnoseInspectArgs};
@@ -12,17 +13,25 @@ pub(super) fn run_capture_command(args: DiagnoseCaptureArgs) -> anyhow::Result<(
     if !args.json {
         return Err(invalid("diagnose capture requires --json"));
     }
-    let output = capture(&args.file)?;
-    println!(
-        "{}",
-        json!({
-            "schema_version": 1,
-            "envelope_version": 1,
-            "ok": true,
-            "outcome": "success",
-            "data": output,
-            "meta": { "truncated": false },
-        })
+    let output = match (args.file, args.snapshot) {
+        (Some(file), None) => capture(&file)?,
+        (None, Some(snapshot_path)) => capture_from_flags(CaptureFlags {
+            snapshot_path,
+            source_id: args.source_id.unwrap_or_default(),
+            record_index: args.record_index.unwrap_or_default(),
+            native_id: args.native_id,
+            kind: args.kind.unwrap_or_default(),
+            item_id: args.item_id,
+            item_source: args.item_source,
+            item_title: args.item_title,
+            item_target: args.item_target,
+            evidence: args.evidence.unwrap_or_default(),
+        })?,
+        _ => return Err(invalid("pass exactly one of --file or --snapshot")),
+    };
+    crate::print_success_envelope(
+        serde_json::to_value(output)?,
+        serde_json::json!({ "truncated": false }),
     );
     Ok(())
 }
@@ -109,22 +118,15 @@ pub(super) fn run_inspect_command(args: DiagnoseInspectArgs) -> anyhow::Result<(
     let page_end = start.saturating_add(output.records.len());
     let truncated = output.coverage.truncated || page_end < total;
     if args.json {
-        println!(
-            "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": output,
-                "meta": {
-                    "offset": start,
-                    "limit": args.limit,
-                    "total": total,
-                    "returned": output.records.len(),
-                    "truncated": truncated,
-                },
-            })
+        crate::print_success_envelope(
+            serde_json::to_value(&output)?,
+            serde_json::json!({
+                "offset": start,
+                "limit": args.limit,
+                "total": total,
+                "returned": output.records.len(),
+                "truncated": truncated,
+            }),
         );
     } else {
         let overlap = match output.overlap {

@@ -14,7 +14,7 @@ Exit codes:
   0  merged cleanly, worktree/<id> is now in <into>
   1  usage error
   2  worktree/<id> has no commits ahead of its base — nothing to merge
-  3  merge conflict — resolve via references/worktree.md, then finish the
+  3  merge conflict — resolve via references/build-worktree.md, then finish the
      merge manually; do NOT run worktree-cleanup.sh until it's resolved
   4  target rejected: branch/<id> is missing, <into> does not resolve, <into>
      does not name the currently checked-out branch, or the merge failed for
@@ -72,6 +72,6 @@ else
     echo "error: merge failed without conflicts" >&2
     exit 4
   fi
-  echo "conflict merging ${branch} into ${into} — see references/worktree.md" >&2
+  echo "conflict merging ${branch} into ${into} — see references/build-worktree.md" >&2
   exit 3
 fi

@@ -21,18 +21,18 @@ require_role_text() {
   done
 }
 
-require_role_text plan "varde-change plan" "Do not implement"
-require_role_text executor "varde-change build" "loaded \`varde-review\` skill" "not a shell executable"
-require_role_text review "loaded \`varde-review\` skill" "is a skill workflow, not a shell command" "not a shell executable" "never edit production source"
-require_role_text explore "varde-explore" "Do not implement"
+require_role_text varde-planner "varde-change plan" "Do not implement"
+require_role_text varde-executor "varde-change build" "loaded \`varde-review\` skill" "not a shell executable"
+require_role_text varde-reviewer "loaded \`varde-review\` skill" "is a skill workflow, not a shell command" "not a shell executable" "never edit production source"
+require_role_text varde-explorer "varde-explore" "Do not implement"
 
-grep -F "skills: varde-change" "$AGENTS_DIR/plan/claude.md" >/dev/null
-grep -F "skills: varde-change, varde-review" "$AGENTS_DIR/executor/claude.md" >/dev/null
-grep -F "skills: varde-review" "$AGENTS_DIR/review/claude.md" >/dev/null
-grep -F "skills: varde-explore" "$AGENTS_DIR/explore/claude.md" >/dev/null
+grep -F "skills: varde-change" "$AGENTS_DIR/varde-planner/claude.md" >/dev/null
+grep -F "skills: varde-change, varde-review" "$AGENTS_DIR/varde-executor/claude.md" >/dev/null
+grep -F "skills: varde-review" "$AGENTS_DIR/varde-reviewer/claude.md" >/dev/null
+grep -F "skills: varde-explore" "$AGENTS_DIR/varde-explorer/claude.md" >/dev/null
 
-if rg -n 'varde-(dashboard|explain|plan|build|orchestrate|review-fix|simplify|spec|reflect|friction|handoff|worktree|code-)' \
-  "$AGENTS_DIR"/{plan,executor,review,explore}; then
+if rg -nP 'varde-(dashboard|explain|plan\b|build|orchestrate|review-fix|simplify|spec|reflect|friction|handoff|worktree|code-(?!cli\.md))' \
+  "$AGENTS_DIR"/{varde-planner,varde-executor,varde-reviewer,varde-explorer}; then
   fail "agent definitions reference retired skills"
 fi
 

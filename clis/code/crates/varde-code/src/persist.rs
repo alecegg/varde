@@ -1275,7 +1275,7 @@ pub(crate) fn persist_full_streaming(
     let churn_files: Vec<String> = files.iter().map(|f| f.path.clone()).collect();
     let churn_root = repo_root.to_path_buf();
     let churn_handle =
-        std::thread::spawn(move || crate::churn::commit_counts_batch(&churn_files, &churn_root));
+        ChurnWorker::spawn(move || crate::churn::commit_counts_batch(&churn_files, &churn_root));
 
     let mut conn = crate::db::open(db_path)?;
     // Single transaction for the whole streaming build: every `write_*` below
@@ -1403,7 +1403,7 @@ fn write_streaming_derived(
     conn: &rusqlite::Connection,
     raw: &StreamingRaw,
     graph: &ResolvedGraph,
-    churn_handle: std::thread::JoinHandle<HashMap<String, u32>>,
+    churn_handle: ChurnWorker,
 ) -> Result<()> {
     let derived = std::slice::from_ref(&raw.merged);
     write_edges(conn, derived, graph, &raw.file_ids, &raw.entity_ids)?;
@@ -1549,7 +1549,17 @@ pub(crate) fn persist_delta(
     );
 
     let churn_handle = spawn_churn(output, repo_root);
+    persist_delta_with_churn(conn, changed_file_ids, output, graph, offsets, churn_handle)
+}
 
+fn persist_delta_with_churn(
+    conn: &rusqlite::Connection,
+    changed_file_ids: &[i64],
+    output: &[ExtractOutput],
+    graph: &ResolvedGraph,
+    offsets: Vec<usize>,
+    churn_handle: ChurnWorker,
+) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     delete_delta_rows(&tx, changed_file_ids)?;
 
@@ -1732,7 +1742,7 @@ fn write_derived_tables(
     file_ids: &FileIds,
     entity_ids: &EntityIdIndex,
     complexity_counts: &[u32],
-    churn_handle: std::thread::JoinHandle<HashMap<String, u32>>,
+    churn_handle: ChurnWorker,
     profile: bool,
     started: std::time::Instant,
 ) -> Result<()> {
@@ -2359,17 +2369,43 @@ fn write_function_metric_row(
     Ok(())
 }
 
-/// Kick off the churn `git log` walk on a background thread. It only needs
-/// the file list (available the moment scan finishes), so the walk overlaps
-/// the entity/symbol/edge inserts below; the handle is joined in
-/// [`write_churn`].
-fn spawn_churn(
-    output: &[ExtractOutput],
-    repo_root: &Path,
-) -> std::thread::JoinHandle<HashMap<String, u32>> {
+/// Own a background churn `git log` walk. It only needs the file list
+/// (available once scan finishes), so the walk overlaps the persistence
+/// writes; [`ChurnWorker`] joins it if any write exits early.
+fn spawn_churn(output: &[ExtractOutput], repo_root: &Path) -> ChurnWorker {
     let files: Vec<String> = output.iter().flat_map(|o| o.files.clone()).collect();
     let root = repo_root.to_path_buf();
-    std::thread::spawn(move || crate::churn::commit_counts_batch(&files, &root))
+    ChurnWorker::spawn(move || crate::churn::commit_counts_batch(&files, &root))
+}
+
+/// A churn worker is a persistence-owned resource: dropping it waits for the
+/// background scan to finish, including on any `?`-based error return.
+struct ChurnWorker {
+    handle: Option<std::thread::JoinHandle<HashMap<String, u32>>>,
+}
+
+impl ChurnWorker {
+    fn spawn(work: impl FnOnce() -> HashMap<String, u32> + Send + 'static) -> Self {
+        Self {
+            handle: Some(std::thread::spawn(work)),
+        }
+    }
+
+    fn join(mut self) -> HashMap<String, u32> {
+        self.handle
+            .take()
+            .expect("churn worker is joined only once")
+            .join()
+            .unwrap_or_default()
+    }
+}
+
+impl Drop for ChurnWorker {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
 }
 
 /// Backfill `files.churn` with each file's 90-day commit count.
@@ -2381,9 +2417,9 @@ fn write_churn(
     conn: &rusqlite::Connection,
     output: &[ExtractOutput],
     file_ids: &FileIds,
-    churn_handle: std::thread::JoinHandle<HashMap<String, u32>>,
+    churn_handle: ChurnWorker,
 ) -> Result<()> {
-    let counts = churn_handle.join().unwrap_or_default();
+    let counts = churn_handle.join();
     let mut stmt = conn.prepare("UPDATE files SET churn = ?1 WHERE id = ?2")?;
     for (out_idx, out) in output.iter().enumerate() {
         for (local_file_id, path) in out.files.iter().enumerate() {
@@ -3523,7 +3559,13 @@ mod tests {
                 resolved: true,
                 from_entity: None,
             }];
-            persist(&db_path, &output, &graph, Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
+            persist(
+                &db_path,
+                &output,
+                &graph,
+                Path::new(env!("CARGO_MANIFEST_DIR")),
+            )
+            .unwrap();
             let conn = crate::db::open(&db_path).unwrap();
             let state = query_persisted_state(&conn, false).unwrap();
             let assert_target = || {
@@ -4122,6 +4164,93 @@ mod tests {
                 churn,
                 i64::from(raw),
                 "persisted churn matches git log count"
+            );
+        }
+    }
+
+    mod churn_worker_lifecycle {
+        use super::*;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        };
+        use std::time::Duration;
+
+        #[test]
+        fn delta_persistence_error_joins_churn_worker_before_return() {
+            let db_path = temp_db("churn-persist-error-join");
+            let conn = crate::db::open_or_rebuild(&db_path).expect("schema creates");
+            conn.execute("INSERT INTO files (path) VALUES ('a.rs')", [])
+                .expect("file row inserts");
+            let file_id = conn.last_insert_rowid();
+            conn.execute_batch(
+                "CREATE TRIGGER fail_entity_insert BEFORE INSERT ON entities
+                 BEGIN SELECT RAISE(ABORT, 'injected persistence failure'); END;",
+            )
+            .expect("failure trigger creates");
+
+            let output = output(&["a.rs"]);
+            let entities: Vec<_> = output
+                .iter()
+                .flat_map(|out| out.entities.iter().cloned())
+                .collect();
+            let symbols: Vec<_> = output
+                .iter()
+                .flat_map(|out| out.symbols.iter().cloned())
+                .collect();
+            let files: Vec<_> = output
+                .iter()
+                .flat_map(|out| out.files.iter().cloned())
+                .collect();
+            let graph = crate::resolve::resolve(&entities, &symbols, &files)
+                .expect("fixture graph resolves");
+
+            let worker_finished = Arc::new(AtomicBool::new(false));
+            let finished = Arc::clone(&worker_finished);
+            let (started_tx, started_rx) = mpsc::sync_channel(1);
+            let (release_tx, release_rx) = mpsc::channel();
+            let churn_worker = ChurnWorker::spawn(move || {
+                started_tx.send(()).expect("test observes worker start");
+                release_rx.recv().expect("test releases churn worker");
+                finished.store(true, Ordering::Release);
+                HashMap::new()
+            });
+
+            let (result_tx, result_rx) = mpsc::channel();
+            let persist_thread = std::thread::spawn(move || {
+                let result = persist_delta_with_churn(
+                    &conn,
+                    &[file_id],
+                    &output,
+                    &graph,
+                    vec![0],
+                    churn_worker,
+                );
+                result_tx
+                    .send(result.is_err())
+                    .expect("test receives result");
+            });
+            started_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("churn worker starts");
+            let result_before_release = result_rx.recv_timeout(Duration::from_millis(250)).ok();
+            release_tx.send(()).expect("churn worker is released");
+            let failed = result_before_release.unwrap_or_else(|| {
+                result_rx
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("persistence returns after the worker is released")
+            });
+            persist_thread.join().expect("persistence thread joins");
+
+            assert!(
+                result_before_release.is_none(),
+                "persistence must not return while the churn worker is blocked"
+            );
+            assert!(failed, "the injected persistence failure returns");
+            assert!(
+                worker_finished.load(Ordering::Acquire),
+                "the churn worker must finish before the persistence call returns"
             );
         }
     }

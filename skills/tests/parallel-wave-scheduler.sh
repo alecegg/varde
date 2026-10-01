@@ -22,6 +22,7 @@ cat > "$fake_bin/varde-code" <<'EOF'
 path="$(printf '%s' "$3" | jq -r .filePath)"
 file="$RADIUS_DIR/$(printf '%s' "$path" | tr / _)"
 if [ -f "$file" ]; then data="$(cat "$file")"; else data='[]'; fi
+if [ "$data" = '__FAIL__' ]; then exit 1; fi
 printf '{"ok":true,"data":%s}\n' "$data"
 EOF
 chmod +x "$fake_bin/varde-code"
@@ -32,8 +33,10 @@ radius() { printf '%s' "$2" > "$RADIUS_DIR/$(printf '%s' "$1" | tr / _)"; }
 plan() {
   local dir="$TEST_ROOT/$1"
   mkdir -p "$dir/plan/tasks" "$dir/src"
+  git -C "$dir" init -q
   touch "$dir/src/alpha" "$dir/src/beta" "$dir/src/gamma" "$dir/src/delta" \
     "$dir/src/util" "$dir/src/left" "$dir/src/right" "$dir/src/new-alpha"
+  git -C "$dir" add src
   printf '%s' "$dir"
 }
 task() { # task <root> <id> <status> <depends_on> <modifies> [creates] [renames] [verification_resources]
@@ -46,6 +49,8 @@ modifies: [$5]
 creates: [${6:-}]
 renames: [${7:-}]
 verification_resources: [${8:-}]
+kind: ${9:-}
+posture: ${10:-}
 ---
 EOF
 }
@@ -264,11 +269,104 @@ task "$root" alpha todo "" "src/alpha"
 task "$root" beta todo "" ""
 [ "$(run "$root" | jq '.next_wave | length')" -le 1 ] || fail "empty write set was parallelized"
 
-# An empty blast radius is unknown (maybe an unindexed language), not independent.
+# An empty blast radius falls back to basename references for unindexed files.
 root="$(plan no-edges)"
 task "$root" alpha todo "" "src/alpha"
 task "$root" beta todo "" "src/beta"
-[ "$(run "$root" | jq '.next_wave | length')" -le 1 ] || fail "empty blast radius was treated as independent"
+run "$root" | jq -e '.next_wave == ["alpha","beta"]' >/dev/null ||
+  fail "unindexed files without basename references were serialized"
+
+# Duplicate basenames only reach matching references in the file's skill tree.
+root="$(plan duplicate-basename)"
+mkdir -p "$root/skills/a/evals" "$root/skills/b/evals" "$root/skills/third"
+printf 'evals.json\n' > "$root/skills/a/evals/evals.json"
+printf 'evals.json\n' > "$root/skills/b/evals/evals.json"
+printf 'See evals.json for the skill configuration.\n' > "$root/skills/third/SKILL.md"
+git -C "$root" add skills
+task "$root" a-edit todo "" "skills/a/evals/evals.json"
+task "$root" b-edit todo "" "skills/b/evals/evals.json"
+run "$root" | jq -e '.next_wave == ["a-edit","b-edit"]' >/dev/null ||
+  fail "duplicate basenames reached unrelated skills"
+
+# Markdown content edits have no graph edges, but only reach their own files.
+root="$(plan markdown-content)"
+mkdir -p "$root/docs"
+printf 'alpha\n' > "$root/docs/alpha.md"
+printf 'beta\n' > "$root/docs/beta.md"
+git -C "$root" add docs
+task "$root" alpha todo "" "docs/alpha.md"
+task "$root" beta todo "" "docs/beta.md"
+run "$root" | jq -e '.next_wave == ["alpha","beta"] and .wave_mode == "shared"' >/dev/null ||
+  fail "independent markdown content edits did not form a shared wave"
+
+# A markdown rename reaches tracked files that mention its basename.
+root="$(plan markdown-rename)"
+mkdir -p "$root/docs"
+printf 'guide\n' > "$root/docs/guide.md"
+printf 'See guide.md for details.\n' > "$root/docs/mentions.md"
+git -C "$root" add docs
+task "$root" rename todo "" "" "" "docs/guide.md -> docs/new-guide.md"
+task "$root" mentions todo "" "docs/mentions.md"
+run "$root" | jq -e '.next_wave == ["mentions"] and .conflicts[0].files == ["docs/mentions.md"]' >/dev/null ||
+  fail "markdown rename missed a file that names its basename"
+
+# A failed graph call stays unknown even for a path eligible for fallback.
+root="$(plan failed-graph)"
+task "$root" alpha todo "" "src/alpha"
+task "$root" beta todo "" "src/beta"
+radius src/alpha '__FAIL__'
+radius src/beta '["src/beta-test"]'
+run "$root" | jq -e '.next_wave == ["alpha"] and (.reasons | any(contains("blast_radius failed for src/alpha")))' >/dev/null ||
+  fail "failed blast_radius call was treated as an empty unindexed result"
+
+# Tasks under one Cargo.toml share a compile unit and require worktrees.
+root="$(plan compile-unit)"
+mkdir -p "$root/crates/alpha/src" "$root/crates/beta/src"
+touch "$root/Cargo.toml" "$root/crates/alpha/src/lib.rs" "$root/crates/beta/src/lib.rs"
+git -C "$root" add Cargo.toml crates
+radius crates/alpha/src/lib.rs '["crates/alpha/src/lib.rs-test"]'
+radius crates/beta/src/lib.rs '["crates/beta/src/lib.rs-test"]'
+task "$root" alpha todo "" "crates/alpha/src/lib.rs"
+task "$root" beta todo "" "crates/beta/src/lib.rs"
+run "$root" | jq -e '.next_wave == ["alpha","beta"] and .wave_mode == "worktree"' >/dev/null ||
+  fail "tasks in one Cargo.toml compile unit did not select worktree mode"
+
+# A ready task must wait when its body points at another task's new file.
+root="$(plan new-file-pointer)"
+task "$root" a-creator todo "" "" "references/x.md"
+task "$root" b-mentions todo "" "src/alpha"
+cat >> "$root/plan/tasks/b-mentions.md" <<'EOF'
+
+Use `references/x.md`, which the other task creates.
+EOF
+run "$root" | jq -e '.next_wave == ["a-creator"] and (.reasons | any(. == "b-mentions: mentions references/x.md created by a-creator; add depends_on"))' >/dev/null ||
+  fail "a task mentioning another task's new file was not held out of the wave"
+
+# A rename destination is also a new file pointer, including repo-relative mentions.
+root="$(plan renamed-file-pointer)"
+task "$root" a-renamer todo "" "" "" "src/old.md -> skills/varde-change/references/y.md"
+task "$root" b-mentions todo "" "src/beta"
+cat >> "$root/plan/tasks/b-mentions.md" <<'EOF'
+
+Use `skills/varde-change/references/y.md`, which the other task renames.
+EOF
+run "$root" | jq -e '.next_wave == ["a-renamer"] and (.reasons | any(. == "b-mentions: mentions skills/varde-change/references/y.md created by a-renamer; add depends_on"))' >/dev/null ||
+  fail "a task mentioning another task's renamed file was not held out of the wave"
+
+# A spike owns no paths, so it always runs alone: single, not worktree.
+root="$(plan spike-mode)"
+task "$root" spike todo "" "" "" "" "" spike
+run "$root" | jq -e '.next_wave == ["spike"] and .wave_mode == "single"' >/dev/null ||
+  fail "lone spike task did not select single mode"
+
+# Refactor posture selects worktrees even when its files have no shared build root.
+root="$(plan refactor-mode)"
+radius src/alpha '["src/alpha-test"]'
+radius src/beta '["src/beta-test"]'
+task "$root" alpha todo "" "src/alpha" "" "" "" "" refactor
+task "$root" beta todo "" "src/beta"
+run "$root" | jq -e '.next_wave == ["alpha","beta"] and .wave_mode == "worktree"' >/dev/null ||
+  fail "refactor posture did not select worktree mode"
 
 # A missing or blocked dependency is reported, not a silent stall.
 root="$(plan deps)"

@@ -39,9 +39,17 @@ per-OS, user-level default.
 | `pi` | Whole-file write | `~/.pi/agent/extensions/pi-extension.js` | Embedded extension JS, `pi.on("session_start", ...)`, returns `{ systemPrompt }` |
 
 Every target's injected command is
-`varde-code report nav_map --json '{"repoRoot":"<cwd>"}' --format text`,
+`varde-code nav_map --json '{"repoRoot":"<cwd>"}' --format text --with-project-knowledge`,
 with `<cwd>` resolved at hook-run time (each session's actual working
-directory), not baked in at install time.
+directory), not baked in at install time. When the project has a durable
+knowledge bundle, the text output points to `memory-bank/knowledge/` without
+loading its contents. The hook always emits the same compact Varde orientation,
+with a few entrypoints and shallow flows plus `varde-code` commands for
+retrieving an expanded map, context, dependency graph, and hotspot data. When
+Toz capture succeeds, it appends the handle and `varde-toz query` commands for
+searching or reading the expanded map (still subject to per-section hard
+caps). When Toz is disabled, unavailable, or capture fails, the orientation
+is unchanged.
 
 All 4 targets install at **user-level scope** by default — not
 project-local. Codex specifically avoids project-local (`.codex/config.toml`)

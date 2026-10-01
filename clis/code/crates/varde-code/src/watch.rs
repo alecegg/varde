@@ -667,15 +667,12 @@ fn try_lock_file(file: &File) -> std::io::Result<bool> {
 }
 
 fn lock_is_held(path: &Path) -> Result<bool> {
-    let file = match std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(path)
-    {
+    let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(err) => {
-            return Err(err).with_context(|| format!("opening lock probe {}", path.display()));
+            return Err(err)
+                .with_context(|| format!("opening read-only lock probe {}", path.display()));
         }
     };
     match try_lock_file(&file)? {
@@ -704,8 +701,11 @@ fn lock_is_held(path: &Path) -> Result<bool> {
 pub struct WatchInstance {
     pub pid: u32,
     pub registered: bool,
-    pub alive: bool,
+    pub alive: Option<bool>,
     pub ready: bool,
+    pub index_ready: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ownership_error: Option<String>,
     pub repos: Vec<String>,
     pub lock_path: String,
     /// Paths that triggered each repo's most recent reconcile — the
@@ -731,11 +731,23 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
             if path.extension().and_then(|e| e.to_str()) != Some("lock") {
                 continue;
             }
-            let Ok(contents) = std::fs::read_to_string(&path) else {
-                continue;
-            };
+            let contents = std::fs::read_to_string(&path);
+            let ownership_error = contents
+                .as_ref()
+                .err()
+                .map(|err| format!("reading watcher owner {}: {err}", path.display()));
+            let contents = contents.unwrap_or_default();
             let owner = serde_json::from_str::<InstanceOwner>(&contents).ok();
-            let meta_contents = std::fs::read_to_string(meta_path_for(&path)).ok();
+            let meta_path = meta_path_for(&path);
+            let meta_contents = match std::fs::read_to_string(&meta_path) {
+                Ok(contents) => Some(contents),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("reading watcher metadata {}", meta_path.display())
+                    });
+                }
+            };
             let meta = meta_contents
                 .as_deref()
                 .and_then(|contents| serde_json::from_str::<InstanceMeta>(contents).ok());
@@ -757,15 +769,55 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
                 .map(|owner| owner.pid)
                 .or_else(|| contents.trim().parse::<u32>().ok())
                 .unwrap_or_default();
+            if repos.is_empty() {
+                let held = match lock_is_held(&path) {
+                    Ok(held) => held,
+                    Err(err) => {
+                        bail!(
+                            "cannot inspect watcher lock {} to determine its repositories: {err:#}; inspect it on the host before ensuring coverage",
+                            path.display()
+                        );
+                    }
+                };
+                if held || ownership_error.is_some() {
+                    bail!(
+                        "cannot determine the repositories for watcher lock {}; inspect it on the host before ensuring coverage",
+                        path.display()
+                    );
+                }
+            }
             if pid == 0 && repos.is_empty() {
                 continue;
             }
-            let alive = owner.as_ref().is_some_and(|owner| {
-                meta.as_ref()
-                    .is_some_and(|meta| instance_owner_is_current(&path, owner, meta))
+            let (alive, ownership_error) = match (owner.as_ref(), meta.as_ref(), ownership_error) {
+                (_, _, Some(error)) => (None, Some(error)),
+                (Some(owner), Some(meta), None) => {
+                    match instance_owner_is_current(&path, owner, meta) {
+                        Ok(alive) => (Some(alive), None),
+                        Err(err) => (None, Some(format!("inspecting watcher ownership: {err:#}"))),
+                    }
+                }
+                _ => match lock_is_held(&path) {
+                    Ok(false) => (Some(false), None),
+                    Ok(true) => (
+                        None,
+                        Some(format!(
+                            "watcher lock {} is held but its owner metadata is unavailable",
+                            path.display()
+                        )),
+                    ),
+                    Err(err) => (None, Some(format!("inspecting watcher lock: {err:#}"))),
+                },
+            };
+            let registered = repos.len() == 1 && service_path_is_file(Path::new(&repos[0]))?;
+            let index_ready =
+                !repos.is_empty() && repos.iter().all(|repo| index_ready(Path::new(repo)));
+            let ownership_error = ownership_error.or_else(|| {
+                (alive.is_none())
+                    .then(|| format!("could not confirm watcher ownership for {}", path.display()))
             });
-            let registered = repos.len() == 1 && service_path(Path::new(&repos[0])).is_file();
-            if !alive && !registered && meta.as_ref().is_some_and(|meta| meta.stopped) {
+            if alive == Some(false) && !registered && meta.as_ref().is_some_and(|meta| meta.stopped)
+            {
                 continue;
             }
             let changed_paths = repos
@@ -783,13 +835,13 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
                 pid,
                 registered,
                 alive,
-                ready: alive
+                ready: alive == Some(true)
+                    && index_ready
                     && meta.as_ref().is_some_and(|meta| {
-                        !meta.stopped
-                            && repos.iter().all(|repo| {
-                                meta.ready_repos.contains(repo) && index_ready(Path::new(repo))
-                            })
+                        !meta.stopped && repos.iter().all(|repo| meta.ready_repos.contains(repo))
                     }),
+                index_ready,
+                ownership_error,
                 repos,
                 lock_path: path.to_string_lossy().into_owned(),
                 changed_paths,
@@ -806,7 +858,7 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
             else {
                 continue;
             };
-            if !service_path(Path::new(&repo)).is_file() {
+            if !service_path_is_file(Path::new(&repo))? {
                 continue;
             }
             if instances.iter().any(|item| item.repos.contains(&repo)) {
@@ -815,8 +867,10 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
             instances.push(WatchInstance {
                 pid: 0,
                 registered: true,
-                alive: false,
+                alive: Some(false),
                 ready: false,
+                index_ready: index_ready(Path::new(&repo)),
+                ownership_error: None,
                 repos: vec![repo],
                 lock_path: String::new(),
                 changed_paths: Vec::new(),
@@ -826,17 +880,38 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
     Ok(instances)
 }
 
-fn instance_owner_is_current(path: &Path, owner: &InstanceOwner, meta: &InstanceMeta) -> bool {
-    owner == &meta.owner
-        && lock_is_held(path).unwrap_or(false)
-        && meta.repos.iter().all(|repo| {
-            lock_is_held(&repo_coverage_path(
-                &crate::db::path::config_dir().join("watch-locks"),
-                Path::new(repo),
-            ))
-            .unwrap_or(false)
-        })
-        && crate::repo_lock::pid_is_alive(owner.pid)
+fn instance_owner_is_current(
+    path: &Path,
+    owner: &InstanceOwner,
+    meta: &InstanceMeta,
+) -> Result<bool> {
+    if !lock_is_held(path)? {
+        return Ok(false);
+    }
+    let lock_dir = crate::db::path::config_dir().join("watch-locks");
+    let mut coverage_locks = Vec::with_capacity(meta.repos.len());
+    for repo in &meta.repos {
+        coverage_locks.push(lock_is_held(&repo_coverage_path(
+            &lock_dir,
+            Path::new(repo),
+        ))?);
+    }
+    if coverage_locks.iter().any(|held| !held) {
+        bail!(
+            "watcher holds only part of its coverage locks for {}",
+            path.display()
+        );
+    }
+    if owner != &meta.owner {
+        bail!(
+            "watcher owner and metadata do not match for {}",
+            path.display()
+        );
+    }
+    if !crate::repo_lock::pid_is_alive(owner.pid) {
+        bail!("watcher lock is held but pid {} is not alive", owner.pid);
+    }
+    Ok(true)
 }
 
 fn index_ready(repo: &Path) -> bool {
@@ -852,9 +927,104 @@ fn index_ready(repo: &Path) -> bool {
 pub struct EnsureStatus {
     pub repo: String,
     pub registered: bool,
-    pub alive: bool,
+    pub alive: Option<bool>,
     pub ready: bool,
+    pub index_ready: bool,
     pub pid: Option<u32>,
+}
+
+#[derive(Debug)]
+enum EnsureDecision {
+    Return(EnsureStatus),
+    Replace,
+}
+
+fn ensure_existing(
+    item: &WatchInstance,
+    repo: &Path,
+    inspect_supervisor: impl FnOnce() -> Result<SupervisorState>,
+) -> Result<EnsureDecision> {
+    let explain = |reason: String| {
+        format!(
+            "{reason}; inspect or manage this watcher on the host with `varde-code watch --list` and `--stop`"
+        )
+    };
+    let readonly = |alive: Option<bool>, reason: String| -> Result<EnsureDecision> {
+        if item.index_ready {
+            return Ok(EnsureDecision::Return(EnsureStatus {
+                repo: repo.display().to_string(),
+                registered: item.registered,
+                alive,
+                ready: false,
+                index_ready: true,
+                pid: (alive == Some(true)).then_some(item.pid),
+            }));
+        }
+        bail!(
+            "{}; the index is stale or unavailable for {}; search source directly until host-side watcher inspection is restored",
+            explain(reason),
+            repo.display()
+        )
+    };
+
+    let Some(alive) = item.alive else {
+        return readonly(
+            None,
+            item.ownership_error.clone().unwrap_or_else(|| {
+                format!("could not confirm watcher ownership for {}", repo.display())
+            }),
+        );
+    };
+    if !alive || !item.registered {
+        return Ok(EnsureDecision::Replace);
+    }
+    let state = match inspect_supervisor() {
+        Ok(state) => state,
+        Err(err) => return readonly(Some(true), format!("supervisor inspection failed: {err:#}")),
+    };
+    if state == SupervisorState::Active && item.ready && item.index_ready {
+        return Ok(EnsureDecision::Return(EnsureStatus {
+            repo: repo.display().to_string(),
+            registered: true,
+            alive: Some(true),
+            ready: true,
+            index_ready: true,
+            pid: Some(item.pid),
+        }));
+    }
+    Ok(EnsureDecision::Replace)
+}
+
+fn readonly_status_or_error(
+    repo: &Path,
+    registered: bool,
+    alive: Option<bool>,
+    pid: Option<u32>,
+    index_ready: bool,
+    reason: impl std::fmt::Display,
+) -> Result<EnsureStatus> {
+    if index_ready {
+        return Ok(EnsureStatus {
+            repo: repo.display().to_string(),
+            registered,
+            alive,
+            ready: false,
+            index_ready: true,
+            pid,
+        });
+    }
+    bail!(
+        "{reason}; the index is stale or unavailable for {}; inspect or manage the watcher on the host with `varde-code watch --list` and `--stop`, then search source directly",
+        repo.display()
+    )
+}
+
+fn ready_instance<'a>(instances: &'a [WatchInstance], repo: &Path) -> Option<&'a WatchInstance> {
+    instances.iter().find(|item| {
+        item.alive == Some(true)
+            && item.ready
+            && item.repos.iter().any(|path| Path::new(path) == repo)
+    })
 }
 
 fn service_name(repo: &Path) -> String {
@@ -882,6 +1052,45 @@ fn service_path(repo: &Path) -> PathBuf {
     }
 }
 
+fn service_path_is_file(repo: &Path) -> Result<bool> {
+    match std::fs::metadata(service_path(repo)) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(err) => Err(err).with_context(|| {
+            format!(
+                "inspecting watcher service definition for {}",
+                repo.display()
+            )
+        }),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SupervisorState {
+    Active,
+    Inactive,
+}
+
+fn state_from_supervisor_output(
+    success: bool,
+    stdout: &str,
+    stderr: &str,
+    command: &str,
+    confirmed_inactive: impl Fn(&str) -> bool,
+) -> Result<SupervisorState> {
+    if success {
+        return Ok(SupervisorState::Active);
+    }
+    let output = format!("{stdout}{stderr}");
+    if confirmed_inactive(&output) {
+        return Ok(SupervisorState::Inactive);
+    }
+    bail!(
+        "{command} could not inspect watcher service: {}",
+        output.trim()
+    )
+}
+
 fn registration_path(repo: &Path) -> PathBuf {
     crate::db::path::config_dir()
         .join("watch-services")
@@ -900,49 +1109,80 @@ pub fn ensure(repo: &Path) -> Result<EnsureStatus> {
     {
         bail!("repository path contains a character unsupported by host service definitions");
     }
-    let existing = list_instances()?
+    let matching = list_instances()?
         .into_iter()
-        .filter(|item| item.alive && item.repos.iter().any(|r| Path::new(r) == repo))
+        .filter(|item| item.repos.iter().any(|r| Path::new(r) == repo))
         .collect::<Vec<_>>();
-    if existing.len() > 1 {
+    let live = matching
+        .iter()
+        .filter(|item| item.alive == Some(true))
+        .collect::<Vec<_>>();
+    if live.len() > 1 {
         bail!(
             "multiple live watcher owners claim {}; stop duplicate coverage before ensuring it",
             repo.display()
         );
     }
-    if let Some(item) = existing.first() {
-        if item.registered && item.ready && service_is_active(&repo) {
-            return Ok(EnsureStatus {
-                repo: repo.display().to_string(),
-                registered: true,
-                alive: true,
-                ready: true,
-                pid: Some(item.pid),
-            });
+    if let Some(item) = matching.iter().find(|item| item.alive.is_none()) {
+        return match ensure_existing(item, &repo, || inspect_service(&repo))? {
+            EnsureDecision::Return(status) => Ok(status),
+            EnsureDecision::Replace => unreachable!("unknown ownership is read-only"),
+        };
+    }
+    let mut stopped_existing = false;
+    if let Some(item) = live.first() {
+        match ensure_existing(item, &repo, || inspect_service(&repo))? {
+            EnsureDecision::Return(status) => return Ok(status),
+            EnsureDecision::Replace => {}
         }
-        if !item.registered || !service_is_active(&repo) {
+        {
             let set = item.repos.iter().map(PathBuf::from).collect::<Vec<_>>();
             stop(&set)?;
             wait_for_instance_exit(Path::new(&item.lock_path), Duration::from_secs(10))?;
             for other in set.iter().filter(|other| *other != &repo) {
                 ensure(other)?;
             }
+            stopped_existing = true;
         }
     }
     // A service definition can survive a failed start or an upgrade from the
     // previous PID-file watcher. Never treat that file as live coverage; if
     // the host still has the job active, stop it through the supervisor and
     // wait for the job itself to disappear before installing the replacement.
-    if service_is_active(&repo) {
-        stop_service(&repo)?;
-        wait_for_service_inactive(&repo, Duration::from_secs(10))?;
-        cleanup_service_registration(&repo)?;
+    if !stopped_existing {
+        let state = match inspect_service(&repo) {
+            Ok(state) => state,
+            Err(err) => {
+                let registered = service_path_is_file(&repo)?;
+                return readonly_status_or_error(
+                    &repo,
+                    registered,
+                    Some(false),
+                    None,
+                    index_ready(&repo),
+                    format!("supervisor inspection failed: {err:#}"),
+                );
+            }
+        };
+        if state == SupervisorState::Active {
+            stop_service(&repo)?;
+            wait_for_service_inactive(&repo, Duration::from_secs(10))?;
+            cleanup_service_registration(&repo)?;
+        }
     }
     let binary = std::env::current_exe().context("locating varde-code executable")?;
     let definition = service_definition(&repo, &binary)?;
     let path = service_path(&repo);
     std::fs::create_dir_all(path.parent().expect("service path parent"))?;
-    if std::fs::read_to_string(&path).ok().as_deref() != Some(definition.as_str()) {
+    let current_definition = match std::fs::read_to_string(&path) {
+        Ok(contents) => Some(contents),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("reading service definition {}", path.display()));
+        }
+    };
+    if current_definition.as_deref() != Some(definition.as_str()) {
         std::fs::write(&path, definition).with_context(|| format!("writing {}", path.display()))?;
     }
     let registration = registration_path(&repo);
@@ -952,27 +1192,76 @@ pub fn ensure(repo: &Path) -> Result<EnsureStatus> {
         serde_json::to_string(&repo.display().to_string())?,
     )?;
     if let Err(err) = start_service(&repo) {
-        let _ = stop_service(&repo);
-        if let Err(cleanup_err) = cleanup_service_registration(&repo) {
-            eprintln!("varde-code watch: failed to clean partial registration: {cleanup_err:#}");
+        match stop_service(&repo) {
+            Ok(()) => {
+                if let Err(cleanup_err) = cleanup_service_registration(&repo) {
+                    eprintln!(
+                        "varde-code watch: failed to clean partial registration: {cleanup_err:#}"
+                    );
+                }
+            }
+            Err(stop_err) => {
+                eprintln!(
+                    "varde-code watch: retaining registration because supervisor stop failed: {stop_err:#}"
+                );
+            }
         }
         return Err(err).context("starting persistent watcher service");
     }
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if let Some(item) = list_instances()?
-            .into_iter()
-            .find(|item| item.alive && item.repos.iter().any(|r| Path::new(r) == repo))
-            && item.ready
-            && service_is_active(&repo)
-        {
-            return Ok(EnsureStatus {
-                repo: repo.display().to_string(),
-                registered: true,
-                alive: true,
-                ready: true,
-                pid: Some(item.pid),
-            });
+        let instances = list_instances()?;
+        if let Some(item) = ready_instance(&instances, &repo) {
+            match inspect_service(&repo) {
+                Ok(SupervisorState::Active) => {
+                    return Ok(EnsureStatus {
+                        repo: repo.display().to_string(),
+                        registered: true,
+                        alive: Some(true),
+                        ready: true,
+                        index_ready: true,
+                        pid: Some(item.pid),
+                    });
+                }
+                Ok(SupervisorState::Inactive) => {}
+                Err(err) => {
+                    return readonly_status_or_error(
+                        &repo,
+                        item.registered,
+                        Some(true),
+                        Some(item.pid),
+                        item.index_ready,
+                        format!("supervisor inspection failed: {err:#}"),
+                    );
+                }
+            }
+        } else if let Some(item) = instances.iter().find(|item| {
+            item.alive.is_none() && item.repos.iter().any(|path| Path::new(path) == repo)
+        }) {
+            return readonly_status_or_error(
+                &repo,
+                item.registered,
+                None,
+                None,
+                item.index_ready,
+                item.ownership_error
+                    .as_deref()
+                    .unwrap_or("ownership is unknown"),
+            );
+        } else {
+            match inspect_service(&repo) {
+                Ok(SupervisorState::Active | SupervisorState::Inactive) => {}
+                Err(err) => {
+                    return readonly_status_or_error(
+                        &repo,
+                        true,
+                        Some(false),
+                        None,
+                        index_ready(&repo),
+                        format!("supervisor inspection failed: {err:#}"),
+                    );
+                }
+            }
         }
         if Instant::now() >= deadline {
             bail!(
@@ -1001,7 +1290,7 @@ fn wait_for_instance_exit(lock_path: &Path, timeout: Duration) -> Result<()> {
 
 fn wait_for_service_inactive(repo: &Path, timeout: Duration) -> Result<()> {
     let deadline = Instant::now() + timeout;
-    while service_is_active(repo) {
+    while inspect_service(repo)? == SupervisorState::Active {
         if Instant::now() >= deadline {
             bail!(
                 "supervisor job for {} is still active after {} seconds",
@@ -1018,9 +1307,7 @@ fn instance_locks_held(lock_path: &Path) -> Result<bool> {
     if lock_is_held(lock_path)? {
         return Ok(true);
     }
-    let Ok(meta) = read_instance_meta(&meta_path_for(lock_path)) else {
-        return Ok(false);
-    };
+    let meta = read_instance_meta(&meta_path_for(lock_path))?;
     for repo in &meta.repos {
         if lock_is_held(&repo_coverage_path(
             &crate::db::path::config_dir().join("watch-locks"),
@@ -1033,40 +1320,59 @@ fn instance_locks_held(lock_path: &Path) -> Result<bool> {
 }
 
 #[cfg(target_os = "linux")]
-fn service_is_active(repo: &Path) -> bool {
-    std::process::Command::new("systemctl")
-        .args([
-            "--user",
-            "is-active",
-            "--quiet",
-            &format!("{}.service", service_name(repo)),
-        ])
-        .status()
-        .is_ok_and(|status| status.success())
+fn inspect_service(repo: &Path) -> Result<SupervisorState> {
+    let unit = format!("{}.service", service_name(repo));
+    let output = std::process::Command::new("systemctl")
+        .args(["--user", "is-active", &unit])
+        .output()
+        .context("running systemctl --user is-active")?;
+    state_from_supervisor_output(
+        output.status.success(),
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+        "systemctl --user is-active",
+        |output| {
+            systemd_job_is_absent(output)
+                || output
+                    .lines()
+                    .any(|line| matches!(line.trim(), "inactive" | "failed"))
+        },
+    )
 }
 
 #[cfg(target_os = "macos")]
-fn service_is_active(repo: &Path) -> bool {
-    let Ok(uid) = std::process::Command::new("id").arg("-u").output() else {
-        return false;
-    };
+fn inspect_service(repo: &Path) -> Result<SupervisorState> {
+    let uid = std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .context("running id -u")?;
     if !uid.status.success() {
-        return false;
+        bail!(
+            "id -u failed: {}",
+            String::from_utf8_lossy(&uid.stderr).trim()
+        );
     }
     let label = format!(
         "gui/{}/{}",
         String::from_utf8_lossy(&uid.stdout).trim(),
         service_name(repo)
     );
-    std::process::Command::new("launchctl")
+    let output = std::process::Command::new("launchctl")
         .args(["print", &label])
-        .status()
-        .is_ok_and(|status| status.success())
+        .output()
+        .context("running launchctl print")?;
+    state_from_supervisor_output(
+        output.status.success(),
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+        "launchctl print",
+        launchd_job_is_absent,
+    )
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn service_is_active(_repo: &Path) -> bool {
-    false
+fn inspect_service(_repo: &Path) -> Result<SupervisorState> {
+    bail!("host supervision is unsupported on this platform")
 }
 
 #[cfg(target_os = "macos")]
@@ -1197,7 +1503,7 @@ pub fn stop(repos: &[PathBuf]) -> Result<StopOutcome> {
     {
         return stop_instance(instance);
     }
-    if repos.len() == 1 && service_path(&repos[0]).is_file() {
+    if repos.len() == 1 && service_path_is_file(&repos[0])? {
         return unregister_service(&repos[0]);
     }
     if let Ok(meta) = read_instance_meta(&meta_path_for(&path))
@@ -1260,27 +1566,36 @@ fn unregister_service(repo: &Path) -> Result<StopOutcome> {
 }
 
 fn stop_instance(instance: &WatchInstance) -> Result<StopOutcome> {
+    if instance.alive.is_none() {
+        bail!(
+            "cannot stop watcher because ownership is unknown: {}; inspect it on the host before changing registrations",
+            instance
+                .ownership_error
+                .as_deref()
+                .unwrap_or("lock probe failed")
+        );
+    }
     let lock_path = Path::new(&instance.lock_path);
     let meta_path = meta_path_for(lock_path);
-    let meta = read_instance_meta(&meta_path).ok();
-    let owner = std::fs::read_to_string(lock_path)
-        .ok()
-        .and_then(|contents| serde_json::from_str::<InstanceOwner>(&contents).ok());
-    let alive = owner.as_ref().is_some_and(|owner| {
-        meta.as_ref()
-            .is_some_and(|meta| instance_owner_is_current(lock_path, owner, meta))
-    });
+    let contents = std::fs::read_to_string(lock_path)
+        .with_context(|| format!("reading watcher owner {}", lock_path.display()))?;
+    let owner = serde_json::from_str::<InstanceOwner>(&contents)
+        .with_context(|| format!("parsing watcher owner {}", lock_path.display()))?;
+    let meta = read_instance_meta(&meta_path)?;
+    let alive = instance_owner_is_current(lock_path, &owner, &meta)?;
     let repos = instance.repos.clone();
-    let pid = owner.as_ref().map_or(instance.pid, |owner| owner.pid);
+    let pid = owner.pid;
 
-    let registered_repo = repos
-        .first()
-        .filter(|_| repos.len() == 1)
-        .map(PathBuf::from)
-        .filter(|repo| service_path(repo).is_file());
-    let supervised = registered_repo
+    let registered_repo = if repos.len() == 1 && service_path_is_file(Path::new(&repos[0]))? {
+        Some(PathBuf::from(&repos[0]))
+    } else {
+        None
+    };
+    let supervisor_state = registered_repo
         .as_ref()
-        .is_some_and(|repo| service_is_active(repo));
+        .map(|repo| inspect_service(repo))
+        .transpose()?;
+    let supervised = supervisor_state == Some(SupervisorState::Active);
     if let Some(repo) = &registered_repo {
         // An unloaded job is already stopped. Other launchctl/systemd errors
         // remain visible and keep the registration available for retry.
@@ -1295,9 +1610,8 @@ fn stop_instance(instance: &WatchInstance) -> Result<StopOutcome> {
     if lock_path.exists() {
         wait_for_instance_exit(lock_path, Duration::from_secs(10))?;
     }
-    if let Ok(mut meta) = read_instance_meta(&meta_path)
-        && owner.as_ref().is_some_and(|owner| owner == &meta.owner)
-    {
+    let mut meta = read_instance_meta(&meta_path)?;
+    if owner == meta.owner {
         meta.ready_repos.clear();
         meta.stopped = true;
         write_instance_meta(&meta_path, &meta)?;
@@ -1331,11 +1645,15 @@ fn stop_service(repo: &Path) -> Result<()> {
         .args(["--user", "disable", "--now", &unit])
         .output()?;
     if !out.status.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        if systemd_job_is_absent(&stderr) {
+        let output = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        if systemd_job_is_absent(&output) {
             return Ok(());
         }
-        bail!("systemctl --user disable failed: {stderr}");
+        bail!("systemctl --user disable failed: {}", output.trim());
     }
     Ok(())
 }
@@ -1355,11 +1673,15 @@ fn stop_service(repo: &Path) -> Result<()> {
         .args(["bootout", &label])
         .output()?;
     if !out.status.success() {
-        let stderr = String::from_utf8_lossy(&out.stderr);
-        if launchd_job_is_absent(&stderr) {
+        let output = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        if launchd_job_is_absent(&output) {
             return Ok(());
         }
-        bail!("launchctl bootout failed: {stderr}");
+        bail!("launchctl bootout failed: {}", output.trim());
     }
     Ok(())
 }
@@ -1407,6 +1729,57 @@ fn watch_set_id(repos: &[PathBuf]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    fn registered_test_repo(label: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = crate::db::path::config_dir().join(label);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("main.rs"), "fn watcher_test() {}\n").unwrap();
+        let repo = std::fs::canonicalize(root).unwrap();
+        let service = service_path(&repo);
+        let registration = registration_path(&repo);
+        std::fs::create_dir_all(service.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(registration.parent().unwrap()).unwrap();
+        std::fs::write(&service, "keep service definition").unwrap();
+        std::fs::write(
+            &registration,
+            serde_json::to_string(&repo.display().to_string()).unwrap(),
+        )
+        .unwrap();
+        (repo, service, registration)
+    }
+
+    #[cfg(unix)]
+    fn supervisor_stub(message: &str, exit_code: i32) -> (PathBuf, PathBuf) {
+        let home = PathBuf::from(std::env::var_os("HOME").unwrap());
+        let bin = home.join("stub-bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let log = home.join("supervisor.log");
+        #[cfg(target_os = "linux")]
+        let command = "systemctl";
+        #[cfg(target_os = "macos")]
+        let command = "launchctl";
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let command = "systemctl";
+        let script_path = bin.join(command);
+        let script = format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nprintf '%s\\n' '{}' >&2\nexit {exit_code}\n",
+            log.display(),
+            message
+        );
+        std::fs::write(&script_path, script).unwrap();
+        let mut permissions = std::fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script_path, permissions).unwrap();
+        (bin, log)
+    }
+
+    fn make_owner_unknown(watcher: &InstanceLock) {
+        let mut meta = read_instance_meta(&watcher.meta_path).unwrap();
+        meta.owner.generation.push_str("-mismatch");
+        write_instance_meta(&watcher.meta_path, &meta).unwrap();
+    }
 
     fn recovery_publishes_readiness(debounced: bool) {
         crate::test_support::with_isolated_home("watch-recovery", || {
@@ -1481,23 +1854,31 @@ mod tests {
             let dead = list_instances().unwrap();
             assert_eq!(dead.len(), 1);
             assert!(dead[0].registered);
-            assert!(!dead[0].alive);
+            assert_eq!(dead[0].alive, Some(false));
             assert!(!dead[0].ready);
+            assert!(!dead[0].index_ready);
 
             let watcher = acquire_instance_lock(std::slice::from_ref(&repo)).unwrap();
             let live = list_instances().unwrap();
             assert_eq!(live.len(), 1);
-            assert!(live[0].alive);
+            assert_eq!(live[0].alive, Some(true));
             assert!(!live[0].ready, "live but not yet reconciled");
+            assert!(!live[0].index_ready, "freshness is reported independently");
 
             crate::slice::ensure_fresh(&ALL_SLICES, &repo.to_string_lossy(), &Scope::Repo).unwrap();
             watcher.mark_ready(&repo).unwrap();
             let ready = list_instances().unwrap();
-            assert!(ready[0].registered && ready[0].alive && ready[0].ready);
+            assert!(ready[0].registered && ready[0].alive == Some(true) && ready[0].ready);
+            assert!(ready[0].index_ready);
             std::fs::write(repo.join("main.py"), "def changed():\n    return 345\n").unwrap();
             assert!(!list_instances().unwrap()[0].ready, "lag is observable");
             drop(watcher);
-            assert!(list_instances().unwrap().iter().all(|item| !item.alive));
+            assert!(
+                list_instances()
+                    .unwrap()
+                    .iter()
+                    .all(|item| item.alive == Some(false))
+            );
             let _ = std::fs::remove_dir_all(repo);
         });
     }
@@ -1625,7 +2006,7 @@ mod tests {
             );
             assert!(write_instance_meta(&meta_path_for(&set_path), &stale_meta).is_ok());
             assert!(
-                !instance_owner_is_current(&set_path, &owner, &stale_meta),
+                !instance_owner_is_current(&set_path, &owner, &stale_meta).unwrap(),
                 "a reused live PID without the watcher's kernel locks is stale"
             );
             let _ = std::fs::remove_dir_all(repo);
@@ -1637,8 +2018,10 @@ mod tests {
         let instance = |pid, repo: &str| WatchInstance {
             pid,
             registered: false,
-            alive: true,
+            alive: Some(true),
             ready: false,
+            index_ready: false,
+            ownership_error: None,
             repos: vec![repo.into()],
             lock_path: format!("/locks/{pid}.lock"),
             changed_paths: Vec::new(),
@@ -1678,6 +2061,268 @@ mod tests {
         assert!(!launchd_job_is_absent(
             "Boot-out failed: Operation not permitted"
         ));
+        assert_eq!(
+            state_from_supervisor_output(false, "inactive\n", "", "systemctl", |output| {
+                systemd_job_is_absent(output)
+                    || output
+                        .lines()
+                        .any(|line| matches!(line.trim(), "inactive" | "failed"))
+            })
+            .unwrap(),
+            SupervisorState::Inactive
+        );
+        assert!(
+            state_from_supervisor_output(
+                false,
+                "",
+                "Failed to connect: Operation not permitted",
+                "systemctl",
+                systemd_job_is_absent,
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("Operation not permitted")
+        );
+    }
+
+    #[test]
+    fn stale_entry_does_not_mask_new_live_ready_coverage() {
+        let repo = Path::new("/tmp/watcher-repo");
+        let stale = test_instance(Some(false), true, false);
+        let mut live = test_instance(Some(true), true, true);
+        live.ready = true;
+        live.pid = 456;
+        let instances = [stale, live];
+
+        assert_eq!(ready_instance(&instances, repo).unwrap().pid, 456);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_ignores_stale_set_lock_when_new_single_repo_owner_is_ready() {
+        crate::test_support::with_isolated_home("watch-stale-set-new-owner", || {
+            let (repo, _service, _registration) = registered_test_repo("stale-set-target");
+            let other = crate::db::path::config_dir().join("stale-set-other");
+            std::fs::create_dir_all(&other).unwrap();
+            let other = std::fs::canonicalize(other).unwrap();
+            let old = acquire_instance_lock(&[repo.clone(), other]).unwrap();
+            let old_lock_path = old.meta_path.with_extension("lock");
+            drop(old);
+
+            let mut old_meta = read_instance_meta(&meta_path_for(&old_lock_path)).unwrap();
+            old_meta.stopped = false;
+            write_instance_meta(&meta_path_for(&old_lock_path), &old_meta).unwrap();
+
+            let current = acquire_instance_lock(std::slice::from_ref(&repo)).unwrap();
+            crate::slice::ensure_fresh(&ALL_SLICES, &repo.to_string_lossy(), &Scope::Repo).unwrap();
+            current.mark_ready(&repo).unwrap();
+            let (bin, _log) = supervisor_stub("active", 0);
+            let _path = crate::test_support::PathOverride::new(&bin);
+
+            let instances = list_instances().unwrap();
+            let stale = instances
+                .iter()
+                .find(|item| Path::new(&item.lock_path) == old_lock_path)
+                .unwrap();
+            assert_eq!(stale.alive, Some(false));
+            let ready = ready_instance(&instances, &repo).unwrap();
+            assert_eq!(
+                ready.lock_path,
+                current.meta_path.with_extension("lock").to_string_lossy()
+            );
+
+            let status = ensure(&repo).unwrap();
+
+            assert_eq!(status.alive, Some(true));
+            assert!(status.ready);
+            assert!(status.index_ready);
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_unknown_owner_with_fresh_index_does_not_touch_host_state() {
+        crate::test_support::with_isolated_home("watch-ensure-unknown-fresh", || {
+            let (repo, service, registration) = registered_test_repo("ensure-unknown-fresh");
+            let watcher = acquire_instance_lock(std::slice::from_ref(&repo)).unwrap();
+            crate::slice::ensure_fresh(&ALL_SLICES, &repo.to_string_lossy(), &Scope::Repo).unwrap();
+            watcher.mark_ready(&repo).unwrap();
+            make_owner_unknown(&watcher);
+            let (bin, log) = supervisor_stub("Operation not permitted", 1);
+            let _path = crate::test_support::PathOverride::new(&bin);
+            let before = (
+                std::fs::read(&service).unwrap(),
+                std::fs::read(&registration).unwrap(),
+                std::fs::read(&watcher.meta_path).unwrap(),
+                std::fs::read(watcher.meta_path.with_extension("lock")).unwrap(),
+            );
+
+            let status = ensure(&repo).unwrap();
+
+            assert_eq!(status.alive, None);
+            assert!(!status.ready);
+            assert!(status.index_ready);
+            assert_eq!(
+                before,
+                (
+                    std::fs::read(&service).unwrap(),
+                    std::fs::read(&registration).unwrap(),
+                    std::fs::read(&watcher.meta_path).unwrap(),
+                    std::fs::read(watcher.meta_path.with_extension("lock")).unwrap(),
+                )
+            );
+            assert!(
+                !log.exists(),
+                "unknown ownership must not inspect or mutate the host service"
+            );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_unknown_owner_with_stale_index_stops_before_host_inspection() {
+        crate::test_support::with_isolated_home("watch-ensure-unknown-stale", || {
+            let (repo, service, registration) = registered_test_repo("ensure-unknown-stale");
+            let watcher = acquire_instance_lock(std::slice::from_ref(&repo)).unwrap();
+            make_owner_unknown(&watcher);
+            let (bin, log) = supervisor_stub("Operation not permitted", 1);
+            let _path = crate::test_support::PathOverride::new(&bin);
+            let before = (
+                std::fs::read(&service).unwrap(),
+                std::fs::read(&registration).unwrap(),
+            );
+
+            let error = ensure(&repo).unwrap_err().to_string();
+
+            assert!(error.contains("stale"));
+            assert!(error.contains("host"));
+            assert_eq!(
+                before,
+                (
+                    std::fs::read(&service).unwrap(),
+                    std::fs::read(&registration).unwrap()
+                )
+            );
+            assert!(!log.exists());
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_unresolved_locked_set_errors_before_host_inspection() {
+        crate::test_support::with_isolated_home("watch-ensure-unresolved", || {
+            let (repo, service, registration) = registered_test_repo("ensure-unresolved");
+            let lock_dir = crate::db::path::config_dir().join("watch-locks");
+            let orphan = open_lock_file(&lock_dir.join("unknown-set.lock")).unwrap();
+            assert!(try_lock_file(&orphan).unwrap());
+            let (bin, log) = supervisor_stub("Operation not permitted", 1);
+            let _path = crate::test_support::PathOverride::new(&bin);
+            let before = (
+                std::fs::read(&service).unwrap(),
+                std::fs::read(&registration).unwrap(),
+            );
+
+            let error = ensure(&repo).unwrap_err().to_string();
+
+            assert!(error.contains("determine the repositories"));
+            assert!(error.contains("host"));
+            assert_eq!(
+                before,
+                (
+                    std::fs::read(&service).unwrap(),
+                    std::fs::read(&registration).unwrap()
+                )
+            );
+            assert!(!log.exists());
+            drop(orphan);
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_supervisor_denial_keeps_fresh_index_and_registration_read_only() {
+        crate::test_support::with_isolated_home("watch-ensure-supervisor-denied", || {
+            let (repo, service, registration) = registered_test_repo("ensure-supervisor-denied");
+            let watcher = acquire_instance_lock(std::slice::from_ref(&repo)).unwrap();
+            crate::slice::ensure_fresh(&ALL_SLICES, &repo.to_string_lossy(), &Scope::Repo).unwrap();
+            watcher.mark_ready(&repo).unwrap();
+            let (bin, log) = supervisor_stub("Operation not permitted", 1);
+            let _path = crate::test_support::PathOverride::new(&bin);
+            let before = (
+                std::fs::read(&service).unwrap(),
+                std::fs::read(&registration).unwrap(),
+                std::fs::read(&watcher.meta_path).unwrap(),
+                std::fs::read(watcher.meta_path.with_extension("lock")).unwrap(),
+            );
+
+            let status = ensure(&repo).unwrap();
+
+            assert_eq!(status.alive, Some(true));
+            assert!(!status.ready);
+            assert!(status.index_ready);
+            let calls = std::fs::read_to_string(&log).unwrap();
+            assert!(calls.contains("is-active") || calls.contains("print"));
+            assert!(!calls.contains("disable"));
+            assert!(!calls.contains("bootout"));
+            assert_eq!(
+                before,
+                (
+                    std::fs::read(&service).unwrap(),
+                    std::fs::read(&registration).unwrap(),
+                    std::fs::read(&watcher.meta_path).unwrap(),
+                    std::fs::read(watcher.meta_path.with_extension("lock")).unwrap(),
+                )
+            );
+        });
+    }
+
+    #[test]
+    fn ownership_probe_errors_are_not_reported_as_stopped() {
+        crate::test_support::with_isolated_home("watch-unknown-owner", || {
+            let repo = PathBuf::from("/tmp/watch-unknown-owner");
+            let lock_path = crate::db::path::config_dir().join("watch-locks/unknown.lock");
+            let service = service_path(&repo);
+            let registration = registration_path(&repo);
+            std::fs::create_dir_all(service.parent().unwrap()).unwrap();
+            std::fs::create_dir_all(registration.parent().unwrap()).unwrap();
+            std::fs::write(&service, "service definition").unwrap();
+            std::fs::write(&registration, "registered").unwrap();
+            let instance = WatchInstance {
+                pid: std::process::id(),
+                registered: true,
+                alive: None,
+                ready: false,
+                index_ready: true,
+                ownership_error: Some("permission denied".into()),
+                repos: vec![repo.to_string_lossy().into_owned()],
+                lock_path: lock_path.to_string_lossy().into_owned(),
+                changed_paths: Vec::new(),
+            };
+
+            assert!(stop_instance(&instance).is_err());
+            assert!(
+                service.exists(),
+                "denied ownership must not unregister the host job"
+            );
+            assert!(
+                registration.exists(),
+                "denied ownership must not clean registration"
+            );
+        });
+    }
+
+    fn test_instance(alive: Option<bool>, registered: bool, index_ready: bool) -> WatchInstance {
+        WatchInstance {
+            pid: 123,
+            registered,
+            alive,
+            ready: false,
+            index_ready,
+            ownership_error: alive.is_none().then(|| "permission denied".into()),
+            repos: vec!["/tmp/watcher-repo".into()],
+            lock_path: "/tmp/watcher.lock".into(),
+            changed_paths: Vec::new(),
+        }
     }
 
     #[test]

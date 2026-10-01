@@ -54,6 +54,8 @@ own rules — this map only says where to look.
   self-contained HTML explanation.
 - **`varde-change`** — the change lifecycle: status, plan, build, verify,
   orchestrate a split plan, or fix a named bug evidence-first.
+- **`varde-code`** — indexed source lookups for declarations, file
+  relationships, and topic-based reading sets.
 - **`varde-review`** — report findings read-only, apply a persisted review
   (fix), tighten just-changed lines (simplify), or triage `varde-code` rules
   (scan).
@@ -112,20 +114,27 @@ Do not convert one shape to the other for consistency alone.
 
 ## Internal techniques
 
-Worktree isolation and `varde-code` navigation are techniques, not skills.
-Each consuming skill carries its own copy of `references/varde-code.md`.
-Worktrees live only in `varde-change` (`references/worktree.md`,
+Worktrees live only in `varde-change` (`references/build-worktree.md`,
 `scripts/worktree-*.sh`), for parallel executor waves, refactor tasks, and
 explicit requests.
 
-Edit the copy inside the skill that uses it. There is no shared source and no
-sync step: a skill that cannot be copied on its own is the bug being avoided.
+Shared CLI references live once under `skills/shared/references/`. The
+`skills/shared/MANIFEST` lists their consuming skills, and `skills/install.sh`
+copies each reference into those skills during installation. Edit the shared
+source, not an installed copy. A shared file holds only content that
+two or more skills use; `tests/shared-single-source.sh` fails when its text
+also appears elsewhere. `tests/install-shared-files.sh` checks that installed
+copies match the shared sources.
 
-Most of each copy is meant to differ — every skill lists the operations it
-actually uses. The shared contract is not, and a fix landing in one copy while
-its siblings keep the old text is the failure mode this model invites.
-`tests/vendored-copies.sh` pins the sections that must stay in step; add a
-section to its manifest when a new one becomes contract.
+`tests/vendored-copies.sh` keeps the inlined memory-location paragraph aligned
+across skills. It still pins that paragraph while CLI references use the
+shared-file installer.
+
+The review-gate references and `risk-tier.py` instead have a single source
+under `skills/shared/`, listed in `skills/shared/MANIFEST` (`<path> <skill>
+...`). `install.sh` copies each into every skill its manifest row names, so
+an installed skill is still self-contained; edit the file under
+`skills/shared/`, not an installed copy.
 
 ### Adding a review category
 
@@ -160,7 +169,7 @@ responses and performs no billed evaluations.
 ## Change execution checks
 
 Build strategies are `inline`, `parallel`, and `auto`. A `parallel` wave runs
-two or three `executor` subagents, each in its own worktree, on tasks that
+two or three `varde-executor` subagents, each in its own worktree, on tasks that
 `varde-code blast_radius` shows are independent; everything else runs inline.
 Tasks declare one testing profile and end with a prose evidence line.
 Run the focused fixtures from the repository root:

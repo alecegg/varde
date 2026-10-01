@@ -101,6 +101,22 @@ report path. It uses a verified native event ID or an independently revalidated
 append-stable JSONL line position and digest; uncertain or inherited identity
 stays report-only.
 
+Or let the CLI build the request from the frozen bundle:
+
+```sh
+varde-learn diagnose capture --snapshot <bundle.json> --source-id <id> \
+  --record-index <n> [--native-id <id>] --kind <kind> --evidence <text> \
+  (--item-id <id> | --item-source <s> --item-title <t> [--item-target <path>]) --json
+```
+
+The flag form finds the bundle record with that source ID and record index and
+copies its whole anchor, so OpenCode session, sequence, and context fields
+survive. OpenCode family bundles share one source ID across parent and child
+sessions and restart each session's sequence, so an index can match several
+records; `diagnose_record_ambiguous` then asks for `--native-id`. `--file` and
+the flag form are mutually exclusive, and both run the same validation and
+write path.
+
 Diagnosis reports stay under the configured working store until explicitly
 removed. Reports and bundles can contain private source excerpts and paths;
 review them before sharing. Diagnosis is separate from evaluations, which

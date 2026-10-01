@@ -612,14 +612,10 @@ fn check_q_map_path(db: &std::path::Path) -> Result<(), String> {
     nonempty(&env, "map_path")
 }
 
-fn check_q_detect_changes(_db: &std::path::Path) -> Result<(), String> {
-    // Envelope conformance: git diff against /tmp yields an ok:true envelope
-    // (possibly empty change list).
-    let env = qrun(
-        "detect_changes",
-        std::path::Path::new("/tmp/index.db"),
-        r#""diffMode":"working_tree","repoRoot":"/tmp""#,
-    );
+fn check_q_detect_changes(db: &std::path::Path) -> Result<(), String> {
+    // Envelope conformance: use the fixture database and its temporary repo
+    // root so this query does not depend on a machine-specific index path.
+    let env = qrun("detect_changes", db, r#""diffMode":"working_tree""#);
     assert_ok(&env, "detect_changes")
 }
 

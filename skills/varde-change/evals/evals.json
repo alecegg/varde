@@ -17,7 +17,7 @@
     {
       "id": 2,
       "prompt": "I want to add rate limiting to the public API. Let's figure out what that involves.",
-      "expected_output": "Dispatches to references/plan-start.md \u2014 the request defines scope rather than naming a concrete change to make. Creates plan.md from the initial prompt before asking anything, seeded with a best-guess Problem/Solution and unknowns routed into ## Open Questions / ## Assumptions, reports the path, then works the open questions one per turn. Authors no task files and writes no production code.",
+      "expected_output": "Dispatches to references/plan.md because the request defines scope rather than naming a concrete change. Creates plan.md from the initial prompt before asking anything, seeded with a best-guess Problem/Solution and unknowns routed into ## Open Questions / ## Assumptions, reports the path, then works the open questions one per turn. Authors no task files and writes no production code.",
       "assertions": [
         "Creates a plan rather than asking the user which mode to use",
         "Creates plan.md seeded with a best guess before asking the first question",
@@ -161,7 +161,7 @@
     {
       "id": 13,
       "prompt": "Resume planning.",
-      "expected_output": "Dispatches to references/plan-resume.md for a resume request with no feature named. Finds drafts under memory-bank/working/plans/: 2026-09-02-beta-draft qualifies (its id ends in -draft and its Open Questions line is unresolved); 2026-09-01-alpha does not (its only Open Questions line is n/a \u2014 resolved). Lists only the qualifying draft and asks which to resume, without changing either plan file.",
+      "expected_output": "Dispatches to references/plan.md, Resume a draft, for a resume request with no feature named. Finds drafts under memory-bank/working/plans/: 2026-09-02-beta-draft qualifies (its id ends in -draft and its Open Questions line is unresolved); 2026-09-01-alpha does not (its only Open Questions line is n/a, resolved). Lists only the qualifying draft and asks which to resume, without changing either plan file.",
       "assertions": [
         "Lists 2026-09-02-beta-draft as a draft to resume",
         "Does not list 2026-09-01-alpha, whose Open Questions are all n/a",
@@ -187,7 +187,7 @@
     {
       "id": 15,
       "prompt": "Finalize the widget exporter plan at memory-bank/working/plans/2026-09-10-widget-exporter-draft/plan.md. Nothing left to resolve.",
-      "expected_output": "Follows plan-fundamentals.md Finalize: derives the slug widget-exporter from the title, moves the untracked draft directory (plain mv, since it was never committed) from its -draft id to 2026-09-10-widget-exporter, obtains independent plan review (not an in-agent fresh-eyes pass) and final completeness check, validates the plan, and leaves it status: backlog without creating task files.",
+      "expected_output": "Follows Finalize in references/plan.md: derives the slug widget-exporter from the title, checks whether the destination is ignored once, renames the draft directory with the matching move command, obtains independent plan review and a final completeness check, validates the plan, and leaves it status: backlog without creating task files.",
       "assertions": [
         "Renames the plan directory from its -draft id to a slug derived from the title",
         "Confirms no live Open Questions remain before finalizing",
@@ -210,7 +210,7 @@
     },
     {
       "id": 17,
-      "prompt": "During plan growth, the scope adds passwordless login beside an existing password-only account model. The plan's current user identity is the password login. Run plan-fundamentals self-review before finalization.",
+      "prompt": "During plan growth, the scope adds passwordless login beside an existing password-only account model. The plan's current user identity is the password login. Run planning self-review before finalization.",
       "expected_output": "Recognizes a singular-to-plural identity shift outside code blocks. Adds one Open Question asking whether the new general account identity should become primary or whether passwordless should be added alongside the password login, with a recommendation grounded in the plan. After the user's answer, records promote or add-alongside and its rationale in Decisions so far; the advisory check itself does not block finalization.",
       "assertions": [
         "Raises exactly one promote-vs-add-alongside identity-model Open Question for the detected second auth method",
@@ -221,7 +221,7 @@
     },
     {
       "id": 18,
-      "prompt": "During plan growth, the only mention of a second auth method is inside a fenced example code block; the actual scope adds logging to one existing auth method. Run plan-fundamentals self-review.",
+      "prompt": "During plan growth, the only mention of a second auth method is inside a fenced example code block; the actual scope adds logging to one existing auth method. Run planning self-review.",
       "expected_output": "Ignores the fenced example and stays silent on the identity-model checkpoint because the plan's actual scope keeps a single auth method and identity anchor.",
       "assertions": [
         "Ignores shift words inside fenced code blocks",

@@ -1,0 +1,7 @@
+scripts/risk-tier.py varde-agent-doc-authoring varde-change varde-docs varde-manage varde-review
+references/varde-code-cli.md varde-change varde-docs varde-explore varde-review
+references/varde-workflow-cli.md varde-change varde-knowledge
+references/review-gates.md varde-agent-doc-authoring varde-change varde-docs varde-manage varde-review
+references/review-gate-record.md varde-agent-doc-authoring varde-change varde-docs varde-manage varde-review
+references/review-gate-plan.md varde-agent-doc-authoring varde-change varde-docs varde-manage varde-review
+references/review-gate-worktree.md varde-agent-doc-authoring varde-change varde-docs varde-manage varde-review

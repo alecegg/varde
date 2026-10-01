@@ -41,7 +41,7 @@ jobs:
             os: ubuntu-22.04
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -84,7 +84,7 @@ jobs:
           tar czf varde-code-${{ matrix.target }}.tar.gz varde-code THIRD-PARTY-LICENSES.md
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: varde-code-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/varde-code-${{ matrix.target }}.tar.gz
@@ -100,7 +100,7 @@ jobs:
       attestations: write # record the provenance attestation
     steps:
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
@@ -111,12 +111,12 @@ jobs:
           sha256sum *.tar.gz | tee SHA256SUMS
 
       - name: Attest build provenance for the release binaries
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-path: dist/*.tar.gz
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.tar.gz

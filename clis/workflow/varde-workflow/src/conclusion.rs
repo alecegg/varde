@@ -7,7 +7,7 @@ use serde_yaml::{Mapping, Value as YamlValue};
 use sha1::{Digest, Sha1};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use varde_workflow_core::memory::{self, MemoryPaths};
+use varde_workflow_core::memory::{self, MemoryKind, MemoryPaths, Source};
 
 #[derive(Debug)]
 pub struct PreparedConclusion {
@@ -40,6 +40,7 @@ impl PreparedConclusion {
 
 pub fn prepare_with_memory(plan_path: &Path, memory: MemoryPaths) -> Result<PreparedConclusion> {
     let plan_path = plan_path.canonicalize()?;
+    let (memory, _) = memory_for_root(&memory.root)?;
     let root = memory.root.clone();
     let snapshot = collect_input_sources(&plan_path, &memory)?;
     let plan_bytes = snapshot.plan_bytes;
@@ -505,20 +506,38 @@ pub fn update_action(
 
 fn output_memory(plan_path: &Path) -> Result<MemoryPaths> {
     let root = project_root(&plan_path.canonicalize()?)?;
-    let mut paths = MemoryPaths::resolve(&root)?;
-    // Memory stores use the shared repository identity; <repo> names this checkout.
-    if let Ok(output) = std::process::Command::new("git")
+    let (mut paths, checkout) = memory_for_root(&root)?;
+    paths.root = checkout;
+    Ok(paths)
+}
+
+fn memory_for_root(root: &Path) -> Result<(MemoryPaths, PathBuf)> {
+    let checkout = if let Ok(output) = std::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
         .output()
         && output.status.success()
     {
-        let checkout = PathBuf::from(String::from_utf8(output.stdout)?.trim());
-        let checkout = checkout.canonicalize()?;
-        if memory::repository_memory_root(&checkout) == paths.root {
-            paths.root = checkout;
+        let checkout = PathBuf::from(String::from_utf8(output.stdout)?.trim()).canonicalize()?;
+        if memory::repository_memory_root(&checkout) == root {
+            checkout
+        } else {
+            root.to_path_buf()
+        }
+    } else {
+        root.to_path_buf()
+    };
+    let mut paths = MemoryPaths::resolve(&checkout)?;
+    if checkout != root {
+        // MemoryPaths resolves linked worktrees through their shared repository root.
+        // Built-in stores belong to the invoking checkout; configured stores keep precedence.
+        if paths.working.source == Source::Builtin {
+            paths.working.path = checkout.join(MemoryKind::Working.default_relative());
+        }
+        if paths.knowledge.source == Source::Builtin {
+            paths.knowledge.path = checkout.join(MemoryKind::Knowledge.default_relative());
         }
     }
-    Ok(paths)
+    Ok((paths, checkout))
 }
 
 fn output_roots(memory: &MemoryPaths) -> [(&'static str, &Path); 3] {
@@ -604,6 +623,45 @@ fn resolve_output_reference(memory: &MemoryPaths, reference: &str) -> Result<Pat
     Ok(path)
 }
 
+fn replace_embedded_root(output: &mut String, root: &str, token: &str) {
+    let mut cursor = 0;
+    while let Some(offset) = output[cursor..].find(root) {
+        let start = cursor + offset;
+        let end = start + root.len();
+        let starts_at_boundary = output[..start].chars().next_back().is_none_or(|character| {
+            !character.is_alphanumeric() && !matches!(character, '_' | '/' | '\\')
+        });
+        let has_child_path = output[end..]
+            .chars()
+            .next()
+            .is_some_and(|character| character == std::path::MAIN_SEPARATOR || character == '/');
+        if starts_at_boundary && has_child_path {
+            output.replace_range(start..end, token);
+            cursor = start + token.len();
+        } else {
+            cursor = end;
+        }
+    }
+}
+
+fn normalize_embedded_roots(memory: &MemoryPaths, output: &str) -> String {
+    let mut roots: Vec<_> = output_roots(memory)
+        .into_iter()
+        .filter_map(|(token, root)| {
+            let root = resolve_output_path(root).ok()?;
+            let text = root.to_str()?.to_owned();
+            Some((root.components().count(), token, text))
+        })
+        .collect();
+    roots.sort_by_key(|(depth, _, _)| std::cmp::Reverse(*depth));
+
+    let mut normalized = output.to_owned();
+    for (_, token, root) in roots {
+        replace_embedded_root(&mut normalized, &root, token);
+    }
+    normalized
+}
+
 fn normalize_output(memory: &MemoryPaths, output: &str) -> Result<String> {
     if output
         .get(..5)
@@ -616,7 +674,7 @@ fn normalize_output(memory: &MemoryPaths, output: &str) -> Result<String> {
         return Ok(output.to_string());
     }
     if !Path::new(output).is_absolute() {
-        return Ok(output.to_string());
+        return Ok(normalize_embedded_roots(memory, output));
     }
     let path = resolve_output_path(Path::new(output))?;
     let mut matches = Vec::new();
@@ -671,7 +729,7 @@ impl PostActionDocument {
     fn resolve_path(plan_path: &Path) -> Result<PathBuf> {
         let plan_path = plan_path.canonicalize()?;
         let root = project_root(&plan_path)?;
-        let memory = MemoryPaths::resolve(&root)?;
+        let (memory, _) = memory_for_root(&root)?;
         let plan_id = plan_id(&plan_path)?;
         require_safe_id(&plan_id, "plan id")?;
         let post_root = memory

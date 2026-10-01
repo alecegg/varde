@@ -139,10 +139,11 @@ if [[ "$prompt" == *'You are grading'* ]]; then cat "$JUDGE"; else cat "$MOCK_TR
     let args = fs::read_to_string(workspace.path().join("args")).unwrap();
     let calls: Vec<_> = args.split("exec\n").skip(1).collect();
     assert_eq!(calls.len(), 2);
-    assert!(calls[0].contains("workspace-write"));
+    // codex rejects --sandbox with --approve-for-me, which implies workspace-write.
+    assert!(!calls[0].contains("--sandbox"));
     assert!(calls[0].contains("run-model"));
     assert!(calls[0].contains("--approve-for-me"));
-    assert!(calls[1].contains("read-only"));
+    assert!(calls[1].contains("--sandbox\nread-only"));
     assert!(calls[1].contains("judge-model"));
     assert!(!calls[1].contains("--approve-for-me"));
     let dir = workspace

@@ -28,18 +28,7 @@ fn show(project: Option<&Path>, json: bool) -> Result<()> {
         Err(error) => return report_error(&InternalError(error.to_string()), json),
     };
     if json {
-        let mut data = json!({
-            "root": paths.root,
-            "working": paths.working.path,
-            "working_source": paths.working.source,
-            "knowledge": paths.knowledge.path,
-            "knowledge_source": paths.knowledge.source,
-            "learn": paths.learn.path,
-            "learn_source": paths.learn.source,
-            "toz": paths.toz.as_ref().map(|resolved| &resolved.path),
-            "toz_source": paths.toz.as_ref().map(|resolved| resolved.source.to_string()),
-            "config": paths.config,
-        });
+        let mut data = resolved_paths_data(&paths, &paths.config);
         report_ignored_legacy(&mut data);
         print_success(data)
     } else {
@@ -189,18 +178,7 @@ fn finish(config: &Config, root: Option<&Path>, config_path: PathBuf, json: bool
             let paths = MemoryPaths::resolve_with(root, config)
                 .map_err(|error| anyhow::anyhow!(error.to_string()))?;
             if json {
-                let mut data = json!({
-                    "root": paths.root,
-                    "working": paths.working.path,
-                    "working_source": paths.working.source,
-                    "knowledge": paths.knowledge.path,
-                    "knowledge_source": paths.knowledge.source,
-                    "learn": paths.learn.path,
-                    "learn_source": paths.learn.source,
-                    "toz": paths.toz.as_ref().map(|resolved| &resolved.path),
-                    "toz_source": paths.toz.as_ref().map(|resolved| resolved.source.to_string()),
-                    "config": config_path,
-                });
+                let mut data = resolved_paths_data(&paths, &config_path);
                 report_ignored_legacy(&mut data);
                 print_success(data)
             } else {
@@ -234,6 +212,21 @@ fn finish(config: &Config, root: Option<&Path>, config_path: PathBuf, json: bool
             }
         }
     }
+}
+
+fn resolved_paths_data(paths: &MemoryPaths, config: &Path) -> serde_json::Value {
+    json!({
+        "root": paths.root,
+        "working": paths.working.path,
+        "working_source": paths.working.source,
+        "knowledge": paths.knowledge.path,
+        "knowledge_source": paths.knowledge.source,
+        "learn": paths.learn.path,
+        "learn_source": paths.learn.source,
+        "toz": paths.toz.as_ref().map(|resolved| &resolved.path),
+        "toz_source": paths.toz.as_ref().map(|resolved| resolved.source.to_string()),
+        "config": config,
+    })
 }
 
 fn report_ignored_legacy(data: &mut serde_json::Value) {

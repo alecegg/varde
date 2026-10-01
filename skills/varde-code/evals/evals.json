@@ -1,0 +1,60 @@
+{
+  "skill_name": "varde-code",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I know the `TokenBucket` symbol is in this repository. Find its declaration and show its body.",
+      "expected_output": "Use `get_symbol` directly with the known name and request `includeBody:true`. Read the returned source to verify the declaration. Do not require a `nav_map` or `context_pack` chain first.",
+      "assertions": [
+        "Routes the known declaration to `get_symbol`",
+        "Requests the body because the user asked to see it",
+        "Does not require broad orientation queries before the lookup"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Give me a compact, ordered set of source files to read for the auth refresh path. Keep the `context_pack` output estimate near 1,500 tokens.",
+      "expected_output": "Use `context_pack` with the topic and `maxTokensEstimate:1500`, then use its `readingOrder` to read source files. Explain that matching is structural and the token figure is an estimate, not an actual tokenizer or global context cap; note the default is 4000 and `includeReadingOrder:false` omits the duplicated list when appropriate.",
+      "assertions": [
+        "Routes a topic-based code reading set to `context_pack`",
+        "Uses `readingOrder` to guide source reads",
+        "Treats `maxTokensEstimate` as a bytes/4 estimate, not an actual tokenizer or global context cap",
+        "Knows the default estimate is 4000 and `includeReadingOrder:false` omits the duplicated order",
+        "Does not claim `context_pack` searches documentation or semantic content"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "For `src/cache/store.rs`, tell me what files it imports and which files depend on it.",
+      "expected_output": "Use `dependencies` and `dependents` with the same `filePath`, setting `maxDepth:1` on both because the request asks for direct imports and dependents. Inspect the returned relationships and source files; describe the graph as potentially incomplete where completeness matters.",
+      "assertions": [
+        "Uses `dependencies` for files imported by the target",
+        "Uses `dependents` for files that depend on the target",
+        "Sets maxDepth:1 for direct imports and dependents",
+        "Knows omitted maxDepth is transitive and maxDepth:1 is direct-only",
+        "Does not present indexed edges as a complete proof without source checks"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "I am a subagent and `varde-code context_pack` returns `index_stale`. What should I do to find the relevant source files?",
+      "expected_output": "Use `Read`, `Grep`, `Glob`, or `rg` for this query and report degraded index access. Do not start a watcher or build an index; the parent owns watcher setup and must confirm coverage for this checkout.",
+      "assertions": [
+        "Falls back to source tools after `index_stale`",
+        "Reports degraded index access",
+        "Does not start or rebuild the watcher from a worker context"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "A `context_pack` result is truncated, and its envelope has a `meta.toz.handle`. Get the missing files after offset 20, but keep the query's result limits in mind.",
+      "expected_output": "Inspect the captured output first with `varde-toz query --handle <H>`. If it lacks the needed section, request `resultsOffset:20` with `fullResults:true`; full results bypass result caps while still honoring the offset. Do not describe the output estimate as a model-token or global context guarantee.",
+      "assertions": [
+        "Uses varde-toz capture first when a handle is present",
+        "Uses paging or fullResults only when capture lacks needed sections",
+        "States fullResults honors resultsOffset while bypassing result caps",
+        "Does not claim a global budget or actual tokenizer guarantee"
+      ]
+    }
+  ]
+}

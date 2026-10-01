@@ -8,9 +8,12 @@
 //! sandbox is still on disk.
 
 use std::collections::HashSet;
+use std::ffi::CString;
 use std::fs;
+use std::io::{self, Read, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::thread;
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -21,6 +24,8 @@ use crate::{ExitResult, RunOutcome as ProcessOutcome, RunRequest, run_with_timeo
 use super::adapter;
 use super::run::extract_transcript;
 use super::{Config, EvalCase, EvalOutcome, OutputHarness};
+
+const MAX_VERIFICATION_OUTPUT_BYTES: usize = 1024 * 1024;
 
 /// One assertion's grading result, merged from verification and judge
 /// output, or synthesized when neither source covered it.
@@ -209,28 +214,113 @@ fn run_deterministic_verification(
         return Ok(Vec::new());
     };
     let script_path = req.skill_dir.join(script_rel);
-    let output = Command::new("bash")
-        .arg(&script_path)
-        .current_dir(req.sbox)
-        .envs(req.env.iter().map(|(key, value)| (key, value)))
-        .env("EVAL_ID", &req.eval.id)
-        .env("EVAL_CONFIG", req.cfg.as_str())
-        .env("EVAL_RUN", req.run.to_string())
-        .env("EVAL_RUN_DIR", req.run_dir_abs)
-        .env(
-            "EVAL_TRANSCRIPT",
-            req.run_dir_abs.join("outputs").join("transcript.txt"),
-        )
-        .env("EVAL_SKILL_DIR", req.skill_dir)
-        .env("EVAL_SANDBOX_DIR", req.sbox)
-        .env("EVAL_RUN_START", req.eval_run_start.to_string())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .output()
-        .map_err(|err| LearnError::Usage(format!("failed to launch verification_script: {err}")))?;
-    fs::write(req.run_dir.join("verification.json"), &output.stdout)
-        .map_err(|err| LearnError::Usage(format!("failed to write verification.json: {err}")))?;
-    if !output.status.success() {
+    let verification_path = req.run_dir.join("verification.json");
+    let temporary_dir = tempfile::Builder::new()
+        .prefix("varde-verification-")
+        .tempdir_in(req.run_dir)
+        .map_err(|err| {
+            LearnError::Usage(format!("failed to create verification temp dir: {err}"))
+        })?;
+    let fifo_path = temporary_dir.path().join("stdout.fifo");
+    let stderr_path = temporary_dir.path().join("stderr");
+    let pgid_path = temporary_dir.path().join("process-group-id");
+    let fifo_cstring = CString::new(fifo_path.as_os_str().as_bytes())
+        .map_err(|err| LearnError::Usage(format!("invalid verification FIFO path: {err}")))?;
+    // SAFETY: fifo_cstring is a valid NUL-terminated path, mode is valid,
+    // and temporary_dir owns the path for the whole capture lifetime.
+    if unsafe { libc::mkfifo(fifo_cstring.as_ptr(), 0o600) } == -1 {
+        return Err(LearnError::Usage(format!(
+            "failed to create verification output FIFO: {}",
+            io::Error::last_os_error()
+        )));
+    }
+    let capture_path = verification_path.clone();
+    let capture_fifo_path = fifo_path.clone();
+    let capture_pgid_path = pgid_path.clone();
+    let capture_thread = thread::spawn(move || {
+        capture_verification_output(&capture_fifo_path, &capture_path, &capture_pgid_path)
+    });
+    let wrapper = "printf '%s\\n' \"$$\" > \"$2\"; exec bash \"$1\"".to_string();
+    let args = vec![
+        "-c".to_string(),
+        wrapper,
+        "varde-verification".to_string(),
+        script_path.display().to_string(),
+        pgid_path.display().to_string(),
+    ];
+    let mut env = req.env.to_vec();
+    env.extend([
+        ("EVAL_ID".to_string(), req.eval.id.clone()),
+        ("EVAL_CONFIG".to_string(), req.cfg.as_str().to_string()),
+        ("EVAL_RUN".to_string(), req.run.to_string()),
+        (
+            "EVAL_RUN_DIR".to_string(),
+            req.run_dir_abs.display().to_string(),
+        ),
+        (
+            "EVAL_TRANSCRIPT".to_string(),
+            req.run_dir_abs
+                .join("outputs")
+                .join("transcript.txt")
+                .display()
+                .to_string(),
+        ),
+        (
+            "EVAL_SKILL_DIR".to_string(),
+            req.skill_dir.display().to_string(),
+        ),
+        (
+            "EVAL_SANDBOX_DIR".to_string(),
+            req.sbox.display().to_string(),
+        ),
+        ("EVAL_RUN_START".to_string(), req.eval_run_start.to_string()),
+    ]);
+    let request = RunRequest {
+        program: "bash",
+        args: &args,
+        cwd: Some(req.sbox),
+        env: &env,
+        stdin: &[],
+        stdout_path: &fifo_path,
+        stderr_path: &stderr_path,
+        timeout: Duration::from_secs(req.timeout_seconds),
+    };
+    let outcome = run_with_timeout(&request);
+    let process_group_cleanup = if outcome.is_ok() {
+        kill_verification_process_group(&pgid_path)
+    } else {
+        Ok(())
+    };
+    let capture_result = capture_thread
+        .join()
+        .map_err(|_| LearnError::Usage("verification output reader panicked".to_string()))?;
+    let stderr_result = forward_file_to_stderr(&stderr_path);
+    stderr_result?;
+    process_group_cleanup.map_err(|err| {
+        LearnError::Usage(format!("failed to clean verification process group: {err}"))
+    })?;
+    let outcome = outcome?;
+    let output_exceeded_limit = capture_result.map_err(|err| {
+        LearnError::Usage(format!("failed to capture verification output: {err}"))
+    })?;
+    if output_exceeded_limit {
+        return Err(LearnError::Usage(format!(
+            "verification_script output exceeded the {MAX_VERIFICATION_OUTPUT_BYTES} byte limit for eval {}, {} run {}; return a smaller JSON result",
+            req.eval.id,
+            req.cfg.as_str(),
+            req.run
+        )));
+    }
+    if outcome == ProcessOutcome::TimedOut {
+        return Err(LearnError::Usage(format!(
+            "verification_script timed out after {} seconds for eval {}, {} run {}",
+            req.timeout_seconds,
+            req.eval.id,
+            req.cfg.as_str(),
+            req.run
+        )));
+    }
+    if outcome != ProcessOutcome::Completed(ExitResult::Code(0)) {
         return Err(LearnError::Usage(format!(
             "verification_script failed for eval {}, {} run {}",
             req.eval.id,
@@ -238,6 +328,14 @@ fn run_deterministic_verification(
             req.run
         )));
     }
+
+    let mut output = Vec::with_capacity(MAX_VERIFICATION_OUTPUT_BYTES);
+    fs::File::open(&verification_path)
+        .and_then(|file| {
+            file.take(MAX_VERIFICATION_OUTPUT_BYTES as u64)
+                .read_to_end(&mut output)
+        })
+        .map_err(|err| LearnError::Usage(format!("failed to read verification.json: {err}")))?;
 
     let invalid = || {
         LearnError::Usage(format!(
@@ -247,7 +345,7 @@ fn run_deterministic_verification(
             req.run
         ))
     };
-    let value: Value = serde_json::from_slice(&output.stdout).map_err(|_| invalid())?;
+    let value: Value = serde_json::from_slice(&output).map_err(|_| invalid())?;
     let results = value
         .get("results")
         .and_then(Value::as_array)
@@ -281,6 +379,66 @@ fn run_deterministic_verification(
         });
     }
     Ok(out)
+}
+
+fn forward_file_to_stderr(path: &Path) -> Result<(), LearnError> {
+    let mut file = fs::File::open(path)
+        .map_err(|err| LearnError::Usage(format!("failed to read verification stderr: {err}")))?;
+    io::copy(&mut file, &mut io::stderr().lock())
+        .map_err(|err| LearnError::Usage(format!("failed to write verification stderr: {err}")))?;
+    Ok(())
+}
+
+fn kill_verification_process_group(pgid_path: &Path) -> io::Result<()> {
+    let pgid: i32 = fs::read_to_string(pgid_path)?
+        .trim()
+        .parse()
+        .map_err(|err| io::Error::other(format!("parse verification process group: {err}")))?;
+    // SAFETY: pgid is written by this child immediately before it execs the
+    // verification script, and the direct child has exited or timed out.
+    if unsafe { libc::killpg(pgid, libc::SIGKILL) } == -1 {
+        let err = io::Error::last_os_error();
+        if err.raw_os_error() != Some(libc::ESRCH) {
+            return Err(err);
+        }
+    }
+    Ok(())
+}
+
+/// Streams script stdout to its artifact without retaining it in memory.
+/// Once one byte beyond the artifact limit arrives, kill the script's whole
+/// process group and continue draining until the pipe closes.
+fn capture_verification_output(
+    fifo_path: &Path,
+    output_path: &Path,
+    pgid_path: &Path,
+) -> io::Result<bool> {
+    let mut input = fs::File::open(fifo_path)?;
+    let mut output = fs::File::create(output_path)?;
+    let mut buffer = [0; 64 * 1024];
+    let mut written = 0usize;
+    let mut exceeded_limit = false;
+
+    loop {
+        let read = input.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        if exceeded_limit {
+            continue;
+        }
+
+        let keep = read.min(MAX_VERIFICATION_OUTPUT_BYTES - written);
+        output.write_all(&buffer[..keep])?;
+        written += keep;
+        if keep < read {
+            exceeded_limit = true;
+            kill_verification_process_group(pgid_path)?;
+        }
+    }
+
+    output.flush()?;
+    Ok(exceeded_limit)
 }
 
 /// Ports `run_llm_judge()`: builds the grading prompt (expected output,

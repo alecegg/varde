@@ -317,7 +317,29 @@ fn store_raw(
         let mut err = Vec::with_capacity(stderr_bytes as usize);
         stdout.read_to_end(&mut out)?;
         stderr.read_to_end(&mut err)?;
-        Ok(raw.store_with_source(source, &capture::source_key(source), &out, &err)?)
+        let source_key = capture::source_key(source);
+        match raw.store_with_source(source, &source_key, &out, &err) {
+            Ok(handle) => Ok(handle),
+            Err(RawError::Io {
+                source: ref cause, ..
+            }) if matches!(
+                cause.kind(),
+                io::ErrorKind::PermissionDenied
+                    | io::ErrorKind::NotADirectory
+                    | io::ErrorKind::ReadOnlyFilesystem
+            ) =>
+            {
+                let fallback = project
+                    .fallback_db_path()
+                    .and_then(|path| path.parent().map(Path::to_path_buf))
+                    .context("primary raw store unavailable and no fallback is configured")?;
+                Ok(
+                    RawStore::open(&fallback.join("raw"), &cfg.raw, &cfg.capture)?
+                        .store_with_source(source, &source_key, &out, &err)?,
+                )
+            }
+            Err(error) => Err(error.into()),
+        }
     })();
     match result {
         Ok(handle) => json!({"state":"stored","handle":handle.as_str(),"fidelity":"exact_bytes",
@@ -512,8 +534,9 @@ pub(crate) fn worker_main() -> Result<i32> {
         .as_str()
         .context("missing script source")?;
     let lines: Rc<dyn LineSource> = Rc::new(FileLines { scratch });
-    let (outcome, _records) =
+    let (outcome, records) =
         toz_core::script::run_with_tools(source, &meta, lines, &limits, Some(commands.clone()))?;
+    drop(records);
     let frame = outcome_frame(outcome, commands.used.get());
     send_frame(&mut commands.protocol.borrow_mut().output, &frame)?;
     Ok(0)
@@ -528,6 +551,7 @@ fn outcome_frame(outcome: Outcome, used: bool) -> Value {
         Outcome::Timeout => json!({"type":"result","kind":"timeout","used":used}),
         Outcome::MemoryLimit => json!({"type":"result","kind":"memory_limit","used":used}),
         Outcome::OutputLimit => json!({"type":"result","kind":"output_limit","used":used}),
+        Outcome::RecordLimit => json!({"type":"result","kind":"record_limit","used":used}),
     }
 }
 
@@ -539,6 +563,7 @@ fn parse_outcome(frame: &Value) -> Result<(Outcome, bool)> {
         Some("timeout") => Outcome::Timeout,
         Some("memory_limit") => Outcome::MemoryLimit,
         Some("output_limit") => Outcome::OutputLimit,
+        Some("record_limit") => Outcome::RecordLimit,
         _ => bail!("unknown worker outcome"),
     };
     Ok((outcome, frame["used"].as_bool().unwrap_or(false)))

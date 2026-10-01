@@ -35,6 +35,39 @@ printf '%s\n' '---' 'status: draft' '---' > "$resolved/plans/example/plan.md"
     EVAL_SANDBOX_DIR="$redirect_root" bash "$VERIFY"
 ) | jq -e '.results[0].verdict == "PASS"' >/dev/null || fail "redirect fixture verifier rejected configured plan"
 
+# Friction 15: setup-change-eval.sh must refuse to touch git identity outside
+# its own scratch dir. Guard both a bare invocation (EVAL_ID unset) and an
+# invocation with a valid EVAL_ID, run inside a pre-existing repo with a
+# committed identity.
+guard_root="$TEST_ROOT/guard-existing-repo"
+mkdir -p "$guard_root"
+(
+  cd "$guard_root"
+  git init -q
+  git config user.email "existing@example.invalid"
+  git config user.name "Existing Repo"
+)
+guard_email_before="$(git -C "$guard_root" config user.email)"
+guard_name_before="$(git -C "$guard_root" config user.name)"
+
+if (cd "$guard_root" && bash "$SETUP") 2>/dev/null; then
+  fail "setup script accepted a bare invocation (no EVAL_ID) inside an existing repo"
+fi
+[[ "$(git -C "$guard_root" config user.email)" == "$guard_email_before" ]] ||
+  fail "bare invocation changed git user.email in existing repo"
+[[ "$(git -C "$guard_root" config user.name)" == "$guard_name_before" ]] ||
+  fail "bare invocation changed git user.name in existing repo"
+
+if (cd "$guard_root" && EVAL_ID=1 EVAL_CONFIG=with_skill EVAL_RUN=1 \
+      EVAL_RUN_DIR="$guard_root/run" EVAL_SKILL_DIR="$SKILL_DIR" \
+      EVAL_SANDBOX_DIR="$guard_root" bash "$SETUP") 2>/dev/null; then
+  fail "setup script accepted EVAL_ID=1 inside an existing repo"
+fi
+[[ "$(git -C "$guard_root" config user.email)" == "$guard_email_before" ]] ||
+  fail "EVAL_ID=1 invocation changed git user.email in existing repo"
+[[ "$(git -C "$guard_root" config user.name)" == "$guard_name_before" ]] ||
+  fail "EVAL_ID=1 invocation changed git user.name in existing repo"
+
 assert_json() {
   local file="$1" expression="$2" message="$3"
   jq -e "$expression" "$file" >/dev/null || fail "$message"
@@ -90,7 +123,7 @@ verify_case() {
   ) > "$output"
 }
 
-states_table="$SKILL_DIR/references/varde-workflow-cli.md"
+states_table="$SKILL_DIR/references/workflow-state.md"
 legal_states="$(grep -E '^\| `(plan|task)` \|' "$states_table" |
   sed -E 's/^\| `[a-z]+` \| ([^|]+) \|.*/\1/' | tr ',' '\n' | tr -d '` ' | sort -u)"
 bad_states="$(grep -rhoE 'status: *[a-z_]+' "$SKILL_DIR"/references/*.md |
@@ -137,7 +170,7 @@ Add configurable client limits.
 PLAN
 mkdir -p "$plan_root/run"
 cat > "$plan_root/run/transcript.txt" <<'TRANSCRIPT'
-Routed through references/plan-start.md.
+Routed through references/plan.md.
 Which limit scope should the plan use?
 
   1. Per client

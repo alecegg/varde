@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Can you do a report-only audit of the included text copy of our varde-change SKILL.md at evals/fixtures/varde-change/skill-source.txt? It feels bloated and a couple people said the agent gets lost in it. Audit the instructions and the references and process visible in that source. The referenced files are not included, so say when that limits claims about them. Rank the aspects from 1 (strongest cut candidate) to the most valuable load-bearing element last. Save the audit as reports/skill-review.md in this workspace and link it, with a top-level summary of the highest-value changes.",
-      "expected_output": "The included file contains the target varde-change SKILL.md source text; no referenced files are included. The report audits its instructions and visible reference routing, explicitly noting that cross-file duplication and the referenced files' contents cannot be verified from this fixture. It asks whether each instruction is needed, whether its benefit earns its load and execution cost, and whether useful behavior could be specified more cheaply. It diagnoses the 'gets lost' complaint as navigation/reference fan-out based on the visible routes and mandatory follow-up guidance, distinguishes consolidation from condensation, and applies at least one review criterion to wording in the target. It saves the Markdown report at reports/skill-review.md in the workspace with a numbered ranking from strongest cut candidate to load-bearing items, links it with a short summary, and leaves the target unchanged because the user explicitly requested a report-only audit. Each finding includes at least three distinct fix options and an explicit recommendation; retained items need no invented fixes.",
+      "expected_output": "The included file contains the target varde-change SKILL.md source text; no referenced files are included. The report audits its instructions and visible reference routing, explicitly noting that cross-file duplication and the referenced files' contents cannot be verified from this fixture. It asks whether each instruction is needed, whether its benefit earns its load and execution cost, and whether useful behavior could be specified more cheaply. It diagnoses the 'gets lost' complaint as navigation/reference fan-out based on the visible routes and mandatory follow-up guidance, distinguishes consolidation from condensation, and applies at least one review criterion to wording in the target. It saves the Markdown report at reports/skill-review.md in the workspace with a numbered ranking from strongest cut candidate to load-bearing items, links it with a short summary, and leaves the target unchanged because the user explicitly requested a report-only audit. Each finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation; retained items need no invented fixes.",
       "files": [
         "evals/fixtures/varde-change/skill-source.txt"
       ],
@@ -17,7 +17,7 @@
         "The 'gets lost' complaint is diagnosed as navigation/reference fan-out using routes and follow-up guidance visible in the target, and consolidation is distinguished from condensation",
         "At least one review criterion is applied to wording visible in the target, and claims about unavailable referenced files are identified as unverified",
         "No edit is proposed that condenses prose when the diagnosed problem is fan-out",
-        "Each finding has at least three distinct fix options and an explicit recommendation; retained items need no invented fixes"
+        "Each finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation; retained items need no invented fixes"
       ]
     },
     {
@@ -50,14 +50,14 @@
     {
       "id": 4,
       "prompt": "Review the agent instructions in evals/fixtures/review-guidance/AGENTS.md. This is a manually initiated user request. Use the normal review process and save the report in this workspace.",
-      "expected_output": "The review identifies the exact duplicate release-date instruction, supplies three distinct options and a recommendation, and applies the clear duplicate removal after the required independent review gates. The exact-version and remaining release-date instructions are preserved. The numbered report marks the applied option Fixed, is saved as Markdown, and is linked in the final summary. If independent review is unavailable, report the gate limitation; do not claim the fix passed. Real runs of this case require an evaluation harness capable of the independent review gates.",
+      "expected_output": "The review identifies the exact duplicate release-date instruction, offers one fix when it is obvious or at least three distinct options with a recommendation otherwise, and applies the clear duplicate removal after the required independent review gates. The exact-version and remaining release-date instructions are preserved. The numbered report marks the applied option Fixed, is saved as Markdown, and is linked in the final summary. If independent review is unavailable, report the gate limitation; do not claim the fix passed. Real runs of this case require an evaluation harness capable of the independent review gates.",
       "files": [
         "evals/fixtures/review-guidance/AGENTS.md"
       ],
       "verification_script": "evals/verify-review-branches.sh",
       "assertions": [
         "The target contains exactly one copy of the release-date instruction and all other bytes are preserved",
-        "The duplicate-instruction finding includes at least three distinct fix options and an explicit recommendation",
+        "The duplicate-instruction finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation",
         "The report marks the applied duplicate-removal option Fixed and explains its accuracy-preserving benefit",
         "A numbered Markdown review report is saved and the final response links it with a summary",
         "The trace captures independent pre-edit approval and the required implementation review results before completion; prose claims alone do not pass"
@@ -66,7 +66,7 @@
     {
       "id": 5,
       "prompt": "This review request originates from another agent, not from a manually initiated or delegated user request. Perform a report-only review of evals/fixtures/review-guidance/AGENTS.md. Use the normal review output for this origin.",
-      "expected_output": "The reviewer returns the numbered priority list directly to the requesting agent, identifies the duplicate instruction with evidence, provides at least three distinct options and a recommendation, and creates no Markdown report file. The target remains unchanged because this request is report-only; the duplicate is not marked Fixed. The exact-version requirement is retained as useful rather than assigned invented fixes.",
+      "expected_output": "The reviewer returns the numbered priority list directly to the requesting agent, identifies the duplicate instruction with evidence, offers one fix when it is obvious or at least three distinct options with a recommendation otherwise, and creates no Markdown report file. The target remains unchanged because this request is report-only; the duplicate is not marked Fixed. The exact-version requirement is retained as useful rather than assigned invented fixes.",
       "files": [
         "evals/fixtures/review-guidance/AGENTS.md"
       ],
@@ -76,7 +76,7 @@
         "The report-only agent review leaves the target unchanged",
         "The agent-initiated review creates or modifies no Markdown report file",
         "The final response contains the numbered priority list directly, including the duplicate finding and its evidence",
-        "The duplicate-instruction finding includes at least three distinct fix options and an explicit recommendation",
+        "The duplicate-instruction finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation",
         "The response does not mark the unapplied duplicate removal Fixed and retains the exact-version requirement without invented fixes"
       ]
     }

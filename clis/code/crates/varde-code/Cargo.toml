@@ -29,6 +29,7 @@ regex = "1"
 # need `alloc` for Vec-based serialize/deserialize of the graph_cache blob.
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 notify = "6"
+libc = "0.2"
 
 [dev-dependencies]
 serde_json = "1"

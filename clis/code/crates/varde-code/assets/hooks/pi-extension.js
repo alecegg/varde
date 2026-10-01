@@ -20,7 +20,14 @@ export default function (pi) {
       const cwd = (ctx && (ctx.cwd || ctx.directory)) || process.cwd();
       navMap = execFileSync(
         "varde-code",
-        ["nav_map", "--json", JSON.stringify({ repoRoot: cwd }), "--format", "text"],
+        [
+          "nav_map",
+          "--json",
+          JSON.stringify({ repoRoot: cwd }),
+          "--format",
+          "text",
+          "--with-project-knowledge",
+        ],
         { cwd, encoding: "utf8" }
       );
     } catch (err) {

@@ -10,12 +10,10 @@ fail() {
   exit 1
 }
 
-grep -Fq "\`Disposition: fix\` findings regardless of label. Blank findings go to parent triage; skip \`dismiss\`, \`action-item\`, and \`escalated\`." "$FIX_DOC" ||
-  fail "fix.md does not define plan-build eligibility"
-grep -Fq "\`Label: auto-fix\` findings whose disposition is blank or \`fix\`. Skip \`dismiss\`, \`action-item\`, and \`escalated\`." "$FIX_DOC" ||
-  fail "fix.md does not define standalone eligibility"
-grep -Fq 'Check eligibility before loading a complete finding' "$FIX_DOC" ||
-  fail "fix.md does not require eligibility before per-finding work"
+grep -Fq "| Plan build (\`mode=build\`) | Any label with \`Disposition: fix\` | Send blank findings to parent triage without applying them; skip \`dismiss\`, \`action-item\`, and \`escalated\`. |" "$PASS_DOC" ||
+  fail "fix-pass.md does not define plan-build eligibility"
+grep -Fq "| Standalone (\`mode=standalone\`) | \`Label: auto-fix\` with \`Disposition: blank\` or \`fix\` | Skip \`dismiss\`, \`action-item\`, and \`escalated\`" "$PASS_DOC" ||
+  fail "fix-pass.md does not define standalone eligibility"
 grep -Fq 'Check eligibility before doing' "$PASS_DOC" ||
   fail "fix-pass.md does not check eligibility first"
 grep -Fq "| Plan build (\`mode=build\`) | Any label with \`Disposition: fix\` | Send blank findings to parent triage without applying them; skip \`dismiss\`, \`action-item\`, and \`escalated\`. |" "$PASS_DOC" ||

@@ -31,6 +31,29 @@ fn single_eval_json(id: &str) -> String {
     format!(r#"{{"skill_name":"fixture","evals":[{{"id":"{id}","prompt":"test"}}]}}"#)
 }
 
+fn process_group_alive(pgid: i32) -> bool {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("kill -0 -{pgid} 2>/dev/null"))
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn assert_no_verification_temp_dir(run_dir: &Path) {
+    let leftovers = std::fs::read_dir(run_dir)
+        .expect("run directory")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("varde-verification-")
+        })
+        .count();
+    assert_eq!(leftovers, 0, "verification temporary directory leaked");
+}
+
 /// Runs a single `--no-baseline` eval with two assertions under
 /// `MOCK_MODE=<mode>`, with a fixed judge verdict (first PASS, second FAIL)
 /// so every mode's benchmark aggregate is graded the same way and only its
@@ -874,6 +897,7 @@ fn verification_script_and_judge_results_are_merged_across_repeated_runs_and_bas
                 run_dir.join("judge-raw.json").exists(),
                 "{cfg} run {run}: judge raw output was not preserved"
             );
+            assert_no_verification_temp_dir(&run_dir);
         }
     }
 
@@ -1107,6 +1131,65 @@ fn setup_script_failure_aborts_before_model_call() {
             .exists(),
         "setup.txt should be written even when setup_script fails"
     );
+    assert!(
+        !workspace
+            .path()
+            .join("iteration-1/eval-one/with_skill/run-1/setup.stderr.tmp")
+            .exists(),
+        "setup stderr temporary file leaked after failure"
+    );
+}
+
+#[test]
+fn setup_script_timeout_kills_its_process_group() {
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().expect("skill dir");
+    write_output_skill(
+        skill_dir.path(),
+        r#"{"skill_name":"fixture","evals":[{"id":"one","prompt":"test","setup_script":"evals/setup.sh"}]}"#,
+    );
+    std::fs::create_dir_all(skill_dir.path().join("evals")).expect("evals dir");
+    std::fs::write(
+        skill_dir.path().join("evals/setup.sh"),
+        "printf '%s\\n' \"$$\" > \"$EVAL_RUN_DIR/setup-pgid\"\nsleep 30 & wait\n",
+    )
+    .expect("setup script");
+    let workspace = tempdir().expect("workspace");
+
+    mock.command()
+        .args([
+            "eval",
+            "output",
+            "--harness",
+            "claude",
+            skill_dir.path().to_str().unwrap(),
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "--timeout-seconds",
+            "1",
+            "--no-baseline",
+        ])
+        .assert()
+        .code(2)
+        .stderr(contains("setup_script timed out"));
+
+    let run_dir = workspace
+        .path()
+        .join("iteration-1/eval-one/with_skill/run-1");
+    let pgid: i32 = std::fs::read_to_string(run_dir.join("setup-pgid"))
+        .expect("setup process group id")
+        .trim()
+        .parse()
+        .expect("numeric process group id");
+    assert!(run_dir.join("setup.txt").exists());
+    assert!(
+        !run_dir.join("setup.stderr.tmp").exists(),
+        "setup stderr temporary file leaked"
+    );
+    assert!(
+        !process_group_alive(pgid),
+        "setup process group {pgid} survived its timeout"
+    );
 }
 
 #[test]
@@ -1214,4 +1297,220 @@ fn failed_agent_output_aggregates_tokens_as_unavailable() {
     assert!(timing["tokens"].is_null());
     assert!(timing.get("usage").is_none());
     assert!(timing.get("cost_usd").is_none());
+}
+
+#[test]
+fn verbose_setup_script_preserves_setup_artifact_contents() {
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().expect("tempdir");
+    std::fs::create_dir_all(skill_dir.path().join("evals/scripts")).expect("mkdir scripts");
+    std::fs::write(skill_dir.path().join("SKILL.md"), "# Fixture skill\n").expect("SKILL.md");
+    std::fs::write(
+        skill_dir.path().join("evals/evals.json"),
+        r#"{"skill_name":"fixture","evals":[{"id":"verbose","prompt":"test","setup_script":"evals/scripts/setup.sh"}]}"#,
+    )
+    .expect("evals.json");
+    std::fs::write(
+        skill_dir.path().join("evals/scripts/setup.sh"),
+        "head -c 4194304 /dev/zero | tr '\\000' x\nprintf setup-warning >&2\n",
+    )
+    .expect("setup.sh");
+    let workspace = tempdir().expect("workspace");
+
+    mock.command()
+        .args([
+            "eval",
+            "output",
+            "--harness",
+            "claude",
+            skill_dir.path().to_str().unwrap(),
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "--no-baseline",
+        ])
+        .assert()
+        .success();
+
+    let setup_output = std::fs::read(
+        workspace
+            .path()
+            .join("iteration-1/eval-verbose/with_skill/run-1/setup.txt"),
+    )
+    .expect("setup.txt");
+    let mut expected = vec![b'x'; 4 * 1024 * 1024];
+    expected.extend_from_slice(b"setup-warning");
+    assert_eq!(setup_output, expected);
+    assert!(
+        !workspace
+            .path()
+            .join("iteration-1/eval-verbose/with_skill/run-1/setup.stderr.tmp")
+            .exists(),
+        "setup stderr temporary file leaked after success"
+    );
+}
+
+#[test]
+fn verification_script_output_over_limit_is_capped_and_reported() {
+    const MAX_VERIFICATION_OUTPUT_BYTES: usize = 1024 * 1024;
+
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().expect("skill dir");
+    write_output_skill(
+        skill_dir.path(),
+        r#"{"skill_name":"fixture","evals":[{"id":"oversized","prompt":"test","assertions":["verified"],"verification_script":"evals/verify.sh"}]}"#,
+    );
+    std::fs::write(
+        skill_dir.path().join("evals/verify.sh"),
+        "printf '%s\\n' \"$$\" > \"$EVAL_RUN_DIR/verification-pgid\"\nhead -c 67108864 /dev/zero | tr '\\000' x\nprintf completed > \"$EVAL_RUN_DIR/verification-completed\"\n",
+    )
+    .expect("verify.sh");
+    let workspace = tempdir().expect("workspace");
+
+    mock.command()
+        .args([
+            "eval",
+            "output",
+            "--harness",
+            "claude",
+            skill_dir.path().to_str().unwrap(),
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "--no-baseline",
+        ])
+        .assert()
+        .code(2)
+        .stderr(contains(
+            "verification_script output exceeded the 1048576 byte limit",
+        ));
+
+    let verification_path = workspace
+        .path()
+        .join("iteration-1/eval-oversized/with_skill/run-1/verification.json");
+    assert_eq!(
+        std::fs::metadata(&verification_path)
+            .expect("verification.json")
+            .len(),
+        MAX_VERIFICATION_OUTPUT_BYTES as u64
+    );
+    assert!(
+        !verification_path
+            .parent()
+            .expect("run directory")
+            .join("verification-completed")
+            .exists(),
+        "oversized verification_script was allowed to finish"
+    );
+    let run_dir = verification_path.parent().unwrap();
+    let pgid: i32 = std::fs::read_to_string(run_dir.join("verification-pgid"))
+        .expect("verification process group id")
+        .trim()
+        .parse()
+        .expect("numeric process group id");
+    assert!(
+        !process_group_alive(pgid),
+        "oversized verification process group {pgid} survived its cap"
+    );
+    assert_no_verification_temp_dir(run_dir);
+}
+
+#[test]
+fn verification_script_timeout_kills_its_process_group() {
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().expect("skill dir");
+    write_output_skill(
+        skill_dir.path(),
+        r#"{"skill_name":"fixture","evals":[{"id":"one","prompt":"test","assertions":["verified"],"verification_script":"evals/verify.sh"}]}"#,
+    );
+    std::fs::create_dir_all(skill_dir.path().join("evals")).expect("evals dir");
+    std::fs::write(
+        skill_dir.path().join("evals/verify.sh"),
+        "printf '%s\\n' \"$$\" > \"$EVAL_RUN_DIR/verification-pgid\"\nsleep 30 & wait\n",
+    )
+    .expect("verification script");
+    let workspace = tempdir().expect("workspace");
+
+    mock.command()
+        .env("MOCK_MODE", "measured")
+        .args([
+            "eval",
+            "output",
+            "--harness",
+            "claude",
+            skill_dir.path().to_str().unwrap(),
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "--timeout-seconds",
+            "1",
+            "--no-baseline",
+        ])
+        .assert()
+        .code(2)
+        .stderr(contains("verification_script timed out"));
+
+    let run_dir = workspace
+        .path()
+        .join("iteration-1/eval-one/with_skill/run-1");
+    let pgid: i32 = std::fs::read_to_string(run_dir.join("verification-pgid"))
+        .expect("verification process group id")
+        .trim()
+        .parse()
+        .expect("numeric process group id");
+    assert!(
+        !process_group_alive(pgid),
+        "verification process group {pgid} survived its timeout"
+    );
+    assert_no_verification_temp_dir(&run_dir);
+}
+
+#[test]
+fn completed_verification_reaps_background_child_before_returning() {
+    let mock = MockOutputClaude::new();
+    let skill_dir = tempdir().expect("skill dir");
+    write_output_skill(
+        skill_dir.path(),
+        r#"{"skill_name":"fixture","evals":[{"id":"one","prompt":"test","assertions":["verified"],"verification_script":"evals/verify.sh"}]}"#,
+    );
+    std::fs::create_dir_all(skill_dir.path().join("evals")).expect("evals dir");
+    std::fs::write(
+        skill_dir.path().join("evals/verify.sh"),
+        "printf '%s\\n' \"$$\" > \"$EVAL_RUN_DIR/verification-pgid\"\nsleep 10 &\nprintf '%s\\n' '{\"results\":[{\"assertion\":\"verified\",\"verdict\":\"PASS\",\"evidence\":\"ok\"}]}'\n",
+    )
+    .expect("verification script");
+    let workspace = tempdir().expect("workspace");
+    let started = std::time::Instant::now();
+
+    mock.command()
+        .env("MOCK_MODE", "measured")
+        .args([
+            "eval",
+            "output",
+            "--harness",
+            "claude",
+            skill_dir.path().to_str().unwrap(),
+            "--workspace",
+            workspace.path().to_str().unwrap(),
+            "--timeout-seconds",
+            "1",
+            "--no-baseline",
+        ])
+        .assert()
+        .success();
+
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "verification returned after waiting for a detached child"
+    );
+    let run_dir = workspace
+        .path()
+        .join("iteration-1/eval-one/with_skill/run-1");
+    let pgid: i32 = std::fs::read_to_string(run_dir.join("verification-pgid"))
+        .expect("verification process group id")
+        .trim()
+        .parse()
+        .expect("numeric process group id");
+    assert!(
+        !process_group_alive(pgid),
+        "completed verification left process group {pgid} alive"
+    );
+    assert_no_verification_temp_dir(&run_dir);
 }

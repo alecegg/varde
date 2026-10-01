@@ -24,6 +24,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
                             &args.scope,
                             &args.exclude,
                             &args.artifact,
+                            args.tier_evidence.as_deref(),
                         )
                     })
                 }
@@ -36,6 +37,7 @@ pub fn run(args: ReviewArgs) -> Result<()> {
                             &args.scope,
                             &args.exclude,
                             &args.artifact,
+                            args.tier_evidence.as_deref(),
                         )
                     })
                 }
@@ -72,57 +74,30 @@ pub fn run(args: ReviewArgs) -> Result<()> {
             }),
             args.json,
         ),
-        ReviewCommand::Contract(args) => {
-            if !args.scope.is_empty() || !args.artifact.is_empty() {
-                return report_error(
-                    &InternalError(
-                        "review contract requires --file and does not accept --scope or --artifact"
-                            .into(),
-                    ),
-                    args.json,
-                );
-            }
-            let Some(file) = args.file else {
-                return report_error(
-                    &InternalError("review contract requires --file".into()),
-                    args.json,
-                );
-            };
-            finish(
-                with_repository(|repository| {
-                    review_gates::update_bounded_contract(
-                        repository,
-                        &args.subject,
-                        &args.expected_version,
-                        &file,
-                    )
-                }),
-                args.json,
-            )
-        }
-        ReviewCommand::Expand(args) => {
-            if args.file.is_some() {
-                return report_error(
-                    &InternalError(
-                        "review expand accepts --scope/--artifact and does not accept --file"
-                            .into(),
-                    ),
-                    args.json,
-                );
-            }
-            finish(
-                with_repository(|repository| {
-                    review_gates::expand_scope(
-                        repository,
-                        &args.subject,
-                        &args.expected_version,
-                        &args.scope,
-                        &args.artifact,
-                    )
-                }),
-                args.json,
-            )
-        }
+        ReviewCommand::Contract(args) => finish(
+            with_repository(|repository| {
+                review_gates::update_bounded_contract(
+                    repository,
+                    &args.subject,
+                    &args.expected_version,
+                    &args.file,
+                )
+            }),
+            args.json,
+        ),
+        ReviewCommand::Expand(args) => finish(
+            with_repository(|repository| {
+                review_gates::expand_scope(
+                    repository,
+                    &args.subject,
+                    &args.expected_version,
+                    &args.scope,
+                    &args.artifact,
+                    args.tier_evidence.as_deref(),
+                )
+            }),
+            args.json,
+        ),
         ReviewCommand::Inspect(args) => finish(
             with_repository(|repository| {
                 review_gates::inspect(repository, &args.subject, &args.phase)

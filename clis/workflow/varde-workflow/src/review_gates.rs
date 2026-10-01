@@ -5,12 +5,13 @@ use crate::review_coverage::{self, SnapshotEntry};
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use serde_yaml::Value as YamlValue;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use varde_workflow_core::memory::MemoryPaths;
+use varde_workflow_core::memory::{self, MemoryPaths};
 
 const SUBJECT_SCHEMA: u32 = 1;
 const RECORD_SCHEMA: u32 = 1;
@@ -30,6 +31,19 @@ pub(crate) struct Subject {
     pub(crate) baseline_id: String,
     pub(crate) snapshots: BTreeMap<String, SnapshotEntry>,
     pub(crate) scope_additions: BTreeSet<String>,
+    #[serde(default)]
+    pub(crate) tier_evidence: Option<TierEvidence>,
+    /// History of prior `baseline_id` values a fully-covered `expand_scope`
+    /// call carried forward. Not a `baseline_fingerprint_with_artifacts`
+    /// hash input.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) carried_baselines: Vec<String>,
+    /// The plan's task-declared ownership paths (`modifies`, `creates`, and
+    /// renamed-to paths), frozen at the moment a `phase == "pre-edit"`
+    /// `EvidenceRecord` is accepted. Meaningful only for plan subjects;
+    /// stays empty for bounded subjects.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) approved_ownership: Vec<String>,
     #[serde(skip)]
     pub(crate) metadata_revision: String,
     #[serde(skip)]
@@ -40,6 +54,28 @@ pub(crate) struct Subject {
 pub struct EvidenceRevision {
     pub path: PathBuf,
     pub revision: String,
+}
+
+/// Fingerprinted `scripts/risk-tier.py` output, or the safe default when
+/// `--tier-evidence` is missing, unreadable, or malformed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TierEvidence {
+    pub(crate) fingerprint: String,
+    pub(crate) tier: String,
+    pub(crate) signals: Vec<String>,
+    pub(crate) recorded_at: String,
+}
+
+impl Subject {
+    /// Subjects created before this field existed default to `high`, same as
+    /// a missing or unreadable `--tier-evidence` file.
+    pub(crate) fn tier(&self) -> &str {
+        self.tier_evidence
+            .as_ref()
+            .map(|evidence| evidence.tier.as_str())
+            .unwrap_or("high")
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -73,6 +109,8 @@ struct EvidenceRecord {
     structural_risk_rationale: Option<String>,
     #[serde(default)]
     implementation_review_required: Option<bool>,
+    #[serde(default)]
+    tier_confirmed: Option<bool>,
     rationale: String,
 }
 
@@ -122,6 +160,12 @@ pub fn scope_for_plan(repository: &Path, plan_path: &Path) -> Result<Option<Vec<
         let entry = entry?;
         if !entry.file_type()?.is_dir() || entry.file_name().to_string_lossy().starts_with('.') {
             continue;
+        }
+        let path = entry.path().join("subject.json");
+        match fs::symlink_metadata(&path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
         }
         let subject = read_subject_file(&entry.path())?;
         if subject.plan_path.as_deref() == Some(plan_path.as_path()) {
@@ -207,6 +251,7 @@ pub fn initialize_plan(
     scope: &[String],
     excludes: &[String],
     artifacts: &[PathBuf],
+    tier_evidence: Option<&Path>,
 ) -> Result<Value> {
     let repository = canonical_directory(repository)?;
     let plan_path = plan_path
@@ -231,6 +276,7 @@ pub fn initialize_plan(
         scope,
         excludes,
         artifacts,
+        tier_evidence,
     )
 }
 
@@ -241,6 +287,7 @@ pub fn initialize_bounded(
     scope: &[String],
     excludes: &[String],
     artifacts: &[PathBuf],
+    tier_evidence: Option<&Path>,
 ) -> Result<Value> {
     validate_subject_id(subject_id)?;
     let repository = canonical_directory(repository)?;
@@ -259,9 +306,11 @@ pub fn initialize_bounded(
         scope,
         excludes,
         artifacts,
+        tier_evidence,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn initialize(
     repository: PathBuf,
     subject_id: String,
@@ -270,6 +319,7 @@ fn initialize(
     scope: &[String],
     excludes: &[String],
     artifacts: &[PathBuf],
+    tier_evidence: Option<&Path>,
 ) -> Result<Value> {
     validate_subject_id(&subject_id)?;
     if scope.is_empty() && artifacts.is_empty() {
@@ -297,6 +347,8 @@ fn initialize(
         &excludes,
         &artifact_scope,
     )?;
+    ensure_scope_matches(&scope, &current)?;
+    let tier_evidence = load_tier_evidence(tier_evidence);
     let staging = gate_root.join(stage_name(&format!("{subject_id}.init")));
     fs::create_dir(&staging).with_context(|| {
         format!(
@@ -322,6 +374,9 @@ fn initialize(
         baseline_id: String::new(),
         snapshots,
         scope_additions: BTreeSet::new(),
+        tier_evidence: Some(tier_evidence),
+        carried_baselines: Vec::new(),
+        approved_ownership: Vec::new(),
         metadata_revision: String::new(),
         baseline_revisions: Vec::new(),
     };
@@ -370,12 +425,38 @@ pub fn update_bounded_contract(
     inspect(&repository, subject_id, "pre-edit")
 }
 
+/// The paths `expand_scope` treats as already authorized, for the covered-
+/// expansion carry-forward rule (plan Design > API / interface contracts,
+/// Item 1). A plan subject uses its frozen `approved_ownership` snapshot; a
+/// bounded subject uses its contract's `scope` array, read live (see the
+/// task's Out of scope: safe because it is already a
+/// `current_contract_fingerprint` hash input, independently caught by
+/// `check()` on edit).
+fn approved_ownership_scope(subject: &Subject) -> Vec<String> {
+    if subject.plan_path.is_some() {
+        return subject.approved_ownership.clone();
+    }
+    subject
+        .bounded_contract
+        .as_ref()
+        .and_then(|contract| contract.get("scope"))
+        .and_then(Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn expand_scope(
     repository: &Path,
     subject_id: &str,
     expected_version: &str,
     additions: &[String],
     artifacts: &[PathBuf],
+    tier_evidence: Option<&Path>,
 ) -> Result<Value> {
     if additions.is_empty() && artifacts.is_empty() {
         return Err(invalid(
@@ -386,6 +467,7 @@ pub fn expand_scope(
     let mut subject = load_subject(&repository, subject_id)?;
     ensure_expected_version(&repository, &subject, "pre-edit", expected_version)?;
     let inspected_subject = subject.clone();
+    let prior_baseline_id = subject.baseline_id.clone();
     let additions = normalize_roots(&repository, additions)?;
     let prior = subject.scope.clone();
     let prior_artifacts = subject.artifact_scope.clone();
@@ -399,18 +481,30 @@ pub fn expand_scope(
         )?);
     subject.artifact_scope.sort();
     subject.artifact_scope.dedup();
-    for root in additions {
+    for root in &additions {
         if !subject
             .scope
             .iter()
-            .any(|existing| roots_cover(existing, &root))
+            .any(|existing| roots_cover(existing, root))
         {
-            subject.scope.push(root);
+            subject.scope.push(root.clone());
         }
     }
     subject.scope.sort();
     subject.scope.dedup();
     if subject.scope == prior && subject.artifact_scope == prior_artifacts {
+        // Scope did not grow, but caller-supplied evidence still applies
+        // (e.g. a low tier reconfirmed with fresh evidence on request).
+        if let Some(evidence_path) = tier_evidence {
+            subject.tier_evidence = Some(load_tier_evidence(Some(evidence_path)));
+            ensure_expected_version(
+                &repository,
+                &inspected_subject,
+                "pre-edit",
+                expected_version,
+            )?;
+            write_subject(&repository, &subject)?;
+        }
         return inspect(&repository, subject_id, "pre-edit");
     }
 
@@ -421,6 +515,19 @@ pub fn expand_scope(
         &subject.excludes,
         &subject.artifact_scope,
     )?;
+    ensure_scope_matches(&additions, &current)?;
+    // Scope grew: a low tier without fresh evidence reverts to high, and
+    // fresh evidence that still computes low keeps it low (plan Design >
+    // API / interface contracts).
+    if subject.tier() == "low" || tier_evidence.is_some() {
+        subject.tier_evidence = Some(match tier_evidence {
+            Some(path) => load_tier_evidence(Some(path)),
+            None => finish_tier_evidence(
+                "high".to_string(),
+                vec!["scope_expanded_without_evidence".to_string()],
+            ),
+        });
+    }
     let gate_root = ensure_gate_root(&working)?;
     let subject_dir = gate_root.join(subject_id);
     let new_roots: Vec<String> = subject
@@ -471,6 +578,21 @@ pub fn expand_scope(
         &subject.scope_additions,
         &subject.artifact_scope,
     )?;
+    // All-or-nothing: only a fully-covered, artifact-free expansion carries
+    // its pre-call baseline forward (plan Design > API / interface
+    // contracts, Item 1). Artifacts never carry forward.
+    if artifacts.is_empty() {
+        let approved = approved_ownership_scope(&subject);
+        if !approved.is_empty()
+            && additions
+                .iter()
+                .all(|added| approved.iter().any(|owned| roots_cover(owned, added)))
+        {
+            subject.carried_baselines.push(prior_baseline_id);
+            subject.carried_baselines.sort();
+            subject.carried_baselines.dedup();
+        }
+    }
     ensure_expected_version(
         &repository,
         &inspected_subject,
@@ -489,6 +611,124 @@ pub fn inspect(repository: &Path, subject_id: &str, phase: &str) -> Result<Value
     Ok(state)
 }
 
+/// The plan's task-declared ownership paths, scanned fresh from every
+/// `tasks/**/*.md` file beside `plan_path`: each task's `modifies`,
+/// `creates`, and the new-path half of each `"old -> new"` entry in
+/// `renames`. Frozen into `Subject::approved_ownership` at each `record()`
+/// pre-edit acceptance (plan Design > API / interface contracts, Item 1).
+fn approved_ownership_for_plan(repository: &Path, plan_path: &Path) -> Result<Vec<String>> {
+    let mut declared = Vec::new();
+    let artifacts = artifact_scope_for_plan(repository, plan_path)?;
+    if let Some(tasks_dir) = plan_path.parent().map(|dir| dir.join("tasks"))
+        && tasks_dir.is_dir()
+    {
+        collect_task_ownership(repository, &tasks_dir, &artifacts, &mut declared)?;
+    }
+    declared.sort();
+    declared.dedup();
+    Ok(declared)
+}
+
+pub(crate) fn artifact_scope_for_plan(repository: &Path, plan_path: &Path) -> Result<Vec<String>> {
+    let Some(prerequisites) = subject_for_plan(repository, plan_path)? else {
+        return Ok(Vec::new());
+    };
+    Ok(load_subject(repository, &prerequisites.subject_id)?.artifact_scope)
+}
+
+pub(crate) fn is_plan_artifact(artifacts: &[String], raw: &str) -> bool {
+    let path = Path::new(raw.trim());
+    path.is_absolute()
+        && artifacts.iter().any(|artifact| {
+            memory::canonical_or_lexical(Path::new(artifact)) == memory::canonical_or_lexical(path)
+        })
+}
+
+fn collect_task_ownership(
+    repository: &Path,
+    dir: &Path,
+    artifacts: &[String],
+    declared: &mut Vec<String>,
+) -> Result<()> {
+    let entries = fs::read_dir(dir)
+        .with_context(|| format!("failed to read task directory {}", dir.display()))?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type()?.is_dir() {
+            collect_task_ownership(repository, &path, artifacts, declared)?;
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let bytes =
+            fs::read(&path).with_context(|| format!("failed to read task {}", path.display()))?;
+        let (frontmatter, _) =
+            varde_workflow_core::frontmatter::parse(&bytes).map_err(|error| {
+                invalid(format!(
+                    "task {} has invalid frontmatter: {error}",
+                    path.display()
+                ))
+            })?;
+        let Some(mapping) = frontmatter.as_mapping() else {
+            continue;
+        };
+        for field in ["modifies", "creates"] {
+            let Some(values) = mapping
+                .get(YamlValue::String(field.to_string()))
+                .and_then(YamlValue::as_sequence)
+            else {
+                continue;
+            };
+            for value in values.iter().filter_map(YamlValue::as_str) {
+                if is_plan_artifact(artifacts, value) {
+                    continue;
+                }
+                declared.push(normalize_relative_path(repository, value)?);
+            }
+        }
+        let Some(renames) = mapping
+            .get(YamlValue::String("renames".to_string()))
+            .and_then(YamlValue::as_sequence)
+        else {
+            continue;
+        };
+        for value in renames.iter().filter_map(YamlValue::as_str) {
+            if let Some((_, new)) = value.split_once(" -> ") {
+                if is_plan_artifact(artifacts, new) {
+                    continue;
+                }
+                declared.push(normalize_relative_path(repository, new)?);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A reviewer file written over a stored record moves the inspected version
+/// and makes `record` report a conflict, so reject those paths up front.
+fn reject_cli_owned_file(repository: &Path, subject_id: &str, record_path: &Path) -> Result<()> {
+    let Ok(file) = record_path.canonicalize() else {
+        return Ok(());
+    };
+    let directory = subject_directory(repository, subject_id)?.canonicalize()?;
+    let reserved = ["subject.json", "pre-edit.json", "implementation.json"];
+    if file.parent() == Some(directory.as_path())
+        && file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| reserved.contains(&name))
+    {
+        return Err(invalid(format!(
+            "review record file {} is a CLI-owned file in the subject directory; \
+             write reviewer evidence elsewhere and pass it with --file",
+            file.display()
+        )));
+    }
+    Ok(())
+}
+
 pub fn record(
     repository: &Path,
     subject_id: &str,
@@ -496,7 +736,8 @@ pub fn record(
     record_path: &Path,
 ) -> Result<Value> {
     let repository = canonical_directory(repository)?;
-    let subject = load_subject(&repository, subject_id)?;
+    let mut subject = load_subject(&repository, subject_id)?;
+    reject_cli_owned_file(&repository, subject_id, record_path)?;
     let record_bytes = fs::read(record_path)
         .with_context(|| format!("failed to read reviewer record {}", record_path.display()))?;
     let record: EvidenceRecord = serde_json::from_slice(&record_bytes)
@@ -525,6 +766,12 @@ pub fn record(
             "review subject or evidence changed before the record could be written",
         ));
     }
+    if phase == "pre-edit"
+        && let Some(plan_path) = subject.plan_path.clone()
+    {
+        subject.approved_ownership = approved_ownership_for_plan(&repository, &plan_path)?;
+        write_subject(&repository, &subject)?;
+    }
     write_atomic(&destination, &serde_json::to_vec_pretty(&record)?)?;
     inspect(&repository, subject_id, phase)
 }
@@ -538,9 +785,15 @@ pub fn check(repository: &Path, subject_id: &str, checkpoint: &str) -> Result<Ch
     let repository = canonical_directory(repository)?;
     let subject = load_subject(&repository, subject_id)?;
     let prereq = prerequisites_for(&repository, &subject)?;
+    let low_tier = subject.tier() == "low"
+        && !review_contract::requires_high_tier(
+            subject.plan_path.as_deref(),
+            subject.bounded_contract.as_ref(),
+        )?;
     let mut blockers = Vec::new();
     let pre_edit = read_record(&repository, &subject, "pre-edit")?;
     match pre_edit.as_ref() {
+        None if low_tier => {}
         None => blockers.push(blocker(
             "review_missing",
             "independent pre-edit approval is missing",
@@ -553,7 +806,8 @@ pub fn check(repository: &Path, subject_id: &str, checkpoint: &str) -> Result<Ch
         )),
         Some(record) => {
             if record.contract_fingerprint != prereq.contract_fingerprint
-                || record.baseline_id != prereq.baseline_id
+                || (record.baseline_id != prereq.baseline_id
+                    && !subject.carried_baselines.contains(&record.baseline_id))
             {
                 blockers.push(blocker(
                     "review_stale_contract",
@@ -577,36 +831,41 @@ pub fn check(repository: &Path, subject_id: &str, checkpoint: &str) -> Result<Ch
         ));
     }
     if checkpoint == "complete" && blockers.is_empty() {
-        let requires_review = pre_edit
-            .as_ref()
-            .and_then(|record| record.implementation_review_required)
-            .unwrap_or(false)
-            || crate::review_worktrees::requires_final_review(&repository, subject_id)?;
-        if requires_review {
-            match read_record(&repository, &subject, "implementation")? {
-                None => blockers.push(blocker(
-                    "review_missing",
-                    "required final implementation review is missing",
-                    json!({ "phase": "implementation" }),
-                )),
-                Some(record) if record.verdict == "blocked" => blockers.push(blocker(
-                    "review_blocked",
-                    "final implementation review is blocked",
-                    json!({ "phase": "implementation", "choices": record.unresolved_choices }),
-                )),
-                Some(record)
-                    if record.contract_fingerprint != prereq.contract_fingerprint
-                        || record.baseline_id != prereq.baseline_id =>
+        // An implementation record is always required at completion now,
+        // independent of tier or the pre-edit reviewer's
+        // `implementation_review_required` judgment (no grandfathering: plan
+        // Design > API / interface contracts).
+        let _ = crate::review_worktrees::requires_final_review(&repository, subject_id)?;
+        match read_record(&repository, &subject, "implementation")? {
+            None => blockers.push(blocker(
+                "review_missing",
+                "required final implementation review is missing",
+                json!({ "phase": "implementation" }),
+            )),
+            Some(record) => {
+                if !record.tier_confirmed.unwrap_or(true) {
+                    blockers.push(blocker(
+                        "review_blocked",
+                        "the implementation reviewer explicitly contradicted the computed tier",
+                        json!({ "phase": "implementation", "reason": "tier_confirmed_false" }),
+                    ));
+                }
+                if record.verdict == "blocked" {
+                    blockers.push(blocker(
+                        "review_blocked",
+                        "final implementation review is blocked",
+                        json!({ "phase": "implementation", "choices": record.unresolved_choices }),
+                    ));
+                } else if record.contract_fingerprint != prereq.contract_fingerprint
+                    || record.baseline_id != prereq.baseline_id
                 {
                     blockers.push(blocker(
                         "review_stale_contract",
                         "final review does not match the current contract or baseline",
                         json!({ "phase": "implementation" }),
                     ));
-                }
-                Some(record)
-                    if record.change_fingerprint.as_deref()
-                        != Some(prereq.change_fingerprint.as_str()) =>
+                } else if record.change_fingerprint.as_deref()
+                    != Some(prereq.change_fingerprint.as_str())
                 {
                     blockers.push(blocker(
                         "review_stale_changes",
@@ -617,7 +876,6 @@ pub fn check(repository: &Path, subject_id: &str, checkpoint: &str) -> Result<Ch
                         }),
                     ));
                 }
-                Some(_) => {}
             }
         }
     }
@@ -655,12 +913,7 @@ pub fn subject_for_plan(
         let path = entry.path().join("subject.json");
         match fs::symlink_metadata(&path) {
             Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                return Err(invalid(format!(
-                    "review subject metadata is missing from {}",
-                    entry.path().display()
-                )));
-            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
             Err(error) => return Err(error.into()),
         }
         let subject = read_subject_file(&entry.path())?;
@@ -730,6 +983,50 @@ fn empty_prerequisites(repository: &Path, plan_path: &Path) -> ReviewPrerequisit
     }
 }
 
+/// A filled-in-shape `EvidenceRecord` for `phase`, so a reviewer copies
+/// `data.record_template` from `review inspect` instead of retyping the
+/// schema from prose (friction 14). Keys are exactly what `validate_record`
+/// requires for `phase`, plus the fields `review-gate-record.md` documents
+/// as optional for it. CLI-known values (`subject_id`, `phase`,
+/// `contract_fingerprint`, `baseline_id`, and for `implementation`
+/// `change_fingerprint`) are pre-filled; reviewer-authored fields are
+/// empty-string or `null` placeholders. No `EvidenceRecord` field change.
+fn record_template(
+    phase: &str,
+    subject_id: &str,
+    contract_fingerprint: &str,
+    baseline_id: &str,
+    change_fingerprint: &str,
+) -> Value {
+    let mut template = json!({
+        "schema_version": RECORD_SCHEMA,
+        "subject_id": subject_id,
+        "phase": phase,
+        "reviewer": { "identity": "", "provenance": "" },
+        "verdict": "",
+        "unresolved_choices": [],
+        "contract_fingerprint": contract_fingerprint,
+        "baseline_id": baseline_id,
+        "verification_approach": "",
+        "verification_rationale": "",
+        "verification_expected_results": "",
+        "rationale": "",
+    });
+    let object = template
+        .as_object_mut()
+        .expect("record_template literal is always a JSON object");
+    if phase == "pre-edit" {
+        object.insert("structural_risk".to_string(), json!(""));
+        object.insert("structural_risk_rationale".to_string(), json!(""));
+        object.insert("implementation_review_required".to_string(), Value::Null);
+    } else {
+        object.insert("change_fingerprint".to_string(), json!(change_fingerprint));
+        object.insert("coverage".to_string(), Value::Null);
+        object.insert("tier_confirmed".to_string(), Value::Null);
+    }
+    template
+}
+
 fn inspect_state(repository: &Path, subject: &Subject, phase: &str) -> Result<Value> {
     validate_phase(phase)?;
     let contract = review_contract::current_contract_fingerprint(
@@ -786,6 +1083,8 @@ fn inspect_state(repository: &Path, subject: &Subject, phase: &str) -> Result<Va
             "excludes": subject.excludes,
             "artifact_scope": subject.artifact_scope,
             "baseline_id": subject.baseline_id,
+            "tier": subject.tier(),
+            "tier_evidence": subject.tier_evidence,
         },
         "phase": phase,
         "version": version,
@@ -794,6 +1093,13 @@ fn inspect_state(repository: &Path, subject: &Subject, phase: &str) -> Result<Va
         "change_fingerprint": change_fingerprint,
         "record": record_value,
         "manifest": { "entries": manifest },
+        "record_template": record_template(
+            phase,
+            &subject.subject_id,
+            &contract,
+            &subject.baseline_id,
+            &change_fingerprint,
+        ),
     }))
 }
 
@@ -1041,9 +1347,10 @@ fn validate_record(record: &EvidenceRecord, subject_id: &str) -> Result<()> {
         .trim()
         .is_empty()
         || record.coverage.as_deref() != Some("entire-subject-change")
+        || record.tier_confirmed.is_none()
     {
         return Err(invalid(
-            "implementation evidence requires a change fingerprint and complete subject coverage",
+            "implementation evidence requires coverage: \"entire-subject-change\", a non-empty change_fingerprint, and tier_confirmed",
         ));
     }
     Ok(())
@@ -1328,4 +1635,68 @@ pub(crate) fn normalize_relative_path(repository: &Path, raw: &str) -> Result<St
 
 fn roots_cover(root: &str, path: &str) -> bool {
     root == "." || root == path || path.starts_with(&format!("{}/", root.trim_end_matches('/')))
+}
+
+/// Rejects any requested scope root that binds no repository entry (for
+/// example an unglobbed pattern like `skills/**`), before anything is
+/// written.
+fn ensure_scope_matches(
+    roots: &[String],
+    current: &BTreeMap<String, review_coverage::CurrentEntry>,
+) -> Result<()> {
+    // A plain path may legitimately not exist yet (future coverage). Only a
+    // glob-shaped root that silently bound nothing is rejected: `--scope`
+    // takes literal paths, so `skills/**` never expands and always means the
+    // caller meant to match files it didn't.
+    for root in roots {
+        let looks_like_glob = root.contains(['*', '?', '[']);
+        if looks_like_glob && !current.keys().any(|path| roots_cover(root, path)) {
+            return Err(invalid(format!(
+                "scope `{root}` does not match any file in the repository"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Loads and fingerprints `scripts/risk-tier.py` output. A missing,
+/// unreadable, or malformed file defaults to `tier: "high"` with
+/// `signals: ["evidence_missing"]`: the tier never drops to low without
+/// evidence (plan Design > Schema / data model).
+fn load_tier_evidence(path: Option<&Path>) -> TierEvidence {
+    let parsed = path.and_then(|path| fs::read(path).ok()).and_then(|bytes| {
+        let value: Value = serde_json::from_slice(&bytes).ok()?;
+        let tier = value.get("tier")?.as_str()?;
+        if tier != "low" && tier != "high" {
+            return None;
+        }
+        let signals = value
+            .get("signals")?
+            .as_array()?
+            .iter()
+            .map(|signal| signal.as_str().map(str::to_string))
+            .collect::<Option<Vec<_>>>()?;
+        Some((tier.to_string(), signals))
+    });
+    let (tier, signals) =
+        parsed.unwrap_or_else(|| ("high".to_string(), vec!["evidence_missing".to_string()]));
+    finish_tier_evidence(tier, signals)
+}
+
+fn finish_tier_evidence(tier: String, signals: Vec<String>) -> TierEvidence {
+    let fingerprint = review_contract::fingerprint_json(
+        "varde-review-tier-evidence-v1",
+        &json!({ "tier": tier, "signals": signals }),
+    )
+    .unwrap_or_default();
+    let recorded_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_default();
+    TierEvidence {
+        fingerprint,
+        tier,
+        signals,
+        recorded_at,
+    }
 }

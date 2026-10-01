@@ -5,7 +5,9 @@ description: "Query captured tool output or run batched commands and capture ana
 
 # varde-toz
 
-Use `query` to retrieve captured output and `run` to batch commands or analyze captures. Harness hooks provide handles for large tool results.
+Pass any handle to `query` or `run --handle`; output is skipped by capture hooks
+only when the command starts with `varde-toz`. Run one `query` per call or batch
+reads inside `run`, not in a shell loop or after `cd`.
 
 ## Query captures
 
@@ -18,9 +20,11 @@ varde-toz query --list                           # recent captures
 varde-toz query --raw <raw-H> --stream stdout    # exact bytes, when retained
 ```
 
-`--global`, `--source`, and `--all` narrow or expand searches. Normal query output is normalized and redacted. Exact raw bytes require an explicit raw request during capture and `[raw] enabled = true`; a raw handle expires.
-
-A preview may come from a matching output profile: a TOC or head preview, or a script's summary. Read a profile script's extracted records with `varde-toz query --handle <H> --records <kind>`.
+Scope searches with `--global`, `--source`, or `--all`. Output is
+normalized and redacted; `--raw` needs a raw-retained handle, and raw handles
+expire. A preview may come from a matching output profile (TOC, head, or
+script summary); read a profile script's extracted records with
+`--records <kind>`.
 
 ## Run a batch script
 
@@ -31,35 +35,26 @@ print(result.exitCode, result.capture.handle || result.stdout);
 JS
 ```
 
-Use `--code '<js>'` for a one-liner. After each `vardeToz.exec()` command,
-the parent compares combined stdout and stderr bytes with the configured
-capture threshold (capped at the 64 KiB inline limit). Short output is complete
-in `stdout`/`stderr`, with `capture.state: "inline"` and no handle; larger
-output gets a searchable handle and bounded previews. `capture: true` forces
-a searchable handle for short output; `raw: true` also forces one and requests
-raw retention. Never-capture rules override both. The script's printed result
-is captured separately and may return its own handle. `vardeToz.exec()` accepts
-`argv` or `shell` plus optional `cwd`, `env`, `timeoutMs`, `capture`, and `raw`.
+- `--code '<js>'` runs a one-liner; `--timeout-ms` and `--memory-mb` adjust
+  script limits.
+- `vardeToz.exec({argv | shell, cwd?, env?, timeoutMs?, capture?, raw?})`
+  runs the command.
+- Combined output up to the capture threshold (max 64 KiB) is complete in
+  `stdout`/`stderr` with `capture.state: "inline"`; larger output gets a
+  handle. `capture: true` forces a handle; `raw: true` also retains raw bytes.
+  Never-capture rules override both.
+- `print(...)` and `console.log(...)` produce the script's result, which is
+  captured separately and may get its own handle.
+- To analyze a capture, pass `--handle <H>` and use `vardeToz.eachLine(fn)`
+  (preferred for large captures), `vardeToz.text()`, or `vardeToz.handle`;
+  commands and capture reads can mix in one script. `--stream stderr` selects
+  the other stream; `--partial` permits a still-running capture.
 
-For analysis, pass `--handle <H>` to `run` and use `vardeToz.eachLine(fn)`, `vardeToz.text()`, and `vardeToz.handle`. Prefer `eachLine` for large captures. `print(...)` and `console.log(...)` produce the result. Commands and capture reads can be mixed in one script. `--stream stderr` selects the other stream; `--partial` permits a still-running capture. `--timeout-ms` and `--memory-mb` adjust script limits.
+If `run` fails to start, a handle is missing, or the store is denied, read
+`references/troubleshooting.md`.
 
-Without `[sandbox]`, `run` inherits the launching shell's permissions. A harness sandbox still covers its worker and child commands; escalation passes on broader access. `vardeToz.exec()` can launch arbitrary commands. A `[sandbox]` section stays active unless `enabled = false`; `enabled = true` adds Seatbelt on macOS or Bubblewrap on Linux. Its policy defaults to workspace read/write and no network. If the backend cannot start, `run` fails.
+## Related skills
 
-If macOS reports `sandbox_apply: Operation not permitted`, retry with host sandbox escalation when available.
-
-With toz's OS sandbox on, use `run` for commands within its grants. Otherwise use the harness tool; its hook can save only output the harness delivers.
-
-For ordinary harness tool calls, use the harness normally, then pass any returned toz handle to `query` or `run --handle`. `varde-toz doctor` checks the installation.
-
-Some harnesses only show a handle hint for structured results. Query that handle. toz's own output is never re-captured.
-
-If a handle is missing, retrieval fails, or output appears truncated, run `varde-toz doctor --json` and report the command, handle, expected result, and actual result. Share tool output only when needed to reproduce the issue.
-
-For session-level output inefficiency, invoke the installed `varde-learn`
-skill when diagnosis is requested. Supply relevant capture handles and retrieval
-limits; diagnosis owns session analysis and eligible friction capture. A noisy
-capture alone does not trigger diagnosis or authorize a filter change.
-
-For installation, configuration, or profile authoring, invoke the installed
-`varde-manage` skill. If unavailable, report that setup guidance is missing;
-continue capture retrieval with the commands above.
+- Session-level output inefficiency: when diagnosis is requested, invoke the
+  installed `varde-learn` skill with relevant handles and retrieval limits. A
+  noisy capture alone does not trigger diagnosis or authorize a filter change.

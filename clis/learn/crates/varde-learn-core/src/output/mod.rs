@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 
 use crate::error::LearnError;
 pub use run::RunRecord;
-use run::execute_run;
+use run::{ExecuteRunArgs, execute_run};
 
 /// Which side of the with/without-skill comparison a run belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -233,16 +233,16 @@ fn execute_selected_evals(
         let eval_dir = iteration_dir.join(format!("eval-{}", eval.id));
         for &cfg in configs {
             for run in 1..=req.runs {
-                let record = execute_run(
+                let record = execute_run(ExecuteRunArgs {
                     skill_dir,
                     eval,
                     cfg,
                     run,
-                    &eval_dir,
-                    req.sandbox_dir.as_deref(),
-                    req.timeout_seconds,
-                    req,
-                )?;
+                    eval_dir: &eval_dir,
+                    sandbox_template: req.sandbox_dir.as_deref(),
+                    timeout_seconds: req.timeout_seconds,
+                    options: req,
+                })?;
                 records.push(record);
             }
         }

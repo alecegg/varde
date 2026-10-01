@@ -97,6 +97,17 @@ pub fn render_value_with_meta(
     }
 }
 
+/// Render a batch child envelope, including the mode tag added to each call.
+pub(crate) fn render_batch_value(
+    result: Result<Value, ApiError>,
+    meta: crate::query::output::OutputMeta,
+    mode: Option<&str>,
+) -> Value {
+    let mut envelope = render_value_with_meta(result, meta);
+    envelope["mode"] = mode.map_or(Value::Null, Value::from);
+    envelope
+}
+
 /// Process-wide SQL statement trace hook, applied to every connection
 /// `open_db` creates. Diagnostics/test support (e.g. verifying that graph
 /// traversals issue a constant number of statements).
@@ -513,7 +524,7 @@ pub fn run_mode(mode: &str, input: &str) -> String {
             )));
         }
     };
-    let result = dispatch_mode_with_meta(mode, &value);
+    let result = dispatch_mode_with_meta(mode, &value, None);
     let meta = result
         .as_ref()
         .map(|(_, meta)| meta.clone())
@@ -529,25 +540,17 @@ pub fn run_mode(mode: &str, input: &str) -> String {
 fn dispatch_mode_with_meta(
     mode: &str,
     value: &serde_json::Value,
+    mode_tag: Option<&str>,
 ) -> Result<(serde_json::Value, crate::query::output::OutputMeta), ApiError> {
     dispatch_mode_inner(mode, value).and_then(|mut data| {
-        let mut pagination = crate::query::output::paginate_query(mode, value, &mut data)?;
+        let pagination =
+            crate::query::output::paginate_query_with_mode_tag(mode, value, &mut data, mode_tag)?;
         // Single output boundary for every mode (and, via `batch`, each of its
         // sub-calls): repo-relative paths (F5) + line-only spans (F6). Both
         // transforms are idempotent, so a `batch` payload seeing this twice —
         // once per sub-call with that call's own `repoRoot`, once for the
         // aggregate — is harmless.
-        let mut meta = crate::query::output::postprocess(&mut data, value);
-        if let Some(sections) = pagination
-            .as_mut()
-            .and_then(serde_json::Value::as_object_mut)
-        {
-            meta.toz = sections.remove("__toz");
-        }
-        if pagination.is_some() {
-            meta.truncated = true;
-            meta.pagination = pagination;
-        }
+        let meta = crate::query::output::assemble_metadata(&mut data, value, pagination);
         Ok((data, meta))
     })
 }
@@ -645,7 +648,7 @@ fn batch(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
         let merged = merge_repo_context(input, call);
         results.push(batch_result(
             Some(mode),
-            dispatch_mode_with_meta(mode, &merged),
+            dispatch_mode_with_meta(mode, &merged, Some(mode)),
         ));
     }
     Ok(serde_json::Value::Array(results))
@@ -659,9 +662,7 @@ fn batch_result(
         .as_ref()
         .map(|(_, meta)| meta.clone())
         .unwrap_or_default();
-    let mut envelope = render_value_with_meta(result.map(|(data, _)| data), meta);
-    envelope["mode"] = mode.map_or(Value::Null, Value::from);
-    envelope
+    render_batch_value(result.map(|(data, _)| data), meta, mode)
 }
 
 /// A batch call's own `repoRoot`/`dbPath` wins; otherwise it inherits the
@@ -694,8 +695,8 @@ pub mod nav_map;
 pub mod noise_filter;
 pub mod output;
 pub mod simple;
-mod symbol_impact;
 pub mod subsystems;
+mod symbol_impact;
 pub mod symbols_section;
 #[cfg(test)]
 mod test_support;
@@ -770,7 +771,7 @@ mod batch_freshen_tests {
             for call in calls["calls"].as_array().unwrap() {
                 let mut merged = call.clone();
                 merged["repoRoot"] = serde_json::json!(rr);
-                let _ = dispatch_mode_with_meta(call["mode"].as_str().unwrap(), &merged);
+                let _ = dispatch_mode_with_meta(call["mode"].as_str().unwrap(), &merged, None);
             }
             let standalone_runs = FRESHEN_RUN_CALLS.load(Ordering::Relaxed) - before;
             assert_eq!(

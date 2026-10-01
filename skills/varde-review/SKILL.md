@@ -5,36 +5,40 @@ description: "Review code or a running UI and act on findings: report without ed
 
 # Review and improve code
 
-Reporting is the default. When a new review also asks for fixes, write the
-report, then run `fix` on that review in the same session. A request to fix one
-already recorded standalone finding follows `references/fix.md`'s single-finding
-route when its solution is settled.
+Reporting is the default; when a new review also asks for fixes, write the
+report, then run `fix` on that review in the same session.
 
-The harness invokes this workflow as a skill. `varde-review` is not a shell
-executable. Check that the harness has this skill installed instead of using
-`command -v varde-review` or reporting a missing CLI.
-
-Before implementation edits, apply `references/review-gates.md`. Carry its
-verdict through execution and completion, including changes made by this skill.
+Before implementation edits, apply `references/review-gates.md` unless a
+caller's approved gate already covers them.
 
 ## Choose the mode
 
 | The request is | Read |
 |---|---|
 | Review a diff, branch, or code area and write down what is wrong | `references/report.md` |
-| Fix one named, already recorded standalone finding | `references/fix.md` (single-finding route) |
+| Fix one named, already recorded standalone finding | `## One recorded finding` below |
 | Apply the findings an earlier review already wrote down | `references/fix.md` |
 | Address review threads or failing checks on an open GitHub PR | `references/fix.md` (PR source routes to `references/fix-pr.md`) |
 | Inspect a running web, iOS simulator, or macOS app visually and through its interactions | `references/visual.md` |
 | Tidy up what was just changed — naming, redundancy, consistency — with no findings file | `references/simplify.md` |
 | Run a `varde-code` scan and decide what its findings mean | `references/scan.md` |
 
+## One recorded finding
+
+Confirm in its category file:
+
+- its ID and current location;
+- one concrete solution;
+- decision evidence: the user's named request for a one-solution `auto-fix`
+  finding, or approval of that solution for a `triage` finding.
+
+Then, in the same turn, run `varde-change` build and follow its micro-change
+section `One standalone review finding`. Create no report, automated pass,
+task, or companion plan, and leave other findings untouched.
+Missing any item, or a plan-owned finding: use `references/fix.md`.
+
 ## Gotchas
 
-- `<working>` (local, uncommitted) and `<knowledge>` (committed): resolve once
-  before first use with `varde-workflow paths --json`; use its absolute
-  `data.working`/`data.knowledge` paths for this session and pass them to
-  subagents. If the command fails, retry it once with escalated access; if it
-  still fails, ask the user for the paths. Do not guess storage paths. A
-  location outside the repo skips git ops (`check-ignore`, `mv`, `status`);
-  use plain file ops.
+- `varde-review` is a skill invoked by the harness, not a shell executable; do not check it with `command -v` or report a missing CLI.
+- Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
+- At the end of a write flow, record real obstacles through `varde-learn` and durable decisions through `varde-knowledge`; otherwise skip.

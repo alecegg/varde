@@ -102,6 +102,59 @@ mod context_pack_mode {
     }
 
     #[test]
+    fn exact_declaration_outranks_complex_fuzzy_helper_and_exact_call() {
+        let declaration = fn_entity(0, "route_handler");
+        let helper = fn_entity(1, "test_route_handler_helper");
+        let mut call = fn_entity(1, "route_handler");
+        call.kind = EntityKind::Call;
+        let mut entities = vec![declaration, helper, call];
+        entities.extend((0..12).map(|_| {
+            let mut flow = fn_entity(1, "if");
+            flow.kind = EntityKind::ControlFlow;
+            flow
+        }));
+        let db = context_db(
+            entities,
+            vec![
+                "src/route.rs".into(),
+                "tests/test_route_handler_helper.rs".into(),
+            ],
+        );
+
+        let env = envelope(
+            "context_pack",
+            &format!(r#"{{"dbPath":"{}","query":"route_handler"}}"#, db.display()),
+        );
+        assert_eq!(env["ok"], true, "{env}");
+        let files = env["data"]["files"].as_array().expect("files array");
+        assert_eq!(files[0]["path"], "src/route.rs", "{env}");
+    }
+
+    #[test]
+    fn exact_path_or_basename_outranks_a_complex_fuzzy_path() {
+        let mut entities = vec![fn_entity(0, "primary"), fn_entity(1, "secondary")];
+        entities.extend((0..12).map(|_| {
+            let mut flow = fn_entity(1, "if");
+            flow.kind = EntityKind::ControlFlow;
+            flow
+        }));
+        let db = context_db(
+            entities,
+            vec!["src/router.rs".into(), "src/router.rs_helper.rs".into()],
+        );
+
+        for query in ["src/router.rs", "router.rs"] {
+            let env = envelope(
+                "context_pack",
+                &format!(r#"{{"dbPath":"{}","query":"{query}"}}"#, db.display()),
+            );
+            assert_eq!(env["ok"], true, "{env}");
+            let files = env["data"]["files"].as_array().expect("files array");
+            assert_eq!(files[0]["path"], "src/router.rs", "{env}");
+        }
+    }
+
+    #[test]
     fn treats_like_wildcards_as_literal_query_text() {
         let literal = fn_entity(0, "literal%_route");
         let wildcard_lookalike = fn_entity(1, "literalXXroute");
@@ -146,7 +199,11 @@ static REPO_ROOTS: OnceLock<Mutex<std::collections::HashMap<String, PathBuf>>> =
 
 fn persist_fixture(db: &std::path::Path, mut output: ExtractOutput, graph: &ResolvedGraph) {
     let default_root = db.parent().unwrap().parent().unwrap();
-    let absolute: Vec<_> = output.files.iter().filter(|file| std::path::Path::new(file).is_absolute()).collect();
+    let absolute: Vec<_> = output
+        .files
+        .iter()
+        .filter(|file| std::path::Path::new(file).is_absolute())
+        .collect();
     let mut root = if let Some(first) = absolute.first() {
         std::path::Path::new(first).parent().unwrap().to_path_buf()
     } else {
@@ -164,7 +221,9 @@ fn persist_fixture(db: &std::path::Path, mut output: ExtractOutput, graph: &Reso
             std::fs::create_dir_all(path.parent().unwrap()).expect("fixture source dir");
             std::fs::write(&path, "fn fixture() {}\n").expect("fixture source");
         }
-        let state = varde_code::scan::list_source_files(path.to_str().unwrap()).expect("source metadata").remove(0);
+        let state = varde_code::scan::list_source_files(path.to_str().unwrap())
+            .expect("source metadata")
+            .remove(0);
         output.file_meta.push(FileMeta {
             mtime: state.mtime,
             size: state.size,
@@ -172,7 +231,11 @@ fn persist_fixture(db: &std::path::Path, mut output: ExtractOutput, graph: &Reso
         });
     }
     persist::persist(db, &[output], graph, &root).expect("persist");
-    REPO_ROOTS.get_or_init(Default::default).lock().unwrap().insert(db.display().to_string(), root);
+    REPO_ROOTS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .insert(db.display().to_string(), root);
 }
 
 fn span() -> Span {

@@ -24,6 +24,8 @@ varde-toz doctor
 | opencode | Tool hook replaces text; context hook adds guidance |
 | Codex | `PostToolUse` captures supported results; structured results may keep their original content and receive a handle hint |
 
+Pi codemode nested results are captured while their original text and structured values stay available to the calling script. Large direct and final codemode text results still receive the usual preview, with nontext blocks kept in place.
+
 Codex may truncate command output before hooks can inspect it. Use `varde-toz run` when the full output matters; its parent captures command streams before the harness can truncate them.
 
 ## Query stored output
@@ -118,9 +120,28 @@ When the OS sandbox is enabled, use `run` for project work whose commands and de
 
 Those tool calls remain eligible for toz's capture hook because the hook runs outside `run`'s sandbox. The hook can save only output the harness delivers; Codex may truncate long command output first.
 
+## Usage stats
+
+`varde-toz stats --json` reports capture input bytes, preview bytes, query counts,
+query readback bytes, and net saved bytes. Net savings subtract every successful
+`query` stdout byte from the original capture savings, including repeated reads.
+Historical query reads are not reconstructed. Query stdout is a proxy for model
+context: a pipe or terminal may consume fewer bytes than toz emitted. If usage
+logging fails on a read-only store, the query still succeeds and warns that its
+readback was not counted.
+
+`varde-toz stats --events 100 --json` includes the 100 newest query events per
+project; add `--session` to narrow them to the current session. Events record
+the requested capture handle, returned project/handle IDs, search and filter shapes,
+result counts, retrieval position, outcome, and emitted bytes. Failed attempts
+remain visible but do not count as successful reads. Search terms, source-filter
+values, result snippets, and command text are not stored in query events. Raw
+handles are stored only as one-way fingerprints because they grant access to
+exact retained bytes.
+
 ## Storage and configuration
 
-Default project databases live under `~/.config/varde-toz/<project-key>/toz.db`. Database files use `0600`; parent directories use `0700`. Harness adapters can supply an external store through `VARDE_TOZ_FALLBACK_DIR` when their own sandbox blocks the default location. The CLI accepts `--fallback-dir`; manual calls must use the same fallback to retrieve captures. `VARDE_TOZ_CONFIG_DIR` relocates all state and takes precedence.
+Default project databases live under `~/.config/varde-toz/<project-key>/toz.db`. Database files use `0600`; parent directories use `0700`. Harness adapters use this primary store by default. If access fails and the user declines the needed permission, `VARDE_TOZ_FALLBACK_DIR` or `--fallback-dir` opts into an external store. Toz tries it only after a primary-store access error. Use the same fallback for hooks, `query`, and `run`; it cannot recover captures that a failed hook never saved. `VARDE_TOZ_CONFIG_DIR` relocates the primary store.
 
 Capture hooks pass output under the default 4 KiB threshold through unchanged.
 Above it, they save normalized, redacted text and return a preview.

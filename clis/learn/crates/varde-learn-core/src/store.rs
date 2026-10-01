@@ -1781,10 +1781,10 @@ fn get_item_by_identifier(
     identifier: &str,
     database_path: &Path,
 ) -> Result<FrictionItem, LearnError> {
-    if let Ok(item_id) = identifier.parse::<i64>() {
-        if item_id > 0 {
-            return get_item(connection, item_id, database_path);
-        }
+    if let Ok(item_id) = identifier.parse::<i64>()
+        && item_id > 0
+    {
+        return get_item(connection, item_id, database_path);
     }
     connection
         .query_row(
@@ -2370,10 +2370,10 @@ fn normalize_absolute(path: &Path) -> Result<PathBuf, LearnError> {
             Component::Prefix(_) | Component::RootDir => normalized.push(component.as_os_str()),
             Component::CurDir => {}
             Component::ParentDir => {
-                if normalized.exists() {
-                    if let Ok(canonical) = normalized.canonicalize() {
-                        normalized = canonical;
-                    }
+                if normalized.exists()
+                    && let Ok(canonical) = normalized.canonicalize()
+                {
+                    normalized = canonical;
                 }
                 normalized.pop();
             }

@@ -54,6 +54,16 @@ fn capture_text(e: &Env, label: &str, body: String) -> String {
         .to_string()
 }
 
+fn handle_from_preview(text: &str) -> String {
+    text.split("handle ")
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string()
+}
+
 #[test]
 fn capture_metadata_redacts_source_and_label_without_losing_identity() {
     let e = env();
@@ -219,6 +229,109 @@ fn fetch_messages_hide_url_credentials_and_query_values() {
     for secret in ["alice", "bob", "pass", "secret-one", "secret-two"] {
         assert!(!text.contains(secret), "{text}");
     }
+}
+
+#[test]
+fn fetch_persists_completed_pages_while_preserving_input_order() {
+    use std::io::{Read, Write};
+    use std::process::Stdio;
+    use std::sync::mpsc;
+
+    fn respond(mut stream: std::net::TcpStream, status: &str, body: &str) {
+        write!(
+            stream,
+            "HTTP/1.1 {status}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+    }
+
+    let e = env();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (slow_started_tx, slow_started_rx) = mpsc::channel();
+    let (release_slow_tx, release_slow_rx) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        let mut slow_release = Some(release_slow_rx);
+        let mut handlers = Vec::new();
+        for _ in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0u8; 2048];
+            let count = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..count]);
+            if request.contains("GET /slow ") {
+                slow_started_tx.send(()).unwrap();
+                let release = slow_release.take().unwrap();
+                handlers.push(std::thread::spawn(move || {
+                    release
+                        .recv_timeout(std::time::Duration::from_secs(5))
+                        .expect("test releases slow fetch");
+                    respond(stream, "200 OK", "slow page");
+                }));
+            } else if request.contains("GET /fast ") {
+                respond(stream, "200 OK", "fast page");
+            } else if request.contains("GET /fail ") {
+                respond(stream, "503 Service Unavailable", "unavailable");
+            } else {
+                panic!("unexpected fetch request: {request}");
+            }
+        }
+        for handler in handlers {
+            handler.join().unwrap();
+        }
+    });
+
+    let slow = format!("http://127.0.0.1:{port}/slow");
+    let fast = format!("http://127.0.0.1:{port}/fast");
+    let fail = format!("http://127.0.0.1:{port}/fail");
+    let child = std::process::Command::new(env!("CARGO_BIN_EXE_varde-toz"))
+        .env("TOZ_CONFIG_DIR", &e.cfg_path)
+        .env("VARDE_CONFIG_DIR", &e.varde_cfg_path)
+        .env_remove("TOZ_THRESHOLD")
+        .env_remove("TOZ_SESSION")
+        .env_remove("TOZ_FALLBACK_DIR")
+        .current_dir(e.project.path())
+        .args(["fetch", "--concurrency", "2", &slow, &fast, &fail])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    assert!(
+        slow_started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .is_ok()
+    );
+    let project = toz_core::Project::resolve(Some(e.project.path())).unwrap();
+    let database = e.cfg_path.join(project.key).join("toz.db");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    let mut fast_persisted_while_slow = false;
+    while std::time::Instant::now() < deadline {
+        if let Ok(store) = toz_core::Store::open_readonly(&database) {
+            fast_persisted_while_slow = store
+                .list(10, false)
+                .is_ok_and(|rows| rows.iter().any(|row| row.source == fast));
+            if fast_persisted_while_slow {
+                break;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    release_slow_tx.send(()).unwrap();
+    let output = child.wait_with_output().unwrap();
+    server.join().unwrap();
+
+    assert!(
+        fast_persisted_while_slow,
+        "fast response waited for slow URL"
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let slow_position = stdout.find(&slow).unwrap();
+    let fast_position = stdout.find(&fast).unwrap();
+    let fail_position = stdout.find(&fail).unwrap();
+    assert!(slow_position < fast_position && fast_position < fail_position);
+    assert!(stdout.contains(&format!("fetch failed for {fail}")));
 }
 
 #[test]
@@ -479,6 +592,352 @@ fn query_search_retrieve_and_list() {
 }
 
 #[test]
+fn query_readback_reduces_net_stats_savings() {
+    let e = env();
+    let handle = capture_text(&e, "readback", "one\ntwo\nthree\n".repeat(200));
+    let before: serde_json::Value =
+        serde_json::from_slice(&toz(&e).args(["stats", "--json"]).output().unwrap().stdout)
+            .unwrap();
+    let before = &before[0];
+
+    let first = toz(&e)
+        .args(["query", "--handle", &handle, "--lines", "2:2"])
+        .output()
+        .unwrap();
+    assert!(first.status.success());
+    let second = toz(&e)
+        .args(["query", "--handle", &handle, "--lines", "2:2"])
+        .output()
+        .unwrap();
+    assert!(second.status.success());
+
+    let after: serde_json::Value =
+        serde_json::from_slice(&toz(&e).args(["stats", "--json"]).output().unwrap().stdout)
+            .unwrap();
+    let after = &after[0];
+    let readback = (first.stdout.len() + second.stdout.len()) as i64;
+    assert_eq!(after["captures"], before["captures"]);
+    assert_eq!(after["bytes_in"], before["bytes_in"]);
+    assert_eq!(after["bytes_out"], before["bytes_out"]);
+    assert_eq!(after["queries"], 2);
+    assert_eq!(after["query_bytes"], readback);
+    assert_eq!(
+        after["net_saved_bytes"],
+        before["bytes_in"].as_i64().unwrap() - before["bytes_out"].as_i64().unwrap() - readback
+    );
+}
+
+#[test]
+fn capture_kind_named_query_is_still_counted_as_capture() {
+    let e = env();
+    toz(&e)
+        .args(["capture", "--force", "--kind", "query:custom"])
+        .write_stdin("capture data\n".repeat(100))
+        .assert()
+        .success();
+    let stats: serde_json::Value =
+        serde_json::from_slice(&toz(&e).args(["stats", "--json"]).output().unwrap().stdout)
+            .unwrap();
+    let stats = &stats[0];
+    assert_eq!(stats["captures"], 1);
+    assert_eq!(stats["queries"], 0);
+    assert_eq!(stats["by_kind"][0]["kind"], "query:custom");
+}
+
+#[test]
+fn query_events_record_filters_results_and_retrieval_without_search_text() {
+    let e = env();
+    let handle = capture_text(&e, "telemetry", "alpha beta\n".repeat(100));
+    toz(&e)
+        .args([
+            "query",
+            "alpha beta",
+            "--handle",
+            &handle,
+            "--source",
+            "telemetry",
+            "--type",
+            "prose",
+            "--limit",
+            "2",
+            "--all",
+        ])
+        .assert()
+        .success();
+    toz(&e)
+        .args(["query", "--handle", &handle, "--chunk", "0"])
+        .assert()
+        .success();
+    let output = toz(&e)
+        .args(["stats", "--events", "10", "--json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stats: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let events = stats[0]["events"].as_array().unwrap();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0]["kind"], "chunk");
+    assert_eq!(events[0]["details"]["chunk"], 0);
+    assert_eq!(events[1]["kind"], "search");
+    assert_eq!(events[1]["details"]["source_filter"], true);
+    assert_eq!(events[1]["details"]["content_type"], "prose");
+    assert_eq!(events[1]["details"]["limit"], 2);
+    assert_eq!(events[1]["details"]["all"], true);
+    assert_eq!(events[1]["details"]["query_count"], 1);
+    assert!(events[1]["details"]["hit_count"].as_u64().unwrap() > 0);
+    assert_eq!(events[1]["details"]["handle"], handle);
+    assert!(events[1]["details"]["result_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id["handle"] == handle && id["project"].as_str().is_some()));
+    let stored = serde_json::to_string(events).unwrap();
+    assert!(!stored.contains("alpha beta"));
+    assert!(!stored.contains("telemetry"));
+}
+
+#[test]
+fn query_events_link_repeated_attempts_to_one_handle_without_inflating_savings() {
+    let e = env();
+    let handle = capture_text(&e, "attempts", "one\ntwo\n".repeat(100));
+    toz(&e)
+        .env("TOZ_SESSION", "attempt-session")
+        .args(["query", "--handle", &handle, "--chunk", "999"])
+        .assert()
+        .failure();
+    let first = toz(&e)
+        .env("TOZ_SESSION", "attempt-session")
+        .args(["query", "--handle", &handle, "--chunk", "0"])
+        .output()
+        .unwrap();
+    let second = toz(&e)
+        .env("TOZ_SESSION", "attempt-session")
+        .args(["query", "--handle", &handle, "--chunk", "0"])
+        .output()
+        .unwrap();
+    assert!(first.status.success() && second.status.success());
+    toz(&e)
+        .env("TOZ_SESSION", "another-session")
+        .args(["query", "--handle", &handle, "--lines", "1:1"])
+        .assert()
+        .success();
+
+    let output = toz(&e)
+        .env("TOZ_SESSION", "attempt-session")
+        .args(["stats", "--session", "--events", "3", "--json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stats: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let stats = &stats[0];
+    let events = stats["events"].as_array().unwrap();
+    assert_eq!(events.len(), 3);
+    assert!(events
+        .iter()
+        .all(|event| event["details"]["handle"] == handle));
+    assert_eq!(events[0]["outcome"], "ok");
+    assert_eq!(events[1]["outcome"], "ok");
+    assert_eq!(events[2]["outcome"], "invalid_selection");
+    assert_eq!(stats["queries"], 2);
+    assert_eq!(
+        stats["query_bytes"],
+        (first.stdout.len() + second.stdout.len()) as i64
+    );
+    let bounded: serde_json::Value = serde_json::from_slice(
+        &toz(&e)
+            .args(["stats", "--events", "1", "--json"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(bounded[0]["events"].as_array().unwrap().len(), 1);
+    toz(&e)
+        .args(["stats", "--events", "10001"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("between 1 and 10000"));
+}
+
+#[test]
+fn empty_store_queries_keep_their_output_and_outcome() {
+    let e = env();
+    for _ in 0..2 {
+        toz(&e)
+            .args(["query", "missing term"])
+            .assert()
+            .success()
+            .stdout("varde-toz: no captures yet for this project\n");
+        toz(&e)
+            .args(["query", "--list", "--json"])
+            .assert()
+            .success()
+            .stdout("[]\n");
+    }
+    let stats: serde_json::Value = serde_json::from_slice(
+        &toz(&e)
+            .args(["stats", "--events", "10", "--json"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(stats[0]["events"].as_array().unwrap().len(), 4);
+    assert!(stats[0]["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|event| event["outcome"] == "no_store"));
+}
+
+#[test]
+fn global_search_events_qualify_result_handles_with_project() {
+    let e = env();
+    let other = TempDir::new().unwrap();
+    capture_text(&e, "one", "global marker\n".repeat(100));
+    toz(&e)
+        .current_dir(other.path())
+        .args(["capture", "--force", "--label", "two"])
+        .write_stdin("global marker\n".repeat(100))
+        .assert()
+        .success();
+    toz(&e)
+        .args(["query", "global marker", "--global"])
+        .assert()
+        .success();
+    let stats: serde_json::Value = serde_json::from_slice(
+        &toz(&e)
+            .args(["stats", "--events", "1", "--json"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let ids = stats[0]["events"][0]["details"]["result_ids"]
+        .as_array()
+        .unwrap();
+    assert_eq!(ids.len(), 2);
+    assert_ne!(ids[0]["project"], ids[1]["project"]);
+    assert!(ids.iter().all(|id| id["handle"].as_str().is_some()));
+}
+
+#[test]
+fn query_stats_count_each_output_mode_and_keep_capture_totals_separate() {
+    let e = env();
+    let handle = capture_text(&e, "query-modes", "alpha\nbeta\n".repeat(100));
+    let cases = [
+        (vec!["query", "--handle", &handle, "--chunk", "0"], "chunk"),
+        (
+            vec!["query", "--handle", &handle, "--lines", "1:1"],
+            "lines",
+        ),
+        (vec!["query", "--handle", &handle, "alpha"], "search"),
+        (vec!["query", "--list", "--json"], "list"),
+        (
+            vec!["query", "--handle", &handle, "--records", "missing"],
+            "records",
+        ),
+    ];
+    let mut expected = 0;
+    for (args, _) in &cases {
+        let output = toz(&e).args(args).output().unwrap();
+        assert!(output.status.success());
+        expected += output.stdout.len() as i64;
+    }
+    toz(&e)
+        .args(["query", "--handle", &handle, "--chunk", "999"])
+        .assert()
+        .failure();
+
+    let stats: serde_json::Value =
+        serde_json::from_slice(&toz(&e).args(["stats", "--json"]).output().unwrap().stdout)
+            .unwrap();
+    let stats = &stats[0];
+    assert_eq!(stats["captures"], 1);
+    assert_eq!(stats["queries"], cases.len());
+    assert_eq!(stats["query_bytes"], expected);
+    assert_eq!(stats["by_kind"].as_array().unwrap().len(), 1);
+    let kinds: Vec<&str> = stats["by_query_kind"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["kind"].as_str().unwrap())
+        .collect();
+    for (_, kind) in &cases {
+        assert!(kinds.contains(kind));
+    }
+}
+
+#[test]
+fn query_stats_session_filter_and_negative_net_savings() {
+    let e = env();
+    let handle = capture_text(&e, "session-query", "short\n".repeat(80));
+    for _ in 0..3 {
+        toz(&e)
+            .env("TOZ_SESSION", "query-session")
+            .args(["query", "--handle", &handle])
+            .assert()
+            .success();
+    }
+    let stats: serde_json::Value = serde_json::from_slice(
+        &toz(&e)
+            .env("TOZ_SESSION", "query-session")
+            .args(["stats", "--session", "--json"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let stats = &stats[0];
+    assert_eq!(stats["captures"], 0);
+    assert_eq!(stats["queries"], 3);
+    assert!(stats["net_saved_bytes"].as_i64().unwrap() < 0);
+    assert!(stats["tokens_saved_estimate"].as_i64().unwrap() < 0);
+}
+
+#[test]
+fn query_handle_readback_is_charged_to_capture_project() {
+    let e = env();
+    let source_project = TempDir::new().unwrap();
+    let captured = toz(&e)
+        .current_dir(source_project.path())
+        .args(["capture", "--force", "--label", "other-project"])
+        .write_stdin("cross-project data\n".repeat(100))
+        .output()
+        .unwrap();
+    assert!(captured.status.success());
+    let preview = String::from_utf8(captured.stdout).unwrap();
+    let handle = preview
+        .split("handle ")
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap();
+
+    let readback = toz(&e)
+        .args(["query", "--handle", handle, "--lines", "1:1"])
+        .output()
+        .unwrap();
+    assert!(readback.status.success());
+    let source_stats: serde_json::Value = serde_json::from_slice(
+        &toz(&e)
+            .current_dir(source_project.path())
+            .args(["stats", "--json"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(source_stats[0]["queries"], 1);
+    assert_eq!(source_stats[0]["query_bytes"], readback.stdout.len());
+}
+
+#[test]
 fn deferred_capture_reads_immediately_and_searches_after_indexing() {
     let e = env();
     let body = "alpha first\nunique-deferred-token second\nomega last\n";
@@ -535,6 +994,80 @@ fn capture_from_stdin() {
         .assert()
         .success()
         .stdout(body);
+}
+
+#[test]
+fn large_capture_stdin_below_threshold_passes_through_byte_for_byte() {
+    let e = env();
+    let body = "p".repeat(8 * 1024 * 1024);
+    toz(&e)
+        .args(["capture", "--threshold", "16777216"])
+        .write_stdin(body.clone())
+        .assert()
+        .success()
+        .stdout(body);
+}
+
+#[test]
+fn large_accepted_capture_preserves_stored_bytes() {
+    let e = env();
+    let mut expected: String = (0..200_000)
+        .map(|i| format!("capture-row-{i:06}\n"))
+        .collect();
+    expected.pop();
+    let handle = capture_text(&e, "streamed", expected.clone());
+    let project = toz_core::Project::resolve(Some(e.project.path())).unwrap();
+    let store =
+        toz_core::Store::open_readonly(&e.cfg_path.join(project.key).join("toz.db")).unwrap();
+    let capture = store.get_by_handle(&handle).unwrap().unwrap();
+    let stored = store.full_text(capture.id, "stdout").unwrap();
+    assert_eq!(stored.as_bytes(), expected.as_bytes());
+}
+
+#[test]
+fn oversized_profile_matched_capture_reports_its_input_limit() {
+    const MAX_PROFILE_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
+
+    let e = env();
+    write_user_profile(
+        &e.varde_cfg_path,
+        r#"
+[[profile]]
+id = "bounded-profile"
+match = { source = "large-profiled-capture" }
+script = "print('profile ran')"
+"#,
+    );
+    let body = vec![b'x'; MAX_PROFILE_CAPTURE_BYTES + 1];
+    toz(&e)
+        .args(["capture", "--source", "large-profiled-capture", "--force"])
+        .write_stdin(body)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "profile-matched capture exceeds the 8388608-byte limit",
+        ));
+}
+
+#[test]
+fn oversized_hook_payload_is_skipped_with_full_byte_count() {
+    const MAX_HOOK_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
+
+    let e = env();
+    let bytes = MAX_HOOK_PAYLOAD_BYTES + 1;
+    toz(&e)
+        .args(["capture", "--hook"])
+        .write_stdin(vec![b'x'; bytes])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+
+    let line = std::fs::read_to_string(e.cfg_path.join("diagnostics.jsonl")).unwrap();
+    let event: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+    assert_eq!(event["outcome"], "failed");
+    assert_eq!(event["reason"], "invalid-payload");
+    assert_eq!(event["bytes"], bytes);
 }
 
 #[test]
@@ -633,6 +1166,31 @@ fn hook_event_uses_fallback_when_default_diagnostics_are_unwritable() {
 }
 
 #[test]
+fn note_never_instructs_agents_to_use_fallback_by_default() {
+    let fallback = TempDir::new().unwrap();
+    let output = Command::cargo_bin("varde-toz")
+        .unwrap()
+        .env("VARDE_TOZ_FALLBACK_DIR", fallback.path())
+        .env_remove("TOZ_FALLBACK_DIR")
+        .args([
+            "--fallback-dir",
+            fallback.path().to_str().unwrap(),
+            "note",
+            "--harness",
+            "claude-code",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let note: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let note = note["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(note.contains("varde-toz query --handle"));
+    assert!(!note.contains("VARDE_TOZ_FALLBACK_DIR="));
+}
+
+#[test]
 fn hook_mode_content_blocks_and_unknown_shapes() {
     let e = env();
     let big: String = (1..=2000).map(|i| format!("l{i} ")).collect();
@@ -676,6 +1234,12 @@ fn hook_mode_content_blocks_and_unknown_shapes() {
     });
     toz(&e)
         .args(["capture", "--hook"])
+        .write_stdin(numeric.to_string())
+        .assert()
+        .success()
+        .stdout("");
+    toz(&e)
+        .args(["capture", "--hook", "--harness", "codex"])
         .write_stdin(numeric.to_string())
         .assert()
         .success()
@@ -729,6 +1293,263 @@ fn hook_mode_content_blocks_preserves_non_text_blocks() {
         .unwrap()
         .starts_with("varde-toz: captured"));
     assert_eq!(upd[2], resource);
+}
+
+#[test]
+fn hook_structured_mcp_round_trip_and_replacement_contracts() {
+    let e = env();
+    let structured = serde_json::json!({
+        "values": (0..=3000).collect::<Vec<usize>>(),
+        "metadata": {"complete": true, "count": 3001}
+    });
+    let image = serde_json::json!({
+        "type": "image", "data": "image-block-secret-base64", "mimeType": "image/png"
+    });
+    let resource = serde_json::json!({
+        "type": "resource_link", "name": "report", "uri": "file:///report.pdf"
+    });
+
+    for harness in ["codex", "claude-code"] {
+        for short_text in [Some("short notes"), None] {
+            let tool_response = if let Some(text) = short_text {
+                serde_json::json!({
+                    "content": [
+                        image.clone(),
+                        {"type": "text", "text": text},
+                        resource.clone(),
+                        {"type": "text", "text": "more"}
+                    ],
+                    "structuredContent": structured.clone()
+                })
+            } else {
+                serde_json::json!({"structuredContent": structured.clone()})
+            };
+            let payload = serde_json::json!({
+                "tool_name": "StructuredTool", "tool_input": {}, "tool_response": tool_response
+            });
+            let out = toz(&e)
+                .args(["capture", "--hook", "--harness", harness])
+                .write_stdin(payload.to_string())
+                .output()
+                .unwrap();
+            assert!(out.status.success());
+            let feedback: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+            let hook = &feedback["hookSpecificOutput"];
+            assert_eq!(hook["hookEventName"], "PostToolUse");
+            assert!(feedback.get("decision").is_none());
+            assert!(feedback.get("continue").is_none());
+
+            let preview = if harness == "claude-code" && short_text.is_some() {
+                let updated = &hook["updatedToolOutput"];
+                assert_eq!(updated["structuredContent"], structured);
+                let content = updated["content"].as_array().unwrap();
+                assert_eq!(content.len(), 3);
+                assert_eq!(content[0], image);
+                assert_eq!(content[2], resource);
+                content[1]["text"].as_str().unwrap()
+            } else {
+                assert!(hook.get("updatedToolOutput").is_none());
+                assert!(hook.get("updatedMCPToolOutput").is_none());
+                hook["additionalContext"].as_str().unwrap()
+            };
+            let handle = handle_from_preview(preview);
+            let archived = toz(&e)
+                .args(["query", "--handle", &handle])
+                .output()
+                .unwrap();
+            assert!(archived.status.success());
+            let envelope: serde_json::Value = serde_json::from_slice(&archived.stdout).unwrap();
+            assert_eq!(
+                envelope["contentText"],
+                short_text.map(|_| "short notes\nmore").unwrap_or("")
+            );
+            assert_eq!(envelope["structuredContent"], structured);
+            assert_eq!(envelope.as_object().unwrap().len(), 2);
+            assert!(!envelope.to_string().contains("image-block-secret-base64"));
+        }
+    }
+}
+
+#[test]
+fn hook_codex_stream_completion_and_unfinished_stream_contract_stays_unchanged() {
+    let e = env();
+    let big: String = (1..=2000).map(|i| format!("line {i} ")).collect();
+    let completed = serde_json::json!({
+        "tool_name": "Bash", "tool_input": {"command": "printf output"},
+        "tool_response": {"stdout": big, "stderr": "", "exit_code": 0}
+    });
+    let out = toz(&e)
+        .args(["capture", "--hook", "--harness", "codex"])
+        .write_stdin(completed.to_string())
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let feedback: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(feedback["continue"], false);
+    assert!(feedback.get("decision").is_none());
+    assert!(feedback["hookSpecificOutput"]["additionalContext"].is_string());
+    assert!(feedback["hookSpecificOutput"]
+        .get("updatedToolOutput")
+        .is_none());
+    assert!(feedback["hookSpecificOutput"]
+        .get("updatedMCPToolOutput")
+        .is_none());
+
+    let unfinished = serde_json::json!({
+        "tool_name": "Bash", "tool_input": {"command": "printf output"},
+        "tool_response": {"stdout": big, "stderr": "", "exit_code": null, "session_id": "live"}
+    });
+    toz(&e)
+        .args(["capture", "--hook", "--harness", "codex"])
+        .write_stdin(unfinished.to_string())
+        .assert()
+        .success()
+        .stdout("");
+}
+
+#[test]
+fn hook_codex_plain_string_feedback_is_bounded_and_round_trips_with_redaction() {
+    const OUTPUT_BYTES: usize = 21_567;
+    const SECRET: &str = "CODEX_SECRET_12345";
+    let mut text = format!("{SECRET}\n{}", "output line\n".repeat(2_000));
+    text.truncate(OUTPUT_BYTES - 1);
+    text.push('\n');
+    assert_eq!(text.len(), OUTPUT_BYTES);
+
+    for redact in [false, true] {
+        let e = env();
+        if redact {
+            std::fs::write(
+                e.cfg_path.join("config.toml"),
+                "[redact]\npatterns = ['CODEX_SECRET_[0-9]+']\n",
+            )
+            .unwrap();
+        }
+        let payload = serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf synthetic-output"},
+            "tool_response": text
+        });
+        let out = toz(&e)
+            .args(["capture", "--hook", "--harness", "codex"])
+            .write_stdin(payload.to_string())
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        assert!(out.stdout.len() < 4096);
+        let feedback: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(feedback["continue"], false);
+        assert!(feedback.get("decision").is_none());
+
+        let hook = &feedback["hookSpecificOutput"];
+        let stop_reason = feedback["stopReason"].as_str().unwrap();
+        let additional_context = hook["additionalContext"].as_str().unwrap();
+        let handle = handle_from_preview(stop_reason);
+        assert!(stop_reason.starts_with("varde-toz: captured"));
+        assert!(additional_context.starts_with("varde-toz: stored this output as handle"));
+        assert!(additional_context.contains(&handle));
+        assert!(!additional_context.contains("output line"));
+        if redact {
+            assert!(!stop_reason.contains(SECRET));
+            assert!(stop_reason.contains("[redacted:user]"));
+        }
+
+        let archived = toz(&e)
+            .args(["query", "--handle", &handle])
+            .output()
+            .unwrap();
+        assert!(archived.status.success());
+        let expected = if redact {
+            text.replace(SECRET, "[redacted:user]")
+        } else {
+            text.clone()
+        };
+        assert_eq!(String::from_utf8(archived.stdout).unwrap(), expected);
+    }
+}
+
+#[test]
+fn hook_codex_small_plain_strings_and_toz_commands_stay_untouched() {
+    let e = env();
+    let small = serde_json::json!({
+        "tool_name": "Bash",
+        "tool_input": {"command": "printf short"},
+        "tool_response": "short output"
+    });
+    toz(&e)
+        .args(["capture", "--hook", "--harness", "codex"])
+        .write_stdin(small.to_string())
+        .assert()
+        .success()
+        .stdout("");
+
+    let large = "own Toz command output\n".repeat(500);
+    let recursive = serde_json::json!({
+        "tool_name": "Bash",
+        "tool_input": {"command": "varde-toz query --handle existing"},
+        "tool_response": large
+    });
+    toz(&e)
+        .args(["capture", "--hook", "--harness", "codex"])
+        .write_stdin(recursive.to_string())
+        .assert()
+        .success()
+        .stdout("");
+}
+
+#[test]
+fn hook_small_and_null_structured_values_keep_existing_behavior() {
+    let e = env();
+    let small = serde_json::json!({
+        "tool_name": "StructuredTool", "tool_input": {},
+        "tool_response": {
+            "content": [{"type": "text", "text": "short"}],
+            "structuredContent": {"count": 1}
+        }
+    });
+    for harness in ["codex", "claude-code"] {
+        toz(&e)
+            .args(["capture", "--hook", "--harness", harness])
+            .write_stdin(small.to_string())
+            .assert()
+            .success()
+            .stdout("");
+    }
+
+    let text = "ordinary content\n".repeat(500);
+    let null_structured = serde_json::json!({
+        "tool_name": "ExampleTool", "tool_input": {},
+        "tool_response": {
+            "content": [{"type": "text", "text": text}], "structuredContent": null
+        }
+    });
+    for harness in ["codex", "claude-code"] {
+        let out = toz(&e)
+            .args(["capture", "--hook", "--harness", harness])
+            .write_stdin(null_structured.to_string())
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        let feedback: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let hook = &feedback["hookSpecificOutput"];
+        let preview = if harness == "codex" {
+            assert!(feedback.get("decision").is_none());
+            assert!(feedback.get("continue").is_none());
+            assert!(hook.get("updatedToolOutput").is_none());
+            hook["additionalContext"].as_str().unwrap()
+        } else {
+            let updated = &hook["updatedToolOutput"];
+            assert_eq!(updated["structuredContent"], serde_json::Value::Null);
+            updated["content"][0]["text"].as_str().unwrap()
+        };
+        let handle = handle_from_preview(preview);
+        let archived = toz(&e)
+            .args(["query", "--handle", &handle])
+            .output()
+            .unwrap();
+        assert!(archived.status.success());
+        assert_eq!(String::from_utf8(archived.stdout).unwrap(), text);
+    }
 }
 
 #[test]
@@ -874,7 +1695,8 @@ fn install_writes_bundle_with_absolute_binary_path() {
         .stdout(predicate::str::contains("wrote"));
     let hooks = std::fs::read_to_string(dir.join("hooks/hooks.json")).unwrap();
     assert!(!hooks.contains("{{TOZ_BIN}}"));
-    assert!(hooks.contains("/varde-toz --fallback-dir"));
+    assert!(hooks.contains("/varde-toz capture --hook"));
+    assert!(!hooks.contains("--fallback-dir"));
     assert!(hooks.contains("capture --hook"));
     assert!(dir.join(".claude-plugin/plugin.json").exists());
     assert!(!dir.join("skills/toz").exists());
@@ -1312,7 +2134,7 @@ fn store_is_private_to_the_user() {
 /// `{filenames, durationMs, numFiles, truncated, …}` and shows `filenames.join("\n")`.
 
 #[test]
-fn harness_bundles_supply_external_fallback_for_capture_and_retrieval() {
+fn harness_bundles_use_primary_store_by_default() {
     let e = env();
     for harness in ["codex", "claude-code", "pi", "opencode"] {
         let dir = e.cfg_path.join(format!("{harness} space ' quote"));
@@ -1345,14 +2167,77 @@ fn harness_bundles_supply_external_fallback_for_capture_and_retrieval() {
             let note = note["hookSpecificOutput"]["additionalContext"]
                 .as_str()
                 .unwrap();
-            assert!(note.contains("TOZ_FALLBACK_DIR="));
+            assert!(!note.contains("TOZ_FALLBACK_DIR="));
             assert!(note.contains("toz query --handle"));
+            assert!(!command.contains("--fallback-dir"));
         } else {
-            assert!(text.contains("TOZ_FALLBACK_DIR: FALLBACK"));
-            assert!(text.contains("TOZ_FALLBACK_DIR="));
+            assert!(!text.contains("TOZ_FALLBACK_DIR: FALLBACK"));
+            assert!(!text.contains("{{TOZ_FALLBACK_"));
         }
     }
     assert!(!e.project.path().join(".toz").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn opted_in_fallback_reads_when_existing_primary_db_is_inaccessible() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let e = env();
+    let fallback = TempDir::new().unwrap();
+    let fallback_capture = toz(&e)
+        .env("TOZ_CONFIG_DIR", fallback.path())
+        .args(["capture", "--force", "--source", "fallback-test"])
+        .write_stdin("fallback only marker\n")
+        .output()
+        .unwrap();
+    assert!(fallback_capture.status.success());
+    let text = String::from_utf8_lossy(&fallback_capture.stdout);
+    let handle = text
+        .split("handle ")
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap();
+
+    let primary_capture = toz(&e)
+        .args(["capture", "--force", "--source", "primary-test"])
+        .write_stdin("primary marker\n")
+        .output()
+        .unwrap();
+    assert!(primary_capture.status.success());
+    let project = toz_core::Project::resolve(Some(e.project.path())).unwrap();
+    let db = e.cfg_path.join(&project.key).join("toz.db");
+    std::fs::set_permissions(&db, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    toz(&e)
+        .args(["query", "--handle", handle])
+        .assert()
+        .failure();
+
+    let fallback_path = fallback.path().to_str().unwrap();
+    for args in [
+        vec!["query", "--handle", handle],
+        vec!["query", "--list"],
+        vec!["query", "fallback only marker"],
+    ] {
+        let output = toz(&e)
+            .args(["--fallback-dir", fallback_path])
+            .args(&args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("fallback only marker") || stdout.contains(handle),
+            "args={args:?}, stdout={stdout}"
+        );
+    }
 }
 
 #[test]
@@ -1519,11 +2404,65 @@ fn script_command_can_request_opt_in_exact_raw_output() {
         ],
         None,
     );
+    let before: serde_json::Value =
+        serde_json::from_slice(&toz(&e).args(["stats", "--json"]).output().unwrap().stdout)
+            .unwrap();
     toz(&e)
         .args(["query", "--raw", handle.trim()])
         .assert()
         .success()
         .stdout("raw-bytes");
+
+    let stats: serde_json::Value =
+        serde_json::from_slice(&toz(&e).args(["stats", "--json"]).output().unwrap().stdout)
+            .unwrap();
+    assert!(stats[0]["by_query_kind"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|kind| kind["kind"] == "raw" && kind["bytes_out"] == "raw-bytes".len()));
+    assert_eq!(
+        stats[0]["query_bytes"].as_i64().unwrap() - before[0]["query_bytes"].as_i64().unwrap(),
+        "raw-bytes".len() as i64
+    );
+    let missing_handle = format!("r{}", "0".repeat(32));
+    toz(&e)
+        .args(["query", "--raw", &missing_handle])
+        .assert()
+        .failure();
+    let events: serde_json::Value = serde_json::from_slice(
+        &toz(&e)
+            .args(["stats", "--events", "2", "--json"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(events[0]["events"][0]["outcome"], "failed_lookup");
+    assert_eq!(
+        events[0]["events"][0]["details"]["handle_fingerprint"],
+        toz_core::content_hash(missing_handle.as_bytes())
+    );
+    assert_eq!(
+        events[0]["events"][1]["details"]["handle_fingerprint"],
+        toz_core::content_hash(handle.trim().as_bytes())
+    );
+    assert!(!serde_json::to_string(&events)
+        .unwrap()
+        .contains(handle.trim()));
+    assert!(!serde_json::to_string(&events)
+        .unwrap()
+        .contains(&missing_handle));
+
+    let project = toz_core::Project::resolve(Some(e.project.path())).unwrap();
+    let db = e.cfg_path.join(&project.key).join("toz.db");
+    std::fs::write(db, b"corrupt database").unwrap();
+    toz(&e)
+        .args(["query", "--raw", handle.trim()])
+        .assert()
+        .success()
+        .stdout("raw-bytes")
+        .stderr(predicate::str::contains("query usage not recorded"));
 }
 
 #[test]
@@ -1549,10 +2488,11 @@ print(JSON.stringify(c));
 fn script_exit_codes_distinguish_failures_and_reserve_two() {
     let e = env();
     let h = capture_lines(&e, "log", 20);
-    let cases: [(&str, i32); 4] = [
+    let cases: [(&str, i32); 5] = [
         ("while(true){}", 3),
         ("const a=[];for(;;)a.push(new Array(4096).fill(7))", 4),
         ("for(let i=0;i<1e6;i++)print('xxxxxxxxxxxxxxxxxxxxxxxx')", 5),
+        ("for(let i=0;i<=10000;i++)toz.record('row',i)", 6),
         ("toz.nope()", 1),
     ];
     for (code, want) in cases {
@@ -1571,6 +2511,13 @@ fn script_exit_codes_distinguish_failures_and_reserve_two() {
             .output()
             .unwrap();
         assert_eq!(out.status.code(), Some(want), "for `{code}`");
+        if code.contains("toz.record") {
+            assert!(
+                String::from_utf8_lossy(&out.stderr).contains("record limit"),
+                "missing actionable record-limit diagnostic: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
     }
     // 2 stays toz's own failure, which is why the script codes skip it.
     toz(&e)
@@ -1939,7 +2886,7 @@ fn varde_config_toz_key_wins_over_an_existing_fallback_store() {
         "expected the store under the varde config dir, not the fallback dir"
     );
 
-    // `--fallback-dir` is ignored while the varde `toz` key is set.
+    // An explicitly configured fallback does not displace an accessible primary store.
     let out = toz(&e)
         .env_remove("TOZ_CONFIG_DIR")
         .args(["--fallback-dir", fallback.path().to_str().unwrap()])

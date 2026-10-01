@@ -79,6 +79,20 @@ fn print_json_error(code: &str, message: &str) {
     );
 }
 
+pub(crate) fn print_success_envelope(data: serde_json::Value, meta: serde_json::Value) {
+    println!(
+        "{}",
+        json!({
+            "schema_version": 1,
+            "envelope_version": 1,
+            "ok": true,
+            "outcome": "success",
+            "data": data,
+            "meta": meta,
+        })
+    );
+}
+
 fn run(cli: Cli) -> anyhow::Result<()> {
     match cli.command {
         TopCommand::Eval { command } => match command {
@@ -152,6 +166,7 @@ fn run_trigger_command(args: TriggerArgs) -> anyhow::Result<()> {
         queries_path: args.queries,
         harness,
         runs: args.runs,
+        timeout_seconds: args.timeout_seconds,
         skill_path: args.skill_path,
     };
 

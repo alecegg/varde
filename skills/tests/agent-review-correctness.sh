@@ -2,27 +2,18 @@
 set -euo pipefail
 skills_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python3 - "$skills_dir" <<'PY'
-import subprocess, tempfile, re, sys
+import subprocess, tempfile, sys
 from pathlib import Path
 skills=Path(sys.argv[1])
-text=(skills/'varde-docs/references/spec-format.md').read_text()
-recipe=re.search(r'```bash\n(.*?)\n```', text, re.S)[1]
-with tempfile.TemporaryDirectory() as tmp:
- root=Path(tmp); subprocess.run(['git','init','-q',tmp],check=True)
- (root/'a').write_bytes(b'alpha\n'); (root/'b').write_bytes(b'beta\n')
- def git(*args, data=None): return subprocess.run(['git',*args],cwd=root,input=data,capture_output=True,check=True).stdout.strip()
- expected=git('hash-object','--stdin',data=b''.join(p+git('hash-object','--no-filters',p.decode()) for p in [b'a',b'b']))
- valid=subprocess.run(['bash','-c',recipe],cwd=root,input=b'b\na\n',capture_output=True)
- assert valid.returncode==0 and valid.stdout.strip()==expected, valid
- invalid=subprocess.run(['bash','-c',recipe],cwd=root,input=b'a\nmissing\n',capture_output=True)
- assert invalid.returncode!=0 and not invalid.stdout.strip(), invalid
 report=(skills/'varde-review/references/report.md').read_text()
-assert 'explicit code area' in report and 'git ls-files -- <area>' in report
+assert 'Explicit code area' in report and 'review-scope.sh area' in report
 assert 'every scoped file' in report
-handoff=(skills/'varde-knowledge/references/reflect-handoff.md').read_text()
-assert 'unknown' in handoff and 'git diff <head_sha> -- <repo-relative-target>' in handoff
-assert 'explicit relevant file links' in handoff
-assert 'target independently' in handoff
+handoff=(skills/'varde-knowledge/references/handoff-resume.md').read_text()
+handoff_write=(skills/'varde-knowledge/references/handoff-write.md').read_text()
+assert 'unknown' in handoff
+assert 'external target' in handoff
+assert 'explicit relevant file links' in handoff_write
+assert 'target independently' in handoff and 'target independently' in handoff_write
 # Exercise the documented comparison with handoff storage outside the repo.
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)/'repo'; root.mkdir(); external=Path(tmp)/'working'; external.mkdir()
@@ -42,14 +33,14 @@ with tempfile.TemporaryDirectory() as tmp:
  git('commit','-qm','changed'); assert git('diff',baseline,'--','target.md')
  assert hashlib.sha256(memory.read_bytes()).hexdigest()==snapshot
  memory.write_text('changed memory\n'); assert hashlib.sha256(memory.read_bytes()).hexdigest()!=snapshot
- assert 'timestamps alone cannot' in handoff and 'external target' in handoff
  # An explicit area lists tracked files even without any pending diff.
  assert not git('diff','HEAD')
  assert git('ls-files','--','target.md').strip()==b'target.md'
 refresh=(skills/'varde-docs/references/refresh.md').read_text()
 inventory=refresh.split('2. Many')[0]
 assert 'varde-workflow paths' not in inventory
-assert 'Before that lookup' in refresh and 'reuse paths' in refresh
-assert 'no memory lookup' in refresh and 'there are no lessons' in refresh
-print('PASS: provenance failure, clean area, external handoff comparisons and first-use routing')
+# Memory paths resolve once in SKILL.md, never mid-workflow.
+assert 'varde-workflow paths' not in refresh
+assert 'Resolve `<working>` and `<knowledge>` once' in (skills/'varde-docs/SKILL.md').read_text()
+print('PASS: clean area, external handoff comparisons and first-use routing')
 PY

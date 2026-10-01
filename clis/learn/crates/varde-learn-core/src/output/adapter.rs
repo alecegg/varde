@@ -24,13 +24,6 @@ pub(super) fn args(
         OutputHarness::Codex => vec![
             "exec".into(),
             "--json".into(),
-            "--sandbox".into(),
-            if judge {
-                "read-only"
-            } else {
-                "workspace-write"
-            }
-            .into(),
             "--ephemeral".into(),
             "--ignore-user-config".into(),
             "--skip-git-repo-check".into(),
@@ -42,7 +35,11 @@ pub(super) fn args(
         args.extend(["--model".into(), model.into()]);
     }
     if harness == OutputHarness::Codex {
-        if !judge {
+        // --approve-for-me implies the workspace-write sandbox; codex rejects
+        // it alongside --sandbox.
+        if judge {
+            args.extend(["--sandbox".into(), "read-only".into()]);
+        } else {
             args.push("--approve-for-me".into());
         }
         for feature in ["plugins", "hooks", "memories"] {

@@ -22,6 +22,17 @@ fn trigger_without_harness_exits_2() {
 }
 
 #[test]
+fn trigger_help_documents_timeout_option() {
+    Command::cargo_bin("varde-learn")
+        .unwrap()
+        .args(["eval", "trigger", "--help"])
+        .assert()
+        .success()
+        .stdout(contains("--timeout-seconds"))
+        .stdout(contains("default: 300"));
+}
+
+#[test]
 fn adopt_record_help_lists_record_fields() {
     Command::cargo_bin("varde-learn")
         .unwrap()
@@ -101,4 +112,30 @@ fn diagnose_help_lists_live_and_frozen_bounded_intakes() {
         .stdout(contains("--cutoff-anchor"))
         .stdout(contains("--offset"))
         .stdout(contains("--limit"));
+}
+
+#[test]
+fn diagnose_capture_help_lists_file_and_flag_form_inputs() {
+    let output = Command::cargo_bin("varde-learn")
+        .unwrap()
+        .args(["diagnose", "capture", "--help"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout).unwrap();
+    for flag in [
+        "--file",
+        "--snapshot",
+        "--source-id",
+        "--record-index",
+        "--native-id",
+        "--kind",
+        "--evidence",
+        "--item-id",
+        "--item-source",
+        "--item-title",
+        "--item-target",
+    ] {
+        assert!(help.contains(flag), "help lacks {flag}");
+    }
 }

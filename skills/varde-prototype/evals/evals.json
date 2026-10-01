@@ -3,7 +3,7 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "I'm not sure what the new dashboard landing page should look like \u2014 can you prototype a few directions for the layout and hierarchy? Use the slug dashboard-layout. Save the standalone files under memory-bank/working/prototypes/dashboard-layout/ in this evaluation sandbox.",
+      "prompt": "I'm not sure what the new dashboard landing page should look like. Can you prototype three directions for the layout and hierarchy? Use the slug dashboard-layout. Save the standalone files under memory-bank/working/prototypes/dashboard-layout/ in this evaluation sandbox.",
       "expected_output": "Standalone visual-track invocation. The skill states the resolved storage path memory-bank/working/prototypes/dashboard-layout/ and creates exactly three structurally different full-page variants at variant-a.html through variant-c.html. Each has an identical fixed switcher bar with real <a href> links and no JavaScript. It reports a file path first, then asks the user to select a direction or hybrid with a recommendation. It ends that round without writing v1.html; v1 follows the user's selection.",
       "assertions": [
         "Storage root is under the resolved <working>/prototypes/<slug>/ (standalone, not the plan= path)",

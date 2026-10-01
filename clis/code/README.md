@@ -90,7 +90,7 @@ index initially and keeps it current; queries only read it:
 
 ```sh
 varde-code watch --ensure --repo . # persistent index coverage
-varde-code watch --list           # confirm registered, alive, and ready
+varde-code watch --list           # inspect registered, alive, ready, and index_ready
 varde-code hotspots --json '{"repoRoot": "."}'
 varde-code symbols_in_file --json '{"repoRoot": ".", "filePath": "src/main.rs"}'
 varde-code context_pack --json '{"repoRoot": ".", "query": "authentication"}'
@@ -101,12 +101,27 @@ restored. Indexed queries require `repoRoot`; `dbPath` is an optional override
 paired with it. `find_pattern` parses live source, while `detect_changes` and
 `slice_state` remain diagnostic exceptions.
 
+In `watch --list` and `watch --ensure`, `alive: null` means lock ownership
+could not be confirmed, not that the watcher stopped. `ready` requires
+confirmed live coverage and completed reconciliation; `index_ready` reports a
+readable fresh index independently. If ownership or supervisor inspection is
+denied, `watch --ensure` leaves host state unchanged. Agents can use a fresh
+index read-only; otherwise inspect or manage the watcher on the host, or search
+source directly.
+
 Every query subcommand takes a single `--json '<object>'` argument and prints
 the versioned envelope documented in
 [machine-output-contract.md](../../memory-bank/knowledge/reference/machine-output-contract.md).
 The top-level `ok` field reports execution. The top-level `outcome` reports
 success, quality failure, incomplete analysis, or tool failure. The index is
 stored at `~/.config/varde-code/repos/<name>-<hash>/index.db`.
+
+`context_pack` defaults `maxTokensEstimate` to `4000`, estimating the complete
+serialized success envelope, including metadata, as JSON bytes divided by four.
+When the budget trims files, symbols, or tests, pagination metadata reports
+shown and total counts. `includeReadingOrder` defaults to `true`; setting it to
+`false` leaves `readingOrder` empty. `fullResults: true` returns all results
+from `resultsOffset` onward, bypassing the budget and per-file symbol cap.
 
 ## Docs
 

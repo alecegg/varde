@@ -6,7 +6,8 @@ use serde_json::{Map, Value, json};
 use serde_yaml::Value as YamlValue;
 use sha1::{Digest, Sha1};
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 const HASH_PREFIX: &str = "sha1-v1:";
 
@@ -31,14 +32,75 @@ pub(crate) fn current_contract_fingerprint(
     bounded_contract: Option<&Value>,
 ) -> Result<String> {
     if let Some(path) = plan_path {
-        return contract_fingerprint(
-            &std::fs::read(path)
-                .with_context(|| format!("failed to read plan {}", path.display()))?,
-        );
+        let bytes =
+            fs::read(path).with_context(|| format!("failed to read plan {}", path.display()))?;
+        return plan_contract_fingerprint(&bytes, path);
     }
     let contract = bounded_contract
         .ok_or_else(|| review_gates::invalid("bounded review subject has no contract"))?;
     fingerprint_json("varde-review-bounded-contract-v1", contract)
+}
+
+pub(crate) fn plan_contract_fingerprint(plan_bytes: &[u8], plan_path: &Path) -> Result<String> {
+    let plan_fingerprint = contract_fingerprint(plan_bytes)?;
+    let Some(plan_dir) = plan_path.parent() else {
+        return Ok(plan_fingerprint);
+    };
+    let tasks_dir = plan_dir.join("tasks");
+    if !tasks_dir.is_dir() {
+        return Ok(plan_fingerprint);
+    }
+
+    let mut task_paths = Vec::new();
+    collect_task_contract_paths(&tasks_dir, &mut task_paths)?;
+    let mut tasks = Vec::with_capacity(task_paths.len());
+    for path in task_paths {
+        let relative_path = path
+            .strip_prefix(plan_dir)
+            .with_context(|| {
+                format!(
+                    "task {} is outside plan directory {}",
+                    path.display(),
+                    plan_dir.display()
+                )
+            })?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let bytes =
+            fs::read(&path).with_context(|| format!("failed to read task {}", path.display()))?;
+        let fingerprint = contract_fingerprint(&bytes).map_err(|error| {
+            review_gates::invalid(format!(
+                "task {} has invalid contract: {error}",
+                path.display()
+            ))
+        })?;
+        tasks.push((relative_path, fingerprint));
+    }
+    if tasks.is_empty() {
+        return Ok(plan_fingerprint);
+    }
+    tasks.sort_by(|left, right| left.0.cmp(&right.0));
+    fingerprint_json(
+        "varde-review-plan-tasks-v1",
+        &json!({ "plan": plan_fingerprint, "tasks": tasks }),
+    )
+}
+
+fn collect_task_contract_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir)
+        .with_context(|| format!("failed to read task directory {}", dir.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_task_contract_paths(&path, paths)?;
+        } else if file_type.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("md")
+        {
+            paths.push(path);
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn parse_bounded_contract(bytes: &[u8]) -> Result<Value> {
@@ -65,6 +127,99 @@ pub(crate) fn parse_bounded_contract(bytes: &[u8]) -> Result<Value> {
         ));
     }
     canonical_json(&value)
+}
+
+/// Whether the live contract forces a low-tier subject to high tier at
+/// `check()` (plan Design > API / interface contracts: "Contract-derived
+/// triggers ... are checked live by the CLI from the stored contract at
+/// every `check()`").
+///
+/// Mapping from contract to the three plan-named triggers:
+/// - `open_choices`: bounded contracts use their `open_choices` array
+///   directly; plans use `-`/`*` bullet lines under a live `## Open
+///   Questions` heading (a "None." line stays low tier).
+/// - `shared_contracts`: bounded contracts use a `shared_contracts` array
+///   if present; plans use a `shared_contracts` frontmatter list if
+///   present. Neither is required today, so absence means no trigger.
+/// - no automated check: bounded contracts search their `verification`
+///   value, plans search the whole body, for an `assert:` marker (plan
+///   Acceptance Criteria review: `assert:` marks an automated check,
+///   `retrieve:` does not). No `assert:` anywhere means no automated
+///   check.
+pub(crate) fn requires_high_tier(
+    plan_path: Option<&Path>,
+    bounded_contract: Option<&Value>,
+) -> Result<bool> {
+    if let Some(path) = plan_path {
+        let bytes = std::fs::read(path)
+            .with_context(|| format!("failed to read plan {}", path.display()))?;
+        return plan_requires_high_tier(&bytes);
+    }
+    let contract = bounded_contract
+        .ok_or_else(|| review_gates::invalid("bounded review subject has no contract"))?;
+    Ok(bounded_contract_requires_high_tier(contract))
+}
+
+fn bounded_contract_requires_high_tier(contract: &Value) -> bool {
+    let has_open_choices = contract
+        .get("open_choices")
+        .and_then(Value::as_array)
+        .is_some_and(|items| !items.is_empty());
+    let has_shared_contracts = contract
+        .get("shared_contracts")
+        .is_some_and(|value| !is_empty_contract_value(value));
+    let has_automated_check = contract
+        .get("verification")
+        .is_some_and(|value| value.to_string().contains("assert:"));
+    has_open_choices || has_shared_contracts || !has_automated_check
+}
+
+fn is_empty_contract_value(value: &Value) -> bool {
+    match value {
+        Value::Null => true,
+        Value::Array(items) => items.is_empty(),
+        Value::String(text) => text.is_empty(),
+        Value::Object(map) => map.is_empty(),
+        _ => false,
+    }
+}
+
+fn plan_requires_high_tier(bytes: &[u8]) -> Result<bool> {
+    let (frontmatter, body) = varde_workflow_core::frontmatter::parse(bytes).map_err(|error| {
+        review_gates::invalid(format!(
+            "plan contract must have valid YAML frontmatter: {error}"
+        ))
+    })?;
+    let has_open_choices = plan_section_lines(&body, "Open Questions")
+        .iter()
+        .any(|line| {
+            let trimmed = line.trim_start();
+            trimmed.starts_with("- ") || trimmed.starts_with("* ")
+        });
+    let has_shared_contracts = frontmatter
+        .get("shared_contracts")
+        .and_then(YamlValue::as_sequence)
+        .is_some_and(|items| !items.is_empty());
+    let has_automated_check = body.contains("assert:");
+    Ok(has_open_choices || has_shared_contracts || !has_automated_check)
+}
+
+/// Lines under a level-2 `## <heading>` markdown heading, up to the next
+/// level-2 heading or end of body.
+fn plan_section_lines<'a>(body: &'a str, heading: &str) -> Vec<&'a str> {
+    let marker = format!("## {heading}");
+    let mut in_section = false;
+    let mut lines = Vec::new();
+    for line in body.lines() {
+        if line.trim_start().starts_with("## ") {
+            in_section = line.trim() == marker;
+            continue;
+        }
+        if in_section {
+            lines.push(line);
+        }
+    }
+    lines
 }
 
 pub(crate) fn fingerprint_json(tag: &str, value: &Value) -> Result<String> {
@@ -719,5 +874,79 @@ mod tests {
             contract_fingerprint(first).unwrap(),
             contract_fingerprint(changed).unwrap()
         );
+    }
+
+    #[test]
+    fn review_plan_fingerprint_without_task_files_keeps_v1_value() {
+        let plan = b"---\ntype: plan\nstatus: backlog\n---\n## Problem\nStable plan.\n";
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let plan_dir = std::env::temp_dir().join(format!(
+            "varde-review-contract-no-tasks-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&plan_dir).unwrap();
+        let plan_path = plan_dir.join("plan.md");
+
+        assert_eq!(
+            plan_contract_fingerprint(plan, &plan_path).unwrap(),
+            contract_fingerprint(plan).unwrap()
+        );
+
+        fs::remove_dir_all(plan_dir).unwrap();
+    }
+
+    #[test]
+    fn review_plan_fingerprint_names_task_with_invalid_frontmatter() {
+        let plan = b"---\ntype: plan\n---\n## Problem\nStable plan.\n";
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let plan_dir = std::env::temp_dir().join(format!(
+            "varde-review-contract-invalid-task-{}-{unique}",
+            std::process::id()
+        ));
+        let task = plan_dir.join("tasks/nested/broken.md");
+        fs::create_dir_all(task.parent().unwrap()).unwrap();
+        fs::write(&task, "not frontmatter\n").unwrap();
+        let plan_path = plan_dir.join("plan.md");
+
+        let error = plan_contract_fingerprint(plan, &plan_path).unwrap_err();
+        assert!(
+            error.to_string().contains(&task.display().to_string()),
+            "{error}"
+        );
+
+        fs::remove_dir_all(plan_dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn review_plan_fingerprint_follows_symlinked_tasks_directory() {
+        let plan = b"---\ntype: plan\n---\n## Problem\nStable plan.\n";
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "varde-review-contract-symlink-tasks-{}-{unique}",
+            std::process::id()
+        ));
+        let real_tasks = root.join("real-tasks");
+        fs::create_dir_all(&real_tasks).unwrap();
+        fs::write(real_tasks.join("one.md"), "---\ntype: task\n---\nBody.\n").unwrap();
+        let plan_dir = root.join("plan");
+        fs::create_dir_all(&plan_dir).unwrap();
+        std::os::unix::fs::symlink(&real_tasks, plan_dir.join("tasks")).unwrap();
+
+        assert_ne!(
+            plan_contract_fingerprint(plan, &plan_dir.join("plan.md")).unwrap(),
+            contract_fingerprint(plan).unwrap()
+        );
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

@@ -21,16 +21,36 @@ fn run(root: &Path, config: &Path, env: &[(&str, &Path)], args: &[&str]) -> Valu
     super::json_data(&output.stdout)
 }
 
-pub fn approve_plan(root: &Path, plan: &Path) {
-    approve_plan_with_final_review(root, plan, false);
+pub fn approve_plan(root: &Path, plan: &Path) -> String {
+    approve_plan_with_final_review(root, plan, false)
 }
 
 pub fn approve_plan_with_final_review(root: &Path, plan: &Path, required: bool) -> String {
     approve_plan_configured_with_risk(root, plan, &root.join("isolated-config"), &[], required)
 }
 
-pub fn approve_plan_configured(root: &Path, plan: &Path, config: &Path, env: &[(&str, &Path)]) {
-    approve_plan_configured_with_risk(root, plan, config, env, false);
+pub fn approve_plan_configured(
+    root: &Path,
+    plan: &Path,
+    config: &Path,
+    env: &[(&str, &Path)],
+) -> String {
+    approve_plan_configured_with_risk(root, plan, config, env, false)
+}
+
+/// Approves a `tier_confirmed: true` implementation record against a
+/// subject's current state, using the same config/env as its pre-edit
+/// approval. `complete`/`conclude` now always require this record (no
+/// grandfathering), and it must be re-approved whenever the subject's
+/// scoped source changes after an earlier approval, or the record goes
+/// stale.
+pub fn approve_implementation_configured(
+    root: &Path,
+    config: &Path,
+    env: &[(&str, &Path)],
+    subject: &str,
+) {
+    approve_phase(root, config, env, subject, "implementation", true);
 }
 
 fn approve_plan_configured_with_risk(
@@ -64,14 +84,7 @@ fn approve_plan_configured_with_risk(
 }
 
 pub fn approve_implementation(root: &Path, subject: &str) {
-    approve_phase(
-        root,
-        &root.join("isolated-config"),
-        &[],
-        subject,
-        "implementation",
-        true,
-    );
+    approve_implementation_configured(root, &root.join("isolated-config"), &[], subject);
 }
 
 fn approve_phase(
@@ -113,6 +126,7 @@ fn approve_phase(
     if phase == "implementation" {
         record["change_fingerprint"] = inspection["change_fingerprint"].clone();
         record["coverage"] = json!("entire-subject-change");
+        record["tier_confirmed"] = json!(true);
     }
     let record_path = config.join("fixture-review-record.json");
     fs::write(&record_path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();

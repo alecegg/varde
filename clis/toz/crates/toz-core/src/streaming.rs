@@ -6,13 +6,22 @@ use crate::metadata;
 use crate::redact::{NeverCapture, Redactor};
 use crate::store::NewCapture;
 use crate::{Config, Store};
-use anyhow::{ensure, Result};
+use anyhow::{Context, Result, ensure};
 use std::io::{BufRead, BufReader, Read, Seek, Write};
 
 /// Smaller captures keep content-aware chunking and whole-document redaction.
 pub const STREAM_THRESHOLD: usize = 1024 * 1024;
 const MAX_LINE_BYTES: usize = 1024 * 1024;
 const BLOCK_BYTES: usize = 256 * 1024;
+
+/// Copies arbitrary stdin to a temporary file using `io::copy`'s bounded buffer.
+pub fn spool(input: &mut impl Read) -> Result<(std::fs::File, usize)> {
+    let mut file = tempfile::tempfile()?;
+    let bytes = std::io::copy(input, &mut file)?;
+    let bytes = usize::try_from(bytes).context("stdin size exceeds this platform's limit")?;
+    file.rewind()?;
+    Ok((file, bytes))
+}
 
 pub fn run(
     cfg: &Config,

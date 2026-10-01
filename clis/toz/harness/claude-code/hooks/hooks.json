@@ -3,7 +3,7 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "{{TOZ_BIN}} --fallback-dir {{TOZ_FALLBACK_SHELL_JSON}} note --harness claude-code", "timeout": 5 }
+          { "type": "command", "command": "{{TOZ_BIN}} note --harness claude-code", "timeout": 5 }
         ]
       }
     ],
@@ -11,7 +11,7 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "{{TOZ_BIN}} --fallback-dir {{TOZ_FALLBACK_SHELL_JSON}} capture --hook", "timeout": 20 }
+          { "type": "command", "command": "{{TOZ_BIN}} capture --hook", "timeout": 20 }
         ]
       }
     ]

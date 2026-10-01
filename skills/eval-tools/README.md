@@ -15,6 +15,11 @@ Claude requires explicit selection. Model/client failure never triggers fallback
 A run measures the selected harness/model only. Missing dollar-cost data means
 unavailable, not free.
 
+`eval output` copies `<skill-dir>` as-is; for a skill with entries in
+`skills/shared/MANIFEST`, install it first (`skills/install.sh -d <temp-dir>
+-s <skill>`) and point `<skill-dir>` at `<temp-dir>/<skill>`, not the repo
+directory.
+
 `<skill-name>` and `<skill-dir>` resolve against `skills/` from anywhere in a
 repository checkout.
 

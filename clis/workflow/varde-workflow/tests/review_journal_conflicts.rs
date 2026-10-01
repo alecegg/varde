@@ -59,8 +59,9 @@ impl Fixture {
             "--scope",
             scope,
         ]));
+        let subject = inspection["subject"]["subject_id"].as_str().unwrap();
         let record = json!({
-            "schema_version": 1, "subject_id": inspection["subject"]["subject_id"], "phase": "pre-edit",
+            "schema_version": 1, "subject_id": subject, "phase": "pre-edit",
             "reviewer": {"identity": "fixture-reviewer", "provenance": "integration-test"}, "verdict": "approved", "unresolved_choices": [],
             "contract_fingerprint": inspection["contract_fingerprint"], "baseline_id": inspection["baseline_id"],
             "verification_approach": "Exercise public journal CLI boundaries.", "verification_rationale": "Test the isolated transaction contract.",
@@ -73,12 +74,22 @@ impl Fixture {
             "review",
             "record",
             "--subject",
-            inspection["subject"]["subject_id"].as_str().unwrap(),
+            subject,
             "--expected-version",
             inspection["version"].as_str().unwrap(),
             "--file",
             record_path.to_str().unwrap(),
         ]));
+        let working = self.root.join("memory-bank/working");
+        common::review::approve_implementation_configured(
+            &self.root,
+            &self.config,
+            &[
+                ("VARDE_WORKING_DIR", working.as_path()),
+                ("VARDE_KNOWLEDGE_DIR", self.knowledge.as_path()),
+            ],
+            subject,
+        );
     }
     fn interrupt_conclusion(&self, partial: bool) {
         let flag = if partial {

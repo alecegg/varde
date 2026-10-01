@@ -113,7 +113,7 @@ fn paths_reports_builtin_defaults_without_config() {
 }
 
 #[test]
-fn legacy_paths_file_resolves_and_migrates_all_entries_on_config_write() {
+fn legacy_paths_file_resolves_and_migrates_all_entries_on_paths_write() {
     let (base, root) = project("legacy-config-migration");
     let dir = base.join("config");
     fs::create_dir_all(&dir).unwrap();
@@ -142,7 +142,7 @@ fn legacy_paths_file_resolves_and_migrates_all_entries_on_config_write() {
 
     let output = run(
         &dir,
-        &["config", "set", "usage_limit", "80%", "--json"],
+        &["paths", "set", "--default", "--learn", "new-learn"],
         &[],
     );
     assert!(
@@ -156,46 +156,8 @@ fn legacy_paths_file_resolves_and_migrates_all_entries_on_config_write() {
     assert!(text.contains("project-knowledge"), "{text}");
     assert!(text.contains("/tmp/default-toz"), "{text}");
     assert!(text.contains("/tmp/project-toz"), "{text}");
-    assert!(text.contains("usage_limit = \"80%\""), "{text}");
+    assert!(text.contains("new-learn"), "{text}");
     assert!(!legacy.exists());
-    fs::remove_dir_all(base).unwrap();
-}
-
-#[test]
-fn config_get_unset_unknown_keys_and_hand_edits() {
-    let (base, root) = project("config-settings");
-    let dir = base.join("config");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(
-        dir.join("config.toml"),
-        "[settings]\nfuture_key = 'keep me'\n",
-    )
-    .unwrap();
-    let paths = run(
-        &dir,
-        &["paths", "--project", root.to_str().unwrap(), "--json"],
-        &[],
-    );
-    assert!(paths.status.success());
-    let output = run(&dir, &["config", "--json"], &[]);
-    let data = common::json_data(&output.stdout);
-    assert_eq!(data["warnings"][0], "unknown settings key `future_key`");
-    let output = run(&dir, &["config", "set", "usage_limit", "80%"], &[]);
-    assert!(output.status.success());
-    let output = run(&dir, &["config", "get", "usage_limit", "--json"], &[]);
-    let data = common::json_data(&output.stdout);
-    assert_eq!(data["value"], "80%");
-    let output = run(&dir, &["config", "get", "typo", "--json"], &[]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("known keys: usage_limit"));
-    let output = run(&dir, &["config", "unset", "usage_limit", "--json"], &[]);
-    assert!(output.status.success());
-    let output = run(&dir, &["config", "get", "usage_limit", "--json"], &[]);
-    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(result["outcome"], "negative-result");
-    assert_eq!(result["data"]["error"]["code"], "not_set");
-    let text = fs::read_to_string(dir.join("config.toml")).unwrap();
-    assert!(text.contains("future_key = \"keep me\""), "{text}");
     fs::remove_dir_all(base).unwrap();
 }
 
@@ -204,7 +166,15 @@ fn xdg_config_home_selects_config_file() {
     let (base, root) = project("xdg-config");
     let xdg = base.join("xdg");
     let output = Command::new(common::bin())
-        .args(["config", "set", "usage_limit", "80%", "--json"])
+        .args([
+            "paths",
+            "set",
+            "--project",
+            root.to_str().unwrap(),
+            "--working",
+            "xdg-working",
+            "--json",
+        ])
         .env_remove("VARDE_CONFIG_DIR")
         .env("XDG_CONFIG_HOME", &xdg)
         .output()
@@ -249,6 +219,45 @@ fn new_file_wins_when_both_config_names_exist() {
 }
 
 #[test]
+fn paths_preserve_usage_limit_as_an_unknown_setting() {
+    let (base, root) = project("usage-limit-setting-preserved");
+    let dir = base.join("config");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("config.toml"), "[settings]\nusage_limit = '80%'\n").unwrap();
+
+    let output = run(
+        &dir,
+        &[
+            "paths",
+            "set",
+            "--project",
+            root.to_str().unwrap(),
+            "--working",
+            "/custom-working",
+            "--json",
+        ],
+        &[],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let text = fs::read_to_string(dir.join("config.toml")).unwrap();
+    assert!(text.contains("usage_limit = \"80%\""), "{text}");
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn config_command_is_removed() {
+    let (base, _root) = project("config-command-removed");
+    let output = run(&base.join("config"), &["config"], &[]);
+    assert!(!output.status.success());
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
 fn paths_write_migrates_legacy_file_without_losing_toz() {
     let (base, root) = project("legacy-paths-write");
     let dir = base.join("config");
@@ -272,18 +281,6 @@ fn paths_write_migrates_legacy_file_without_losing_toz() {
     assert!(text.contains("legacy-toz"), "{text}");
     assert!(text.contains("new-working"), "{text}");
     assert!(!legacy.exists());
-    fs::remove_dir_all(base).unwrap();
-}
-
-#[test]
-fn unsetting_only_setting_removes_empty_config() {
-    let (base, _root) = project("empty-settings-config");
-    let dir = base.join("config");
-    let output = run(&dir, &["config", "set", "usage_limit", "80%"], &[]);
-    assert!(output.status.success());
-    let output = run(&dir, &["config", "unset", "usage_limit"], &[]);
-    assert!(output.status.success());
-    assert!(!dir.join("config.toml").exists());
     fs::remove_dir_all(base).unwrap();
 }
 
@@ -590,7 +587,8 @@ fn conclusion_reads_redirected_working_and_writes_redirected_knowledge() {
         String::from_utf8_lossy(&output.stderr)
     );
     let plan = write_plan(&working.join("plans/group/feature"));
-    common::review::approve_plan_configured(&root, &plan, &config, &[]);
+    let subject = common::review::approve_plan_configured(&root, &plan, &config, &[]);
+    common::review::approve_implementation_configured(&root, &config, &[], &subject);
 
     let output = run(
         &config,
@@ -641,11 +639,17 @@ fn interrupted_conclusion_recovers_across_redirected_knowledge() {
     let config = base.join("config");
     let knowledge = base.join("outside/knowledge");
     let plan = write_plan(&root.join("memory-bank/working/plans/group/feature"));
-    common::review::approve_plan_configured(
+    let subject = common::review::approve_plan_configured(
         &root,
         &plan,
         &config,
         &[("VARDE_KNOWLEDGE_DIR", knowledge.as_path())],
+    );
+    common::review::approve_implementation_configured(
+        &root,
+        &config,
+        &[("VARDE_KNOWLEDGE_DIR", knowledge.as_path())],
+        &subject,
     );
 
     let output = run(
@@ -1145,7 +1149,7 @@ fn learn_path_is_global_and_uses_learn_cli_precedence() {
     fs::write(
         config.join("config.toml"),
         format!(
-            "[default]\nworking = '/existing-working'\ntoz = '/existing-toz'\n\n[project.'{}']\nworking = '/project-working'\nknowledge = '/project-knowledge'\ntoz = '/project-toz'\nlearn = '/ignored-project-learn'\n\n[settings]\nusage_limit = '80%'\n",
+            "[default]\nworking = '/existing-working'\ntoz = '/existing-toz'\n\n[project.'{}']\nworking = '/project-working'\nknowledge = '/project-knowledge'\ntoz = '/project-toz'\nlearn = '/ignored-project-learn'\n",
             root.display()
         ),
     )
@@ -1178,8 +1182,6 @@ fn learn_path_is_global_and_uses_learn_cli_precedence() {
         text.contains("learn = \"/ignored-project-learn\""),
         "{text}"
     );
-    assert!(text.contains("usage_limit = \"80%\""), "{text}");
-
     let resolved_learn = base.join(configured_learn);
     let show = run_in(
         &base,

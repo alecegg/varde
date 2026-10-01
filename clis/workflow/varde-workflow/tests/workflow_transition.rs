@@ -115,6 +115,76 @@ fn valid_transition_commits_recoverably() {
 }
 
 #[test]
+fn spike_task_with_no_ownership_transitions_without_rejection() {
+    let root = common::temp_bundle("workflow-transition-spike-task");
+    let plan_path = plan(&root, "feature", "backlog", None);
+    let task = plan_path.parent().unwrap().join("tasks/explore.md");
+    fs::create_dir_all(task.parent().unwrap()).unwrap();
+    fs::write(
+        &task,
+        "---\ntype: task\nstatus: todo\ndepends_on: []\nkind: spike\nmodifies: []\ncreates: []\nrenames: []\n---\nSpike body.\n",
+    )
+    .unwrap();
+    common::review::approve_plan(&root, &plan_path);
+
+    let output = common::isolate_memory(&root)
+        .args(["transition"])
+        .arg(&task)
+        .arg("in_progress")
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let data = common::json_data(&output.stdout);
+    assert_eq!(data["previous_state"], "todo");
+    assert_eq!(data["state"], "in_progress");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn task_with_no_kind_and_empty_ownership_is_still_rejected() {
+    let root = common::temp_bundle("workflow-transition-empty-ownership-task");
+    let plan_path = plan(&root, "feature", "backlog", None);
+    let task = plan_path.parent().unwrap().join("tasks/no-kind.md");
+    fs::create_dir_all(task.parent().unwrap()).unwrap();
+    fs::write(
+        &task,
+        "---\ntype: task\nstatus: todo\ndepends_on: []\nmodifies: []\ncreates: []\nrenames: []\n---\nTask body.\n",
+    )
+    .unwrap();
+    common::review::approve_plan(&root, &plan_path);
+
+    let output = common::isolate_memory(&root)
+        .args(["transition"])
+        .arg(&task)
+        .arg("in_progress")
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(4));
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(envelope["data"]["error"]["code"], "review_invalid");
+    assert!(
+        envelope["data"]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("non-empty"),
+        "{envelope}"
+    );
+    assert!(
+        fs::read_to_string(&task).unwrap().contains("status: todo"),
+        "rejected transition must not mutate the task"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn blocker_state_remains_available_when_dependencies_block() {
     let root = common::temp_bundle("workflow-transition-blocker-state");
     plan(&root, "foundation", "active", None);

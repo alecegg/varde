@@ -20,7 +20,7 @@ export const VardeCodeNavMap = async ({ $, directory }) => {
       try {
         navMap = await $`varde-code nav_map --json ${JSON.stringify({
           repoRoot: directory,
-        })} --format text`.cwd(directory).text();
+        })} --format text --with-project-knowledge`.cwd(directory).text();
       } catch (err) {
         // Best-effort: never block session start on a nav_map failure.
         console.error("varde-code nav_map hook failed:", err);

@@ -50,7 +50,7 @@
     {
       "id": 5,
       "prompt": "How does the retry logic in the job queue actually work?",
-      "expected_output": "Resolves to explore mode and answers in the conversation. 'How does X work' is an open question about code, not a request for a document to keep — the dispatch table's second row requires a direct ask for an explanation artifact. Reads the queue source (loading references/varde-code.md if that CLI is on PATH, since the question is structural) and summarizes the mechanism with evidence from the files read.",
+      "expected_output": "Resolves to explore mode and answers in the conversation. 'How does X work' is an open question about code, not a request for a document to keep — the dispatch table's second row requires a direct ask for an explanation artifact. Reads the queue source (loading references/varde-code-cli.md if that CLI is on PATH, since the question is structural) and summarizes the mechanism with evidence from the files read.",
       "assertions": [
         "Resolves to explore mode and answers in conversation — no HTML file is written",
         "Reads the job queue source directly rather than answering from inference",

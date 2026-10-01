@@ -6,21 +6,32 @@ Usage: resolve-execution-wave.py [--max-workers N] [--repo-root DIR] <plan-dir>
 Reads task frontmatter (status, depends_on, modifies, creates, renames, and
 verification_resources). A task's write set is modifies + creates + both paths
 of each rename. Its reach is its write set plus `varde-code blast_radius` of
-every existing modified or renamed path (transitive dependents). Two ready
+every existing modified or renamed path (transitive dependents). When the
+graph returns no edges, markdown content edits reach only themselves; other
+unindexed paths reach files mentioning their basename. When multiple tracked
+paths share it, hits must name the repo-relative path or lie under that path's
+grandparent directory. A failed graph or fallback lookup stays unknown. Two ready
 tasks conflict when either writes into the other's reach or they share a
-verification resource. `next_wave` is a greedy, id-ordered set of mutually
-independent ready tasks, at most
+verification resource.
+`next_wave` is a greedy, id-ordered set of mutually independent ready tasks, at most
 --max-workers (default and ceiling 3), safe to run in parallel when it holds two
-or more. Otherwise it is the first ready task alone. Without varde-code it
-always holds one task. A modified or renamed path whose blast radius is empty or
-fails is unknown, not independent: that task stays out of a multi-task wave.
+--max-workers (default and ceiling 3), safe to run in parallel when it holds two
+or more. Otherwise it is the first eligible ready task alone, or empty if all
+ready tasks are held by file pointers. Without varde-code, independence is
+unchecked and one eligible task is selected when available. An empty graph
+result uses the unindexed-path rules above; a failed result keeps the task
+unknown.
+Ready tasks whose bodies mention a path created or renamed by another not-done
+task are held out of the wave until they declare that task in `depends_on`.
 Missing ownership metadata keeps `next_wave` to one task. The caller decides
 how to execute it and may run fewer tasks together, never more.
 Ownership and graph paths are compared after resolving symlink ancestors,
 including new destinations. Unresolvable ownership keeps the whole wave serial.
 Without Python's ALLOW_MISSING, dangling aliases or unresolved .. stay serial.
 
-Output is JSON: ready, blocked_by_dep, next_wave, conflicts, reasons.
+`wave_mode` is `shared`, `worktree`, or `single`; compile-unit and posture
+conflicts require worktrees. Output is JSON: ready, blocked_by_dep, next_wave,
+wave_mode, conflicts, reasons.
 Exit codes: 0 ok, 1 usage or input error, 3 dependency cycle.
 It dispatches nothing and writes nothing.
 """
@@ -33,7 +44,7 @@ import shutil
 import stat
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 MAX_WORKERS = 3
 LIST_KEYS = ("depends_on", "modifies", "creates", "renames", "verification_resources")
@@ -65,6 +76,12 @@ def parse_frontmatter(path):
     return data
 
 
+def task_body(path):
+    text = path.read_text(encoding="utf-8")
+    match = re.match(r"^---\n.*?\n---\s*", text, re.S)
+    return text[match.end():] if match else ""
+
+
 def unquote(value):
     return value.strip().strip("'\"").strip()
 
@@ -74,24 +91,34 @@ def load_tasks(plan_dir):
     for path in sorted((plan_dir / "tasks").glob("*.md")):
         fm = parse_frontmatter(path)
         rename_paths = []
+        rename_destinations = []
         invalid_renames = []
         for rename in fm.get("renames", []):
             parts = rename.split("->")
             if len(parts) != 2 or not all(part.strip() for part in parts):
                 invalid_renames.append(rename)
                 continue
-            rename_paths.extend(norm(part) for part in parts)
+            normalized = [norm(part) for part in parts]
+            rename_paths.extend(normalized)
+            rename_destinations.append(normalized[1])
         missing_ownership = [key for key in OWNERSHIP_KEYS if key not in fm]
         if invalid_renames:
             missing_ownership.append('renames (expected "old/path -> new/path")')
         tasks[path.stem] = {
             "status": fm.get("status", "todo"),
             "depends_on": fm.get("depends_on", []),
+            "kind": fm.get("kind", ""),
+            "posture": fm.get("posture", ""),
             "writes": sorted(set(
                 [norm(p) for p in fm.get("modifies", []) + fm.get("creates", [])]
                 + rename_paths
             )),
             "modifies": [norm(p) for p in fm.get("modifies", [])],
+            "rename_paths": rename_paths,
+            "created_paths": sorted(set(
+                [norm(p) for p in fm.get("creates", [])] + rename_destinations
+            )),
+            "body": task_body(path),
             "graph_sources": [norm(p) for p in fm.get("modifies", [])] + rename_paths,
             "verification_resources": sorted(set(fm.get("verification_resources", []))),
             "missing_ownership": missing_ownership,
@@ -104,6 +131,24 @@ def norm(path):
     while path.startswith("./"):
         path = path[2:]
     return path
+
+
+def body_mentions_path(body, path):
+    """Match a declared repo path or its references/ relative spelling."""
+    path = norm(path)
+    spellings = {path}
+    parts = path.split("/")
+    if "references" in parts:
+        spellings.add("/".join(parts[parts.index("references"):]))
+    spellings |= {"./" + spelling for spelling in spellings}
+    for spelling in spellings:
+        if spelling.startswith("references/"):
+            left_boundary = r"(?<![A-Za-z0-9_.-])"
+        else:
+            left_boundary = r"(?<![A-Za-z0-9_./-])"
+        if re.search(left_boundary + re.escape(spelling) + r"(?![A-Za-z0-9_./-])", body):
+            return True
+    return False
 
 
 def canonical_path(repo_root, path):
@@ -170,6 +215,72 @@ def blast_radius(repo_root, path):
         return None
 
 
+def basename_references(repo_root, path):
+    """Return files passing the basename reach rule, or None on failure."""
+    basename = PurePosixPath(path).name
+    try:
+        tracked = subprocess.run(
+            ["git", "-C", str(repo_root), "ls-files", "-z"],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if tracked.returncode != 0:
+        return None
+    duplicate_basename = sum(
+        PurePosixPath(candidate).name == basename
+        for candidate in tracked.stdout.split("\0") if candidate
+    ) > 1
+
+    def grep_matches(pattern):
+        try:
+            proc = subprocess.run(
+                ["git", "-C", str(repo_root), "grep", "-l", "-F", "--", pattern],
+                capture_output=True, text=True, timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if proc.returncode == 1:
+            return []
+        if proc.returncode != 0:
+            return None
+        try:
+            return [canonical_path(repo_root, match) for match in proc.stdout.splitlines() if match]
+        except (OSError, RuntimeError, ValueError, TypeError):
+            return None
+
+    references = grep_matches(basename)
+    if references is None or not duplicate_basename:
+        return references
+
+    exact_references = grep_matches(path)
+    if exact_references is None:
+        return None
+    grandparent = PurePosixPath(path).parent.parent.as_posix()
+    scoped_references = (
+        match for match in references
+        if grandparent != "." and match.startswith(f"{grandparent}/")
+    )
+    return sorted(set(scoped_references) | set(exact_references))
+
+
+def compile_unit(repo_root, path):
+    """Find the nearest ancestor directory containing a build marker."""
+    directory = (repo_root / path).parent
+    fixed_markers = (
+        "Cargo.toml", "go.mod", "tsconfig.json", "pom.xml",
+    )
+    while directory == repo_root or repo_root in directory.parents:
+        if any((directory / marker).is_file() for marker in fixed_markers):
+            return directory.relative_to(repo_root).as_posix()
+        if any(directory.glob("*.csproj")) or any(directory.glob("build.gradle*")):
+            return directory.relative_to(repo_root).as_posix()
+        if directory == repo_root:
+            break
+        directory = directory.parent
+    return None
+
+
 def resolve(tasks, repo_root, max_workers):
     reasons, conflicts = [], []
     ready = [
@@ -187,12 +298,25 @@ def resolve(tasks, repo_root, max_workers):
                 why = "missing" if dep is None else "blocked"
                 blocked_by_dep.append({"task": tid, "dependency": d, "reason": why})
                 reasons.append(f"{tid}: dependency {d} is {why}")
+
+    mention_blocked = set()
+    for tid in ready:
+        body = tasks[tid].get("body", "")
+        for creator, task in tasks.items():
+            if creator == tid or task["status"] == "done":
+                continue
+            for path in task.get("created_paths", []):
+                if body_mentions_path(body, path):
+                    mention_blocked.add(tid)
+                    reasons.append(
+                        f"{tid}: mentions {path} created by {creator}; add depends_on"
+                    )
     have_cli = shutil.which("varde-code") is not None
     if not have_cli:
         reasons.append("varde-code unavailable: independence cannot be checked")
 
     missing_ownership = False
-    writes_by_task, graph_sources = {}, {}
+    writes_by_task, graph_sources, markdown_edits, rename_paths = {}, {}, {}, {}
     for tid in ready:
         missing = tasks[tid]["missing_ownership"]
         if missing:
@@ -202,6 +326,14 @@ def resolve(tasks, repo_root, max_workers):
         try:
             writes_by_task[tid] = {canonical_path(repo_root, path) for path in tasks[tid]["writes"]}
             graph_sources[tid] = {canonical_path(repo_root, path) for path in tasks[tid]["graph_sources"]}
+            markdown_edits[tid] = {
+                canonical_path(repo_root, path)
+                for path in tasks[tid].get("modifies", [])
+                if path.lower().endswith(".md")
+            }
+            rename_paths[tid] = {
+                canonical_path(repo_root, path) for path in tasks[tid].get("rename_paths", [])
+            }
         except (OSError, RuntimeError, ValueError) as exc:
             missing_ownership = True
             reasons.append(f"{tid}: ownership path identity is uncertain: {exc}")
@@ -209,6 +341,8 @@ def resolve(tasks, repo_root, max_workers):
 
     reach, candidates = {}, []
     for tid in ready:
+        if tid in mention_blocked:
+            continue
         if tid not in writes_by_task:
             continue
         writes = writes_by_task[tid]
@@ -222,13 +356,19 @@ def resolve(tasks, repo_root, max_workers):
             if not (repo_root / path).exists():
                 continue
             found = blast_radius(repo_root, path)
-            if not found:
-                # Empty is indistinguishable from an unindexed language.
-                why = "failed" if found is None else "found no graph edges"
-                reasons.append(f"{tid}: blast_radius {why} for {path}")
+            if found is None:
+                reasons.append(f"{tid}: blast_radius failed for {path}")
                 area = None
                 break
-            area.update(found)
+            if found:
+                area.update(found)
+            elif path not in markdown_edits[tid] or path in rename_paths[tid]:
+                references = basename_references(repo_root, path)
+                if references is None:
+                    reasons.append(f"{tid}: git grep failed for {path}")
+                    area = None
+                    break
+                area.update(references)
         if area is not None:
             reach[tid] = area
             candidates.append(tid)
@@ -254,12 +394,37 @@ def resolve(tasks, repo_root, max_workers):
             wave.append(tid)
 
     if len(wave) < 2 or missing_ownership:
-        wave = ready[:1]
+        wave = [tid for tid in ready if tid not in mention_blocked][:1]
+    wave_units = []
+    for tid in wave:
+        units = set()
+        for path in writes_by_task.get(tid, set()):
+            unit = compile_unit(repo_root, path)
+            if unit:
+                units.add(unit)
+        wave_units.append(units)
+    shared_compile_unit = any(
+        wave_units[left] & wave_units[right]
+        for left in range(len(wave_units))
+        for right in range(left + 1, len(wave_units))
+    )
+    has_special_posture = any(
+        tasks[tid].get("kind") == "spike" or tasks[tid].get("posture") == "refactor"
+        for tid in wave
+    )
+    if len(wave) <= 1:
+        wave_mode = "single"
+    elif shared_compile_unit or has_special_posture:
+        wave_mode = "worktree"
+    else:
+        wave_mode = "shared"
+
     return {
         "schema_version": 3,
         "ready": ready,
         "blocked_by_dep": blocked_by_dep,
         "next_wave": wave,
+        "wave_mode": wave_mode,
         "conflicts": conflicts,
         "reasons": reasons,
     }

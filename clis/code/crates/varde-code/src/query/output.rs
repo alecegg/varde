@@ -110,6 +110,24 @@ pub(crate) fn postprocess(data: &mut Value, input: &Value) -> OutputMeta {
     metadata_for(input, data)
 }
 
+/// Assemble the metadata attached by dispatch after query-specific pagination.
+/// Context-pack budgeting uses the same path to measure its final envelope.
+pub(crate) fn assemble_metadata(
+    data: &mut Value,
+    input: &Value,
+    mut pagination: Option<Value>,
+) -> OutputMeta {
+    let mut meta = postprocess(data, input);
+    if let Some(sections) = pagination.as_mut().and_then(Value::as_object_mut) {
+        meta.toz = sections.remove("__toz");
+    }
+    if pagination.is_some() {
+        meta.truncated = true;
+        meta.pagination = pagination;
+    }
+    meta
+}
+
 fn metadata_for(input: &Value, data: &Value) -> OutputMeta {
     let root = input
         .get("repoRoot")
@@ -229,10 +247,20 @@ fn pagination_meta(total: usize, start: usize, end: usize, options: PaginationOp
 ///
 /// Query handlers retain their established payload shapes. Array modes stay
 /// arrays, while pagination details travel in the envelope's `meta` object.
+#[cfg(test)]
 pub(crate) fn paginate_query(
     mode: &str,
     input: &Value,
     data: &mut Value,
+) -> Result<Option<Value>, super::ApiError> {
+    paginate_query_with_mode_tag(mode, input, data, None)
+}
+
+pub(crate) fn paginate_query_with_mode_tag(
+    mode: &str,
+    input: &Value,
+    data: &mut Value,
+    mode_tag: Option<&str>,
 ) -> Result<Option<Value>, super::ApiError> {
     // `maxSymbols` is the legacy explicit cap. Keep its old behavior and
     // avoid claiming a total that the handler intentionally did not load.
@@ -247,7 +275,7 @@ pub(crate) fn paginate_query(
         postprocess(data, input);
     }
     match mode {
-        "context_pack" => paginate_context_pack(input, data, options),
+        "context_pack" => paginate_context_pack(input, data, options, mode_tag),
         "symbols_in_files" => Ok(data
             .as_object_mut()
             .and_then(|map| paginate_symbols_in_files(map, input, mode, &mut options))),
@@ -375,12 +403,15 @@ fn paginate_context_pack(
     input: &Value,
     data: &mut Value,
     mut options: PaginationOptions,
+    mode_tag: Option<&str>,
 ) -> Result<Option<Value>, super::ApiError> {
-    // Measure the same compact representation the caller receives. The normal
-    // output pass is idempotent and runs again after pagination.
+    // Paths must be compacted before both candidate sizing and Toz capture.
     postprocess(data, input);
     let files = data["files"].as_array().cloned().unwrap_or_default();
-    let mut reference = capture_page("context_pack", &files, options);
+    let capture_page = !options.full && (options.offset > 0 || files.len() > options.limit);
+    let mut reference = capture_page
+        .then(|| crate::toz::capture_items("context_pack", &files))
+        .flatten();
     if reference.is_some() && input.get("resultsLimit").is_none() {
         options.limit = crate::toz::PAGE_LIMIT;
     }
@@ -395,25 +426,44 @@ fn paginate_context_pack(
     };
     let max_tokens = context_token_limit(input)?;
     let include_reading_order = context_reading_order(input)?;
-    let selection = select_context_window(
+    let mut selection = select_context_window(
         &files,
         &symbols,
         &tests,
         start,
         end,
+        input,
+        options,
         max_tokens,
         options.full,
         include_reading_order,
+        &mut reference,
+        mode_tag,
     )?;
-    if reference.is_none() && !options.full && selection.end < total {
+
+    // A budget may shorten the window even when the caller's page controls do
+    // not. Capture the original rows once so the final guide can recover them,
+    // then remeasure with that reference in metadata.
+    if reference.is_none() && !options.full && selection.end < total && !capture_page {
         reference = crate::toz::capture_items("context_pack", &files);
+        if reference.is_some() {
+            selection = select_context_window(
+                &files,
+                &symbols,
+                &tests,
+                start,
+                end,
+                input,
+                options,
+                max_tokens,
+                options.full,
+                include_reading_order,
+                &mut reference,
+                mode_tag,
+            )?;
+        }
     }
-    let unchanged = start == 0
-        && selection.end == total
-        && !selection.budget_trimmed
-        && selection.symbol_shown == selection.symbol_total;
-    let sections = (!unchanged)
-        .then(|| context_sections(total, start, &selection, options, max_tokens, reference));
+    let sections = context_pagination(total, start, &selection, options, max_tokens, reference);
     *data = selection.data;
     Ok(sections)
 }
@@ -449,23 +499,29 @@ struct ContextSelection {
     budget_trimmed: bool,
     symbol_total: usize,
     symbol_shown: usize,
+    test_total: usize,
+    test_shown: usize,
 }
 
-#[allow(clippy::too_many_arguments)] // Existing compact pagination boundary; preserve its call contract.
+#[allow(clippy::too_many_arguments)] // The candidate must include the exact output policy and recovery metadata.
 fn select_context_window(
     files: &[Value],
     symbols: &[Value],
     tests: &[Value],
     start: usize,
     mut end: usize,
+    input: &Value,
+    options: PaginationOptions,
     max_tokens: usize,
     full: bool,
     include_reading_order: bool,
+    reference: &mut Option<Value>,
+    mode_tag: Option<&str>,
 ) -> Result<ContextSelection, super::ApiError> {
     let mut budget_trimmed = false;
     let symbols_per_file = (max_tokens / 800).max(1);
     loop {
-        let (mut candidate, symbol_total) = context_candidate(
+        let (mut candidate, symbol_total, test_total) = context_candidate(
             &files[start..end],
             symbols,
             tests,
@@ -473,26 +529,132 @@ fn select_context_window(
             full,
             include_reading_order,
         );
-        if !full && end == start + 1 {
-            budget_trimmed |= trim_single_file(&mut candidate, max_tokens)?;
-        }
-        if full || estimated_tokens(&candidate) <= max_tokens {
+        let mut symbol_shown = candidate["symbols"].as_array().map_or(0, Vec::len);
+        let mut test_shown = candidate["tests"].as_array().map_or(0, Vec::len);
+        if full {
             return Ok(ContextSelection {
-                symbol_shown: candidate["symbols"].as_array().map_or(0, Vec::len),
                 data: candidate,
                 end,
                 budget_trimmed,
                 symbol_total,
+                symbol_shown,
+                test_total,
+                test_shown,
             });
         }
-        if end == start {
-            return Err(super::ApiError::new(
-                "invalid_input",
-                "maxTokensEstimate cannot hold an empty context pack",
-            ));
+
+        loop {
+            let selection = ContextSelection {
+                data: candidate.clone(),
+                end,
+                budget_trimmed,
+                symbol_total,
+                symbol_shown,
+                test_total,
+                test_shown,
+            };
+            let pagination = context_pagination(
+                files.len(),
+                start,
+                &selection,
+                options,
+                max_tokens,
+                reference.clone(),
+            );
+            if estimated_context_envelope_tokens(&candidate, input, pagination, mode_tag)
+                <= max_tokens
+            {
+                return Ok(selection);
+            }
+
+            if trim_context_preview(reference) {
+                budget_trimmed = true;
+                continue;
+            }
+
+            if end == start + 1 {
+                let removed = candidate["symbols"]
+                    .as_array_mut()
+                    .and_then(Vec::pop)
+                    .map(|_| {
+                        symbol_shown = symbol_shown.saturating_sub(1);
+                    })
+                    .or_else(|| {
+                        candidate["tests"]
+                            .as_array_mut()
+                            .and_then(Vec::pop)
+                            .map(|_| {
+                                test_shown = test_shown.saturating_sub(1);
+                            })
+                    });
+                if removed.is_some() {
+                    budget_trimmed = true;
+                    continue;
+                }
+                return Err(super::ApiError::new(
+                    "invalid_input",
+                    "maxTokensEstimate cannot hold one context file",
+                ));
+            }
+
+            if end == start {
+                return Err(super::ApiError::new(
+                    "invalid_input",
+                    "maxTokensEstimate cannot hold an empty context pack",
+                ));
+            }
+            end -= 1;
+            budget_trimmed = true;
+            break;
         }
-        end -= 1;
-        budget_trimmed = true;
+    }
+}
+
+fn estimated_context_envelope_tokens(
+    data: &Value,
+    input: &Value,
+    pagination: Option<Value>,
+    mode_tag: Option<&str>,
+) -> usize {
+    let mut data = data.clone();
+    let meta = assemble_metadata(&mut data, input, pagination);
+    let envelope = match mode_tag {
+        Some(mode) => super::render_batch_value(Ok(data), meta, Some(mode)),
+        None => super::render_value_with_meta(Ok(data), meta),
+    };
+    serde_json::to_vec(&envelope)
+        .map(|serialized| serialized.len() / 4)
+        .unwrap_or(usize::MAX)
+}
+
+fn trim_context_preview(reference: &mut Option<Value>) -> bool {
+    let Some(preview) = reference
+        .as_mut()
+        .and_then(|reference| reference.get_mut("toc"))
+    else {
+        return false;
+    };
+    match preview {
+        Value::String(preview) if !preview.is_empty() => {
+            if preview.chars().count() <= 4 {
+                preview.clear();
+            } else {
+                let keep = preview.chars().count() / 2;
+                let end = preview
+                    .char_indices()
+                    .nth(keep)
+                    .map_or(preview.len(), |(index, _)| index);
+                preview.truncate(end);
+                preview.push('…');
+            }
+            true
+        }
+        Value::String(preview) if preview.is_empty() => false,
+        Value::Null => false,
+        _ => {
+            *preview = Value::String("…".to_string());
+            true
+        }
     }
 }
 
@@ -503,7 +665,7 @@ fn context_candidate(
     symbols_per_file: usize,
     full: bool,
     include_reading_order: bool,
-) -> (Value, usize) {
+) -> (Value, usize, usize) {
     let paths: HashSet<&str> = selected
         .iter()
         .filter_map(|file| file.get("path").and_then(Value::as_str))
@@ -536,6 +698,7 @@ fn context_candidate(
         })
         .cloned()
         .collect();
+    let test_total = selected_tests.len();
     let reading_order: Vec<Value> = if include_reading_order {
         selected
             .iter()
@@ -550,31 +713,24 @@ fn context_candidate(
             "tests": selected_tests, "readingOrder": reading_order,
         }),
         matching_symbols,
+        test_total,
     )
 }
 
-fn estimated_tokens(candidate: &Value) -> usize {
-    serde_json::to_string(candidate)
-        .map(|text| text.len() / 4)
-        .unwrap_or(0)
-}
-
-fn trim_single_file(candidate: &mut Value, max_tokens: usize) -> Result<bool, super::ApiError> {
-    let mut trimmed = false;
-    while estimated_tokens(candidate) > max_tokens {
-        let removed = candidate["symbols"]
-            .as_array_mut()
-            .and_then(Vec::pop)
-            .or_else(|| candidate["tests"].as_array_mut().and_then(Vec::pop));
-        if removed.is_none() {
-            return Err(super::ApiError::new(
-                "invalid_input",
-                "maxTokensEstimate cannot hold one context file",
-            ));
-        }
-        trimmed = true;
-    }
-    Ok(trimmed)
+fn context_pagination(
+    total: usize,
+    start: usize,
+    selection: &ContextSelection,
+    options: PaginationOptions,
+    max_tokens: usize,
+    reference: Option<Value>,
+) -> Option<Value> {
+    let unchanged = start == 0
+        && selection.end == total
+        && !selection.budget_trimmed
+        && selection.symbol_shown == selection.symbol_total
+        && selection.test_shown == selection.test_total;
+    (!unchanged).then(|| context_sections(total, start, selection, options, max_tokens, reference))
 }
 
 fn context_sections(
@@ -612,6 +768,16 @@ fn context_sections(
                 "shown": selection.symbol_shown,
                 "total": selection.symbol_total,
                 "request": "raise maxTokensEstimate or set fullResults to true for more symbols"
+            }),
+        );
+    }
+    if selection.test_shown < selection.test_total {
+        sections.insert(
+            "tests".to_string(),
+            serde_json::json!({
+                "shown": selection.test_shown,
+                "total": selection.test_total,
+                "request": "raise maxTokensEstimate or set fullResults to true for more tests"
             }),
         );
     }
@@ -693,6 +859,41 @@ fn trim_spans(v: &mut Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn context_pack_data(file_count: usize) -> Value {
+        let files: Vec<Value> = (0..file_count)
+            .map(|index| {
+                json!({
+                    "path": format!("src/module_{index}_{}", "x".repeat(48)),
+                    "relevance": "neighbor"
+                })
+            })
+            .collect();
+        let reading_order: Vec<Value> = files.iter().map(|file| file["path"].clone()).collect();
+        json!({
+            "files": files,
+            "symbols": [],
+            "tests": [],
+            "readingOrder": reading_order
+        })
+    }
+
+    fn render_context_envelope(
+        mut data: Value,
+        input: &Value,
+        pagination: Option<Value>,
+        mode: Option<&str>,
+    ) -> Value {
+        let meta = assemble_metadata(&mut data, input, pagination);
+        match mode {
+            Some(mode) => super::super::render_batch_value(Ok(data), meta, Some(mode)),
+            None => super::super::render_value_with_meta(Ok(data), meta),
+        }
+    }
+
+    fn estimated_envelope_tokens(envelope: &Value) -> usize {
+        serde_json::to_vec(envelope).unwrap().len() / 4
+    }
 
     fn sep() -> char {
         std::path::MAIN_SEPARATOR
@@ -917,27 +1118,236 @@ mod tests {
 
     #[test]
     fn context_pack_budget_trims_file_window() {
-        let input = json!({ "maxTokensEstimate": 40 });
-        let mut data = json!({
-            "files": [
-                {"path": "a.rs", "relevance": "seed"},
-                {"path": "b.rs", "relevance": "neighbor"},
-                {"path": "c.rs", "relevance": "neighbor"}
-            ],
-            "symbols": [],
-            "tests": [],
-            "readingOrder": ["a.rs", "b.rs", "c.rs"]
-        });
+        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let budget = 150;
+        let input = json!({ "maxTokensEstimate": budget });
+        let mut data = context_pack_data(3);
         let pagination = paginate_query("context_pack", &input, &mut data)
             .expect("budget is valid")
             .expect("budget truncates the pack");
-        assert!(data["files"].as_array().unwrap().len() < 3);
-        assert_eq!(
-            data["readingOrder"].as_array().unwrap().len(),
-            data["files"].as_array().unwrap().len()
-        );
-        assert!(serde_json::to_string(&data).unwrap().len() / 4 <= 40);
         assert!(pagination.get("budget").is_some());
+        let envelope = render_context_envelope(data, &input, Some(pagination), None);
+        let files = envelope["data"]["files"].as_array().unwrap();
+        assert!(files.len() < 3);
+        assert_eq!(
+            envelope["data"]["readingOrder"].as_array().unwrap().len(),
+            files.len()
+        );
+        assert!(estimated_envelope_tokens(&envelope) <= budget);
+    }
+
+    #[test]
+    fn context_pack_budget_covers_standalone_and_batch_child_envelopes() {
+        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let budget = 250;
+        for mode in [None, Some("context_pack")] {
+            let input = json!({ "maxTokensEstimate": budget });
+            let mut data = context_pack_data(8);
+            let pagination = paginate_query_with_mode_tag("context_pack", &input, &mut data, mode)
+                .expect("budget is valid");
+            let envelope = render_context_envelope(data, &input, pagination, mode);
+
+            assert_eq!(envelope["ok"], true);
+            assert_eq!(envelope.get("mode").is_some(), mode.is_some());
+            assert!(
+                estimated_envelope_tokens(&envelope) <= budget,
+                "{} tokens exceeds budget {budget}: {envelope}",
+                estimated_envelope_tokens(&envelope)
+            );
+        }
+    }
+
+    #[test]
+    fn context_pack_toz_preview_is_trimmed_and_recovery_is_preserved() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir =
+            std::env::temp_dir().join(format!("varde-context-budget-toz-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("stub directory creates");
+        let count_path = dir.join("capture-count");
+        let input_path = dir.join("capture-input");
+        let marker = format!("varde_context_budget_toz_probe_{}.rs", std::process::id());
+        let preview = "x".repeat(6_000);
+        let response = json!({
+            "handle": "context-pack-handle",
+            "preview": preview
+        })
+        .to_string();
+        let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+        let real_toz = std::env::var_os("PATH").and_then(|path| {
+            std::env::split_paths(&path)
+                .map(|directory| directory.join("toz"))
+                .find(|candidate| candidate.is_file())
+        });
+        let fallback = real_toz
+            .as_deref()
+            .map(|path| {
+                format!(
+                    "{} \"$@\" < \"$input_path\"\nexit $?",
+                    quote(path.to_str().unwrap())
+                )
+            })
+            .unwrap_or_else(|| "exit 1".to_string());
+        let script = format!(
+            "#!/bin/sh\ninput_path={}.$$\ntrap 'rm -f \"$input_path\"' 0\ncat > \"$input_path\"\nif grep -F -- {} \"$input_path\" >/dev/null 2>&1; then\n  printf 'capture\\n' >> {}\n  printf '%s\\n' {}\n  exit 0\nfi\n{}\n",
+            quote(input_path.to_str().unwrap()),
+            quote(&marker),
+            quote(count_path.to_str().unwrap()),
+            quote(&response),
+            fallback
+        );
+        let bin = dir.join("toz");
+        std::fs::write(&bin, script).expect("stub writes");
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755))
+            .expect("stub becomes executable");
+        let _path = crate::test_support::PathOverride::new(&dir);
+        unsafe { std::env::set_var("VARDE_CODE_TOZ", "1") };
+
+        let budget = 240;
+        let input = json!({ "maxTokensEstimate": budget, "resultsLimit": 30 });
+        let mut data = context_pack_data(30);
+        data["files"][0]["path"] = json!(marker);
+        data["readingOrder"][0] = json!(marker);
+        let pagination =
+            paginate_query("context_pack", &input, &mut data).expect("budget is valid");
+        let envelope = render_context_envelope(data, &input, pagination, None);
+        let files = envelope["data"]["files"].as_array().unwrap();
+        assert!(!files.is_empty(), "context pack keeps at least one file");
+        assert!(
+            files.len() < 30,
+            "oversized captured context should shrink its file window"
+        );
+
+        assert!(
+            estimated_envelope_tokens(&envelope) <= budget,
+            "{} tokens exceeds budget {budget}: {envelope}",
+            estimated_envelope_tokens(&envelope)
+        );
+        assert_eq!(envelope["meta"]["toz"]["handle"], "context-pack-handle");
+        assert_eq!(envelope["meta"]["toz"]["toc"], "");
+        assert_eq!(
+            envelope["meta"]["pagination"]["files"]["toz_search"],
+            "toz query --handle context-pack-handle \"<term>\""
+        );
+        assert!(
+            envelope["meta"]["pagination"]["files"]["toz_read"]
+                .as_str()
+                .is_some()
+        );
+        assert_eq!(
+            std::fs::read_to_string(&count_path)
+                .expect("capture count exists")
+                .lines()
+                .count(),
+            1
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn context_pack_stops_trimming_an_exhausted_toz_preview() {
+        let mut reference = Some(json!({ "toc": "" }));
+
+        assert!(!trim_context_preview(&mut reference));
+        assert_eq!(reference, Some(json!({ "toc": "" })));
+    }
+
+    #[test]
+    fn context_pack_reports_tests_omitted_from_the_selected_file_window() {
+        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let tests: Vec<Value> = (0..4)
+            .map(|index| {
+                json!({
+                    "name": format!("large_test_{index}"),
+                    "coversFile": "src/main.rs",
+                    "excerpt": "x".repeat(700)
+                })
+            })
+            .collect();
+        let mut data = json!({
+            "files": [{"path":"src/main.rs", "relevance":"seed"}],
+            "symbols": [],
+            "tests": tests,
+            "readingOrder": ["src/main.rs"]
+        });
+        let budget = 300;
+        let input = json!({ "maxTokensEstimate": budget });
+        let pagination =
+            paginate_query("context_pack", &input, &mut data).expect("budget is valid");
+        let envelope = render_context_envelope(data, &input, pagination, None);
+        let shown = envelope["data"]["tests"].as_array().unwrap();
+
+        assert!(shown.len() < 4);
+        assert_eq!(envelope["meta"]["pagination"]["tests"]["total"], 4);
+        assert_eq!(
+            envelope["meta"]["pagination"]["tests"]["shown"],
+            shown.len()
+        );
+        assert!(shown.iter().all(|test| test["coversFile"] == "src/main.rs"));
+        assert!(estimated_envelope_tokens(&envelope) <= budget);
+    }
+
+    #[test]
+    fn context_pack_rejects_a_file_when_its_success_envelope_cannot_fit() {
+        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let input = json!({
+            "maxTokensEstimate": 20,
+            "includeReadingOrder": false
+        });
+        let mut data = json!({
+            "files": [{"path":"a"}],
+            "symbols": [],
+            "tests": [],
+            "readingOrder": ["a"]
+        });
+
+        let error = paginate_query("context_pack", &input, &mut data)
+            .expect_err("the complete success envelope cannot fit");
+
+        assert_eq!(error.code, "invalid_input");
+    }
+
+    #[test]
+    fn context_pack_full_results_bypasses_budget_and_symbol_caps_after_offset() {
+        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let mut data = json!({
+            "files": [
+                {"path":"a.rs", "relevance":"seed"},
+                {"path":"b.rs", "relevance":"neighbor"},
+                {"path":"c.rs", "relevance":"neighbor"}
+            ],
+            "symbols": [
+                {"name":"a1", "filePath":"a.rs"},
+                {"name":"b1", "filePath":"b.rs"},
+                {"name":"b2", "filePath":"b.rs"},
+                {"name":"c1", "filePath":"c.rs"},
+                {"name":"c2", "filePath":"c.rs"}
+            ],
+            "tests": [
+                {"name":"test_b", "coversFile":"b.rs"},
+                {"name":"test_c", "coversFile":"c.rs"}
+            ],
+            "readingOrder": ["a.rs", "b.rs", "c.rs"]
+        });
+        let input = json!({
+            "fullResults": true,
+            "resultsLimit": 1,
+            "resultsOffset": 1,
+            "maxTokensEstimate": 1
+        });
+
+        let pagination = paginate_query("context_pack", &input, &mut data)
+            .expect("tiny positive budget is valid")
+            .expect("nonzero offset is reported");
+        let envelope = render_context_envelope(data, &input, Some(pagination), None);
+
+        assert_eq!(envelope["data"]["files"].as_array().unwrap().len(), 2);
+        assert_eq!(envelope["data"]["files"][0]["path"], "b.rs");
+        assert_eq!(envelope["data"]["symbols"].as_array().unwrap().len(), 4);
+        assert_eq!(envelope["data"]["tests"].as_array().unwrap().len(), 2);
+        assert_eq!(envelope["meta"]["pagination"]["files"]["offset"], 1);
+        assert!(estimated_envelope_tokens(&envelope) > 1);
     }
 
     #[test]

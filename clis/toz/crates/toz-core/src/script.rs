@@ -57,6 +57,7 @@ pub enum Outcome {
     Timeout,
     MemoryLimit,
     OutputLimit,
+    RecordLimit,
 }
 
 impl Outcome {
@@ -67,6 +68,7 @@ impl Outcome {
             Outcome::Timeout => 3,
             Outcome::MemoryLimit => 4,
             Outcome::OutputLimit => 5,
+            Outcome::RecordLimit => 6,
         }
     }
 }
@@ -132,6 +134,18 @@ impl LineSource for TextLines {
 pub struct Record {
     pub kind: String,
     pub json: String,
+}
+
+/// Maximum number of records a script can produce in one run.
+pub const MAX_RECORD_COUNT: usize = 10_000;
+/// Maximum combined UTF-8 bytes in record kinds and serialized JSON for one script run.
+pub const MAX_RECORD_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Default)]
+struct RecordBuffer {
+    records: Vec<Record>,
+    serialized_bytes: usize,
+    over_limit: bool,
 }
 
 /// `LineSource` backed by a capture in the store.
@@ -200,7 +214,7 @@ pub fn run_with_tools(
         cap: limits.max_output_bytes,
         over: false,
     }));
-    let records = Rc::new(RefCell::new(Vec::<Record>::new()));
+    let records = Rc::new(RefCell::new(RecordBuffer::default()));
 
     let result = ctx.with(|ctx| {
         evaluate_script(
@@ -217,8 +231,16 @@ pub fn run_with_tools(
         )
     })?;
 
-    let collected = records.borrow().clone();
-    Ok((result, collected))
+    let (outcome, collected) = {
+        let mut records = records.borrow_mut();
+        if records.over_limit {
+            drop(std::mem::take(&mut records.records));
+            (Outcome::RecordLimit, Vec::new())
+        } else {
+            (result, std::mem::take(&mut records.records))
+        }
+    };
+    Ok((outcome, collected))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -232,7 +254,7 @@ fn evaluate_script<'js>(
     deadline: Instant,
     timed_out: Arc<AtomicBool>,
     out: Rc<RefCell<OutBuf>>,
-    records: Rc<RefCell<Vec<Record>>>,
+    records: Rc<RefCell<RecordBuffer>>,
 ) -> Result<Outcome> {
     let globals = ctx.globals();
     install_print(&ctx, &globals, out.clone())?;
@@ -339,7 +361,7 @@ fn install_toz<'js>(
     limits: &Limits,
     commands: Option<Rc<dyn CommandCaller>>,
     deadline: Instant,
-    records: Rc<RefCell<Vec<Record>>>,
+    records: Rc<RefCell<RecordBuffer>>,
 ) -> Result<()> {
     let toz = Object::new(ctx.clone())?;
 
@@ -472,7 +494,7 @@ fn install_text<'js>(
 fn install_record<'js>(
     ctx: &Ctx<'js>,
     toz: &Object<'js>,
-    records: Rc<RefCell<Vec<Record>>>,
+    records: Rc<RefCell<RecordBuffer>>,
 ) -> Result<()> {
     // record(kind, obj) — appended in call order; persisted per capture after the script exits.
     {
@@ -480,11 +502,33 @@ fn install_record<'js>(
                               kind: rquickjs::Coerced<String>,
                               obj: Value<'js>|
               -> rquickjs::Result<()> {
+            let count_exceeded = {
+                let mut records = records.borrow_mut();
+                if records.over_limit || records.records.len() >= MAX_RECORD_COUNT {
+                    records.over_limit = true;
+                    true
+                } else {
+                    false
+                }
+            };
+            if count_exceeded {
+                return Err(js_error(&ctx, "toz.record(): record limit exceeded"));
+            }
+
             let json = match ctx.json_stringify(obj)? {
                 Some(s) => s.to_string()?,
                 None => "null".to_string(),
             };
-            records.borrow_mut().push(Record { kind: kind.0, json });
+            let record_bytes = kind.0.len().saturating_add(json.len());
+            let mut records = records.borrow_mut();
+            if records.over_limit
+                || record_bytes > MAX_RECORD_BYTES.saturating_sub(records.serialized_bytes)
+            {
+                records.over_limit = true;
+                return Err(js_error(&ctx, "toz.record(): record limit exceeded"));
+            }
+            records.serialized_bytes += record_bytes;
+            records.records.push(Record { kind: kind.0, json });
             Ok(())
         };
         toz.set("record", Function::new(ctx.clone(), record_fn)?)?;
@@ -749,6 +793,77 @@ mod tests {
         assert_eq!(kinds, vec!["line", "other", "line"]);
         assert_eq!(records[0].json, "{\"v\":1}");
         assert_eq!(records[2].json, "{\"v\":2}");
+    }
+
+    #[test]
+    fn record_count_limit_accepts_the_boundary_and_rejects_the_next_record() {
+        const RECORD_COUNT_LIMIT: usize = 10_000;
+        let code = format!("for (let i = 0; i < {RECORD_COUNT_LIMIT}; i++) toz.record('row', i)");
+        let (outcome, records) =
+            run(&code, &meta(), VecSource::stdout(&[]), &Limits::default()).expect("engine ran");
+
+        assert!(matches!(outcome, Outcome::Ok(_)));
+        assert_eq!(records.len(), RECORD_COUNT_LIMIT);
+        assert_eq!(records.first().unwrap().json, "0");
+        assert_eq!(records.last().unwrap().json, "9999");
+
+        let code = format!("for (let i = 0; i <= {RECORD_COUNT_LIMIT}; i++) toz.record('row', i)");
+        let (outcome, records) =
+            run(&code, &meta(), VecSource::stdout(&[]), &Limits::default()).expect("engine ran");
+
+        assert!(matches!(outcome, Outcome::RecordLimit));
+        assert!(
+            records.is_empty(),
+            "limited runs must discard partial records"
+        );
+    }
+
+    #[test]
+    fn record_serialized_byte_limit_is_aggregate_and_includes_record_kinds() {
+        const RECORD_BYTES_LIMIT: usize = 8 * 1024 * 1024;
+        let value_bytes = (RECORD_BYTES_LIMIT - 6) / 2;
+        let exact = format!(
+            "toz.record('k', 'a'.repeat({value_bytes})); toz.record('k', 'b'.repeat({value_bytes}))"
+        );
+        let (outcome, records) = run(
+            &exact,
+            &meta(),
+            VecSource::stdout(&[]),
+            &Limits {
+                memory_bytes: 96 * 1024 * 1024,
+                ..Limits::default()
+            },
+        )
+        .expect("engine ran");
+
+        assert!(matches!(outcome, Outcome::Ok(_)));
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].kind, "k");
+        assert_eq!(records[0].json.len(), value_bytes + 2);
+        assert_eq!(records[0].json.as_bytes()[1], b'a');
+        assert_eq!(records[1].json.len(), value_bytes + 2);
+        assert_eq!(records[1].json.as_bytes()[1], b'b');
+
+        let over = format!(
+            "toz.record('k', 'a'.repeat({value_bytes})); toz.record('k', 'b'.repeat({}))",
+            value_bytes + 1
+        );
+        let (outcome, records) = run(
+            &over,
+            &meta(),
+            VecSource::stdout(&[]),
+            &Limits {
+                memory_bytes: 96 * 1024 * 1024,
+                ..Limits::default()
+            },
+        )
+        .expect("engine ran");
+
+        assert!(matches!(outcome, Outcome::RecordLimit));
+        assert!(
+            records.is_empty(),
+            "limited runs must discard partial records"
+        );
     }
 
     #[test]

@@ -16,7 +16,7 @@ The `skills/` and `agents/` folders and each workspace under `clis/` are self-co
 Rules that keep the modules independent:
 
 1. **No cross-folder source or dependency imports.** `clis/code/`, `clis/workflow/`, `clis/toz/`, and `clis/learn/` are separate Cargo workspaces and must stay that way — do not add a root or `clis/Cargo.toml`, and do not add path dependencies from one folder into another. The skills reach the CLIs only through the installed binaries on `PATH`, never by relative path into a sibling folder.
-   - Each skill under `skills/` owns its own flat `references/` directory and is self-contained; `install.sh` copies one skill directory at a time. Guidance a skill needs is written into that skill, never imported from a sibling folder.
+   - Each skill under `skills/` owns its own flat `references/` directory and is self-contained; `install.sh` copies one skill directory at a time. Guidance a skill needs is written into that skill, never imported from a sibling folder. Exception: files listed in `skills/shared/MANIFEST` have one source under `skills/shared/`, and `install.sh` copies them into every skill the manifest names, so an installed skill still stands alone.
    - `skills/check-refs.sh` guards this: it installs into a temp dir and fails on any pointer that would not resolve on a user's machine.
 2. **Build and test within a folder.** `cd clis/code && cargo test`, `cd clis/workflow && cargo test`, `cd clis/toz && cargo test`, `cd clis/learn && cargo test`, `cd skills && ./install.sh`, `cd agents && ./install.sh`. There is no root build or test entry point. `varde sync` is the only root wiring entry point. It only wires supported harnesses through module installers.
 3. **Names keep the `varde-` prefix.** Folders are short (`clis/code/`, `clis/workflow/`, `skills/`, `agents/`, `clis/toz/`), but package names, CLI names, and skill names retain their full `varde-*` identity where applicable (`varde-toz` also installs `toz` as a compatibility alias). Plugin identities use the same prefix; module-specific environment variables use `VARDE_<MODULE>_*`. Legacy names may remain as compatibility inputs, with canonical names taking precedence.
@@ -31,6 +31,10 @@ Rules that keep the modules independent:
    `~/.config/varde/config.toml`, never in the repo.
 
 ## CLI updates after a plan
+
+For each GitHub release, all four CLI package `version` fields must match the
+release tag, without its leading `v` in Cargo (for example, tag `v1.4.0` uses
+package version `1.4.0`).
 
 After a plan changes any CLI module, run its required checks, then rebuild and
 install every affected binary from this checkout before reporting completion.
@@ -47,6 +51,7 @@ Verify that `command -v <binary>` selects the installed executable, run its
 `--help`, and check any CLI flags changed by the plan. Use `--force` even when
 the package version is unchanged. If installation or verification fails,
 report the failure and the remaining update before claiming completion.
+A change to review fingerprint inputs makes in-flight approvals stale, so re-record them after installing.
 
 ## Sandbox and shell
 

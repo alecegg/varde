@@ -21,10 +21,10 @@ The four agents map onto the plan → execute → review lifecycle:
 
 | Agent | Purpose | Backing skill(s) |
 |---|---|---|
-| `plan` | Collaboratively scope a change | `varde-change plan` |
-| `executor` | Implement one bounded task and apply review fixes | `varde-change build`, `varde-review fix` |
-| `review` | Report-only structured review | `varde-review report` |
-| `explore` | Read-only repository navigation | `varde-explore` |
+| `varde-planner` | Collaboratively scope a change | `varde-change plan` |
+| `varde-executor` | Implement one bounded task and apply review fixes | `varde-change build`, `varde-review fix` |
+| `varde-reviewer` | Report-only structured review | `varde-review report` |
+| `varde-explorer` | Read-only repository navigation | `varde-explore` |
 
 The agents invoke the `varde-*` skills by name through their harness; names such
 as `varde-review report` refer to skill workflows, not shell executables. Install
@@ -76,7 +76,7 @@ Agent instructions select modes within those installed packages.
 ./install.sh                       # all agents, Claude   -> ~/.claude/agents
 ./install.sh -t codex              # all agents, Codex    -> ~/.codex/agents
 ./install.sh -t opencode           # all agents, opencode -> ~/.config/opencode/agents
-./install.sh -t claude -a plan,review
+./install.sh -t claude -a varde-planner,varde-reviewer
 ./install.sh -t claude -d ./.claude/agents   # into a repo-local dir
 ```
 
@@ -85,22 +85,27 @@ ownership marker and preserves same-named files created elsewhere. Use `-f`
 only when every selected destination may be replaced explicitly.
 
 On install each variant is renamed to the agent's canonical name for that
-harness — `executor/claude.md` → `executor.md`, `executor/codex.toml` →
-`executor.toml`, `executor/opencode.md` → `executor.md` — matching how each harness discovers agents
+harness — `varde-executor/claude.md` → `varde-executor.md`, `varde-executor/codex.toml` →
+`varde-executor.toml`, `varde-executor/opencode.md` → `varde-executor.md` — matching how each harness discovers agents
 (Claude/Codex by the `name` field, opencode by filename).
 
 Managed upgrades remove stale `build.<ext>` files from earlier releases.
+The agents were renamed `explore`, `plan`, `review`, `executor` →
+`varde-explorer`, `varde-planner`, `varde-reviewer`, `varde-executor`. With `-m` or
+`-f`, installing a renamed agent also removes the old `<old>.<ext>` file when it
+carries varde's ownership marker (`-n` prints `Would remove renamed managed`).
 Unmanaged files remain byte-identical.
 
 OpenCode adapters target V2, whose global discovery directory is plural
 `~/.config/opencode/agents/`. V1 adapters are no longer generated. V2 uses
 `permissions` fields rather than the legacy `tools` and `permission` mappings.
-Canonical `plan` and `explore` IDs intentionally override the corresponding
-built-in agents.
+The `varde-` prefix avoids collisions with harness built-in agents and user
+agents.
 
 For the default OpenCode target, `-m` and `-f` remove a selected agent's managed
 regular file from the legacy singular `agent/` directory only after installing
-its replacement. Installing `executor` also retires managed legacy `build.md`.
+its replacement. Installing `varde-executor` also retires managed legacy `build.md`; old-named
+legacy files (for example `plan.md`) are retired too.
 Preserved destinations, unowned files, and symlinks do not trigger cleanup;
 explicit `-d` targets never clean the global legacy directory. `-n` previews
 these decisions without changing files.

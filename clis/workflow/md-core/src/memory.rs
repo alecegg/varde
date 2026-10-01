@@ -151,8 +151,6 @@ impl Entry {
 /// User-wide settings stored alongside memory paths.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage_limit: Option<String>,
     /// Preserve hand-edited keys so a path edit cannot silently erase them.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, toml::Value>,
@@ -160,7 +158,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn is_empty(&self) -> bool {
-        self.usage_limit.is_none() && self.unknown.is_empty()
+        self.unknown.is_empty()
     }
 }
 

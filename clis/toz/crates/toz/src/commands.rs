@@ -2,9 +2,10 @@ use crate::cli::*;
 use crate::diagnostics;
 use crate::sandbox;
 use crate::worker;
-use anyhow::{bail, Context, Result};
-use serde_json::{json, Value};
-use std::io::{Read, Write};
+use anyhow::{Context, Result, bail};
+use serde_json::{Value, json};
+use std::io::{Read, Seek, Write};
+use std::path::Path;
 use toz_core::capture::{self, CaptureInput, Outcome};
 use toz_core::config::WorkspaceAccess;
 use toz_core::fetch::{self, FetchOpts};
@@ -13,7 +14,11 @@ use toz_core::metadata;
 use toz_core::profile;
 use toz_core::redact::Redactor;
 use toz_core::search::{self, QueryResult, SearchOpts};
+use toz_core::streaming;
 use toz_core::{Config, Project, Store};
+
+/// Keep parsed hook payloads bounded; oversized hooks are dropped and counted in diagnostics.
+const MAX_HOOK_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 
 fn safe_metadata(cfg: &Config, value: &str) -> Result<String> {
     let redactor = Redactor::from_config(&cfg.redact)?;
@@ -63,7 +68,7 @@ fn dispatch_loaded(
 ) -> Result<i32> {
     match command {
         Command::Query(a) => cmd_query(cfg, project, g, a),
-        Command::Run(a) => cmd_run(cfg, project, g, a),
+        Command::Run(a) => cmd_script(cfg, project, g, a),
         Command::Capture(a) => cmd_capture(cfg, project, g, a),
         Command::Index(a) => cmd_index(cfg, project, g, a),
         Command::Fetch(a) => cmd_fetch(cfg, project, g, a),
@@ -80,131 +85,242 @@ fn dispatch_loaded(
 }
 
 fn cmd_query(cfg: &Config, project: &Project, g: &GlobalOpts, a: QueryArgs) -> Result<i32> {
-    if a.raw.is_some() {
-        if query_raw_conflicts(&a) {
-            bail!("--raw cannot be combined with search or capture options");
-        }
-        return cmd_raw(
-            cfg,
-            project,
-            RawArgs {
-                handle: a.raw.unwrap(),
-                stream: a.stream,
-            },
-        );
+    match QueryMode::from_args(a)? {
+        QueryMode::Raw(args) => cmd_raw(cfg, project, args),
+        QueryMode::List(args) => cmd_list(cfg, project, g, args),
+        QueryMode::Search(args) => cmd_search(cfg, project, g, args),
+        QueryMode::Retrieve(args) => cmd_show(project, g, args),
     }
-    if a.list {
-        if query_list_conflicts(&a) {
-            bail!("--list cannot be combined with search or capture options");
+}
+
+enum QueryMode {
+    Raw(RawArgs),
+    List(ListArgs),
+    Search(SearchArgs),
+    Retrieve(ShowArgs),
+}
+
+impl QueryMode {
+    fn from_args(a: QueryArgs) -> Result<Self> {
+        if a.raw.is_some() {
+            if query_raw_conflicts(&a) {
+                bail!("--raw cannot be combined with search or capture options");
+            }
+            return Ok(Self::Raw(RawArgs {
+                handle: a.raw.expect("raw mode has a handle"),
+                stream: a.stream,
+            }));
         }
-        return cmd_list(
-            cfg,
-            project,
-            g,
-            ListArgs {
+        if a.list {
+            if query_list_conflicts(&a) {
+                bail!("--list cannot be combined with search or capture options");
+            }
+            return Ok(Self::List(ListArgs {
                 limit: a.limit.unwrap_or(20),
                 all: a.all,
-            },
-        );
-    }
-    if !a.queries.is_empty() {
-        return query_search(cfg, project, g, a);
-    }
-    query_retrieve(project, g, a)
-}
-
-fn query_raw_conflicts(a: &QueryArgs) -> bool {
-    [
-        a.list,
-        a.handle.is_some(),
-        !a.queries.is_empty(),
-        a.chunk.is_some(),
-        a.records.is_some(),
-        a.lines.is_some(),
-        a.source.is_some(),
-        a.limit.is_some(),
-        a.content_type.is_some(),
-        a.all,
-        a.global,
-    ]
-    .contains(&true)
-}
-
-fn query_list_conflicts(a: &QueryArgs) -> bool {
-    [
-        a.handle.is_some(),
-        !a.queries.is_empty(),
-        a.chunk.is_some(),
-        a.records.is_some(),
-        a.lines.is_some(),
-        a.source.is_some(),
-        a.content_type.is_some(),
-        a.global,
-        a.stream != "stdout",
-    ]
-    .contains(&true)
-}
-
-fn query_search(cfg: &Config, project: &Project, g: &GlobalOpts, a: QueryArgs) -> Result<i32> {
-    if a.chunk.is_some() || a.records.is_some() || a.lines.is_some() || a.stream != "stdout" {
-        bail!("--chunk, --records, --lines, and --stream require capture retrieval");
-    }
-    cmd_search(
-        cfg,
-        project,
-        g,
-        SearchArgs {
-            queries: a.queries,
-            handle: a.handle,
-            source: a.source,
-            limit: a.limit.unwrap_or(3),
-            content_type: a.content_type,
-            all: a.all,
-            global: a.global,
-        },
-    )
-}
-
-fn query_retrieve(project: &Project, g: &GlobalOpts, a: QueryArgs) -> Result<i32> {
-    let handle = a
-        .handle
-        .context("provide search terms, --handle, --list, or --raw")?;
-    if a.source.is_some() || a.limit.is_some() || a.content_type.is_some() || a.all || a.global {
-        bail!("search filters require search terms");
-    }
-    if a.chunk.is_some() && a.lines.is_some() {
-        bail!("--chunk and --lines cannot be combined");
-    }
-    if a.records.is_some() && (a.chunk.is_some() || a.lines.is_some()) {
-        bail!("--records cannot be combined with --chunk or --lines");
-    }
-    cmd_show(
-        project,
-        g,
-        ShowArgs {
+            }));
+        }
+        if !a.queries.is_empty() {
+            if a.chunk.is_some() || a.records.is_some() || a.lines.is_some() || a.stream != "stdout"
+            {
+                bail!("--chunk, --records, --lines, and --stream require capture retrieval");
+            }
+            return Ok(Self::Search(SearchArgs {
+                queries: a.queries,
+                handle: a.handle,
+                source: a.source,
+                limit: a.limit.unwrap_or(3),
+                content_type: a.content_type,
+                all: a.all,
+                global: a.global,
+            }));
+        }
+        let handle = a
+            .handle
+            .context("provide search terms, --handle, --list, or --raw")?;
+        if a.source.is_some() || a.limit.is_some() || a.content_type.is_some() || a.all || a.global
+        {
+            bail!("search filters require search terms");
+        }
+        if a.chunk.is_some() && a.lines.is_some() {
+            bail!("--chunk and --lines cannot be combined");
+        }
+        if a.records.is_some() && (a.chunk.is_some() || a.lines.is_some()) {
+            bail!("--records cannot be combined with --chunk or --lines");
+        }
+        Ok(Self::Retrieve(ShowArgs {
             handle,
             chunk: a.chunk,
             records: a.records,
             lines: a.lines,
             stream: a.stream,
-        },
-    )
+        }))
+    }
+}
+
+fn query_raw_conflicts(a: &QueryArgs) -> bool {
+    a.list
+        || a.handle.is_some()
+        || !a.queries.is_empty()
+        || a.chunk.is_some()
+        || a.records.is_some()
+        || a.lines.is_some()
+        || a.source.is_some()
+        || a.limit.is_some()
+        || a.content_type.is_some()
+        || a.all
+        || a.global
+}
+
+fn query_list_conflicts(a: &QueryArgs) -> bool {
+    a.handle.is_some()
+        || !a.queries.is_empty()
+        || a.chunk.is_some()
+        || a.records.is_some()
+        || a.lines.is_some()
+        || a.source.is_some()
+        || a.content_type.is_some()
+        || a.global
+        || a.stream != "stdout"
 }
 
 fn cmd_raw(cfg: &Config, project: &Project, a: RawArgs) -> Result<i32> {
     let handle = toz_core::raw::RawHandle::parse(&a.handle)?;
     let dir = project.store_dir()?.join("raw");
     let raw = toz_core::raw::RawStore::open(&dir, &cfg.raw, &cfg.capture)?;
-    let output = raw.get(&handle);
+    let output = match raw.get(&handle) {
+        Ok(output) => Ok(output),
+        Err(error) if raw_fallback_allowed(&error) => {
+            match project
+                .fallback_db_path()
+                .and_then(|path| path.parent().map(Path::to_path_buf))
+            {
+                Some(fallback) if fallback.join("raw") != dir => {
+                    let raw = toz_core::raw::RawStore::open(
+                        &fallback.join("raw"),
+                        &cfg.raw,
+                        &cfg.capture,
+                    )?;
+                    raw.get(&handle)
+                }
+                _ => Err(error),
+            }
+        }
+        Err(error) => Err(error),
+    };
     let _ = raw.prune();
-    let output = output?;
+    let output = match output {
+        Ok(output) => output,
+        Err(error) => {
+            record_query_event(
+                project,
+                &project.db_path()?,
+                "raw",
+                0,
+                "failed_lookup",
+                &raw_query_details(&a),
+            );
+            return Err(error.into());
+        }
+    };
     let bytes = if a.stream == "stderr" {
         output.stderr
     } else {
         output.stdout
     };
-    std::io::stdout().lock().write_all(&bytes)?;
+    emit_query_output(
+        project,
+        &project.db_path()?,
+        "raw",
+        &bytes,
+        raw_query_details(&a),
+    )
+}
+
+fn raw_query_details(a: &RawArgs) -> Value {
+    // A raw handle retrieves exact unredacted bytes, so telemetry must never export it.
+    json!({
+        "handle_fingerprint": toz_core::content_hash(a.handle.as_bytes()),
+        "stream": a.stream,
+    })
+}
+
+fn emit_query_output(
+    project: &Project,
+    path: &Path,
+    kind: &str,
+    bytes: &[u8],
+    details: Value,
+) -> Result<i32> {
+    emit_query_output_as(project, path, kind, bytes, "ok", details)
+}
+
+fn emit_query_output_as(
+    project: &Project,
+    path: &Path,
+    kind: &str,
+    bytes: &[u8],
+    outcome: &str,
+    details: Value,
+) -> Result<i32> {
+    let mut out = std::io::stdout().lock();
+    let mut written = 0;
+    let write_result = (|| -> std::io::Result<()> {
+        while written < bytes.len() {
+            match out.write(&bytes[written..]) {
+                Ok(0) => return Err(std::io::ErrorKind::WriteZero.into()),
+                Ok(n) => written += n,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    })();
+    drop(out);
+    record_query_event(
+        project,
+        path,
+        kind,
+        written,
+        if write_result.is_ok() {
+            outcome
+        } else {
+            "partial"
+        },
+        &details,
+    );
+    write_result?;
     Ok(0)
+}
+
+fn record_query_event(
+    project: &Project,
+    path: &Path,
+    kind: &str,
+    bytes_out: usize,
+    outcome: &str,
+    details: &Value,
+) {
+    let logged = Store::open(path).or_else(|error| {
+        if Store::access_error(&error) && path == project.db_path()?.as_path() {
+            if let Some(fallback) = project.fallback_db_path().filter(|p| p != path) {
+                return Store::open(&fallback);
+            }
+        }
+        Err(error)
+    });
+    match logged
+        .and_then(|store| store.log_query(kind, bytes_out, session().as_deref(), outcome, details))
+    {
+        Ok(()) => {}
+        Err(error) => eprintln!("varde-toz: query usage not recorded: {error:#}"),
+    }
+}
+
+fn raw_fallback_allowed(error: &toz_core::raw::RawError) -> bool {
+    matches!(error, toz_core::raw::RawError::NotFound { .. })
+        || matches!(error, toz_core::raw::RawError::Io { source, .. }
+            if matches!(source.kind(), std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::NotADirectory | std::io::ErrorKind::ReadOnlyFilesystem))
 }
 
 fn open_store(cfg: &Config, project: &Project) -> Result<Store> {
@@ -437,142 +553,203 @@ fn cmd_fetch(cfg: &Config, project: &Project, g: &GlobalOpts, a: FetchArgs) -> R
         println!("varde-toz: --label ignored for multiple URLs");
     }
 
-    let results = fetch_many(&urls, opts, a.concurrency);
     let mut store = open_store(cfg, project)?;
     let sess = session();
+    let results = fetch_many(&urls, opts, a.concurrency, |result| {
+        persist_fetch(
+            cfg,
+            project,
+            &mut store,
+            result,
+            label.as_deref(),
+            sess.as_deref(),
+        )
+    })?;
     let mut worst = 0;
     for (url, result) in urls.iter().zip(results) {
         if urls.len() > 1 {
             println!("=== {} ===", safe_url(cfg, url)?);
         }
-        worst = worst.max(report_fetch(
-            cfg,
-            project,
-            g,
-            &mut store,
-            url,
-            result,
-            label.as_deref(),
-            sess.as_deref(),
-        )?);
+        worst = worst.max(emit_fetch_report(cfg, g, url, result?)?);
     }
     Ok(worst)
 }
 
-type FetchResult = Option<std::result::Result<fetch::Fetched, String>>;
+type FetchResult = std::result::Result<fetch::Fetched, String>;
 
-fn fetch_many(urls: &[String], opts: FetchOpts, concurrency: usize) -> Vec<FetchResult> {
-    // Fetches race on a small worker pool; storing is serialised by the caller.
+enum FetchReport {
+    Failed,
+    Cached {
+        handle: String,
+        fetched_at: i64,
+        age: String,
+        chunk_count: i64,
+    },
+    NotStored(&'static str),
+    Captured(Box<toz_core::Preview>),
+}
+
+fn fetch_many<F>(
+    urls: &[String],
+    opts: FetchOpts,
+    concurrency: usize,
+    mut persist: F,
+) -> Result<Vec<Result<FetchReport>>>
+where
+    F: FnMut(FetchResult) -> Result<FetchReport>,
+{
+    // Workers may hold a response while sending, and the consumer persists one at a time.
+    // Bound queued responses by the worker count instead of retaining every fetched page.
     let workers = concurrency.max(1).min(urls.len().max(1));
-    let queue = std::sync::Arc::new(std::sync::Mutex::new((0usize, urls.to_vec())));
-    let results = std::sync::Arc::new(std::sync::Mutex::new(
-        (0..urls.len()).map(|_| None).collect::<Vec<FetchResult>>(),
-    ));
+    let urls = std::sync::Arc::new(urls.to_vec());
+    let queue = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    let (sender, receiver) = std::sync::mpsc::sync_channel::<(usize, FetchResult)>(workers);
     let handles: Vec<_> = (0..workers)
         .map(|_| {
             let queue = queue.clone();
-            let results = results.clone();
-            std::thread::spawn(move || loop {
-                let (i, url) = {
-                    let mut q = queue.lock().unwrap();
-                    if q.0 >= q.1.len() {
+            let urls = urls.clone();
+            let sender = sender.clone();
+            std::thread::spawn(move || {
+                loop {
+                    let next = {
+                        let mut index = queue.lock().unwrap();
+                        if *index >= urls.len() {
+                            None
+                        } else {
+                            let current = *index;
+                            *index += 1;
+                            Some((current, urls[current].clone()))
+                        }
+                    };
+                    let Some((i, url)) = next else { break };
+                    let r = fetch::fetch(&url, opts).map_err(|e| format!("{e:#}"));
+                    if sender.send((i, r)).is_err() {
                         break;
                     }
-                    let i = q.0;
-                    q.0 += 1;
-                    (i, q.1[i].clone())
-                };
-                let r = fetch::fetch(&url, opts).map_err(|e| format!("{e:#}"));
-                results.lock().unwrap()[i] = Some(r);
+                }
             })
         })
         .collect();
-    for h in handles {
-        let _ = h.join();
+    drop(sender);
+
+    let mut results: Vec<Option<Result<FetchReport>>> = (0..urls.len()).map(|_| None).collect();
+    let mut received = 0;
+    while let Ok((index, result)) = receiver.recv() {
+        received += 1;
+        if let Some(slot) = results.get_mut(index) {
+            *slot = Some(persist(result));
+        }
     }
-    std::sync::Arc::try_unwrap(results)
-        .ok()
-        .unwrap()
-        .into_inner()
-        .unwrap()
+
+    let mut panicked = false;
+    for handle in handles {
+        panicked |= handle.join().is_err();
+    }
+    if panicked {
+        bail!("a fetch worker panicked");
+    }
+    if received != urls.len() {
+        bail!("fetch worker did not return a result");
+    }
+    results
+        .into_iter()
+        .map(|result| result.ok_or_else(|| anyhow::anyhow!("fetch worker did not return a result")))
+        .collect()
 }
 
-fn report_fetch(
+fn persist_fetch(
     cfg: &Config,
     project: &Project,
-    g: &GlobalOpts,
     store: &mut Store,
-    url: &str,
     result: FetchResult,
     label: Option<&str>,
     sess: Option<&str>,
-) -> Result<i32> {
+) -> Result<FetchReport> {
     let mut fetched = match result {
-        Some(Ok(fetched)) => fetched,
-        Some(Err(_)) => {
-            println!("varde-toz: fetch failed for {}", safe_url(cfg, url)?);
-            return Ok(1);
-        }
-        None => return Ok(0),
+        Ok(fetched) => fetched,
+        Err(_) => return Ok(FetchReport::Failed),
     };
-    if report_cached_fetch(cfg, &fetched, project, g, store, url)? {
-        return Ok(0);
+    if let Some(cached) = report_cached_fetch(&fetched, project, store)? {
+        return Ok(cached);
     }
     match fetch::store_fetched(cfg, store, &project.key, &mut fetched, label, sess)? {
-        Outcome::Captured(p) => {
-            emit_preview(g, &p)?;
-            Ok(0)
-        }
-        Outcome::Skipped { rule } => {
-            println!("varde-toz: {}: not stored ({rule})", safe_url(cfg, url)?);
-            Ok(1)
-        }
+        Outcome::Captured(p) => Ok(FetchReport::Captured(p)),
+        Outcome::Skipped { rule } => Ok(FetchReport::NotStored(rule)),
         Outcome::PassThrough => unreachable!("fetch always forces capture"),
     }
 }
 
+fn emit_fetch_report(cfg: &Config, g: &GlobalOpts, url: &str, report: FetchReport) -> Result<i32> {
+    match report {
+        FetchReport::Failed => {
+            println!("varde-toz: fetch failed for {}", safe_url(cfg, url)?);
+            Ok(1)
+        }
+        FetchReport::Cached {
+            handle,
+            fetched_at,
+            age,
+            chunk_count,
+        } => {
+            if g.json {
+                println!(
+                    "{}",
+                    json!({"handle": handle, "cached": true, "fetched_at": fetched_at, "url": safe_url(cfg, url)?})
+                );
+            } else {
+                println!(
+                    "varde-toz: cached {age} ago → handle {handle} ({chunk_count} chunks)   next: varde-toz query --handle {handle} \"<query>\"   |   varde-toz query --handle {handle} --chunk N"
+                );
+            }
+            Ok(0)
+        }
+        FetchReport::NotStored(rule) => {
+            println!("varde-toz: {}: not stored ({rule})", safe_url(cfg, url)?);
+            Ok(1)
+        }
+        FetchReport::Captured(preview) => {
+            emit_preview(g, &preview)?;
+            Ok(0)
+        }
+    }
+}
+
 fn report_cached_fetch(
-    cfg: &Config,
     fetched: &fetch::Fetched,
     project: &Project,
-    g: &GlobalOpts,
     store: &Store,
-    url: &str,
-) -> Result<bool> {
+) -> Result<Option<FetchReport>> {
     // A cache hit whose capture still exists in this project needs no new store entry.
     let project_identity = metadata::project_identity(&project.key)?;
     if !fetched.from_cache || fetched.meta.project_key.as_deref() != Some(project_identity.as_str())
     {
-        return Ok(false);
+        return Ok(None);
     }
     let Some(handle) = &fetched.meta.handle else {
-        return Ok(false);
+        return Ok(None);
     };
     let Some(row) = store.get_by_handle(handle)? else {
-        return Ok(false);
+        return Ok(None);
     };
     if row.superseded_by.is_some() {
-        return Ok(false);
+        return Ok(None);
     }
     let age = fmt_age(toz_core::store::now() - fetched.meta.fetched_at);
-    if g.json {
-        println!(
-            "{}",
-            json!({"handle": handle, "cached": true, "fetched_at": fetched.meta.fetched_at, "url": safe_url(cfg, url)?})
-        );
-    } else {
-        println!(
-            "varde-toz: cached {age} ago → handle {handle} ({} chunks)   next: varde-toz query --handle {handle} \"<query>\"   |   varde-toz query --handle {handle} --chunk N",
-            row.chunk_count
-        );
-    }
-    Ok(true)
+    Ok(Some(FetchReport::Cached {
+        handle: handle.clone(),
+        fetched_at: fetched.meta.fetched_at,
+        age,
+        chunk_count: row.chunk_count,
+    }))
 }
 
 // ---------------------------------------------------------------------------------------------
 // stats
 
 fn cmd_stats(project: &Project, g: &GlobalOpts, a: StatsArgs) -> Result<i32> {
+    if a.events.is_some_and(|limit| limit == 0 || limit > 10_000) {
+        bail!("--events must be between 1 and 10000");
+    }
     let stores: Vec<(String, std::path::PathBuf)> = if a.global {
         toz_core::project::all_store_dbs(project)?
     } else {
@@ -595,24 +772,45 @@ fn cmd_stats(project: &Project, g: &GlobalOpts, a: StatsArgs) -> Result<i32> {
             continue;
         }
         let store = Store::open_readonly(&path)?;
-        rows.push((key, store.stats(session_filter, since)?));
+        let events = a
+            .events
+            .map(|limit| store.query_events(session_filter, since, limit))
+            .transpose()?
+            .unwrap_or_default();
+        rows.push((key, store.stats(session_filter, since)?, events));
     }
 
     if g.json {
-        print_stats_json(&rows)?;
+        print_stats_json(&rows, a.events.is_some())?;
         return Ok(0);
     }
-    print_stats_text(&rows, a.global, a.session, sess.as_deref());
+    print_stats_text(
+        &rows,
+        a.global,
+        a.session,
+        sess.as_deref(),
+        a.events.is_some(),
+    );
     Ok(0)
 }
 
-fn print_stats_json(rows: &[(String, toz_core::store::Stats)]) -> Result<()> {
+fn print_stats_json(
+    rows: &[(
+        String,
+        toz_core::store::Stats,
+        Vec<toz_core::store::QueryEvent>,
+    )],
+    include_events: bool,
+) -> Result<()> {
     let v: Vec<Value> = rows
         .iter()
-        .map(|(k, s)| {
+        .map(|(k, s, events)| {
             let mut v = serde_json::to_value(s).unwrap();
             v["project"] = Value::String(k.clone());
-            let saved = (s.bytes_in - s.bytes_out).max(0);
+            if include_events {
+                v["events"] = serde_json::to_value(events).unwrap();
+            }
+            let saved = s.net_saved_bytes;
             v["tokens_saved_estimate"] = json!(saved / 4);
             v["reduction_pct"] = json!(if s.bytes_in > 0 {
                 saved * 100 / s.bytes_in
@@ -627,10 +825,15 @@ fn print_stats_json(rows: &[(String, toz_core::store::Stats)]) -> Result<()> {
 }
 
 fn print_stats_text(
-    rows: &[(String, toz_core::store::Stats)],
+    rows: &[(
+        String,
+        toz_core::store::Stats,
+        Vec<toz_core::store::QueryEvent>,
+    )],
     global: bool,
     session: bool,
     sess: Option<&str>,
+    include_events: bool,
 ) {
     let window = if session {
         match sess {
@@ -644,22 +847,29 @@ fn print_stats_text(
         println!("varde-toz: no store yet ({window})");
         return;
     }
-    for (key, s) in rows {
+    for (key, s, events) in rows {
         if global {
             println!("== {key} ==");
         }
-        let saved = (s.bytes_in - s.bytes_out).max(0);
+        let saved = s.net_saved_bytes;
         let pct = if s.bytes_in > 0 {
             saved * 100 / s.bytes_in
         } else {
             0
         };
+        let net = if saved < 0 {
+            format!("-{}", capture::fmt_bytes(saved.unsigned_abs() as usize))
+        } else {
+            capture::fmt_bytes(saved as usize)
+        };
         println!(
-            "{window}: {} captures, {} in → {} out ({pct}% kept out of context, ~{} tokens at bytes/4)",
+            "{window}: {} captures, {} in → {} preview + {} query readback ({} queries); net savings {net} ({pct}% of input, ~{} tokens at bytes/4)",
             s.captures,
             capture::fmt_bytes(s.bytes_in as usize),
             capture::fmt_bytes(s.bytes_out as usize),
-            fmt_count(saved / 4),
+            capture::fmt_bytes(s.query_bytes as usize),
+            s.queries,
+            saved / 4,
         );
         for k in &s.by_kind {
             println!(
@@ -670,18 +880,32 @@ fn print_stats_text(
                 capture::fmt_bytes(k.bytes_out as usize),
             );
         }
+        for k in &s.by_query_kind {
+            println!(
+                "  query:{:<8} {:>5}  {} read back",
+                k.kind,
+                k.queries,
+                capture::fmt_bytes(k.bytes_out as usize),
+            );
+        }
+        if include_events {
+            for event in events {
+                println!(
+                    "  {} query:{} {} {} read back {}",
+                    event.ts,
+                    event.kind,
+                    event.outcome,
+                    capture::fmt_bytes(event.bytes_out as usize),
+                    event.details
+                );
+            }
+        }
         println!(
             "store: {} captures on disk, {} DB",
             s.stored_captures,
             capture::fmt_bytes(s.db_bytes as usize)
         );
     }
-}
-
-fn fmt_count(n: i64) -> String {
-    capture::fmt_bytes(n.max(0) as usize)
-        .trim_end_matches(" bytes")
-        .to_string()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -992,7 +1216,7 @@ fn run_profile_test_case(
     let preview = match outcome {
         Outcome::Captured(preview) => preview,
         Outcome::PassThrough => {
-            return fail("capture was not stored (stayed under threshold)".into())
+            return fail("capture was not stored (stayed under threshold)".into());
         }
         Outcome::Skipped { rule } => return fail(format!("capture skipped: {rule}")),
     };
@@ -1099,7 +1323,7 @@ fn cmd_doctor(cfg: &Config, project: &Project, g: &GlobalOpts) -> Result<i32> {
     let mut profile_diagnostics = Vec::new();
     doctor_store(project, &mut checks, &mut profile_diagnostics);
     doctor_plugins(&mut checks);
-    doctor_sandbox_access(project, &mut checks);
+    doctor_sandbox_access(&mut checks);
     doctor_context_mode(&mut checks);
     let recent = diagnostics::recent();
     doctor_hook_outcomes(&recent, &mut checks);
@@ -1465,16 +1689,10 @@ fn doctor_plugin_drift(
     ));
 }
 
-fn doctor_sandbox_access(project: &Project, checks: &mut Vec<(bool, String)>) {
+fn doctor_sandbox_access(checks: &mut Vec<(bool, String)>) {
     let mut ok = |pass: bool, msg: String| checks.push((pass, msg));
     // An actual open above is authoritative; config text alone cannot prove sandbox access.
-    if let Some(fallback) = project.fallback_db_path().filter(|p| p.is_file()) {
-        ok(
-            true,
-            format!("using sandbox fallback store {}", fallback.display()),
-        );
-    } else if let (Some(home), Ok(store_root)) = (dirs::home_dir(), toz_core::config::config_dir())
-    {
+    if let (Some(home), Ok(store_root)) = (dirs::home_dir(), toz_core::config::config_dir()) {
         let cfg_path = home.join(".codex").join("config.toml");
         if let Ok(text) = std::fs::read_to_string(&cfg_path) {
             let root = store_root.to_string_lossy();
@@ -1557,7 +1775,13 @@ fn doctor_hook_outcomes(recent: &Result<diagnostics::Summary>, checks: &mut Vec<
                     && summary.unavailable_sources == 0,
                 format!(
                     "retained hook outcomes, last 7 days: {} captured, {} skipped, {} failed ({} attempted), {} unreadable records, {} unavailable sources{}",
-                    summary.captured, summary.skipped, summary.failed, attempts, summary.unreadable_lines, summary.unavailable_sources, detail
+                    summary.captured,
+                    summary.skipped,
+                    summary.failed,
+                    attempts,
+                    summary.unreadable_lines,
+                    summary.unavailable_sources,
+                    detail
                 ),
             );
         }
@@ -1565,20 +1789,16 @@ fn doctor_hook_outcomes(recent: &Result<diagnostics::Summary>, checks: &mut Vec<
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// run
-
-fn cmd_run(cfg: &Config, project: &Project, g: &GlobalOpts, a: RunArgs) -> Result<i32> {
-    cmd_script(cfg, project, g, a)
-}
-
-fn pass_through(stdout: &[u8], stderr: &[u8]) -> Result<()> {
-    let mut o = std::io::stdout().lock();
-    o.write_all(stdout)?;
-    o.flush()?;
-    let mut e = std::io::stderr().lock();
-    e.write_all(stderr)?;
-    e.flush()?;
+fn pass_through_reader(input: &mut impl Read, to_stderr: bool) -> Result<()> {
+    if to_stderr {
+        let mut output = std::io::stderr().lock();
+        std::io::copy(input, &mut output)?;
+        output.flush()?;
+    } else {
+        let mut output = std::io::stdout().lock();
+        std::io::copy(input, &mut output)?;
+        output.flush()?;
+    }
     Ok(())
 }
 
@@ -1586,53 +1806,79 @@ fn pass_through(stdout: &[u8], stderr: &[u8]) -> Result<()> {
 // capture (stdin / hook)
 
 fn cmd_capture(cfg: &Config, project: &Project, g: &GlobalOpts, a: CaptureArgs) -> Result<i32> {
-    let mut raw = Vec::new();
-    std::io::stdin()
-        .lock()
-        .read_to_end(&mut raw)
-        .context("reading stdin")?;
-
     if a.hook {
+        let (mut spool, total) =
+            streaming::spool(&mut std::io::stdin().lock()).context("spooling hook payload")?;
+        if total > MAX_HOOK_PAYLOAD_BYTES {
+            if let Some(path) = hook_log_path(cfg) {
+                log_payload_reader(&path, &mut spool);
+            }
+            diagnostics::record_best_effort(&a.harness, "failed", "invalid-payload", "", total);
+            return Ok(0);
+        }
+        let mut raw = Vec::with_capacity(total);
+        spool
+            .read_to_end(&mut raw)
+            .context("reading spooled hook payload")?;
         return hook_capture(cfg, project, &raw, &a.harness);
     }
 
-    let (stdout, stderr): (&[u8], &[u8]) = if a.stderr { (&[], &raw) } else { (&raw, &[]) };
+    let (mut spool, total) =
+        streaming::spool(&mut std::io::stdin().lock()).context("spooling stdin")?;
     let source = a
         .source
         .clone()
         .or_else(|| a.label.clone())
         .unwrap_or_else(|| "stdin".into());
-    let total = raw.len();
     let threshold = a.threshold.unwrap_or(cfg.threshold);
     if !a.force && total <= threshold {
-        pass_through(stdout, stderr)?;
+        pass_through_reader(&mut spool, a.stderr)?;
         return Ok(0);
+    }
+
+    let (profiles, _) = profile::load_profiles(project);
+    let mut input = CaptureInput::new(&[], &source, &a.kind);
+    input.label = a.label.as_deref();
+    input.exit_code = a.exit_code;
+    input.force = a.force;
+    input.defer_index = a.defer_index;
+    input.threshold = a.threshold;
+    let profile_matched = capture::matched_profile(&input, &profiles).is_some();
+    if profile_matched && total > capture::MAX_PROFILED_CAPTURE_BYTES {
+        bail!(
+            "profile-matched capture exceeds the {}-byte limit; reduce stdin or adjust the matching profile",
+            capture::MAX_PROFILED_CAPTURE_BYTES
+        );
     }
 
     let mut store = open_store(cfg, project)?;
     let sess = session();
-    let (profiles, _) = profile::load_profiles(project);
-    let outcome = capture::run(
-        cfg,
-        &mut store,
-        CaptureInput {
-            stdout,
-            stderr,
-            label: a.label.as_deref(),
-            source: &source,
-            kind: &a.kind,
-            exit_code: a.exit_code,
-            session: sess.as_deref(),
-            force: a.force,
-            defer_index: a.defer_index,
-            threshold: a.threshold,
-            file_mtime: None,
-            file_hash: None,
-        },
-        &profiles,
-    )?;
+    input.session = sess.as_deref();
+    let outcome = if profile_matched {
+        // Profile scripts and custom preview rules consume the complete text; keep their existing
+        // behavior behind a strict size limit instead of buffering arbitrary input.
+        spool.rewind()?;
+        let mut raw = Vec::with_capacity(total);
+        spool.read_to_end(&mut raw)?;
+        if a.stderr {
+            input.stderr = &raw;
+        } else {
+            input.stdout = &raw;
+        }
+        capture::run(cfg, &mut store, input, &profiles)?
+    } else {
+        let mut empty = std::io::Cursor::new(&[][..]);
+        if a.stderr {
+            streaming::run(cfg, &mut store, input, &mut empty, &mut spool, total)?
+        } else {
+            streaming::run(cfg, &mut store, input, &mut spool, &mut empty, total)?
+        }
+    };
     match outcome {
-        Outcome::PassThrough | Outcome::Skipped { .. } => pass_through(stdout, stderr)?,
+        Outcome::PassThrough | Outcome::Skipped { .. } => {
+            spool.rewind()?;
+            pass_through_reader(&mut spool, a.stderr)?;
+        }
         Outcome::Captured(p) => emit_preview(g, &p)?,
     }
     Ok(0)
@@ -1640,11 +1886,7 @@ fn cmd_capture(cfg: &Config, project: &Project, g: &GlobalOpts, a: CaptureArgs) 
 
 /// Claude Code PostToolUse payload → `updatedToolOutput` JSON on overflow, nothing otherwise.
 fn hook_capture(cfg: &Config, project: &Project, raw: &[u8], harness: &str) -> Result<i32> {
-    let log = toz_core::config::env("TOZ_HOOK_LOG")
-        .ok()
-        .map(std::path::PathBuf::from)
-        .or_else(|| cfg.hook_log.clone());
-    if let Some(path) = log {
+    if let Some(path) = hook_log_path(cfg) {
         log_payload(&path, raw);
     }
     let payload: Value = match serde_json::from_slice(raw) {
@@ -1752,6 +1994,18 @@ fn print_hook_output(harness: &str, shape: &Extracted, response: &Value, p: &toz
     }
 
     let (key, value) = match &shape.kind {
+        ShapeKind::StructuredHint => {
+            println!(
+                "{}",
+                json!({
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "additionalContext": hook_handle_hint(p)
+                    }
+                })
+            );
+            return;
+        }
         ShapeKind::Streams => (
             "updatedToolOutput",
             json!({
@@ -1781,35 +2035,36 @@ fn print_hook_output(harness: &str, shape: &Extracted, response: &Value, p: &toz
 }
 
 fn print_codex_hook_output(shape: &Extracted, p: &toz_core::Preview, text: &str) {
-    // Codex can replace stream-shaped command results with bounded feedback. Other
-    // shapes get a handle hint because its output replacement support is limited.
-    if matches!(shape.kind, ShapeKind::Streams) {
-        let context = format!(
-            "{}\n\nFull output is searchable as handle {}. Later: varde-toz query --handle {} \"<query>\" | varde-toz query --handle {} --chunk N",
-            text, p.handle, p.handle, p.handle
-        );
+    // Codex can replace streams and plain strings with bounded feedback. Other
+    // shapes keep their value and get only a handle hint.
+    if matches!(shape.kind, ShapeKind::Streams | ShapeKind::PlainString) {
         println!(
             "{}",
             json!({
                 "continue": false,
+                "stopReason": text,
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
-                    "additionalContext": context
+                    "additionalContext": hook_handle_hint(p)
                 }
             })
         );
         return;
     }
-    let hint = format!(
-        "varde-toz: stored this output as handle {h} ({}, {} chunks). Later: varde-toz query --handle {h} \"<query>\" | varde-toz query --handle {h} --chunk N",
-        capture::fmt_bytes(p.bytes),
-        p.chunks,
-        h = p.handle,
-    );
+    let hint = hook_handle_hint(p);
     println!(
         "{}",
         json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", "additionalContext": hint } })
     );
+}
+
+fn hook_handle_hint(p: &toz_core::Preview) -> String {
+    format!(
+        "varde-toz: stored this output as handle {h} ({}, {} chunks). Later: varde-toz query --handle {h} \"<query>\" | varde-toz query --handle {h} --chunk N",
+        capture::fmt_bytes(p.bytes),
+        p.chunks,
+        h = p.handle,
+    )
 }
 
 fn content_preview(response: &Value, text: &str) -> Value {
@@ -1847,15 +2102,27 @@ pub fn log_hook_error(e: &anyhow::Error, harness: &str) {
 }
 
 fn log_payload(path: &std::path::Path, raw: &[u8]) {
+    let mut raw = raw;
+    log_payload_reader(path, &mut raw);
+}
+
+fn log_payload_reader(path: &std::path::Path, raw: &mut impl Read) {
     use std::io::Write as _;
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
     {
-        let _ = f.write_all(raw);
+        let _ = std::io::copy(raw, &mut f);
         let _ = f.write_all(b"\n");
     }
+}
+
+fn hook_log_path(cfg: &Config) -> Option<std::path::PathBuf> {
+    toz_core::config::env("TOZ_HOOK_LOG")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| cfg.hook_log.clone())
 }
 
 enum ShapeKind {
@@ -1863,6 +2130,8 @@ enum ShapeKind {
     PlainString,
     ContentBlocks,
     ContentField,
+    /// Structured MCP output has no text content to replace.
+    StructuredHint,
     /// Text lived at this key path inside a structured response object; replace it in place.
     Field(Vec<String>),
 }
@@ -1909,6 +2178,31 @@ fn extract(tool: &str, input: &Value, response: &Value, harness: &str) -> Option
     let label = format!("{tool}: {}", toz_core::chunk::truncate(&source, 100));
     if response["stdout"].is_string() || response["output"].is_string() {
         return Some(extract_streams(response, source, label));
+    }
+    if matches!(harness, "codex" | "claude-code") {
+        if let Some(structured) = response
+            .get("structuredContent")
+            .filter(|value| !value.is_null())
+        {
+            let content_text = extract_content_text(response);
+            let envelope = json!({
+                "contentText": content_text.as_deref().unwrap_or(""),
+                "structuredContent": structured
+            });
+            return Some(Extracted {
+                kind: if content_text.is_some() {
+                    ShapeKind::ContentField
+                } else {
+                    ShapeKind::StructuredHint
+                },
+                stdout: serde_json::to_string_pretty(&envelope).unwrap_or_default(),
+                stderr: String::new(),
+                label,
+                source,
+                exit_code: None,
+                completed: true,
+            });
+        }
     }
     if let Some(text) = extract_content_text(response) {
         return Some(Extracted {
@@ -2210,11 +2504,7 @@ fn cmd_uninstall(g: &GlobalOpts, a: UninstallArgs) -> Result<i32> {
 }
 
 fn cmd_note(a: NoteArgs) -> Result<i32> {
-    let mut note = crate::install::usage_note(
-        toz_core::config::env_os("TOZ_FALLBACK_DIR")
-            .as_deref()
-            .map(std::path::Path::new),
-    );
+    let mut note = crate::install::usage_note();
     match diagnostics::recent() {
         Ok(summary) if summary.failed > 0 || summary.unreadable_lines > 0 || summary.unavailable_sources > 0 => note.push_str(&format!(
             "\nToz recorded {} hook failure(s), {} unreadable record(s), and {} unavailable diagnostic source(s) recently. Run `varde-toz doctor --json` and report recurring failures.",
@@ -2249,7 +2539,19 @@ fn cmd_search(cfg: &Config, project: &Project, g: &GlobalOpts, a: SearchArgs) ->
         search_all_projects(project, &a, &opts)?
     } else {
         let Some(results) = search_project(cfg, project, g, &a, &opts)? else {
-            return Ok(0);
+            let output = if g.json {
+                b"[]\n".to_vec()
+            } else {
+                b"varde-toz: no captures yet for this project\n".to_vec()
+            };
+            return emit_query_output_as(
+                project,
+                &project.db_path()?,
+                "search",
+                &output,
+                "no_store",
+                search_event_details(project, &a, g, &[]),
+            );
         };
         results
     };
@@ -2258,8 +2560,52 @@ fn cmd_search(cfg: &Config, project: &Project, g: &GlobalOpts, a: SearchArgs) ->
             hit.label = safe_metadata(cfg, &hit.label)?;
         }
     }
-    print_results(g, &results, a.global)?;
-    Ok(0)
+    let output = render_results(g, &results, a.global)?;
+    emit_query_output(
+        project,
+        &project.db_path()?,
+        "search",
+        &output,
+        search_event_details(project, &a, g, &results),
+    )
+}
+
+fn search_event_details(
+    project: &Project,
+    a: &SearchArgs,
+    g: &GlobalOpts,
+    results: &[QueryResult],
+) -> Value {
+    let mut result_ids: Vec<(String, String)> = results
+        .iter()
+        .flat_map(|r| {
+            r.hits.iter().map(|h| {
+                (
+                    h.project.as_deref().unwrap_or(&project.key).to_string(),
+                    h.handle.clone(),
+                )
+            })
+        })
+        .collect();
+    result_ids.sort_unstable();
+    result_ids.dedup();
+    json!({
+        "handle": a.handle,
+        "result_ids": result_ids.iter().map(|(project, handle)| json!({"project": project, "handle": handle})).collect::<Vec<_>>(),
+        "query_count": a.queries.len(),
+        "query_shapes": a.queries.iter().map(|q| json!({
+            "chars": q.chars().count(),
+            "terms": search::terms_of(q).len(),
+        })).collect::<Vec<_>>(),
+        "hit_count": results.iter().map(|r| r.hits.len()).sum::<usize>(),
+        "corrected_count": results.iter().filter(|r| r.corrected.is_some()).count(),
+        "source_filter": a.source.is_some(),
+        "content_type": a.content_type,
+        "limit": a.limit,
+        "all": a.all,
+        "global": a.global,
+        "json": g.json,
+    })
 }
 
 fn search_all_projects(
@@ -2322,12 +2668,7 @@ fn search_project(
     opts: &SearchOpts,
 ) -> Result<Option<Vec<QueryResult>>> {
     let path = project.db_path()?;
-    if !path.exists() {
-        if g.json {
-            println!("[]");
-        } else {
-            println!("varde-toz: no captures yet for this project");
-        }
+    if !path.exists() && project.fallback_db_path().is_none() {
         return Ok(None);
     }
     // Best effort: a read-only store searches without refreshing changed files.
@@ -2339,13 +2680,16 @@ fn search_project(
             (store, refreshed)
         }
         Err(_) => {
-            let store = Store::open_readonly(&path)?;
+            let store = open_readonly_with_fallback(project, &path)?;
             if store.has_deferred(a.handle.as_deref())? {
                 bail!("deferred capture requires a writable store for its first term search");
             }
             (store, Vec::new())
         }
     };
+    if store.list(1, true)?.is_empty() {
+        return Ok(None);
+    }
     if !refreshed.is_empty() && !g.json {
         println!(
             "varde-toz: re-indexed {} changed file{}",
@@ -2356,11 +2700,11 @@ fn search_project(
     Ok(Some(search::search(&store, &a.queries, opts)?))
 }
 
-fn print_results(g: &GlobalOpts, results: &[QueryResult], show_project: bool) -> Result<()> {
-    let mut out = std::io::stdout().lock();
+fn render_results(g: &GlobalOpts, results: &[QueryResult], show_project: bool) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
     if g.json {
         writeln!(out, "{}", serde_json::to_string(results)?)?;
-        return Ok(());
+        return Ok(out);
     }
     for r in results {
         write!(out, "## {}", r.query)?;
@@ -2376,7 +2720,7 @@ fn print_results(g: &GlobalOpts, results: &[QueryResult], show_project: bool) ->
         }
         writeln!(out)?;
     }
-    Ok(())
+    Ok(out)
 }
 
 fn print_hit(out: &mut impl Write, h: &search::Hit, show_project: bool) -> Result<()> {
@@ -2414,25 +2758,71 @@ fn print_hit(out: &mut impl Write, h: &search::Hit, show_project: bool) -> Resul
 }
 
 fn cmd_show(project: &Project, g: &GlobalOpts, a: ShowArgs) -> Result<i32> {
-    let store = open_for_handle(project, &a.handle)?;
+    let store = match open_for_handle(project, &a.handle) {
+        Ok(store) => store,
+        Err(error) => {
+            record_query_event(
+                project,
+                &project.db_path()?,
+                show_kind(&a),
+                0,
+                "failed_lookup",
+                &show_request_details(&a),
+            );
+            return Err(error);
+        }
+    };
     let Some(row) = store.get_by_handle(&a.handle)? else {
+        record_query_event(
+            project,
+            store.path(),
+            show_kind(&a),
+            0,
+            "failed_lookup",
+            &show_request_details(&a),
+        );
         bail!("no capture with handle {}", a.handle)
     };
     if row.binary {
+        record_query_event(
+            project,
+            store.path(),
+            show_kind(&a),
+            0,
+            "unavailable",
+            &show_request_details(&a),
+        );
         bail!("legacy binary capture contains metadata only; content was not retained");
     }
-    let mut out = std::io::stdout().lock();
+    let mut out = Vec::new();
+    let path = store.path().to_path_buf();
 
     if let Some(kind) = &a.records {
-        for json in store.records_for(row.id, kind)? {
+        let records = store.records_for(row.id, kind)?;
+        let count = records.len();
+        for json in records {
             writeln!(out, "{json}")?;
         }
-        return Ok(0);
+        return emit_query_output(
+            project,
+            &path,
+            "records",
+            &out,
+            json!({"handle": a.handle, "record_kind_selected": true, "record_count": count}),
+        );
     }
 
     if let Some(i) = a.chunk {
         let chunks = store.chunks_for(row.id)?;
         let Some(c) = chunks.get(i) else {
+            record_query_event(
+                project,
+                &path,
+                "chunk",
+                0,
+                "invalid_selection",
+                &json!({"handle": a.handle, "chunk": i, "available_chunks": chunks.len()}),
+            );
             bail!("capture {} has {} chunks", a.handle, chunks.len())
         };
         if g.json {
@@ -2450,12 +2840,31 @@ fn cmd_show(project: &Project, g: &GlobalOpts, a: ShowArgs) -> Result<i32> {
             )?;
             writeln!(out, "{}", c.body)?;
         }
-        return Ok(0);
+        return emit_query_output(
+            project,
+            &path,
+            "chunk",
+            &out,
+            json!({"handle": a.handle, "chunk": i, "stream": c.stream, "json": g.json}),
+        );
     }
 
     let text = store.full_text(row.id, &a.stream)?;
     if let Some(range) = &a.lines {
-        let (lo, hi) = parse_range(range)?;
+        let (lo, hi) = match parse_range(range) {
+            Ok(bounds) => bounds,
+            Err(error) => {
+                record_query_event(
+                    project,
+                    &path,
+                    "lines",
+                    0,
+                    "invalid_selection",
+                    &json!({"handle": a.handle, "range_valid": false}),
+                );
+                return Err(error);
+            }
+        };
         let lines: Vec<&str> = if row.chunk_count == 0 {
             Vec::new()
         } else {
@@ -2463,15 +2872,57 @@ fn cmd_show(project: &Project, g: &GlobalOpts, a: ShowArgs) -> Result<i32> {
         };
         let hi = hi.min(lines.len());
         if lo == 0 || lo > hi {
+            record_query_event(
+                project,
+                &path,
+                "lines",
+                0,
+                "invalid_selection",
+                &json!({"handle": a.handle, "line_start": lo, "available_lines": lines.len()}),
+            );
             bail!("range {range} out of bounds (1..{})", lines.len());
         }
         for l in &lines[lo - 1..hi] {
             writeln!(out, "{l}")?;
         }
-        return Ok(0);
+        return emit_query_output(
+            project,
+            &path,
+            "lines",
+            &out,
+            json!({"handle": a.handle, "line_start": lo, "line_end": hi, "stream": a.stream}),
+        );
     }
     writeln!(out, "{text}")?;
-    Ok(0)
+    emit_query_output(
+        project,
+        &path,
+        "full",
+        &out,
+        json!({"handle": a.handle, "stream": a.stream}),
+    )
+}
+
+fn show_kind(a: &ShowArgs) -> &'static str {
+    if a.records.is_some() {
+        "records"
+    } else if a.chunk.is_some() {
+        "chunk"
+    } else if a.lines.is_some() {
+        "lines"
+    } else {
+        "full"
+    }
+}
+
+fn show_request_details(a: &ShowArgs) -> Value {
+    json!({
+        "handle": a.handle,
+        "chunk": a.chunk,
+        "lines_requested": a.lines.is_some(),
+        "records_requested": a.records.is_some(),
+        "stream": a.stream,
+    })
 }
 
 /// The project store if it has the handle, else the first other store that does.
@@ -2485,7 +2936,7 @@ fn cmd_script(cfg: &Config, project: &Project, g: &GlobalOpts, a: RunArgs) -> Re
     }
     let source = script_source(&a)?;
     if source.trim().is_empty() {
-        bail!("empty script; pass --file - with a heredoc, or --code '<js>' for a one-liner");
+        bail!("empty script; pass --script - with a heredoc, or --code '<js>' for a one-liner");
     }
 
     let limits = script_limits(cfg, &a);
@@ -2537,6 +2988,14 @@ fn cmd_script(cfg: &Config, project: &Project, g: &GlobalOpts, a: RunArgs) -> Re
             );
             Ok(5)
         }
+        toz_core::script::Outcome::RecordLimit => {
+            eprintln!(
+                "varde-toz: script exceeded the record limit ({} records or {} serialized bytes); reduce toz.record() output",
+                toz_core::script::MAX_RECORD_COUNT,
+                toz_core::script::MAX_RECORD_BYTES
+            );
+            Ok(6)
+        }
     }
 }
 
@@ -2575,8 +3034,8 @@ fn script_input(
         // A partial aggregate could look like a complete answer.
         if row.state == "running" && !a.partial {
             bail!(
-                    "capture {handle} is still running; wait for it to finish, or pass --partial to compute over what has been committed so far"
-                );
+                "capture {handle} is still running; wait for it to finish, or pass --partial to compute over what has been committed so far"
+            );
         }
         let meta = toz_core::script::Meta {
             handle: row.handle.clone(),
@@ -2613,11 +3072,13 @@ pub(crate) fn script_policy(
         WorkspaceAccess::ReadWrite => write_roots.push(project.root.clone()),
     }
     let store = open_store(cfg, project)?;
-    let mut protected_roots = vec![store
-        .path()
-        .parent()
-        .context("store has no parent")?
-        .to_path_buf()];
+    let mut protected_roots = vec![
+        store
+            .path()
+            .parent()
+            .context("store has no parent")?
+            .to_path_buf(),
+    ];
     if let Ok(config_root) = toz_core::config::config_dir() {
         if config_root.is_dir() {
             protected_roots.push(config_root);
@@ -2651,7 +3112,7 @@ fn script_source(a: &RunArgs) -> Result<String> {
         (None, Some(f)) => {
             std::fs::read_to_string(f).with_context(|| format!("reading script {f}"))
         }
-        (None, None) => bail!("pass --file - with a heredoc (preferred), or --code '<js>'"),
+        (None, None) => bail!("pass --script - with a heredoc (preferred), or --code '<js>'"),
     }
 }
 
@@ -2707,8 +3168,8 @@ fn emit_script_result(
 
 fn open_for_handle(project: &Project, handle: &str) -> Result<Store> {
     let local = project.db_path()?;
-    if local.exists() {
-        let s = Store::open_readonly(&local)?;
+    if local.exists() || project.fallback_db_path().is_some() {
+        let s = open_readonly_with_fallback(project, &local)?;
         if s.get_by_handle(handle)?.is_some() {
             return Ok(s);
         }
@@ -2717,12 +3178,36 @@ fn open_for_handle(project: &Project, handle: &str) -> Result<Store> {
         if db == local {
             continue;
         }
-        let s = Store::open_readonly(&db)?;
+        let s = match Store::open_readonly(&db) {
+            Ok(s) => s,
+            Err(error) if Store::access_error(&error) && project.fallback_db_path().is_some() => {
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         if s.get_by_handle(handle)?.is_some() {
             return Ok(s);
         }
     }
     bail!("no capture with handle {handle}")
+}
+
+fn open_readonly_with_fallback(project: &Project, primary: &Path) -> Result<Store> {
+    match Store::open_readonly(primary) {
+        Ok(store) => Ok(store),
+        Err(error) if Store::access_error(&error) => {
+            let Some(fallback) = project.fallback_db_path().filter(|path| path != primary) else {
+                return Err(error);
+            };
+            Store::open_readonly(&fallback).with_context(|| {
+                format!(
+                    "primary store failed ({error:#}); opening fallback {}",
+                    fallback.display()
+                )
+            })
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn parse_range(s: &str) -> Result<(usize, usize)> {
@@ -2732,14 +3217,26 @@ fn parse_range(s: &str) -> Result<(usize, usize)> {
 
 fn cmd_list(cfg: &Config, project: &Project, g: &GlobalOpts, a: ListArgs) -> Result<i32> {
     let path = project.db_path()?;
-    if !path.exists() {
-        if g.json {
-            println!("[]");
-        }
-        return Ok(0);
+    if !path.exists() && project.fallback_db_path().is_none() {
+        let output = if g.json {
+            b"[]\n".as_slice()
+        } else {
+            b"".as_slice()
+        };
+        return emit_query_output_as(
+            project,
+            &path,
+            "list",
+            output,
+            "no_store",
+            json!({"limit": a.limit, "all": a.all, "json": g.json, "row_count": 0}),
+        );
     }
-    let store = Store::open_readonly(&path)?;
+    let store = open_readonly_with_fallback(project, &path)?;
+    let path = store.path().to_path_buf();
     let rows = store.list(a.limit, a.all)?;
+    let row_count = rows.len();
+    let mut out = Vec::new();
     if g.json {
         let v: Vec<Value> = rows
             .iter()
@@ -2749,8 +3246,15 @@ fn cmd_list(cfg: &Config, project: &Project, g: &GlobalOpts, a: ListArgs) -> Res
                     "superseded": r.superseded_by.is_some(), "session": r.session, "state": r.state}))
             })
             .collect::<Result<_>>()?;
-        println!("{}", serde_json::to_string(&v)?);
-        return Ok(0);
+        writeln!(out, "{}", serde_json::to_string(&v)?)?;
+        return emit_query_output_as(
+            project,
+            &path,
+            "list",
+            &out,
+            if row_count == 0 { "no_store" } else { "ok" },
+            json!({"limit": a.limit, "all": a.all, "json": true, "row_count": row_count}),
+        );
     }
     let now = toz_core::store::now();
     for r in rows {
@@ -2760,7 +3264,8 @@ fn cmd_list(cfg: &Config, project: &Project, g: &GlobalOpts, a: ListArgs) -> Res
         } else {
             ""
         };
-        println!(
+        writeln!(
+            out,
             "{:<6} {:>12} {:>4} chunks  {:>7}  {}{}",
             r.handle,
             capture::fmt_bytes(r.bytes as usize),
@@ -2768,9 +3273,16 @@ fn cmd_list(cfg: &Config, project: &Project, g: &GlobalOpts, a: ListArgs) -> Res
             age,
             toz_core::chunk::truncate(&safe_metadata(cfg, &r.label)?, 70),
             sup
-        );
+        )?;
     }
-    Ok(0)
+    emit_query_output_as(
+        project,
+        &path,
+        "list",
+        &out,
+        if row_count == 0 { "no_store" } else { "ok" },
+        json!({"limit": a.limit, "all": a.all, "json": false, "row_count": row_count}),
+    )
 }
 
 fn fmt_age(secs: i64) -> String {

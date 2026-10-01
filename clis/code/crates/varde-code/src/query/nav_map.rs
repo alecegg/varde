@@ -122,7 +122,11 @@ struct NavMapBudget {
 pub fn nav_map(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
     super::freshen_for_mode("nav_map", input)?;
     let conn = open_db(input)?;
-    let (listed, entrypoints_json) = entrypoint_sections(&conn)?;
+    let repo_root = input
+        .get("repoRoot")
+        .and_then(serde_json::Value::as_str)
+        .map(std::path::Path::new);
+    let (listed, entrypoints_json) = entrypoint_sections(&conn, repo_root)?;
     let foundational_files =
         super::foundational_files::leaderboard(&conn, Some(FOUNDATIONAL_FILES_SECTION_LIMIT))?;
     let module_layers_json = module_layers_section(&conn)?;
@@ -157,19 +161,25 @@ pub fn nav_map(input: &serde_json::Value) -> Result<serde_json::Value, ApiError>
 
 fn entrypoint_sections(
     conn: &rusqlite::Connection,
+    repo_root: Option<&std::path::Path>,
 ) -> Result<(Vec<super::entrypoints::Entrypoint>, Vec<serde_json::Value>), ApiError> {
     let entrypoints = super::entrypoints::detect(conn)?;
     let routes = super::entrypoints::detect_routes(conn)?;
     let process_mains = super::entrypoints::detect_process_mains(conn)?;
+    let node_entrypoints = super::entrypoints::detect_node_entrypoints(conn, repo_root)?;
+    let sveltekit_routes = super::entrypoints::detect_sveltekit_server_routes(conn)?;
     let listed = entrypoints
         .into_iter()
         .chain(routes)
         .chain(process_mains)
+        .chain(node_entrypoints)
+        .chain(sveltekit_routes)
         .collect::<Vec<_>>();
-    let displayed = round_robin_entrypoints(&listed)
+    let mut displayed = round_robin_entrypoints(&listed)
         .into_iter()
         .map(|entrypoint| entrypoint.to_json())
-        .collect();
+        .collect::<Vec<_>>();
+    displayed.extend(super::entrypoints::detect_sveltekit_pages(conn)?);
     Ok((listed, displayed))
 }
 
@@ -1195,6 +1205,127 @@ mod nav_map_tests {
 
         let db = crate::db::path::repo_db_path(&root);
         let _ = std::fs::remove_file(&db);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn nav_map_surfaces_node_and_sveltekit_entrypoints() {
+        with_isolated_home(
+            "nav-map",
+            "node-sveltekit-entrypoints",
+            nav_map_surfaces_node_and_sveltekit_entrypoints_inner,
+        );
+    }
+
+    fn nav_map_surfaces_node_and_sveltekit_entrypoints_inner() {
+        let root = temp_root("node-sveltekit-entrypoints");
+        let write = |relative: &str, contents: &str| {
+            let path = root.join(relative);
+            std::fs::create_dir_all(path.parent().expect("parent directory"))
+                .expect("create fixture directory");
+            std::fs::write(path, contents).expect("write fixture file");
+        };
+        write(
+            "packages/server/src/index.ts",
+            "import { createServer } from 'node:http';\n\
+             export async function main() { start(); }\n\
+             function start() { createServer((req, res) => handleRequest(req, res)); }\n\
+             function handleRequest(_req: unknown, _res: unknown) { dispatch(); }\n\
+             function dispatch() {}\n\
+             if (import.meta.url === `file://${process.argv[1]}`) { main(); }\n",
+        );
+        write("packages/server/src/helper.ts", "function main() {}\n");
+        write(
+            "packages/server/src/negative.ts",
+            "function main() {}\nif (require.main !== module) { main(); }\n",
+        );
+        write(
+            "packages/server/src/body-tokens.ts",
+            "function main() {}\nif (true) { const marker = 'import.meta.url process.argv[1]'; main(); }\n",
+        );
+        write(
+            "packages/server/src/unrelated-equality.ts",
+            "function main() {}\nif (require.main && module && foo === bar) { main(); }\n",
+        );
+        write(
+            "packages/server/src/shared-operand.ts",
+            "function main() {}\nif (require.main && foo === module) { main(); }\n",
+        );
+        write(
+            "packages/server/src/commonjs.js",
+            "function main() {}\nif (require.main === module) { main(); }\n",
+        );
+        write("packages/web/src/routes/+page.svelte", "<h1>Home</h1>\n");
+        write("packages/web/src/routes/+layout.svelte", "<slot />\n");
+        write(
+            "packages/web/src/routes/(app)/todo/[id]/+page.svelte",
+            "<h1>Todo</h1>\n",
+        );
+        write(
+            "packages/web/src/routes/api/items/+server.ts",
+            "export function GET() { return listItems(); }\nfunction listItems() { return []; }\n",
+        );
+        write(
+            "packages/web/src/routes/api/arrow/+server.ts",
+            "export const GET = async () => listItems();\n",
+        );
+
+        crate::build::run_with_force(root.to_str().unwrap(), true).expect("full build");
+        let data = nav_map(&serde_json::json!({ "repoRoot": root.to_str().unwrap() }))
+            .expect("nav_map computes");
+        let entries = data["entrypoints"].as_array().expect("entrypoints array");
+        let by_file = |symbol: &str, file: &str| {
+            entries.iter().find(|entry| {
+                entry["symbol"] == symbol
+                    && entry["file"]
+                        .as_str()
+                        .is_some_and(|actual| actual.ends_with(file))
+            })
+        };
+        let by_route = |symbol: &str, path: &str| {
+            entries
+                .iter()
+                .find(|entry| entry["symbol"] == symbol && entry["path"] == path)
+        };
+
+        let main = by_file("main", "packages/server/src/index.ts")
+            .unwrap_or_else(|| panic!("guarded main missing: {entries:?}"));
+        assert_eq!(main["role"], "process_main");
+        assert!(by_file("main", "packages/server/src/commonjs.js").is_some());
+        let handler = by_file("handleRequest", "packages/server/src/index.ts")
+            .expect("createServer request handler");
+        assert_eq!(handler["role"], "route_handler");
+        let get = by_route("GET", "/api/items").expect("named SvelteKit server method");
+        assert_eq!(get["method"], "GET");
+        assert!(
+            get.get("entity_id").is_some(),
+            "server handler has real entity"
+        );
+        assert!(
+            by_route("GET", "/api/arrow").is_none(),
+            "anonymous arrows lack function entities"
+        );
+
+        let home = by_route("+page", "/").expect("SvelteKit home page");
+        assert_eq!(home["role"], "page_component");
+        assert!(
+            home.get("entity_id").is_none(),
+            "page entries are path-only"
+        );
+        assert!(by_route("+layout", "/").is_some(), "root layout is visible");
+        assert!(
+            by_route("+page", "/todo/[id]").is_some(),
+            "route groups are omitted from URL paths"
+        );
+        assert!(
+            by_file("main", "packages/server/src/helper.ts").is_none(),
+            "an unguarded helper named main is not a process entrypoint"
+        );
+        assert!(by_file("main", "packages/server/src/negative.ts").is_none());
+        assert!(by_file("main", "packages/server/src/body-tokens.ts").is_none());
+        assert!(by_file("main", "packages/server/src/unrelated-equality.ts").is_none());
+        assert!(by_file("main", "packages/server/src/shared-operand.ts").is_none());
+
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -339,10 +339,9 @@ fn validate_after_checkpoint(
     if artifact_type == "plan"
         && let Some(approved) =
             review_gates::approved_contract_fingerprint_for_plan(&guard.repository, &guard.target)?
-        && let Some(proposed_contract) = guard
-            .original
-            .as_deref()
-            .and_then(|_| crate::review_contract::contract_fingerprint(proposed).ok())
+        && let Some(proposed_contract) = guard.original.as_deref().and_then(|_| {
+            crate::review_contract::plan_contract_fingerprint(proposed, &guard.target).ok()
+        })
         && approved != proposed_contract
     {
         return Err(review_gates::stale_contract(
@@ -458,6 +457,8 @@ pub fn nearest_plan(managed_root: &Path, task: &Path) -> Option<PathBuf> {
 fn validate_task_ownership(repository: &Path, mapping: &Mapping, plan_path: &Path) -> Result<()> {
     let fields = ["modifies", "creates", "renames"];
     let mut declared = Vec::new();
+    let artifacts = review_gates::artifact_scope_for_plan(repository, plan_path)?;
+    let mut declared_artifact = false;
     for field in fields {
         let Some(value) = mapping.get(YamlValue::String(field.to_string())) else {
             continue;
@@ -473,14 +474,24 @@ fn validate_task_ownership(repository: &Path, mapping: &Mapping, plan_path: &Pat
                 let (old, new) = value
                     .split_once(" -> ")
                     .context("task rename ownership must use `old/path -> new/path`")?;
-                declared.push(validate_owned_path(repository, old, field)?);
-                declared.push(validate_owned_path(repository, new, field)?);
+                for path in [old, new] {
+                    if review_gates::is_plan_artifact(&artifacts, path) {
+                        declared_artifact = true;
+                    } else {
+                        declared.push(validate_owned_path(repository, path, field)?);
+                    }
+                }
+            } else if review_gates::is_plan_artifact(&artifacts, value) {
+                declared_artifact = true;
             } else {
                 declared.push(validate_owned_path(repository, value, field)?);
             }
         }
     }
-    if declared.is_empty() {
+    let kind = mapping
+        .get(YamlValue::String("kind".to_string()))
+        .and_then(YamlValue::as_str);
+    if declared.is_empty() && !declared_artifact && kind != Some("spike") {
         bail!("managed task must declare non-empty modifies, creates, or renames ownership");
     }
     if let Some(declared_plan) = mapping

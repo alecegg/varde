@@ -26,7 +26,7 @@ for field in root working knowledge; do
   }
 done
 
-python3 - "$skills_dir/varde-change/references/build-plan-finish.md" <<'PY'
+python3 - "$skills_dir/varde-change/references/build-finish.md" <<'PY'
 from pathlib import Path
 import re
 import sys

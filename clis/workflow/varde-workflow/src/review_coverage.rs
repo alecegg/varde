@@ -3,14 +3,21 @@
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha1::{Digest, Sha1};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io;
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::review_contract;
 use crate::review_gates;
+
+const HASH_BUFFER_BYTES: usize = 64 * 1024;
+const FILE_HASH_TAG: &[u8] = b"review-file-v1";
+static NEXT_BLOB_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -26,7 +33,6 @@ pub(crate) struct SnapshotEntry {
 #[derive(Debug)]
 pub(crate) struct CurrentEntry {
     pub snapshot: SnapshotEntry,
-    bytes: Option<Vec<u8>>,
 }
 
 pub(crate) fn inventory(
@@ -204,7 +210,7 @@ pub(crate) fn capture_baseline(
 ) -> Result<()> {
     for (path, entry) in current {
         let mut snapshot = entry.snapshot.clone();
-        persist_content(subject_dir, &mut snapshot, entry.bytes.as_deref())?;
+        persist_content(subject_dir, &mut snapshot)?;
         snapshots.insert(path.clone(), snapshot);
     }
     Ok(())
@@ -242,7 +248,7 @@ pub(crate) fn capture_scope_additions(
             continue;
         }
         let mut snapshot = entry.snapshot.clone();
-        persist_content(subject_dir, &mut snapshot, entry.bytes.as_deref())?;
+        persist_content(subject_dir, &mut snapshot)?;
         snapshots.insert(path.clone(), snapshot);
         scope_additions.insert(path.clone());
     }
@@ -320,10 +326,8 @@ pub(crate) fn verify_baseline_blobs(
                 "baseline content for `{path}` escapes its local snapshot store"
             )));
         }
-        let bytes = fs::read(&canonical)?;
-        if entry.sha1.as_deref()
-            != Some(review_contract::hash_bytes(b"review-file-v1", &bytes).as_str())
-        {
+        let (digest, _) = hash_file(&canonical)?;
+        if entry.sha1.as_deref() != Some(digest.as_str()) {
             return Err(review_gates::invalid(format!(
                 "baseline content for `{path}` failed its fingerprint check"
             )));
@@ -386,33 +390,216 @@ fn same_state(left: &SnapshotEntry, right: &SnapshotEntry) -> bool {
         && left.symlink_target == right.symlink_target
 }
 
-fn persist_content(
-    subject_dir: &Path,
-    entry: &mut SnapshotEntry,
-    bytes: Option<&[u8]>,
-) -> Result<()> {
+fn persist_content(subject_dir: &Path, entry: &mut SnapshotEntry) -> Result<()> {
     if entry.entry_type != "file" {
         return Ok(());
     }
-    let bytes = bytes.ok_or_else(|| anyhow!("baseline file has no captured bytes"))?;
     let digest = entry
         .sha1
         .as_deref()
         .ok_or_else(|| anyhow!("baseline file has no fingerprint"))?;
+    let source = entry
+        .content_path
+        .as_deref()
+        .ok_or_else(|| anyhow!("baseline file has no source path"))?;
+    let size = entry
+        .size
+        .ok_or_else(|| anyhow!("baseline file has no size"))?;
     let blob = subject_dir
         .join("baseline/blobs")
         .join(format!("{}.blob", digest.trim_start_matches("sha1-v1:")));
-    if !blob.exists() {
-        fs::write(&blob, bytes)
-            .with_context(|| format!("failed to capture baseline content at {}", blob.display()))?;
-    } else if fs::read(&blob)? != bytes {
+    if blob.exists() {
+        verify_blob_matches_source(source, &blob, digest, size)?;
+        entry.content_path = Some(blob);
+        return Ok(());
+    }
+
+    let (temporary, file) = create_blob_temp(&blob)?;
+    if let Err(error) = copy_and_hash_file(source, file, size).and_then(|actual| {
+        if actual == digest {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "scoped file changed while its baseline content was being captured: {}",
+                source.display()
+            ))
+        }
+    }) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    let publish_result = match fs::hard_link(&temporary, &blob) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            verify_blob_matches_source(source, &blob, digest, size)
+        }
+        Err(error) => Err(error)
+            .with_context(|| format!("failed to publish baseline content at {}", blob.display())),
+    };
+    let cleanup_result = fs::remove_file(&temporary).with_context(|| {
+        format!(
+            "failed to remove temporary baseline content at {}",
+            temporary.display()
+        )
+    });
+    publish_result?;
+    cleanup_result?;
+    entry.content_path = Some(blob);
+    Ok(())
+}
+
+fn create_blob_temp(blob: &Path) -> Result<(PathBuf, File)> {
+    let parent = blob
+        .parent()
+        .ok_or_else(|| anyhow!("baseline blob has no parent directory"))?;
+    let name = blob
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow!("baseline blob path is not valid UTF-8"))?;
+    for _ in 0..128 {
+        let id = NEXT_BLOB_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+        let temporary = parent.join(format!(".{name}.{}.{}.tmp", std::process::id(), id));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "failed to create temporary baseline content at {}",
+                        temporary.display()
+                    )
+                });
+            }
+        }
+    }
+    Err(anyhow!("could not allocate a temporary baseline blob path"))
+}
+
+fn copy_and_hash_file(source: &Path, destination: File, size: u64) -> Result<String> {
+    let source = File::open(source)
+        .with_context(|| format!("failed to capture baseline content at {}", source.display()))?;
+    let mut source = BufReader::new(source);
+    let mut destination = BufWriter::new(destination);
+    let digest = hash_reader_with_copy(&mut source, size, Some(&mut destination))?;
+    destination.flush()?;
+    Ok(digest)
+}
+
+fn verify_blob_matches_source(source: &Path, blob: &Path, digest: &str, size: u64) -> Result<()> {
+    let source_path = source.to_path_buf();
+    let mut source = BufReader::new(File::open(&source_path).with_context(|| {
+        format!(
+            "failed to capture baseline content at {}",
+            source_path.display()
+        )
+    })?);
+    let mut blob_reader = BufReader::new(
+        File::open(blob)
+            .with_context(|| format!("failed to read baseline content at {}", blob.display()))?,
+    );
+    let mut hasher = file_hasher(size);
+    let mut source_buffer = [0_u8; HASH_BUFFER_BYTES];
+    let mut blob_buffer = [0_u8; HASH_BUFFER_BYTES];
+    let mut bytes_read = 0_u64;
+    let mut matches_blob = true;
+    loop {
+        let source_count = read_chunk(&mut source, &mut source_buffer)?;
+        let blob_count = read_chunk(&mut blob_reader, &mut blob_buffer)?;
+        matches_blob &= source_count == blob_count
+            && source_buffer[..source_count] == blob_buffer[..blob_count];
+        if source_count == 0 {
+            break;
+        }
+        bytes_read = bytes_read
+            .checked_add(source_count as u64)
+            .ok_or_else(|| anyhow!("scoped file is too large to capture"))?;
+        hasher.update(&source_buffer[..source_count]);
+    }
+    if bytes_read != size || finish_file_hash(hasher) != digest {
+        return Err(anyhow!(
+            "scoped file changed while its baseline content was being captured: {}",
+            source_path.display()
+        ));
+    }
+    if !matches_blob {
         return Err(anyhow!(
             "baseline content hash collision at {}",
             blob.display()
         ));
     }
-    entry.content_path = Some(blob);
     Ok(())
+}
+
+fn hash_file(path: &Path) -> Result<(String, u64)> {
+    let file = fs::File::open(path)
+        .with_context(|| format!("failed to read scoped file `{}`", path.display()))?;
+    let size = file.metadata()?.len();
+    Ok((hash_reader(file, size)?, size))
+}
+
+fn hash_reader(mut reader: impl Read, size: u64) -> Result<String> {
+    hash_reader_with_copy(&mut reader, size, None)
+}
+
+fn hash_reader_with_copy(
+    reader: &mut impl Read,
+    size: u64,
+    mut destination: Option<&mut dyn Write>,
+) -> Result<String> {
+    let mut hasher = file_hasher(size);
+
+    let mut buffer = [0_u8; HASH_BUFFER_BYTES];
+    let mut bytes_read = 0_u64;
+    loop {
+        let count = read_chunk(reader, &mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        bytes_read = bytes_read
+            .checked_add(count as u64)
+            .ok_or_else(|| anyhow!("scoped file is too large to fingerprint"))?;
+        hasher.update(&buffer[..count]);
+        if let Some(destination) = destination.as_mut() {
+            destination.write_all(&buffer[..count])?;
+        }
+    }
+    if bytes_read != size {
+        return Err(anyhow!(
+            "scoped file changed while it was being fingerprinted (expected {size} bytes, read {bytes_read})"
+        ));
+    }
+
+    Ok(finish_file_hash(hasher))
+}
+
+fn read_chunk(reader: &mut impl Read, buffer: &mut [u8]) -> io::Result<usize> {
+    loop {
+        match reader.read(buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            result => return result,
+        }
+    }
+}
+
+fn file_hasher(size: u64) -> Sha1 {
+    let mut hasher = Sha1::new();
+    hasher.update(FILE_HASH_TAG);
+    hasher.update([0]);
+    hasher.update(size.to_be_bytes());
+    hasher
+}
+
+fn finish_file_hash(hasher: Sha1) -> String {
+    let mut digest = String::from("sha1-v1:");
+    for byte in hasher.finalize() {
+        use std::fmt::Write as _;
+        write!(&mut digest, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    digest
 }
 
 fn git_files(repository: &Path) -> Result<Option<Vec<String>>> {
@@ -591,42 +778,35 @@ fn add_current_path(
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error.into()),
     };
-    let (entry_type, bytes, symlink_target) = if metadata.file_type().is_symlink() {
-        let target = fs::read_link(&path)?;
-        let target = target
-            .to_str()
-            .ok_or_else(|| {
-                review_gates::invalid(format!("symlink target for `{relative}` is not UTF-8"))
-            })?
-            .to_string();
-        ("symlink", Some(target.as_bytes().to_vec()), Some(target))
-    } else if metadata.is_file() {
-        (
-            "file",
-            Some(
-                fs::read(&path)
-                    .with_context(|| format!("failed to read scoped file `{relative}`"))?,
-            ),
-            None,
-        )
-    } else if metadata.is_dir() {
-        if relative != "." && path.join(".git").exists() {
+    let (entry_type, sha1, size, symlink_target, content_path) =
+        if metadata.file_type().is_symlink() {
+            let target = fs::read_link(&path)?;
+            let target = target
+                .to_str()
+                .ok_or_else(|| {
+                    review_gates::invalid(format!("symlink target for `{relative}` is not UTF-8"))
+                })?
+                .to_string();
+            let sha1 = review_contract::hash_bytes(FILE_HASH_TAG, target.as_bytes());
+            let size = target.len() as u64;
+            ("symlink", Some(sha1), Some(size), Some(target), None)
+        } else if metadata.is_file() {
+            let (sha1, size) = hash_file(&path)
+                .with_context(|| format!("failed to fingerprint scoped file `{relative}`"))?;
+            ("file", Some(sha1), Some(size), None, Some(path.clone()))
+        } else if metadata.is_dir() {
+            if relative != "." && path.join(".git").exists() {
+                return Err(review_gates::invalid(format!(
+                    "submodule directory `{relative}` is not supported in a review baseline"
+                )));
+            }
+            ("directory", None, None, None, None)
+        } else {
             return Err(review_gates::invalid(format!(
-                "submodule directory `{relative}` is not supported in a review baseline"
+                "special filesystem entry `{relative}` is not supported in a review baseline"
             )));
-        }
-        ("directory", None, None)
-    } else {
-        return Err(review_gates::invalid(format!(
-            "special filesystem entry `{relative}` is not supported in a review baseline"
-        )));
-    };
+        };
     let mode = file_mode(&metadata);
-    let sha1 = bytes
-        .as_deref()
-        .map(|bytes| review_contract::hash_bytes(b"review-file-v1", bytes));
-    let size = bytes.as_ref().map(|bytes| bytes.len() as u64);
-    let content_path = (entry_type == "file").then(|| path.clone());
     entries.insert(
         relative.to_string(),
         CurrentEntry {
@@ -638,7 +818,6 @@ fn add_current_path(
                 symlink_target,
                 content_path,
             },
-            bytes,
         },
     );
     Ok(())
@@ -729,4 +908,50 @@ fn file_mode(metadata: &fs::Metadata) -> Option<u32> {
 #[cfg(not(unix))]
 fn file_mode(_metadata: &fs::Metadata) -> Option<u32> {
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TrackingReader {
+        inner: io::Cursor<Vec<u8>>,
+        max_read: usize,
+        calls: usize,
+    }
+
+    impl io::Read for TrackingReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            self.max_read = self.max_read.max(buffer.len());
+            self.calls += 1;
+            self.inner.read(buffer)
+        }
+    }
+
+    #[test]
+    fn review_file_hash_streams_fixed_size_chunks_with_the_existing_fingerprint() {
+        let bytes = (0..(64 * 1024 * 3 + 17))
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        let expected = review_contract::hash_bytes(b"review-file-v1", &bytes);
+        let mut reader = TrackingReader {
+            inner: io::Cursor::new(bytes.clone()),
+            max_read: 0,
+            calls: 0,
+        };
+
+        let actual = hash_reader(&mut reader, bytes.len() as u64).unwrap();
+
+        assert_eq!(actual, expected);
+        assert_eq!(reader.max_read, 64 * 1024);
+        assert!(reader.calls > 1);
+    }
+
+    #[test]
+    fn current_entry_retains_only_manifest_metadata() {
+        assert_eq!(
+            std::mem::size_of::<CurrentEntry>(),
+            std::mem::size_of::<SnapshotEntry>()
+        );
+    }
 }

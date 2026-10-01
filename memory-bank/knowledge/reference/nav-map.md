@@ -29,7 +29,9 @@ varde-code nav_map --json '{"repoRoot":"<repo-root>"}' --format text
 
 `--format` accepts `json` (default, the canonical output) or `text` (a
 plain-text rendering derived from the same JSON — never a second
-data-gathering path). The same mode is reachable via `code_query(mode:
+data-gathering path). `--with-project-knowledge` prepends a pointer to the
+project's `memory-bank/knowledge/` bundle when present; it reads no document
+contents. The same mode is reachable via `code_query(mode:
 "nav_map", ...)`.
 
 ## Output sections
@@ -39,8 +41,13 @@ data-gathering path). The same mode is reachable via `code_query(mode:
 - **`entrypoints`** — semantic entrypoints: functions/classes role-tagged
   (`route_handler`, `page_component`, `cli_command`, `background_job`,
   `event_listener`, `middleware`) via decorator/base-class/path-glob
-  matching. Bootstrap/process entrypoints (`main.rs`, `__main__.py`,
-  `index.ts`, ...) are excluded.
+  matching. Process mains in compiled languages are included; Node `main()`
+  is included when its source contains a recognized direct-run guard and the
+  query has `repoRoot`. Node `handleRequest` functions called by a
+  `createServer` callback are also included. SvelteKit `+page.svelte` and
+  `+layout.svelte` files are path-only entries; named, exported HTTP methods
+  in `+server` modules are entity-backed route roots. Path-only entries have
+  no `entity_id` and do not contribute symbols or flows.
 - **`foundational_files`** — a fan-in leaderboard (file, count, one-line
   `why`), noise-filtered. No edges listed here — edges live in `flows`.
 - **`module_layers`** — module-to-module edges (kept only when ≥3 files
@@ -66,15 +73,19 @@ excluded from every section via one shared filter
 
 ## Text rendering and toz capture
 
-`--format text` renders the JSON as plain text (one section per header) and,
-by default, also hands an *unbudgeted* rendering (still under each section's
-hard cap, e.g. `HOTSPOTS_SECTION_LIMIT`, only the `maxTokensEstimate` budget
-pass is skipped) to `toz capture` (source `varde-code nav_map <repoRoot>`,
-label `nav_map`) if a `toz` binary is on `PATH`. When that capture succeeds,
-its own TOC preview is printed in place of the budgeted text, so the session-
-start injection stays small while the full unbudgeted map is one `toz query`
-away. Any failure to capture — no `toz` on `PATH`, a non-zero exit, or
-`VARDE_CODE_TOZ=0` — falls back to today's budgeted render, byte-identical.
+For successful map data, `--format text` emits the compact repository
+orientation: up to five entrypoints, up to four shallow flow summaries, and
+commands for retrieving an expanded map or focused context, dependency graph,
+and hotspot data. Text mode also hands a rendering without the
+`maxTokensEstimate` token budget (still under each section's hard cap, e.g.
+`HOTSPOTS_SECTION_LIMIT`) to `toz capture`
+(source `varde-code nav_map <repoRoot>`, label `nav_map`) if a `toz` binary is
+on `PATH`. A successful capture appends the Toz handle and commands to search
+or read the expanded map; Toz's TOC preview does not replace the orientation.
+If capture is unavailable, fails, or `VARDE_CODE_TOZ=0`, the orientation is
+unchanged. Its counts describe items present in the capped map, with
+token-budget omissions called out separately; per-section hard caps still
+apply. Query errors retain their raw envelope, and JSON mode is unchanged.
 
 ## Non-goals
 

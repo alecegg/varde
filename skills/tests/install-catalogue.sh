@@ -67,6 +67,28 @@ if "$SKILLS_DIR/install.sh" -f -m -d "$TEST_ROOT/reject" >/dev/null 2>&1; then
   fail "-f and -m together were accepted"
 fi
 
+# -m must fail when an existing ownership marker cannot be read.
+unreadable_target="$TEST_ROOT/unreadable-managed"
+unreadable_destination="$unreadable_target/varde-review"
+unreadable_marker="$unreadable_destination/$MARKER"
+mkdir -p "$unreadable_destination"
+printf 'keep\n' >"$unreadable_destination/local.txt"
+printf 'varde-managed-skill\n' >"$unreadable_marker"
+unreadable_before="$(find "$unreadable_destination" -type f -exec cksum {} \; | sort)"
+chmod 000 "$unreadable_marker"
+if "$SKILLS_DIR/install.sh" -m -d "$unreadable_target" -s varde-change,varde-review \
+  >"$TEST_ROOT/unreadable.out" 2>"$TEST_ROOT/unreadable.err"; then
+  fail "-m accepted an unreadable ownership marker"
+fi
+chmod u+r "$unreadable_marker"
+grep -Fq "Cannot read ownership marker: $unreadable_marker" "$TEST_ROOT/unreadable.err" ||
+  fail "-m did not report the unreadable ownership marker"
+[ ! -e "$unreadable_target/varde-change" ] ||
+  fail "-m copied a skill before checking an unreadable ownership marker"
+unreadable_after="$(find "$unreadable_destination" -type f -exec cksum {} \; | sort)"
+[ "$unreadable_before" = "$unreadable_after" ] ||
+  fail "-m changed a destination with an unreadable ownership marker"
+
 # -m preserves a same-named directory it did not mark, and updates one it did.
 unowned_managed_target="$TEST_ROOT/unowned-managed"
 mkdir -p "$unowned_managed_target/varde-change"

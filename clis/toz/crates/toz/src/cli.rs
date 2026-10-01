@@ -16,7 +16,7 @@ pub struct Cli {
 
 #[derive(Args, Debug, Clone)]
 pub struct GlobalOpts {
-    /// Harness-supplied external fallback directory (VARDE_TOZ_CONFIG_DIR takes precedence)
+    /// External store to try after primary-store access fails
     #[arg(long, global = true)]
     pub fallback_dir: Option<PathBuf>,
     /// Project directory (default: git root of cwd, else cwd)
@@ -333,6 +333,9 @@ pub struct StatsArgs {
     /// Every project store
     #[arg(long)]
     pub global: bool,
+    /// Include up to N recent query events per project (max 10000)
+    #[arg(long, value_name = "N")]
+    pub events: Option<usize>,
 }
 
 #[derive(Args, Debug)]

@@ -159,7 +159,7 @@ const CODEX: Bundle = Bundle {
     ],
     after: "Codex captures completed unified execution through PostToolUse; use `varde-toz run --script -` for batches with complete command output. \
 The AGENTS.md block explains both paths. Codex needs `hooks = true` in ~/.codex/config.toml and will ask you to trust \
-the SessionStart and PostToolUse hooks. The adapter supplies an external fallback beside its installed files.",
+the SessionStart and PostToolUse hooks. The adapter uses the primary Toz store by default.",
     binary: "codex",
     min_version: (0, 140, 0),
     why_min: "PostToolUse for completed unified execution",
@@ -249,11 +249,8 @@ fn shell_quote_executable(value: &str) -> String {
     }
 }
 
-pub fn usage_note(fallback: Option<&Path>) -> String {
-    match fallback {
-        Some(path) => format!("{NOTE}\nUnless VARDE_TOZ_FALLBACK_DIR or TOZ_FALLBACK_DIR is already set, use VARDE_TOZ_FALLBACK_DIR={} for every varde-toz invocation in the command environment. Use the same value for capture, query, and run. VARDE_TOZ_CONFIG_DIR (or TOZ_CONFIG_DIR) still takes precedence.\n", shell_quote(&path.to_string_lossy())),
-        None => NOTE.to_string(),
-    }
+pub fn usage_note() -> String {
+    NOTE.to_string()
 }
 
 pub fn render_at(template: &str, dir: &Path) -> Result<String> {
@@ -274,7 +271,7 @@ fn render_with_exe(template: &str, dir: &Path, exe: &Path) -> Result<String> {
     } else {
         dir.join("varde-toz")
     };
-    let note = usage_note(Some(&fallback));
+    let note = usage_note();
     let shell_json = serde_json::to_string(&shell_quote(&fallback.to_string_lossy()))?;
     Ok(template
         .replace(

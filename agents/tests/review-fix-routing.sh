@@ -12,7 +12,7 @@ import sys
 agents = pathlib.Path(sys.argv[1])
 repo = pathlib.Path(sys.argv[2])
 manifest = json.loads((agents / "capabilities.json").read_text())
-executor = next(profile for profile in manifest["profiles"] if profile["name"] == "executor")
+executor = next(profile for profile in manifest["profiles"] if profile["name"] == "varde-executor")
 instructions = executor["instructions"].lower()
 required = (
     "mode=build",
@@ -27,9 +27,9 @@ for phrase in required:
     assert phrase in instructions, f"Executor manifest omits {phrase!r}"
 
 for path in (
-    agents / "executor/claude.md",
-    agents / "executor/codex.toml",
-    agents / "executor/opencode.md",
+    agents / "varde-executor/claude.md",
+    agents / "varde-executor/codex.toml",
+    agents / "varde-executor/opencode.md",
 ):
     text = " ".join(path.read_text().lower().split())
     for phrase in required:
@@ -39,10 +39,7 @@ fix = (repo / "skills/varde-review/references/fix.md").read_text().lower()
 for phrase in (
     "plan-owned review",
     "standalone review folder",
-    "`disposition: fix` findings regardless of label",
-    "`label: auto-fix` findings whose disposition is blank or `fix`",
     "the parent owns review orchestration and user triage",
-    "blank findings go to parent triage",
     "the parent shows every unresolved blank finding",
     "do not perform human triage",
     "never prompts the user",
@@ -50,7 +47,16 @@ for phrase in (
 ):
     assert phrase in fix, f"fix.md omits {phrase!r}"
 
-finish = (repo / "skills/varde-change/references/build-plan-finish.md").read_text().lower()
+# fix-pass.md owns eligibility (review verdict batch 2 item 4).
+fix_pass = " ".join((repo / "skills/varde-review/references/fix-pass.md").read_text().lower().split())
+for phrase in (
+    "any label with `disposition: fix`",
+    "`label: auto-fix` with `disposition: blank` or `fix`",
+    "send blank findings to parent triage",
+):
+    assert phrase in fix_pass, f"fix-pass.md omits {phrase!r}"
+
+finish = (repo / "skills/varde-change/references/build-finish.md").read_text().lower()
 for phrase in (
     "mode=build",
     "plan_context",
@@ -60,7 +66,7 @@ for phrase in (
     "finding_ids",
     "parent receives deferred findings",
 ):
-    assert phrase.lower() in finish, f"build-plan-finish.md omits {phrase!r}"
+    assert phrase.lower() in finish, f"build-finish.md omits {phrase!r}"
 
 print("Review-fix parent-routing contract passed.")
 PY

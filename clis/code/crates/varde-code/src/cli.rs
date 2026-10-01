@@ -233,7 +233,11 @@ pub enum Command {
     /// (see `context_pack` help for inputs)
     #[command(name = "context_pack")]
     ContextPack {
-        /// JSON object: { repoRoot, dbPath?, query, resultsLimit?, resultsOffset?, fullResults? }
+        /// JSON object: { repoRoot, dbPath?, query, resultsLimit?, resultsOffset?,
+        /// maxTokensEstimate? (default 4000), includeReadingOrder? (default true), fullResults? }
+        /// maxTokensEstimate estimates the complete success envelope as serialized JSON bytes / 4,
+        /// including metadata. includeReadingOrder=false leaves readingOrder empty.
+        /// fullResults bypasses the token budget and symbol cap; resultsOffset still applies.
         #[arg(long)]
         json: String,
     },
@@ -250,8 +254,11 @@ pub enum Command {
         #[arg(long)]
         json: String,
         /// Output format: `json` (default) or `text`.
-        #[arg(long, default_value = "json")]
+        #[arg(long, default_value = "json", value_parser = ["json", "text"])]
         format: String,
+        /// With `--format text`, prepend a pointer to the project's durable knowledge bundle.
+        #[arg(long)]
+        with_project_knowledge: bool,
     },
     /// Scan built-in, user, and repository rules against a fresh read-only index.
     /// Ensure watcher coverage with `watch --ensure` before calling scan.
@@ -537,6 +544,7 @@ mod tests {
             Command::NavMap {
                 json: parsed,
                 format,
+                ..
             } => {
                 assert_eq!(parsed, json);
                 assert_eq!(format, "json", "format defaults to json");

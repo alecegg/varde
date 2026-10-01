@@ -14,7 +14,6 @@ import { spawnSync } from "node:child_process";
 
 const TOZ = "{{TOZ_BIN}}";
 const NOTE = "{{TOZ_NOTE_JSON}}";
-const FALLBACK = process.env.VARDE_TOZ_FALLBACK_DIR || process.env.TOZ_FALLBACK_DIR || "{{TOZ_FALLBACK_JSON}}";
 const NOTE_MARKER = "varde-toz (tool-output-zone) is active";
 const PRECHECK_BYTES = 2048;
 
@@ -22,7 +21,7 @@ const PRECHECK_BYTES = 2048;
 function usageNote(cwd: string): string {
   try {
     const r = spawnSync(TOZ, ["note", "--harness", "opencode"], {
-      cwd, env: { ...process.env, VARDE_TOZ_FALLBACK_DIR: FALLBACK },
+      cwd, env: process.env,
       encoding: "utf8", timeout: 1_000,
     });
     if (r.status === 0 && r.stdout?.trim()) return r.stdout.trim();
@@ -37,7 +36,7 @@ function reportFailure(reason: string, tool: string, bytes: number, cwd: string)
   try {
     spawnSync(TOZ, ["event", "--harness", "opencode", "--outcome", "failed", "--reason", reason,
       "--tool", tool, "--bytes", String(bytes)], {
-      cwd, env: { ...process.env, VARDE_TOZ_FALLBACK_DIR: FALLBACK }, timeout: 1_000, stdio: "ignore",
+      cwd, env: process.env, timeout: 1_000, stdio: "ignore",
     });
   } catch {
     // Failure reporting is best effort.
@@ -54,7 +53,6 @@ export const TozPlugin: Plugin = async ({ directory, worktree }) => {
     },
 
     "shell.env": async (_input, output) => {
-      output.env.VARDE_TOZ_FALLBACK_DIR = output.env.VARDE_TOZ_FALLBACK_DIR || output.env.TOZ_FALLBACK_DIR || FALLBACK;
       output.env.VARDE_TOZ_SESSION = output.env.VARDE_TOZ_SESSION || output.env.TOZ_SESSION || "opencode";
     },
 
@@ -76,7 +74,7 @@ export const TozPlugin: Plugin = async ({ directory, worktree }) => {
           encoding: "utf8",
           timeout: 20_000,
           cwd,
-          env: { ...process.env, VARDE_TOZ_FALLBACK_DIR: FALLBACK, VARDE_TOZ_SESSION: `opencode-${input.sessionID}` },
+          env: { ...process.env, VARDE_TOZ_SESSION: `opencode-${input.sessionID}` },
         });
       } catch {
         fail("spawn");

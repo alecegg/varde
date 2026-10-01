@@ -39,7 +39,7 @@ impl Fixture {
             "---\ntype: plan\nstatus: backlog\n---\n\
              ## Problem\nThe original problem.\n\
              ## Solution\nImplement the solution.\n\
-             ## Acceptance criteria\n- [ ] The behavior works.\n\
+             ## Acceptance criteria\n- [ ] The behavior works.\n      (assert: true)\n\
              ## Progress\n- started\n",
         )
         .unwrap();
@@ -106,6 +106,7 @@ impl Fixture {
         if phase == "implementation" {
             record["change_fingerprint"] = inspection["change_fingerprint"].clone();
             record["coverage"] = json!("entire-subject-change");
+            record["tier_confirmed"] = json!(true);
         }
         fs::write(&record_path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
         self.run(&[
@@ -128,6 +129,32 @@ impl Fixture {
     fn approve(&self, subject: &str, phase: &str, final_review: bool) {
         let inspection = self.inspect(subject, phase);
         success(self.record_approved_with_risk(subject, phase, &inspection, final_review));
+    }
+
+    fn write_tier_evidence(&self, tag: &str, tier: &str, signals: &[&str]) -> PathBuf {
+        let path = self.root.join(format!("tier-evidence-{tag}.json"));
+        fs::write(
+            &path,
+            serde_json::to_vec(&json!({ "tier": tier, "signals": signals })).unwrap(),
+        )
+        .unwrap();
+        path
+    }
+
+    fn init_plan_with_tier(&self, plan: &Path, scope: &str, tier_evidence: &Path) -> Value {
+        success(self.run(&[
+            "review",
+            "init",
+            "--plan",
+            plan.to_str().unwrap(),
+            "--repository",
+            self.root.to_str().unwrap(),
+            "--scope",
+            scope,
+            "--tier-evidence",
+            tier_evidence.to_str().unwrap(),
+            "--json",
+        ]))
     }
 
     fn git_init(&self) {
@@ -193,6 +220,98 @@ fn failure(output: Output, exit: i32, code: &str) -> Value {
     envelope
 }
 
+fn write_fingerprint_task(plan: &Path, status: &str, body: &str, progress: &str) -> PathBuf {
+    let tasks = plan.parent().unwrap().join("tasks");
+    fs::create_dir_all(&tasks).unwrap();
+    let path = tasks.join("fingerprint.md");
+    fs::write(
+        &path,
+        format!(
+            "---\ntype: task\nstatus: {status}\ntitle: Fingerprint task\nmodifies:\n  - src/feature.rs\n---\n## Work\n{body}\n\n#### Progress\n{progress}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn inspect_returns_record_template_matching_evidence_record_shape() {
+    let fixture = Fixture::new("record-template");
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+
+    let pre_edit = fixture.inspect(subject, "pre-edit");
+    let template = pre_edit["record_template"].as_object().unwrap();
+    let mut keys: Vec<&str> = template.keys().map(String::as_str).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        vec![
+            "baseline_id",
+            "contract_fingerprint",
+            "implementation_review_required",
+            "phase",
+            "rationale",
+            "reviewer",
+            "schema_version",
+            "structural_risk",
+            "structural_risk_rationale",
+            "subject_id",
+            "unresolved_choices",
+            "verdict",
+            "verification_approach",
+            "verification_expected_results",
+            "verification_rationale",
+        ],
+        "pre-edit record_template must have exactly the required plus documented-optional fields"
+    );
+    assert_eq!(template["subject_id"], pre_edit["subject"]["subject_id"]);
+    assert_eq!(template["phase"], json!("pre-edit"));
+    assert_eq!(
+        template["contract_fingerprint"],
+        pre_edit["contract_fingerprint"]
+    );
+    assert_eq!(template["baseline_id"], pre_edit["baseline_id"]);
+
+    success(fixture.record_approved(subject, "pre-edit", &pre_edit));
+    let implementation = fixture.inspect(subject, "implementation");
+    let template = implementation["record_template"].as_object().unwrap();
+    let mut keys: Vec<&str> = template.keys().map(String::as_str).collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        vec![
+            "baseline_id",
+            "change_fingerprint",
+            "contract_fingerprint",
+            "coverage",
+            "phase",
+            "rationale",
+            "reviewer",
+            "schema_version",
+            "subject_id",
+            "tier_confirmed",
+            "unresolved_choices",
+            "verdict",
+            "verification_approach",
+            "verification_expected_results",
+            "verification_rationale",
+        ],
+        "implementation record_template must have exactly the required plus documented-optional fields"
+    );
+    assert_eq!(
+        template["change_fingerprint"],
+        implementation["change_fingerprint"]
+    );
+    assert_eq!(
+        template["contract_fingerprint"],
+        implementation["contract_fingerprint"]
+    );
+    assert_eq!(template["baseline_id"], implementation["baseline_id"]);
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
 #[test]
 fn missing_approval_blocks_start_check() {
     let fixture = Fixture::new("missing-approval");
@@ -215,6 +334,65 @@ fn missing_approval_blocks_start_check() {
     );
     assert!(blocked["data"]["error"]["details"]["blockers"].is_array());
 
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn record_rejects_file_inside_subject_directory() {
+    let fixture = Fixture::new("record-reserved-file");
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let inspection = fixture.inspect(subject, "pre-edit");
+    let subject_dir = fixture
+        .root
+        .join("memory-bank/working/review-gates")
+        .join(subject);
+    let record = serde_json::to_vec_pretty(&json!({
+        "schema_version": 1, "subject_id": subject, "phase": "pre-edit",
+        "reviewer": { "identity": "fixture-reviewer", "provenance": "integration-test" },
+        "verdict": "approved", "unresolved_choices": [],
+        "contract_fingerprint": inspection["contract_fingerprint"],
+        "baseline_id": inspection["baseline_id"],
+        "verification_approach": "Run the fixture.",
+        "verification_rationale": "The fixture covers the change.",
+        "verification_expected_results": "Tests pass.",
+        "structural_risk": "low",
+        "structural_risk_rationale": "Fixture only.",
+        "implementation_review_required": false,
+        "rationale": "No unresolved choices."
+    }))
+    .unwrap();
+    for name in ["pre-edit.json", "implementation.json", "subject.json"] {
+        let reserved = subject_dir.join(name);
+        // A valid record written here moves the inspected version, which
+        // reported `conflict` before reserved paths were rejected.
+        if name != "subject.json" {
+            fs::write(&reserved, &record).unwrap();
+        }
+        let before = fs::read(&reserved).unwrap();
+        let rejected = failure(
+            fixture.run(&[
+                "review",
+                "record",
+                "--subject",
+                subject,
+                "--expected-version",
+                inspection["version"].as_str().unwrap(),
+                "--file",
+                reserved.to_str().unwrap(),
+                "--json",
+            ]),
+            4,
+            "review_invalid",
+        );
+        let message = rejected["data"]["error"]["message"].as_str().unwrap();
+        assert!(
+            message.contains(name),
+            "message should name {name}: {message}"
+        );
+        assert_eq!(fs::read(&reserved).unwrap(), before);
+    }
     fs::remove_dir_all(fixture.root).unwrap();
 }
 
@@ -297,6 +475,13 @@ fn task_done_review_pending() {
     fs::create_dir_all(source.parent().unwrap()).unwrap();
     fs::write(&source, "baseline\n").unwrap();
     let plan = fixture.plan();
+    let task = plan.parent().unwrap().join("tasks/feature/task.md");
+    fs::create_dir_all(task.parent().unwrap()).unwrap();
+    fs::write(
+        &task,
+        "---\ntype: task\nstatus: todo\nmodifies:\n  - src/feature.rs\n---\nTask\n",
+    )
+    .unwrap();
     let created = fixture.init_plan(&plan, "src");
     let subject = created["subject"]["subject_id"].as_str().unwrap();
     fixture.approve(subject, "pre-edit", true);
@@ -308,13 +493,6 @@ fn task_done_review_pending() {
         String::from_utf8_lossy(&plan_start.stderr)
     );
 
-    let task = plan.parent().unwrap().join("tasks/feature/task.md");
-    fs::create_dir_all(task.parent().unwrap()).unwrap();
-    fs::write(
-        &task,
-        "---\ntype: task\nstatus: todo\nmodifies:\n  - src/feature.rs\n---\nTask\n",
-    )
-    .unwrap();
     assert!(fixture.transition(&task, "in_progress").status.success());
     let done = fixture.transition(&task, "done");
     assert!(
@@ -517,6 +695,156 @@ fn artifact_type_alias_does_not_gate_unrelated_knowledge() {
 }
 
 #[test]
+fn review_plan_task_contract_body_change_stales_start_check() {
+    let fixture = Fixture::new("task-contract-body-change");
+    let plan = fixture.plan();
+    let task = write_fingerprint_task(&plan, "in_progress", "Initial task body.", "- started");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    fixture.approve(subject, "pre-edit", false);
+
+    let changed = fs::read_to_string(&task)
+        .unwrap()
+        .replace("Initial task body.", "Changed task body.");
+    fs::write(&task, changed).unwrap();
+
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_stale_contract",
+    );
+
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn review_plan_task_lifecycle_progress_changes_keep_start_check_valid() {
+    let fixture = Fixture::new("task-lifecycle-progress-change");
+    let plan = fixture.plan();
+    let task = write_fingerprint_task(&plan, "in_progress", "Stable task body.", "- started");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    fixture.approve(subject, "pre-edit", false);
+
+    let changed = fs::read_to_string(&task)
+        .unwrap()
+        .replace("status: in_progress", "status: done")
+        .replace("- started", "- completed");
+    fs::write(&task, changed).unwrap();
+
+    success(fixture.run(&[
+        "review",
+        "check",
+        "--subject",
+        subject,
+        "--checkpoint",
+        "start",
+        "--json",
+    ]));
+
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn review_approved_plan_status_transition_with_tasks_keeps_contract() {
+    let fixture = Fixture::new("task-contract-plan-transition");
+    let plan = fixture.plan();
+    write_fingerprint_task(&plan, "in_progress", "Stable task body.", "- started");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    fixture.approve(subject, "pre-edit", false);
+
+    let output = fixture.transition(&plan, "active");
+    assert!(
+        output.status.success(),
+        "status={:?}\nstdout={}\nstderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn review_plan_transition_skips_directory_without_subject_metadata() {
+    let fixture = Fixture::new("plan-transition-skips-foreign-directory");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    fixture.approve(subject, "pre-edit", false);
+
+    fs::create_dir_all(
+        fixture
+            .root
+            .join("memory-bank/working/review-gates/contracts"),
+    )
+    .unwrap();
+
+    let output = fixture.transition(&plan, "active");
+    assert!(
+        output.status.success(),
+        "status={:?}\nstdout={}\nstderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn task_transition_skips_sibling_gate_directory_without_subject_json() {
+    let fixture = Fixture::new("task-transition-sibling-gate");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let task = write_fingerprint_task(&plan, "todo", "Stable task body.", "- queued");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    fixture.approve(subject, "pre-edit", false);
+
+    let gates = fixture.root.join("memory-bank/working/review-gates");
+    let sibling = gates.join("contract-only");
+    fs::create_dir_all(&sibling).unwrap();
+    fs::write(sibling.join("contract.json"), "{}").unwrap();
+
+    let output = fixture.transition(&task, "in_progress");
+    assert!(
+        output.status.success(),
+        "status={:?}\nstdout={}\nstderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    fs::write(sibling.join("subject.json"), "not json").unwrap();
+    let blocked = fixture.transition(&task, "done");
+    assert_ne!(blocked.status.code(), Some(0));
+    assert!(
+        String::from_utf8_lossy(&blocked.stdout).contains("review_invalid")
+            || String::from_utf8_lossy(&blocked.stderr).contains("review_invalid"),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&blocked.stdout),
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
 fn crud_gates_direct_task_start_and_checks_both_rename_paths() {
     let fixture = Fixture::new("crud-direct-task-start");
     let plan = fixture.plan();
@@ -671,6 +999,13 @@ fn redirected_plan_and_task_transitions_recover_under_the_repository_lock() {
          ## Acceptance criteria\n- [ ] The behavior works.\n",
     )
     .unwrap();
+    let task = working.join("plans/example/tasks/feature.md");
+    fs::create_dir_all(task.parent().unwrap()).unwrap();
+    fs::write(
+        &task,
+        "---\ntype: task\nstatus: todo\nmodifies:\n  - src/feature.rs\n---\nTask.\n",
+    )
+    .unwrap();
     let created = fixture.init_plan(&plan, "src");
     let subject = created["subject"]["subject_id"].as_str().unwrap();
     fixture.approve(subject, "pre-edit", false);
@@ -704,13 +1039,6 @@ fn redirected_plan_and_task_transitions_recover_under_the_repository_lock() {
     );
     assert!(!fixture.root.join(".varde-workflow-journal.json").exists());
 
-    let task = working.join("plans/example/tasks/feature.md");
-    fs::create_dir_all(task.parent().unwrap()).unwrap();
-    fs::write(
-        &task,
-        "---\ntype: task\nstatus: todo\nmodifies:\n  - src/feature.rs\n---\nTask.\n",
-    )
-    .unwrap();
     let started = fixture.transition(&task, "in_progress");
     assert!(
         started.status.success(),
@@ -856,6 +1184,7 @@ fn prerequisite_conflicts_reject_same_bytes_symlink_for_an_applied_target() {
     let created = fixture.init_plan(&plan, "src");
     let subject = created["subject"]["subject_id"].as_str().unwrap();
     fixture.approve(subject, "pre-edit", false);
+    fixture.approve(subject, "implementation", false);
 
     let interrupted = Command::new(common::bin())
         .args(["conclude", plan.to_str().unwrap(), "--json"])
@@ -1343,6 +1672,251 @@ fn scope_expansion_is_monotonic_and_changes_baseline_identity() {
     fs::remove_dir_all(fixture.root).unwrap();
 }
 
+/// Writes a task declaring `modifies: [path]` under the plan's `tasks/`
+/// directory, so `record()`'s pre-edit `approved_ownership` scan picks it up.
+fn write_owning_task(plan: &Path, name: &str, path: &str) {
+    let task = plan
+        .parent()
+        .unwrap()
+        .join("tasks")
+        .join(format!("{name}.md"));
+    fs::create_dir_all(task.parent().unwrap()).unwrap();
+    fs::write(
+        &task,
+        format!(
+            "---\ntype: task\nstatus: todo\nmodifies:\n  - {path}\ncreates: []\nrenames: []\n---\nTask.\n"
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn expand_scope_carries_forward_baseline_for_task_owned_addition() {
+    let fixture = Fixture::new("expand-carry-forward-covered");
+    fs::create_dir_all(fixture.root.join("src")).unwrap();
+    fs::create_dir_all(fixture.root.join("docs")).unwrap();
+    fs::write(fixture.root.join("src/lib.rs"), "pub fn value() {}\n").unwrap();
+    fs::write(fixture.root.join("docs/design.md"), "current docs\n").unwrap();
+    let plan = fixture.plan();
+    write_owning_task(&plan, "design", "docs/design.md");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let initial = fixture.inspect(subject, "pre-edit");
+    success(fixture.record_approved(subject, "pre-edit", &initial));
+    let before = fixture.inspect(subject, "pre-edit");
+
+    success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        before["version"].as_str().unwrap(),
+        "--scope",
+        "docs/design.md",
+        "--json",
+    ]));
+    let after = fixture.inspect(subject, "pre-edit");
+    // The recompute always happens, even on a covered expansion.
+    assert_ne!(after["baseline_id"], before["baseline_id"]);
+    // But the carried-forward prior baseline keeps the pre-edit approval
+    // fresh: no review_stale_contract blocker.
+    success(fixture.run(&[
+        "review",
+        "check",
+        "--subject",
+        subject,
+        "--checkpoint",
+        "start",
+        "--json",
+    ]));
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn expand_scope_addition_outside_task_ownership_stays_stale() {
+    let fixture = Fixture::new("expand-carry-forward-uncovered");
+    fs::create_dir_all(fixture.root.join("src")).unwrap();
+    fs::create_dir_all(fixture.root.join("docs")).unwrap();
+    fs::write(fixture.root.join("src/lib.rs"), "pub fn value() {}\n").unwrap();
+    fs::write(fixture.root.join("docs/design.md"), "current docs\n").unwrap();
+    let plan = fixture.plan();
+    write_owning_task(&plan, "design", "docs/design.md");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let initial = fixture.inspect(subject, "pre-edit");
+    success(fixture.record_approved(subject, "pre-edit", &initial));
+    let before = fixture.inspect(subject, "pre-edit");
+
+    // "elsewhere" is not declared by any task, so it stays uncovered even
+    // though the subject has an approved_ownership set from `design.md`.
+    success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        before["version"].as_str().unwrap(),
+        "--scope",
+        "elsewhere",
+        "--json",
+    ]));
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_stale_contract",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn expand_scope_mixed_covered_and_uncovered_additions_stays_stale() {
+    let fixture = Fixture::new("expand-carry-forward-mixed");
+    fs::create_dir_all(fixture.root.join("src")).unwrap();
+    fs::create_dir_all(fixture.root.join("docs")).unwrap();
+    fs::write(fixture.root.join("src/lib.rs"), "pub fn value() {}\n").unwrap();
+    fs::write(fixture.root.join("docs/design.md"), "current docs\n").unwrap();
+    let plan = fixture.plan();
+    write_owning_task(&plan, "design", "docs/design.md");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let initial = fixture.inspect(subject, "pre-edit");
+    success(fixture.record_approved(subject, "pre-edit", &initial));
+    let before = fixture.inspect(subject, "pre-edit");
+
+    // "docs" is covered by the task; "elsewhere" is not. All-or-nothing:
+    // the mixed call gets no partial carry-forward.
+    success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        before["version"].as_str().unwrap(),
+        "--scope",
+        "docs/design.md",
+        "--scope",
+        "elsewhere",
+        "--json",
+    ]));
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_stale_contract",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn expand_scope_reloads_and_legacy_subject_without_new_fields_still_loads() {
+    let fixture = Fixture::new("expand-carry-forward-reload");
+    fs::create_dir_all(fixture.root.join("src")).unwrap();
+    fs::create_dir_all(fixture.root.join("docs")).unwrap();
+    fs::write(fixture.root.join("src/lib.rs"), "pub fn value() {}\n").unwrap();
+    fs::write(fixture.root.join("docs/design.md"), "current docs\n").unwrap();
+    let plan = fixture.plan();
+    write_owning_task(&plan, "design", "docs/design.md");
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let subject_dir = fixture
+        .root
+        .join("memory-bank/working/review-gates")
+        .join(subject);
+
+    // Right after `init`, before any pre-edit approval, `approved_ownership`
+    // has never been written; the on-disk subject.json is shaped exactly
+    // like a subject.json from before this change (no `carried_baselines`
+    // or `approved_ownership` keys). It must still load.
+    let pre_approval_subject = fs::read_to_string(subject_dir.join("subject.json")).unwrap();
+    assert!(!pre_approval_subject.contains("carried_baselines"));
+    assert!(!pre_approval_subject.contains("approved_ownership"));
+    let initial = fixture.inspect(subject, "pre-edit");
+    success(fixture.record_approved(subject, "pre-edit", &initial));
+    let before = fixture.inspect(subject, "pre-edit");
+    success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        before["version"].as_str().unwrap(),
+        "--scope",
+        "docs/design.md",
+        "--json",
+    ]));
+
+    // `load_subject` (exercised by every CLI call below) enforces that
+    // `baseline_id` always equals a fresh recompute over the current
+    // scope/snapshots/artifact_scope; a covered expansion must keep passing
+    // that check.
+    let after = fixture.inspect(subject, "pre-edit");
+    assert_eq!(after["subject"]["scope"], json!(["docs/design.md", "src"]));
+    success(fixture.run(&[
+        "review",
+        "check",
+        "--subject",
+        subject,
+        "--checkpoint",
+        "start",
+        "--json",
+    ]));
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn inspection_of_broad_scope_keeps_hashes_and_baseline_content_stable() {
+    let fixture = Fixture::new("streamed-review-inventory");
+    fs::create_dir_all(fixture.root.join("src")).unwrap();
+    let content = b"large scoped baseline content\n".repeat(80_000);
+    for index in 0..4 {
+        fs::write(fixture.root.join(format!("src/file-{index}.rs")), &content).unwrap();
+    }
+
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let first = fixture.inspect(subject, "pre-edit");
+    let second = fixture.inspect(subject, "pre-edit");
+
+    assert_eq!(first["baseline_id"], second["baseline_id"]);
+    assert_eq!(first["change_fingerprint"], second["change_fingerprint"]);
+    let entry = first["manifest"]["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["path"] == "src/file-0.rs")
+        .unwrap();
+    assert_eq!(entry["baseline"]["sha1"], entry["current"]["sha1"]);
+    assert_eq!(entry["current"]["size"], content.len());
+
+    let subject_dir = fixture
+        .root
+        .join("memory-bank/working/review-gates")
+        .join(subject);
+    let stored_subject: Value =
+        serde_json::from_slice(&fs::read(subject_dir.join("subject.json")).unwrap()).unwrap();
+    let blob_path = stored_subject["snapshots"]["src/file-0.rs"]["content_path"]
+        .as_str()
+        .unwrap();
+    assert_eq!(fs::read(blob_path).unwrap(), content);
+}
+
 #[test]
 fn git_coverage_manifest_tracks_edits_additions_deletions_renames_modes_and_symlinks() {
     let fixture = Fixture::new("git-coverage");
@@ -1675,6 +2249,59 @@ fn unknown_subject_and_unsupported_stored_schema_fail_closed_with_json() {
 }
 
 #[test]
+fn review_implementation_validation_error_names_required_fields() {
+    let fixture = Fixture::new("implementation-record-requirements");
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let pre_edit = fixture.inspect(subject, "pre-edit");
+    success(fixture.record_approved(subject, "pre-edit", &pre_edit));
+
+    fs::create_dir_all(fixture.root.join("src")).unwrap();
+    fs::write(fixture.root.join("src/change.rs"), "implementation\n").unwrap();
+    let implementation = fixture.inspect(subject, "implementation");
+    let record_path = fixture.root.join("implementation-record.json");
+    let record = json!({
+        "schema_version": 1,
+        "subject_id": subject,
+        "phase": "implementation",
+        "reviewer": { "identity": "independent-reviewer", "provenance": "local-agent" },
+        "verdict": "approved",
+        "unresolved_choices": [],
+        "contract_fingerprint": implementation["contract_fingerprint"],
+        "baseline_id": implementation["baseline_id"],
+        "change_fingerprint": "",
+        "coverage": "changed-files",
+        "verification_approach": "Run the scoped tests.",
+        "verification_rationale": "They exercise the completed change.",
+        "verification_expected_results": "The requirements error is returned.",
+        "rationale": "The record omits required implementation review values."
+    });
+    fs::write(&record_path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
+
+    let rejected = failure(
+        fixture.run(&[
+            "review",
+            "record",
+            "--subject",
+            subject,
+            "--expected-version",
+            implementation["version"].as_str().unwrap(),
+            "--file",
+            record_path.to_str().unwrap(),
+            "--json",
+        ]),
+        4,
+        "review_invalid",
+    );
+    assert_eq!(
+        rejected["data"]["error"]["message"],
+        "implementation evidence requires coverage: \"entire-subject-change\", a non-empty change_fingerprint, and tier_confirmed"
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
 fn required_implementation_record_covers_the_whole_current_manifest() {
     let fixture = Fixture::new("implementation-record");
     let plan = fixture.plan();
@@ -1726,6 +2353,7 @@ fn required_implementation_record_covers_the_whole_current_manifest() {
         "baseline_id": implementation["baseline_id"],
         "change_fingerprint": implementation["change_fingerprint"],
         "coverage": "entire-subject-change",
+        "tier_confirmed": true,
         "verification_approach": "Run the scoped tests.",
         "verification_rationale": "They exercise the completed change.",
         "verification_expected_results": "The complete manifest passes review.",
@@ -1885,12 +2513,29 @@ struct WorktreeFixture {
 }
 impl WorktreeFixture {
     fn new(tag: &str) -> Self {
+        Self::build(tag, false)
+    }
+
+    fn new_with_task(tag: &str) -> Self {
+        Self::build(tag, true)
+    }
+
+    fn build(tag: &str, include_task: bool) -> Self {
         let fixture = Fixture::new(tag);
         fixture.git_init();
         fs::create_dir_all(fixture.root.join("src")).unwrap();
         fs::write(fixture.root.join("src/a.rs"), "baseline\n").unwrap();
         fs::write(fixture.root.join("src/b.rs"), "other\n").unwrap();
         let plan = fixture.plan();
+        if include_task {
+            let task = plan.parent().unwrap().join("tasks/change.md");
+            fs::create_dir_all(task.parent().unwrap()).unwrap();
+            fs::write(
+                &task,
+                "---\ntype: task\nstatus: in_progress\ndepends_on: []\nmodifies: [src/a.rs]\ncreates: []\nrenames: []\nverification_resources: []\n---\n#### Verification\n- assert: check -> pass\n#### Progress\n",
+            )
+            .unwrap();
+        }
         fixture.git_commit(&["src", "memory-bank"]);
         let created = fixture.init_plan(&plan, "src");
         let subject = created["subject"]["subject_id"]
@@ -2162,15 +2807,13 @@ fn bind_rejects_scope_expansion_clone_and_stale_occ_without_publication() {
 }
 
 #[test]
-fn task_binding_rejects_ownership_and_verification_drift_but_allows_progress() {
-    let case = WorktreeFixture::new("binding-task");
+fn task_binding_allows_progress_and_release_with_stable_contract() {
+    let case = WorktreeFixture::new_with_task("binding-task");
     case.fixture.approve(&case.subject, "pre-edit", false);
     let task = case
         .fixture
         .root
         .join("memory-bank/working/plans/example/tasks/change.md");
-    fs::create_dir_all(task.parent().unwrap()).unwrap();
-    fs::write(&task,"---\ntype: task\nstatus: in_progress\nmodifies: [src/a.rs]\ncreates: []\nrenames: []\nverification_resources: []\n---\n\n#### Verification\n- assert: check -> pass\n\n#### Progress\n").unwrap();
     let inspection = case.fixture.inspect(&case.subject, "pre-edit");
     success(case.fixture.run(&[
         "review",
@@ -2191,10 +2834,7 @@ fn task_binding_rejects_ownership_and_verification_drift_but_allows_progress() {
     ]));
     fs::write(
         &task,
-        fs::read_to_string(&task)
-            .unwrap()
-            .replace("status: todo", "status: in_progress")
-            + "- progress event\n",
+        fs::read_to_string(&task).unwrap() + "- progress event\n",
     )
     .unwrap();
     success(case.check("resume"));
@@ -2206,14 +2846,6 @@ fn task_binding_rejects_ownership_and_verification_drift_but_allows_progress() {
     case.git_worker(&["add", "src/a.rs"]);
     case.git_worker(&["commit", "-qm", "original task result"]);
     let commit = case.git_worker(&["rev-parse", "HEAD"]);
-    fs::write(
-        &task,
-        fs::read_to_string(&task)
-            .unwrap()
-            .replace("assert: check -> pass", "assert: changed-check -> pass"),
-    )
-    .unwrap();
-    failure(case.check("resume"), 4, "review_invalid");
     assert!(
         Command::new("git")
             .args(["merge", "--ff-only", "worker"])
@@ -2223,9 +2855,9 @@ fn task_binding_rejects_ownership_and_verification_drift_but_allows_progress() {
             .status
             .success()
     );
-    let stale_task_evidence = case.inspect();
-    assert_eq!(stale_task_evidence["execution_ready"], false);
-    success(case.release(stale_task_evidence["version"].as_str().unwrap(), &commit));
+    let task_evidence = case.inspect();
+    assert_eq!(task_evidence["execution_ready"], true);
+    success(case.release(task_evidence["version"].as_str().unwrap(), &commit));
     failure(
         case.fixture.run(&[
             "review",
@@ -2297,13 +2929,11 @@ fn binding_releases_committed_rename_and_rejects_hidden_or_newline_scope_escape(
 
 #[test]
 fn binding_rejects_blocked_task_and_blocked_parent_lifecycle() {
-    let case = WorktreeFixture::new("binding-lifecycle");
+    let case = WorktreeFixture::new_with_task("binding-lifecycle");
     let task = case
         .fixture
         .root
         .join("memory-bank/working/plans/example/tasks/change.md");
-    fs::create_dir_all(task.parent().unwrap()).unwrap();
-    fs::write(&task,"---\ntype: task\nstatus: in_progress\ndepends_on: []\nmodifies: [src/a.rs]\ncreates: []\nrenames: []\nverification_resources: []\n---\n#### Verification\n- assert: check -> pass\n#### Progress\n").unwrap();
     let inspection = case.fixture.inspect(&case.subject, "pre-edit");
     success(case.fixture.run(&[
         "review",
@@ -2335,7 +2965,7 @@ fn binding_rejects_blocked_task_and_blocked_parent_lifecycle() {
         original.replace("depends_on: []", "depends_on: [other-task]"),
     )
     .unwrap();
-    failure(case.check("resume"), 4, "review_invalid");
+    failure(case.check("resume"), 4, "review_stale_contract");
     fs::write(&task, &original).unwrap();
     let plan = case
         .fixture
@@ -2719,4 +3349,581 @@ fn missing_worktree_can_be_abandoned_without_recreation_or_deleting_recovery_ref
         "complete",
         "--json",
     ]));
+}
+
+#[test]
+fn low_tier_start_no_pre_edit() {
+    let fixture = Fixture::new("low-tier-start");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "low");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+
+    for checkpoint in ["start", "resume"] {
+        success(fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            checkpoint,
+            "--json",
+        ]));
+    }
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn low_tier_with_open_choices_requires_pre_edit() {
+    let fixture = Fixture::new("low-tier-open-choices");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture
+        .root
+        .join("memory-bank/working/plans/example/plan.md");
+    fs::create_dir_all(plan.parent().unwrap()).unwrap();
+    fs::write(
+        &plan,
+        "---\ntype: plan\nstatus: backlog\n---\n\
+         ## Problem\nThe original problem.\n\
+         ## Solution\nImplement the solution.\n\
+         ## Acceptance criteria\n- [ ] The behavior works.\n      (assert: true)\n\
+         ## Open Questions\n- Should this widen scope?\n\
+         ## Progress\n- started\n",
+    )
+    .unwrap();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "low");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn low_tier_with_open_questions_none_stays_low() {
+    let fixture = Fixture::new("low-tier-open-questions-none");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture
+        .root
+        .join("memory-bank/working/plans/example/plan.md");
+    fs::create_dir_all(plan.parent().unwrap()).unwrap();
+    fs::write(
+        &plan,
+        "---\ntype: plan\nstatus: backlog\n---\n\
+         ## Problem\nThe original problem.\n\
+         ## Solution\nImplement the solution.\n\
+         ## Acceptance criteria\n- [ ] The behavior works.\n      (assert: true)\n\
+         ## Open Questions\nNone.\n\
+         ## Progress\n- started\n",
+    )
+    .unwrap();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "low");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+
+    for checkpoint in ["start", "resume"] {
+        success(fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            checkpoint,
+            "--json",
+        ]));
+    }
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn low_tier_with_shared_contracts_requires_pre_edit() {
+    let fixture = Fixture::new("low-tier-shared-contracts");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture
+        .root
+        .join("memory-bank/working/plans/example/plan.md");
+    fs::create_dir_all(plan.parent().unwrap()).unwrap();
+    fs::write(
+        &plan,
+        "---\ntype: plan\nstatus: backlog\nshared_contracts:\n  - other-plan\n---\n\
+         ## Problem\nThe original problem.\n\
+         ## Solution\nImplement the solution.\n\
+         ## Acceptance criteria\n- [ ] The behavior works.\n      (assert: true)\n\
+         ## Progress\n- started\n",
+    )
+    .unwrap();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "low");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn low_tier_without_automated_check_requires_pre_edit() {
+    let fixture = Fixture::new("low-tier-no-automated-check");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture
+        .root
+        .join("memory-bank/working/plans/example/plan.md");
+    fs::create_dir_all(plan.parent().unwrap()).unwrap();
+    fs::write(
+        &plan,
+        "---\ntype: plan\nstatus: backlog\n---\n\
+         ## Problem\nThe original problem.\n\
+         ## Solution\nImplement the solution.\n\
+         ## Acceptance criteria\n- [ ] The behavior works.\n\
+         ## Progress\n- started\n",
+    )
+    .unwrap();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "low");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn missing_evidence_defaults_high() {
+    let fixture = Fixture::new("missing-evidence-high");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    assert_eq!(created["subject"]["tier"], "high");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn malformed_tier_falls_back_to_high() {
+    let fixture = Fixture::new("malformed-tier-high");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    // "medium" is neither "low" nor "high": malformed evidence never drops
+    // the tier below high.
+    let evidence = fixture.write_tier_evidence("malformed", "medium", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "high");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn complete_always_requires_implementation() {
+    let fixture = Fixture::new("complete-always-impl");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    fixture.approve(subject, "pre-edit", false);
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "complete",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+
+    let source2 = fixture.root.join("src2/feature.rs");
+    fs::create_dir_all(source2.parent().unwrap()).unwrap();
+    fs::write(&source2, "baseline\n").unwrap();
+    let plan2 = fixture
+        .root
+        .join("memory-bank/working/plans/example2/plan.md");
+    fs::create_dir_all(plan2.parent().unwrap()).unwrap();
+    fs::write(
+        &plan2,
+        "---\ntype: plan\nstatus: backlog\n---\n\
+         ## Problem\nThe original problem.\n\
+         ## Solution\nImplement the solution.\n\
+         ## Acceptance criteria\n- [ ] The behavior works.\n\
+         ## Progress\n- started\n",
+    )
+    .unwrap();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created2 = fixture.init_plan_with_tier(&plan2, "src2", &evidence);
+    let subject2 = created2["subject"]["subject_id"].as_str().unwrap();
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject2,
+            "--checkpoint",
+            "complete",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn tier_confirmed_false_blocks() {
+    let fixture = Fixture::new("tier-confirmed-false");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    fixture.approve(subject, "pre-edit", false);
+    let inspection = fixture.inspect(subject, "implementation");
+    let record_path = fixture.root.join("impl-record.json");
+    let record = json!({
+        "schema_version": 1,
+        "subject_id": subject,
+        "phase": "implementation",
+        "reviewer": { "identity": "independent-reviewer", "provenance": "local-agent" },
+        "verdict": "approved",
+        "unresolved_choices": [],
+        "contract_fingerprint": inspection["contract_fingerprint"],
+        "baseline_id": inspection["baseline_id"],
+        "change_fingerprint": inspection["change_fingerprint"],
+        "coverage": "entire-subject-change",
+        "tier_confirmed": false,
+        "verification_approach": "Run the focused case.",
+        "verification_rationale": "It exercises the subject boundary.",
+        "verification_expected_results": "The reviewer's tier contradiction is reported.",
+        "rationale": "The change is covered but the reviewer disputes the computed tier."
+    });
+    fs::write(&record_path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
+    success(fixture.run(&[
+        "review",
+        "record",
+        "--subject",
+        subject,
+        "--expected-version",
+        inspection["version"].as_str().unwrap(),
+        "--file",
+        record_path.to_str().unwrap(),
+        "--json",
+    ]));
+
+    let subject_dir = fixture
+        .root
+        .join("memory-bank/working/review-gates")
+        .join(subject);
+    let before_subject = fs::read(subject_dir.join("subject.json")).unwrap();
+
+    let blocked = failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "complete",
+            "--json",
+        ]),
+        4,
+        "review_blocked",
+    );
+    assert_eq!(
+        blocked["data"]["error"]["details"]["blockers"][0]["reason"],
+        "tier_confirmed_false"
+    );
+    assert_eq!(
+        fs::read(subject_dir.join("subject.json")).unwrap(),
+        before_subject
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn expand_reverts_to_high_without_evidence() {
+    let fixture = Fixture::new("expand-reverts-high");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "low");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+
+    let other = fixture.root.join("other/more.rs");
+    fs::create_dir_all(other.parent().unwrap()).unwrap();
+    fs::write(&other, "extra\n").unwrap();
+    let inspection = fixture.inspect(subject, "pre-edit");
+    let expanded = success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        inspection["version"].as_str().unwrap(),
+        "--scope",
+        "other",
+        "--json",
+    ]));
+    assert_eq!(expanded["subject"]["tier"], "high");
+    failure(
+        fixture.run(&[
+            "review",
+            "check",
+            "--subject",
+            subject,
+            "--checkpoint",
+            "start",
+            "--json",
+        ]),
+        4,
+        "review_missing",
+    );
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn expand_stays_low_with_evidence() {
+    let fixture = Fixture::new("expand-stays-low");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let evidence = fixture.write_tier_evidence("clean", "low", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+
+    let other = fixture.root.join("other/more.rs");
+    fs::create_dir_all(other.parent().unwrap()).unwrap();
+    fs::write(&other, "extra\n").unwrap();
+    let fresh_evidence = fixture.write_tier_evidence("fresh", "low", &["clean"]);
+    let inspection = fixture.inspect(subject, "pre-edit");
+    let expanded = success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        inspection["version"].as_str().unwrap(),
+        "--scope",
+        "other",
+        "--tier-evidence",
+        fresh_evidence.to_str().unwrap(),
+        "--json",
+    ]));
+    assert_eq!(expanded["subject"]["tier"], "low");
+    success(fixture.run(&[
+        "review",
+        "check",
+        "--subject",
+        subject,
+        "--checkpoint",
+        "start",
+        "--json",
+    ]));
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn expand_pins_high_to_low_with_fresh_evidence() {
+    let fixture = Fixture::new("expand-pins-high-to-low");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let evidence = fixture.write_tier_evidence("initial", "high", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "high");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+
+    let other = fixture.root.join("other/more.rs");
+    fs::create_dir_all(other.parent().unwrap()).unwrap();
+    fs::write(&other, "extra\n").unwrap();
+    let fresh_evidence = fixture.write_tier_evidence("fresh", "low", &["clean"]);
+    let inspection = fixture.inspect(subject, "pre-edit");
+    let expanded = success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        inspection["version"].as_str().unwrap(),
+        "--scope",
+        "other",
+        "--tier-evidence",
+        fresh_evidence.to_str().unwrap(),
+        "--json",
+    ]));
+    assert_eq!(expanded["subject"]["tier"], "low");
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn expand_applies_evidence_without_scope_growth() {
+    let fixture = Fixture::new("expand-no-growth-evidence");
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let plan = fixture.plan();
+    let evidence = fixture.write_tier_evidence("initial", "high", &[]);
+    let created = fixture.init_plan_with_tier(&plan, "src", &evidence);
+    assert_eq!(created["subject"]["tier"], "high");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+
+    let fresh_evidence = fixture.write_tier_evidence("fresh", "low", &["clean"]);
+    let inspection = fixture.inspect(subject, "pre-edit");
+    // Same scope already covers "src", so this expansion request has no
+    // scope growth, but the supplied evidence must still apply.
+    let expanded = success(fixture.run(&[
+        "review",
+        "expand",
+        "--subject",
+        subject,
+        "--expected-version",
+        inspection["version"].as_str().unwrap(),
+        "--scope",
+        "src",
+        "--tier-evidence",
+        fresh_evidence.to_str().unwrap(),
+        "--json",
+    ]));
+    assert_eq!(expanded["subject"]["tier"], "low");
+    fs::remove_dir_all(fixture.root).unwrap();
+}
+
+#[test]
+fn review_scope_rejects_unmatched() {
+    let fixture = Fixture::new("scope-rejects-unmatched");
+    let plan = fixture.plan();
+    let blocked = failure(
+        fixture.run(&[
+            "review",
+            "init",
+            "--plan",
+            plan.to_str().unwrap(),
+            "--repository",
+            fixture.root.to_str().unwrap(),
+            "--scope",
+            "skills/**",
+            "--json",
+        ]),
+        4,
+        "review_invalid",
+    );
+    assert!(
+        blocked["data"]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("skills/**")
+    );
+    let gate_root = fixture.root.join("memory-bank/working/review-gates");
+    assert!(!gate_root.exists() || fs::read_dir(&gate_root).unwrap().next().is_none());
+
+    let source = fixture.root.join("src/feature.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(&source, "baseline\n").unwrap();
+    let created = fixture.init_plan(&plan, "src");
+    let subject = created["subject"]["subject_id"].as_str().unwrap();
+    let subject_dir = gate_root.join(subject);
+    let before = fs::read(subject_dir.join("subject.json")).unwrap();
+    let inspection = fixture.inspect(subject, "pre-edit");
+    failure(
+        fixture.run(&[
+            "review",
+            "expand",
+            "--subject",
+            subject,
+            "--expected-version",
+            inspection["version"].as_str().unwrap(),
+            "--scope",
+            "docs/**",
+            "--json",
+        ]),
+        4,
+        "review_invalid",
+    );
+    assert_eq!(fs::read(subject_dir.join("subject.json")).unwrap(), before);
+    fs::remove_dir_all(fixture.root).unwrap();
 }

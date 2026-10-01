@@ -2,15 +2,19 @@
 
 ## Review folder layout
 
-Standalone (no plan id passed): `<working>/reviews/<YYYY-MM-DD>-<slug>/`.
-Nested (the review runs for a plan build, a plan id was passed):
-`<working>/plans/<plan-id>/<review-id>/`, where `<review-id>` =
-`review-<YYYY-MM-DD>` (append `-2`, `-3`, ... on a same-day collision in that
-plan folder). `<fix-id>` = `<review-id>-fixes`. `review.md` frontmatter:
-`type: review`, date, branch, target, `status` (`in_progress` until roll-up,
-then `complete`), categories[], triage_status; body `## Categories` table
-(Category | Status [`complete` or `skipped`] | Findings). One file per
-category, `<CATEGORY>.md`; identifiers are category-local,
+| Case | Path |
+|---|---|
+| Standalone (no plan id passed) | `<working>/reviews/<YYYY-MM-DD>-<slug>/` |
+| Nested (review runs for a plan build, a plan id was passed) | `<working>/plans/<plan-id>/<review-id>/`, where `<review-id>` = `review-<YYYY-MM-DD>` (append `-2`, `-3`, ... on a same-day collision in that plan folder) |
+
+`<fix-id>` = `<review-id>-fixes`.
+
+`review.md` frontmatter: `type: review`, date, branch, target, `status`
+(`in_progress` until roll-up, then `complete`), categories[], triage_status;
+body `## Categories` table (Category | Status [`complete` or `skipped`] |
+Findings).
+
+One file per category, `<CATEGORY>.md`; identifiers are category-local,
 `<CATEGORY>-<NNN>` from 001, never reused after dismissal.
 
 ## Finding format
@@ -40,23 +44,20 @@ The parser accepts expired tokens.
 
 ### Finding discipline
 
-A finding is a defect confirmed by reading the code, not speculation. "This
-could break" is not a finding. State when it breaks and show the code path.
+A finding is a defect confirmed by reading the code, not speculation ("this
+could break"): state when it breaks and show the code path.
+
 Imported PR feedback and scan candidates are pending triage; identify their
 source and keep the reported concern distinct from a verified code defect.
-Their initial severity is a routing priority, not a claim that the defect is
-confirmed.
 
 - Only a reproduced or code-confirmed defect earns `high` or `critical`. An
   unverified "might" is at most `low`/`info`, or omit it.
-- Treat each finding as a claim. Show the check, not only the conclusion.
-  "Grepped 4 call sites, all unguarded" shows evidence. "Nothing guards this"
-  does not.
+- Show the check and its sample boundary, not only the conclusion: "Grepped
+  4 of 7 call sites, all unguarded", not "Nothing guards this" or "most call
+  sites".
 - A claim over a set ("every writer", "the only path", "the class is closed")
-  requires enumerating the set. One example supports only that example — call a
-  sample a sample.
-- Numbers carry the boundary of their sample: "3 of 7 call sites", not "most
-  call sites".
+  requires enumerating the set; one example supports only that example.
+
 ### Required fields
 
 | Field | Allowed values |
@@ -72,7 +73,7 @@ Use `blank` until a human chooses an outcome.
 | Field | Allowed values or shape | Meaning |
 |---|---|---|
 | Violates | `[<title>](/specs/<x>.md)` or a `/decision/`, `/pattern/` link | The knowledge note this finding breaks. Only when one exists; its rationale guides the fix. |
-| Escalated | `spec-conflict — <reason>`, `scope-creep — <reason>`, or `human-only — <category>` | Set only by the build-mode escalation gate in `references/fix-pass.md`. Absent otherwise. |
+| Escalated | `spec-conflict — <reason>`, `scope-creep — <reason>`, or `human-only — <category>` | Set only by the build-mode escalation gate in fix mode. Absent otherwise. |
 
 ### Field rules
 

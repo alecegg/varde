@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs varde agents into a Claude / Codex / opencode agents directory.
 #
-# Each agent lives in its own folder here (executor/, explore/, plan/, review/)
+# Each agent lives in its own folder here (varde-executor/, varde-explorer/, varde-planner/, varde-reviewer/)
 # with one variant file per harness:
 #   claude.md    -> installed as <name>.md   in a Claude agents dir
 #   codex.toml   -> installed as <name>.toml in a Codex agents dir
@@ -37,7 +37,7 @@ Usage: $(basename "$0") [-t harness] [-d target_dir] [-a agent1,agent2,...] [-f]
 Examples:
   $(basename "$0")                          # all agents, Claude
   $(basename "$0") -t codex                 # all agents, Codex
-  $(basename "$0") -t opencode -a plan,review
+  $(basename "$0") -t opencode -a varde-planner,varde-reviewer
   $(basename "$0") -t claude -d ./.claude/agents   # into a repo-local dir
 EOF
 }
@@ -124,6 +124,32 @@ remove_stale_build() {
   fi
 }
 
+# Agents renamed to varde-* names; -m/-f installs retire the old managed files.
+old_name_for() {
+  case "$1" in
+    varde-explorer) echo explore ;;
+    varde-planner)  echo plan ;;
+    varde-reviewer) echo review ;;
+    varde-executor) echo executor ;;
+  esac
+}
+
+remove_renamed() {
+  local old stale
+  old="$(old_name_for "$1")"
+  [ -n "$old" ] || return 0
+  { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; } || return 0
+  stale="$TARGET/$old.$EXT"
+  if is_varde_managed "$stale"; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf 'Would remove renamed managed %s\n' "$stale"
+    else
+      rm "$stale"
+      printf 'Removed renamed managed %s\n' "$stale"
+    fi
+  fi
+}
+
 # Retire only owned regular files from the V1 default directory, after a
 # corresponding V2 adapter is installed. Explicit targets never affect HOME.
 remove_legacy_opencode() {
@@ -131,8 +157,10 @@ remove_legacy_opencode() {
   [ "$HARNESS" = "opencode" ] && [ "$CUSTOM_TARGET" -eq 0 ] || return 0
   [ ! -L "$legacy" ] || return 0
   { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; } || return 0
-  local candidates=("$legacy/$agent.md") candidate
-  [ "$agent" != "executor" ] || candidates+=("$legacy/build.md")
+  local old candidates=("$legacy/$agent.md") candidate
+  old="$(old_name_for "$agent")"
+  [ -z "$old" ] || candidates+=("$legacy/$old.md")
+  [ "$agent" != "varde-executor" ] || candidates+=("$legacy/build.md")
   for candidate in "${candidates[@]}"; do
     if is_varde_managed "$candidate"; then
       if [ "$DRY_RUN" -eq 1 ]; then
@@ -215,10 +243,11 @@ for agent in "${SELECTED[@]}"; do
       prompt) printf 'Would request confirmation to replace %s\n' "$dest"; continue ;;
       refuse) printf 'Would refuse noninteractive replacement of %s; use -f or -m\n' "$dest" >&2; install_failure "$agent" "$dest" ;;
     esac
-    if [ "$agent" = "executor" ] &&
+    if [ "$agent" = "varde-executor" ] &&
       { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; }; then
       remove_stale_build
     fi
+    remove_renamed "$agent"
     remove_legacy_opencode "$agent"
     continue
   fi
@@ -237,10 +266,11 @@ for agent in "${SELECTED[@]}"; do
   COMPLETED+=("$agent")
   echo "Installed $agent -> $dest"
   remove_legacy_opencode "$agent"
-  if [ "$agent" = "executor" ] &&
+  if [ "$agent" = "varde-executor" ] &&
     { [ "$MANAGED" -eq 1 ] || [ "$FORCE" -eq 1 ]; }; then
     remove_stale_build
   fi
+  remove_renamed "$agent"
 done
 
 if [ "$DRY_RUN" -eq 1 ]; then

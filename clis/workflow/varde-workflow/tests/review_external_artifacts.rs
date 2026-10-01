@@ -49,6 +49,21 @@ impl Fixture {
             "--json",
         ])
     }
+    fn init_plan(&self, plan: &Path, scope: &str, artifact: &Path) -> Output {
+        self.run(&[
+            "review",
+            "init",
+            "--plan",
+            plan.to_str().unwrap(),
+            "--repository",
+            self.root.to_str().unwrap(),
+            "--scope",
+            scope,
+            "--artifact",
+            artifact.to_str().unwrap(),
+            "--json",
+        ])
+    }
     fn inspect(&self, id: &str, phase: &str) -> Value {
         success(self.run(&[
             "review",
@@ -69,6 +84,7 @@ impl Fixture {
         } else {
             record["change_fingerprint"] = inspected["change_fingerprint"].clone();
             record["coverage"] = json!("entire-subject-change");
+            record["tier_confirmed"] = json!(true);
         }
         let path = self.root.join("record.json");
         fs::write(&path, record.to_string()).unwrap();
@@ -100,6 +116,117 @@ fn success(output: Output) -> Value {
     );
     common::json_data(&output.stdout)
 }
+
+fn plan_fixture(f: &Fixture, name: &str) -> PathBuf {
+    let path = f
+        .root
+        .join(format!("memory-bank/working/plans/{name}/plan.md"));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        "---\ntype: plan\nstatus: backlog\n---\nPlan for external artifact ownership.\n",
+    )
+    .unwrap();
+    path
+}
+
+fn task_path(plan: &Path, name: &str) -> PathBuf {
+    let path = plan.parent().unwrap().join(format!("tasks/{name}.md"));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    path
+}
+
+fn report_task(artifact: &Path) -> String {
+    format!(
+        "---\ntype: task\nstatus: todo\nkind: research\ntitle: Report artifact\ncreates:\n  - {}\n---\nWrite the report.\n",
+        artifact.display()
+    )
+}
+
+#[test]
+fn plan_artifact_ownership_survives_review_and_task_transitions() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.root.join("src")).unwrap();
+    fs::write(f.root.join("src/input.md"), "input").unwrap();
+    let plan = plan_fixture(&f, "artifact-owner");
+    let artifact = f.working.join("reports/result.md");
+    fs::create_dir_all(artifact.parent().unwrap()).unwrap();
+    fs::write(&artifact, "report baseline").unwrap();
+    let task = task_path(&plan, "report");
+    fs::write(&task, report_task(&artifact)).unwrap();
+
+    let initialized = success(f.init_plan(&plan, "src", &artifact));
+    let subject = initialized["subject"]["subject_id"].as_str().unwrap();
+    success(f.approve(subject, "pre-edit", &f.inspect(subject, "pre-edit")));
+    let stored_subject = f
+        .working
+        .join(format!("review-gates/{subject}/subject.json"));
+    let stored: Value = serde_json::from_slice(&fs::read(stored_subject).unwrap()).unwrap();
+    assert!(
+        stored["approved_ownership"]
+            .as_array()
+            .is_none_or(Vec::is_empty)
+    );
+    assert_eq!(
+        initialized["subject"]["artifact_scope"],
+        json!([artifact.to_string_lossy()])
+    );
+    let plan_start = f.run(&["transition", plan.to_str().unwrap(), "active", "--json"]);
+    assert!(
+        plan_start.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&plan_start.stdout),
+        String::from_utf8_lossy(&plan_start.stderr)
+    );
+    assert!(
+        f.run(&[
+            "transition",
+            task.to_str().unwrap(),
+            "in_progress",
+            "--json"
+        ])
+        .status
+        .success()
+    );
+    assert!(
+        f.run(&["transition", task.to_str().unwrap(), "done", "--json"])
+            .status
+            .success()
+    );
+}
+
+#[test]
+fn unrelated_absolute_task_path_is_rejected_while_recording_approval() {
+    let f = Fixture::new();
+    fs::create_dir_all(f.root.join("src")).unwrap();
+    fs::write(f.root.join("src/input.md"), "input").unwrap();
+    let plan = plan_fixture(&f, "unrelated-artifact");
+    let artifact = f.working.join("reports/approved.md");
+    let unrelated = f.working.join("reports/unapproved.md");
+    fs::create_dir_all(artifact.parent().unwrap()).unwrap();
+    fs::write(&artifact, "approved artifact").unwrap();
+    let task = task_path(&plan, "report");
+    fs::write(&task, report_task(&unrelated)).unwrap();
+
+    let initialized = success(f.init_plan(&plan, "src", &artifact));
+    let subject = initialized["subject"]["subject_id"].as_str().unwrap();
+    let inspection = f.inspect(subject, "pre-edit");
+    let rejected = f.approve(subject, "pre-edit", &inspection);
+    assert!(!rejected.status.success());
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&rejected.stdout),
+        String::from_utf8_lossy(&rejected.stderr)
+    );
+    assert!(
+        output.contains(&format!(
+            "coverage path must be a non-empty repository-relative path: `{}`",
+            unrelated.display()
+        )),
+        "unexpected rejection: {output}"
+    );
+}
+
 #[test]
 fn external_working_artifact_has_immutable_baseline_and_stale_final_gate() {
     let f = Fixture::new();

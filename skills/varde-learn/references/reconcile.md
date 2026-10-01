@@ -1,24 +1,16 @@
 # Reconcile a friction item against evidence
 
-Reconciliation checks whether an existing obstacle is resolved or obsolete.
-An item's recorded summary is not proof that the problem is fixed.
-
 1. Read the complete item and its occurrence history:
 
    ```sh
    varde-learn friction show <ID> --json
    ```
-
-   `show` pages occurrences and status history together. Continue with
-   `--offset` until `meta.truncated` is false.
 2. For each Git occurrence, use its recorded `repo_root` and `head_sha`.
    Confirm the root with `git -C <repo_root> rev-parse --show-toplevel` and
-   verify the recorded commit with
-   `git -C <repo_root> cat-file -e '<head_sha>^{commit}'`. If either check
-   fails, report that the occurrence cannot be verified. Inspect the named
-   source at that commit and compare it with current source or other current
-   evidence. A `git log` result alone does not establish that the obstacle is
-   fixed.
+   the commit with `git -C <repo_root> cat-file -e '<head_sha>^{commit}'`; if
+   either fails, report the occurrence as unverifiable. Otherwise compare the
+   named source at that commit with current source or evidence; a `git log`
+   result alone does not establish a fix.
 3. For an occurrence without Git context, use named current evidence such as a
    present file, command result, or user-provided observation. Do not invent a
    repository or SHA, or use Git history to fill the gap.
@@ -32,5 +24,4 @@ An item's recorded summary is not proof that the problem is fixed.
    varde-learn friction set-status 42 resolved --reason "The current check now verifies the required path." --json
    ```
 
-The status command appends an audit event. Do not edit exported Markdown or
-the SQLite database directly.
+Do not edit exported Markdown or the SQLite database directly.

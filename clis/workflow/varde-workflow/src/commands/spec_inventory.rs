@@ -129,9 +129,11 @@ pub fn run(args: SpecInventoryArgs) -> Result<()> {
     } else {
         pending_architecture_paths.extend(untracked.iter().cloned());
     }
-    pending_architecture_paths.extend(
-        architecture_additions_since_index(&repository, &knowledge, &current_paths)?.into_iter(),
-    );
+    pending_architecture_paths.extend(architecture_additions_since_index(
+        &repository,
+        &knowledge,
+        &current_paths,
+    )?);
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let unreliable_index = git_bytes(&repository, &["ls-files", "-v", "-z"])?
         .split(|byte| *byte == 0)
@@ -290,6 +292,7 @@ pub fn run(args: SpecInventoryArgs) -> Result<()> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn full_inventory(
     repository: &Path,
     knowledge: &Path,
@@ -399,14 +402,13 @@ fn incremental_inventory(
         .filter(|domain| domain.domain != "architecture")
         .map(|domain| &domain.domain)
         .collect();
-    if old_names != new_names {
-        if let Some(architecture) = domains
+    if old_names != new_names
+        && let Some(architecture) = domains
             .iter_mut()
             .find(|domain| domain.domain == "architecture")
-        {
-            architecture.status = "stale".into();
-            architecture.reason = "domain set changed".into();
-        }
+    {
+        architecture.status = "stale".into();
+        architecture.reason = "domain set changed".into();
     }
     cache.head = head;
     cache.ignore_hash = ignore_hash;
@@ -448,10 +450,7 @@ fn verify_domains(
             .as_ref()
             .and_then(|value| strings(value, "source_roots"))
             .unwrap_or_default();
-        let sources = mapping
-            .as_ref()
-            .and_then(|value| source_paths(value))
-            .unwrap_or_default();
+        let sources = mapping.as_ref().and_then(source_paths).unwrap_or_default();
         let relevant = changed.contains(&format!("specs/{domain}.md"))
             || changed.contains("specs/index.md")
             || changed.iter().any(|changed_path| {
@@ -459,13 +458,12 @@ fn verify_domains(
                     || sources.iter().any(|source| source == changed_path)
                     || (domain == "architecture" && is_declaration(changed_path))
             });
-        if !relevant {
-            if let Some(saved) =
+        if !relevant
+            && let Some(saved) =
                 previous.and_then(|list| list.iter().find(|saved| saved.domain == domain))
-            {
-                domains.push(saved.clone());
-                continue;
-            }
+        {
+            domains.push(saved.clone());
+            continue;
         }
         domains.push(verify_domain(repository, &domain, mapping, paths));
     }

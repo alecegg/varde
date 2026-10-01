@@ -5,6 +5,7 @@
 mod common;
 
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
 use predicates::prelude::PredicateBooleanExt;
@@ -34,6 +35,67 @@ fn trigger_args(mock: &MockHarness, harness: &str, queries: &Path, runs: &str) -
     args
 }
 
+fn process_group_alive(pgid: i32) -> bool {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("kill -0 -{pgid} 2>/dev/null"))
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[test]
+fn timeout_kills_hanging_harness_process_group() {
+    let mock = MockHarness::new();
+    std::fs::write(
+        mock.bin_dir().join("mock-cli"),
+        "#!/bin/bash\necho $$ > \"$MOCK_PGID_FILE\"\nsleep 30 &\nwait\n",
+    )
+    .expect("write hanging mock");
+    let pgid_file = mock.root().join("pgid");
+    let queries = write_queries(mock.root(), true);
+    let mut args = trigger_args(&mock, "claude", &queries, "1");
+    args.extend(["--timeout-seconds".to_string(), "1".to_string()]);
+
+    let started = Instant::now();
+    mock.command(&mock.root().join("unused-trace.jsonl"), 0, args)
+        .env("MOCK_PGID_FILE", &pgid_file)
+        .assert()
+        .code(2)
+        .stderr(contains("claude CLI timed out after 1 seconds for query 1"));
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "harness did not respect its one-second deadline"
+    );
+
+    let pgid: i32 = std::fs::read_to_string(&pgid_file)
+        .expect("harness wrote its process-group id")
+        .trim()
+        .parse()
+        .expect("process-group id is numeric");
+    let cleanup_deadline = Instant::now() + Duration::from_secs(2);
+    while process_group_alive(pgid) && Instant::now() < cleanup_deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        !process_group_alive(pgid),
+        "timed-out harness process group {pgid} still has a live member"
+    );
+}
+
+#[test]
+fn trigger_timeout_must_be_positive() {
+    let mock = MockHarness::new();
+    let queries = write_queries(mock.root(), true);
+    let mut args = trigger_args(&mock, "claude", &queries, "1");
+    args.extend(["--timeout-seconds".to_string(), "0".to_string()]);
+
+    mock.command(&mock.root().join("unused-trace.jsonl"), 0, args)
+        .assert()
+        .code(2)
+        .stderr(contains("--timeout-seconds must be a positive integer"));
+}
+
 #[test]
 // parity: fail "$harness $scenario expected pass, got $status: $(cat "$err")"
 // parity: fail "$harness $scenario summary was wrong"
@@ -48,6 +110,75 @@ fn hit_true_passes() {
             .success()
             .stdout(contains("evals: pass=1 fail=0"));
     }
+}
+
+#[test]
+fn large_valid_trace_preserves_hit_classification() {
+    let mock = MockHarness::new();
+    let trace = mock.root().join("large-claude.jsonl");
+    let padding = "{\"type\":\"system\"}\n".repeat(10_000);
+    let skill_event = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"fixture-skill"}}]}}"#;
+    let result_event = r#"{"type":"result","subtype":"success","is_error":false}"#;
+    std::fs::write(&trace, format!("{padding}{skill_event}\n{result_event}\n"))
+        .expect("write large trace");
+    let queries = write_queries(mock.root(), true);
+
+    mock.command(&trace, 0, trigger_args(&mock, "claude", &queries, "1"))
+        .assert()
+        .success()
+        .stdout(contains("evals: pass=1 fail=0"));
+}
+
+#[test]
+fn oversized_harness_trace_is_rejected_with_size_limit() {
+    let mock = MockHarness::new();
+    let trace = mock.root().join("oversized-claude.jsonl");
+    let mut file = std::fs::File::create(&trace).expect("create trace");
+    let chunk = vec![b'x'; 8 * 1024];
+    for _ in 0..(16 * 1024 * 1024 / chunk.len() + 1) {
+        std::io::Write::write_all(&mut file, &chunk).expect("write oversized trace");
+    }
+    let queries = write_queries(mock.root(), true);
+
+    mock.command(&trace, 0, trigger_args(&mock, "claude", &queries, "1"))
+        .assert()
+        .code(2)
+        .stderr(contains("trace exceeded the 16 MiB limit"));
+}
+
+#[test]
+fn oversized_harness_stderr_is_rejected_with_size_limit() {
+    let mock = MockHarness::new();
+    std::fs::write(
+        mock.bin_dir().join("mock-cli"),
+        "#!/bin/bash\nset -euo pipefail\ncat \"$MOCK_TRACE\" >&2\n",
+    )
+    .expect("write stderr mock");
+    let trace = mock.root().join("oversized-stderr.txt");
+    std::fs::write(&trace, vec![b'x'; 64 * 1024 + 1]).expect("write oversized stderr");
+    let queries = write_queries(mock.root(), true);
+
+    mock.command(&trace, 0, trigger_args(&mock, "claude", &queries, "1"))
+        .assert()
+        .code(2)
+        .stderr(contains("Claude CLI stderr exceeded the 64 KiB limit"));
+}
+
+#[test]
+fn closed_harness_pipes_still_wait_for_process_exit() {
+    let mock = MockHarness::new();
+    std::fs::write(
+        mock.bin_dir().join("mock-cli"),
+        "#!/bin/bash\nexec 1>&- 2>&-\nsleep 0.1\n",
+    )
+    .expect("write delayed mock");
+    let trace = mock.root().join("unused-trace.jsonl");
+    let queries = write_queries(mock.root(), true);
+
+    mock.command(&trace, 0, trigger_args(&mock, "claude", &queries, "1"))
+        .assert()
+        .code(2)
+        .stderr(contains("unusable Claude trace"));
 }
 
 #[test]

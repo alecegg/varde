@@ -9,14 +9,14 @@ fail() {
   exit 1
 }
 
-for profile in plan executor review explore; do
+for profile in varde-planner varde-executor varde-reviewer varde-explorer; do
   for variant in claude.md codex.toml opencode.md; do
     prompt="$AGENTS_DIR/$profile/$variant"
     [ -f "$prompt" ] || fail "missing generated prompt: $prompt"
 
     grep -Fq '## CLI policy' "$prompt" || \
       fail "$profile/$variant lacks a CLI policy"
-    grep -Fq 'references/varde-code.md' "$prompt" || \
+    grep -Fq 'references/varde-code-cli.md' "$prompt" || \
       fail "$profile/$variant lacks the Varde Code policy reference"
     grep -Eq 'degraded.*capability|capability.*degraded' "$prompt" || \
       fail "$profile/$variant lacks degraded-capability reporting"
@@ -52,19 +52,19 @@ for text in (
     "varde-workflow review check --json; varde-workflow transition task.md done --json",
 ):
     assert copied_manual(text), text
-for profile in ("plan", "executor", "review", "explore"):
+for profile in ("varde-planner", "varde-executor", "varde-reviewer", "varde-explorer"):
     for variant in ("claude.md", "codex.toml", "opencode.md"):
         if copied_manual((root / profile / variant).read_text()):
             sys.exit(f"FAIL: {profile}/{variant} copied a CLI command manual")
 PY_GATE
 
-for profile in plan executor; do
+for profile in varde-planner varde-executor; do
   grep -Fq 'references/varde-workflow-cli.md' \
     "$AGENTS_DIR/$profile/claude.md" || \
     fail "$profile does not name its workflow CLI policy"
 done
 
-for profile in review explore; do
+for profile in varde-reviewer varde-explorer; do
   if grep -Fq 'references/varde-workflow-cli.md' "$AGENTS_DIR/$profile/claude.md"; then
     fail "$profile claims workflow artifact ownership"
   fi

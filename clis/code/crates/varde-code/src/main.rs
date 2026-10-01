@@ -16,72 +16,33 @@ fn main() {
 
 fn dispatch_command(command: Command) {
     match command {
-        command @ (Command::Batch { .. }
-        | Command::SymbolsInFile { .. }
-        | Command::SymbolsInFiles { .. }
-        | Command::GetSymbol { .. }
-        | Command::Dependencies { .. }
-        | Command::Dependents { .. }
-        | Command::TestsForFile { .. }
-        | Command::FindImports { .. }
-        | Command::TypeHierarchy { .. }
-        | Command::FilterSymbols { .. }
-        | Command::SliceState { .. }) => run_core_query(command),
-        command @ (Command::Hotspots { .. }
-        | Command::Clusters { .. }
-        | Command::MapFile { .. }
-        | Command::MapSymbol { .. }
-        | Command::MapPath { .. }
-        | Command::Explore { .. }
-        | Command::BlastRadius { .. }
-        | Command::SymbolBlastRadius { .. }
-        | Command::DetectChanges { .. }
-        | Command::FindPattern { .. }
-        | Command::ContextPack { .. }
-        | Command::NavMap { .. }) => run_navigation_query(command),
-        command => run_control_command(command),
-    }
-}
-
-fn run_core_query(command: Command) {
-    let (mode, json) = match command {
-        Command::Batch { json } => ("batch", json),
-        Command::SymbolsInFile { json } => ("symbols_in_file", json),
-        Command::SymbolsInFiles { json } => ("symbols_in_files", json),
-        Command::GetSymbol { json } => ("get_symbol", json),
-        Command::Dependencies { json } => ("dependencies", json),
-        Command::Dependents { json } => ("dependents", json),
-        Command::TestsForFile { json } => ("tests_for_file", json),
-        Command::FindImports { json } => ("find_imports", json),
-        Command::TypeHierarchy { json } => ("type_hierarchy", json),
-        Command::FilterSymbols { json } => ("filter_symbols", json),
-        Command::SliceState { json } => ("slice_state", json),
-        _ => unreachable!("core query dispatcher received another command"),
-    };
-    run_query(mode, &json);
-}
-
-fn run_navigation_query(command: Command) {
-    let (mode, json) = match command {
-        Command::Hotspots { json } => ("hotspots", json),
-        Command::Clusters { json } => ("clusters", json),
-        Command::MapFile { json } => ("map_file", json),
-        Command::MapSymbol { json } => ("map_symbol", json),
-        Command::MapPath { json } => ("map_path", json),
-        Command::Explore { json } => ("explore", json),
-        Command::BlastRadius { json } => ("blast_radius", json),
-        Command::SymbolBlastRadius { json } => ("symbol_blast_radius", json),
-        Command::DetectChanges { json } => ("detect_changes", json),
-        Command::FindPattern { json } => ("find_pattern", json),
-        Command::ContextPack { json } => ("context_pack", json),
-        Command::NavMap { json, format } => return run_nav_map(&json, &format),
-        _ => unreachable!("navigation dispatcher received another command"),
-    };
-    run_query(mode, &json);
-}
-
-fn run_control_command(command: Command) {
-    match command {
+        Command::Batch { json } => run_query("batch", &json),
+        Command::SymbolsInFile { json } => run_query("symbols_in_file", &json),
+        Command::SymbolsInFiles { json } => run_query("symbols_in_files", &json),
+        Command::GetSymbol { json } => run_query("get_symbol", &json),
+        Command::Dependencies { json } => run_query("dependencies", &json),
+        Command::Dependents { json } => run_query("dependents", &json),
+        Command::TestsForFile { json } => run_query("tests_for_file", &json),
+        Command::Hotspots { json } => run_query("hotspots", &json),
+        Command::Clusters { json } => run_query("clusters", &json),
+        Command::MapFile { json } => run_query("map_file", &json),
+        Command::MapSymbol { json } => run_query("map_symbol", &json),
+        Command::MapPath { json } => run_query("map_path", &json),
+        Command::Explore { json } => run_query("explore", &json),
+        Command::BlastRadius { json } => run_query("blast_radius", &json),
+        Command::SymbolBlastRadius { json } => run_query("symbol_blast_radius", &json),
+        Command::DetectChanges { json } => run_query("detect_changes", &json),
+        Command::FindPattern { json } => run_query("find_pattern", &json),
+        Command::ContextPack { json } => run_query("context_pack", &json),
+        Command::FindImports { json } => run_query("find_imports", &json),
+        Command::TypeHierarchy { json } => run_query("type_hierarchy", &json),
+        Command::FilterSymbols { json } => run_query("filter_symbols", &json),
+        Command::SliceState { json } => run_query("slice_state", &json),
+        Command::NavMap {
+            json,
+            format,
+            with_project_knowledge,
+        } => return run_nav_map(&json, &format, with_project_knowledge),
         Command::Extract { path } => run_extract(&path),
         Command::Build {
             repo_root,
@@ -126,7 +87,6 @@ fn run_control_command(command: Command) {
         } else {
             run_watch(&repos, config.as_deref(), debounce_ms)
         }),
-        _ => unreachable!("control dispatcher received a query command"),
     }
 }
 
@@ -169,16 +129,10 @@ fn install_panic_hook() {
 /// `{ok:false,data.error}` envelope and returns non-zero. `output` present →
 /// envelope written to that file and nothing on stdout; absent → stdout.
 fn run_scan(json: &str, apply: bool, force: bool) -> i32 {
-    let mut value: serde_json::Value = match serde_json::from_str(json) {
+    let mut value = match parse_json_input(json) {
         Ok(value) => value,
-        Err(e) => {
-            println!(
-                "{}",
-                varde_code::query::render(Err(varde_code::query::ApiError::new(
-                    "invalid_input",
-                    format!("input is not valid JSON: {e}"),
-                )))
-            );
+        Err(error) => {
+            println!("{}", varde_code::query::render(Err(error)));
             return 1;
         }
     };
@@ -236,16 +190,10 @@ fn run_scan(json: &str, apply: bool, force: bool) -> i32 {
 /// test failed or a tool-level error occurred (bad input JSON, invalid
 /// `rulesDir`, etc).
 fn run_test(json: &str) -> i32 {
-    let value: serde_json::Value = match serde_json::from_str(json) {
+    let value = match parse_json_input(json) {
         Ok(value) => value,
-        Err(e) => {
-            println!(
-                "{}",
-                varde_code::query::render(Err(varde_code::query::ApiError::new(
-                    "invalid_input",
-                    format!("input is not valid JSON: {e}"),
-                )))
-            );
+        Err(error) => {
+            println!("{}", varde_code::query::render(Err(error)));
             return 1;
         }
     };
@@ -491,16 +439,10 @@ fn run_watch_stop_all() -> i32 {
 /// `scan_cli::rules_list`, prints the uniform envelope. Never exits
 /// non-zero — this is a read-only listing, not a CI gate like `scan`.
 fn run_rules_list(json: &str) {
-    let value: serde_json::Value = match serde_json::from_str(json) {
+    let value = match parse_json_input(json) {
         Ok(value) => value,
-        Err(e) => {
-            println!(
-                "{}",
-                varde_code::query::render(Err(varde_code::query::ApiError::new(
-                    "invalid_input",
-                    format!("input is not valid JSON: {e}"),
-                )))
-            );
+        Err(error) => {
+            println!("{}", varde_code::query::render(Err(error)));
             return;
         }
     };
@@ -517,16 +459,10 @@ fn run_rules_list(json: &str) {
 /// `scan_cli::rules_seed`, prints the uniform envelope. Never exits
 /// non-zero — writing seed files is not a CI gate.
 fn run_rules_seed(json: &str, user: bool, force: bool) {
-    let value: serde_json::Value = match serde_json::from_str(json) {
+    let value = match parse_json_input(json) {
         Ok(value) => value,
-        Err(e) => {
-            println!(
-                "{}",
-                varde_code::query::render(Err(varde_code::query::ApiError::new(
-                    "invalid_input",
-                    format!("input is not valid JSON: {e}"),
-                )))
-            );
+        Err(error) => {
+            println!("{}", varde_code::query::render(Err(error)));
             return;
         }
     };
@@ -543,16 +479,10 @@ fn run_rules_seed(json: &str, user: bool, force: bool) {
 /// `scan_cli::rules_remove`, prints the uniform envelope. Never exits
 /// non-zero — deleting seed files is not a CI gate.
 fn run_rules_remove(json: &str, user: bool, force: bool) {
-    let value: serde_json::Value = match serde_json::from_str(json) {
+    let value = match parse_json_input(json) {
         Ok(value) => value,
-        Err(e) => {
-            println!(
-                "{}",
-                varde_code::query::render(Err(varde_code::query::ApiError::new(
-                    "invalid_input",
-                    format!("input is not valid JSON: {e}"),
-                )))
-            );
+        Err(error) => {
+            println!("{}", varde_code::query::render(Err(error)));
             return;
         }
     };
@@ -760,42 +690,308 @@ fn run_query(mode: &str, json: &str) {
     println!("{}", varde_code::query::run_mode(mode, json));
 }
 
+fn parse_json_input(json: &str) -> Result<serde_json::Value, varde_code::query::ApiError> {
+    serde_json::from_str(json).map_err(|error| {
+        varde_code::query::ApiError::new(
+            "invalid_input",
+            format!("input is not valid JSON: {error}"),
+        )
+    })
+}
+
 /// `nav_map` — JSON is the canonical envelope, printed as-is; `--format
 /// text` derives a plain-text rendering from the same JSON.
 ///
-/// The `--format text` path is injected verbatim into a session at start, so
-/// it stays token-budgeted by default. When toz capture is available
-/// ([`varde_code::toz::enabled`]), it also renders a second, *unbudgeted*
-/// copy (still under the per-section hard caps) and hands that to toz; on
-/// success, toz's own TOC preview replaces the budgeted text (a smaller,
-/// still-oriented summary with the full detail one `toz query` away). Any
-/// failure to capture (or `VARDE_CODE_TOZ=0`) falls back to today's budgeted
-/// render, byte-identical.
-fn run_nav_map(json: &str, format: &str) {
+/// The `--format text` path is injected verbatim into a session at start. It
+/// always includes Varde's compact orientation and, when Toz capture succeeds,
+/// a handle with commands to retrieve the unbudgeted map (still under the
+/// per-section hard caps). Query errors still return their raw envelope.
+fn run_nav_map(json: &str, format: &str, with_project_knowledge: bool) {
     let envelope = varde_code::query::run_mode("nav_map", json);
     if format == "text" {
-        println!("{}", render_nav_map_text_with_toz(json, &envelope));
+        let value = serde_json::from_str(&envelope).ok();
+        let data = value.as_ref().and_then(successful_nav_map_data);
+        let map = render_nav_map_text_with_toz_data(json, &envelope, data);
+        if with_project_knowledge && data.is_some() {
+            if let Some(knowledge) = render_project_knowledge(json) {
+                println!("{knowledge}\n\n{map}");
+                return;
+            }
+        }
+        println!("{map}");
     } else {
         println!("{}", envelope);
     }
 }
 
-/// Budgeted text render of `envelope`, replaced by a toz preview of the
-/// unbudgeted render when toz capture is enabled and succeeds.
+/// Point session-start hooks to durable project knowledge without loading it.
+fn render_project_knowledge(json: &str) -> Option<String> {
+    let repo_root = nav_map_input_repo_root(json)?;
+    let session_dir = std::path::Path::new(&repo_root).canonicalize().ok()?;
+    if !session_dir.is_dir() {
+        return None;
+    }
+
+    // The hook passes the session cwd, which can be nested below the Git root.
+    // Resolve that root for knowledge lookup only; nav_map keeps its original input.
+    let project_root = session_dir
+        .ancestors()
+        .find(|dir| dir.join(".git").exists())
+        .unwrap_or(&session_dir);
+    if !project_root.join("memory-bank/knowledge").is_dir() {
+        return None;
+    }
+
+    Some(String::from(
+        "Project knowledge: memory-bank/knowledge/ (use varde-workflow concept search --bundle memory-bank/knowledge --text <term>).",
+    ))
+}
+
+/// Render one Varde-owned orientation in every case. A successful Toz capture
+/// adds only a retrieval pointer for the expanded map.
+#[cfg(test)]
 fn render_nav_map_text_with_toz(json: &str, envelope: &str) -> String {
-    let budgeted = render_nav_map_text(envelope);
-    if nav_map_data(envelope).is_none() || !varde_code::toz::enabled() {
-        return budgeted;
+    let value = serde_json::from_str(envelope).ok();
+    let data = value.as_ref().and_then(successful_nav_map_data);
+    render_nav_map_text_with_toz_data(json, envelope, data)
+}
+
+fn render_nav_map_text_with_toz_data(
+    json: &str,
+    envelope: &str,
+    data: Option<&serde_json::Value>,
+) -> String {
+    let mut orientation =
+        data.map_or_else(|| envelope.to_string(), render_nav_map_orientation_data);
+    if data.is_none() || !varde_code::toz::enabled() {
+        return orientation;
     }
     let unbudgeted_json = json_with_unbounded_token_budget(json);
     let unbudgeted_envelope = varde_code::query::run_mode("nav_map", &unbudgeted_json);
-    if nav_map_data(&unbudgeted_envelope).is_none() {
-        return budgeted;
-    }
-    let unbudgeted_text = render_nav_map_text(&unbudgeted_envelope);
+    let unbudgeted_value = serde_json::from_str(&unbudgeted_envelope).ok();
+    let Some(unbudgeted_data) = unbudgeted_value.as_ref().and_then(successful_nav_map_data) else {
+        return orientation;
+    };
+    let unbudgeted_text = render_nav_map_text_data(unbudgeted_data);
     let repo_root = nav_map_input_repo_root(json).unwrap_or_default();
     let source = format!("varde-code nav_map {repo_root}");
-    varde_code::toz::capture_text(&source, "nav_map", &unbudgeted_text).unwrap_or(budgeted)
+    let Some(handle) = varde_code::toz::capture_text(&source, "nav_map", &unbudgeted_text)
+        .and_then(|preview| toz_capture_handle(&preview).map(str::to_owned))
+    else {
+        return orientation;
+    };
+    orientation.push_str(&format!(
+        "\nExpanded map in Toz (handle {handle}). Search: `varde-toz query --handle {handle} \"<term>\"`; read lines: `varde-toz query --handle {handle} --lines 1:80`.\n"
+    ));
+    orientation
+}
+
+/// Accept only Toz's standard capture header and a simple handle token.
+/// Other successful-looking output is not enough to claim a stored capture.
+fn toz_capture_handle(stdout: &str) -> Option<&str> {
+    let first_line = stdout.lines().next()?.trim_end_matches('\r');
+    let (byte_count, capture) = first_line
+        .strip_prefix("varde-toz: captured ")?
+        .split_once(" → handle ")?;
+    let byte_digits = byte_count.strip_suffix(" bytes")?;
+    let mut groups = byte_digits.split(',');
+    let first_group = groups.next()?;
+    if first_group.is_empty()
+        || first_group.len() > 3
+        || !first_group.chars().all(|digit| digit.is_ascii_digit())
+        || groups.any(|group| group.len() != 3 || !group.chars().all(|d| d.is_ascii_digit()))
+    {
+        return None;
+    }
+
+    let (handle, details) = capture.split_once(" (")?;
+    let (counts, label) = details.split_once(")  label: ")?;
+    if label != "\"nav_map\"" {
+        return None;
+    }
+    let (line_count, chunk_count) = counts.split_once(", ")?;
+    line_count.strip_suffix(" lines")?.parse::<usize>().ok()?;
+    let chunk_count = chunk_count
+        .strip_suffix(" chunks")
+        .or_else(|| chunk_count.strip_suffix(" chunk"))?;
+    chunk_count.parse::<usize>().ok()?;
+
+    (handle.len() >= 4
+        && handle
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit()))
+    .then_some(handle)
+}
+
+/// Compact session-start orientation, used whether or not Toz can retain the
+/// expanded map. Keep repo shape, representative entrypoints, and shallow
+/// flow roots; provide real CLI commands for task-specific detail.
+#[cfg(test)]
+fn render_nav_map_orientation(envelope: &str) -> String {
+    let value = serde_json::from_str(envelope).ok();
+    value
+        .as_ref()
+        .and_then(successful_nav_map_data)
+        .map_or_else(|| envelope.to_string(), render_nav_map_orientation_data)
+}
+
+fn render_nav_map_orientation_data(data: &serde_json::Value) -> String {
+    const ENTRYPOINT_LIMIT: usize = 5;
+    const SUBSYSTEM_LIMIT: usize = 5;
+    const FLOW_LIMIT: usize = 4;
+    const FLOW_CHILD_LIMIT: usize = 4;
+
+    let mut out = String::from("## Repository outline\n");
+    let sections = [
+        ("entrypoints", "entrypoints"),
+        ("subsystems", "subsystems"),
+        ("flows", "flows"),
+        ("hotspots", "hotspots"),
+    ];
+    let counts = sections
+        .iter()
+        .map(|(section, label)| format!("{} {label}", array_len(data, section)))
+        .collect::<Vec<_>>();
+    out.push_str(&format!(
+        "Items present in this capped map: {}.\n",
+        counts.join(", ")
+    ));
+    let omitted = sections
+        .iter()
+        .filter_map(|(section, label)| {
+            token_budget_omissions(data, section)
+                .filter(|count| *count > 0)
+                .map(|count| format!("{count} {label}"))
+        })
+        .collect::<Vec<_>>();
+    if !omitted.is_empty() {
+        out.push_str(&format!(
+            "Additional items omitted by the token budget: {}.\n",
+            omitted.join(", ")
+        ));
+    }
+
+    if let Some(subsystems) = data["subsystems"]
+        .as_array()
+        .filter(|items| !items.is_empty())
+    {
+        let names = subsystems
+            .iter()
+            .take(SUBSYSTEM_LIMIT)
+            .map(|item| str_field(item, "name"))
+            .filter(|name| !name.is_empty())
+            .collect::<Vec<_>>();
+        if !names.is_empty() {
+            out.push_str(&format!("Subsystems: {}\n", names.join(", ")));
+        }
+    }
+
+    append_orientation_items(
+        &mut out,
+        "Key entrypoints",
+        data["entrypoints"].as_array(),
+        ENTRYPOINT_LIMIT,
+        render_entrypoint,
+    );
+    append_orientation_items(
+        &mut out,
+        "Main flows (root and direct calls)",
+        data["flows"].as_array(),
+        FLOW_LIMIT,
+        |item| render_flow_preview(item, FLOW_CHILD_LIMIT),
+    );
+
+    out.push_str("## Investigate further\n");
+    out.push_str(
+        "- Expanded map (section caps still apply): `varde-code nav_map --json '{\"repoRoot\":\"<repo-root>\",\"maxTokensEstimate\":18446744073709551615}'`\n\
+         - Find relevant files and symbols: `varde-code context_pack --json '{\"repoRoot\":\"<repo-root>\",\"query\":\"<term>\"}'`\n\
+         - Explore file dependencies from a file or symbol: `varde-code explore --json '{\"repoRoot\":\"<repo-root>\",\"query\":{\"params\":{\"input\":\"<file-or-symbol>\",\"direction\":\"outgoing\"}}}'`\n\
+         - Inspect risk hotspots: `varde-code hotspots --json '{\"repoRoot\":\"<repo-root>\"}'`\n",
+    );
+    out
+}
+
+fn array_len(data: &serde_json::Value, key: &str) -> usize {
+    data.get(key)
+        .and_then(|items| items.as_array())
+        .map_or(0, Vec::len)
+}
+
+fn token_budget_omissions(data: &serde_json::Value, section: &str) -> Option<usize> {
+    let total = data
+        .pointer(&format!("/guide/truncated/{section}/total"))?
+        .as_u64()?;
+    let total = usize::try_from(total).ok()?;
+    Some(total.saturating_sub(array_len(data, section)))
+}
+
+fn append_orientation_items<F>(
+    out: &mut String,
+    heading: &str,
+    items: Option<&Vec<serde_json::Value>>,
+    limit: usize,
+    render: F,
+) where
+    F: Fn(&serde_json::Value) -> String,
+{
+    let Some(items) = items.filter(|items| !items.is_empty()) else {
+        return;
+    };
+    out.push_str(&format!("## {heading}\n"));
+    for item in items.iter().take(limit) {
+        out.push_str(&render(item));
+    }
+    if items.len() > limit {
+        out.push_str(&format!(
+            "- … {} more; query for details\n",
+            items.len() - limit
+        ));
+    }
+}
+
+fn render_flow_preview(item: &serde_json::Value, child_limit: usize) -> String {
+    let files = item
+        .get("files")
+        .and_then(|files| files.as_array())
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    let mut out = format!(
+        "- {} ({} nodes)",
+        str_field(item, "entrypoint"),
+        u64_field(item, "nodeCount")
+    );
+    if let Some(root) = item.get("root") {
+        out.push_str(&format!(
+            ": {} ({})",
+            str_field(root, "symbol"),
+            flow_node_file(root, files)
+        ));
+        if let Some(children) = root
+            .get("children")
+            .and_then(|value| value.as_array())
+            .filter(|children| !children.is_empty())
+        {
+            let calls = children
+                .iter()
+                .take(child_limit)
+                .map(|child| {
+                    format!(
+                        "{} ({})",
+                        str_field(child, "symbol"),
+                        flow_node_file(child, files)
+                    )
+                })
+                .collect::<Vec<_>>();
+            if !calls.is_empty() {
+                out.push_str(&format!(" → {}", calls.join(", ")));
+            }
+            if children.len() > child_limit {
+                out.push_str(&format!(", +{} calls", children.len() - child_limit));
+            }
+        }
+    }
+    out.push('\n');
+    out
 }
 
 /// Parse `json`, set `maxTokensEstimate` to the largest value `nav_map`'s
@@ -834,7 +1030,16 @@ fn nav_map_input_repo_root(json: &str) -> Option<String> {
 /// is injected verbatim into a session at start and a count alone orients
 /// nobody. On error (or unparseable input), fall back to the raw envelope so no
 /// information is lost.
+#[cfg(test)]
 fn render_nav_map_text(envelope: &str) -> String {
+    let value = serde_json::from_str(envelope).ok();
+    value
+        .as_ref()
+        .and_then(successful_nav_map_data)
+        .map_or_else(|| envelope.to_string(), render_nav_map_text_data)
+}
+
+fn render_nav_map_text_data(data: &serde_json::Value) -> String {
     const SECTIONS: [&str; 7] = [
         "entrypoints",
         "foundational_files",
@@ -844,28 +1049,26 @@ fn render_nav_map_text(envelope: &str) -> String {
         "flows",
         "hotspots",
     ];
-    let Some(data) = nav_map_data(envelope) else {
-        return envelope.to_string();
-    };
     let truncated = data
         .pointer("/guide/truncated")
         .and_then(|value| value.as_object());
     let mut out = String::new();
     for section in SECTIONS {
-        render_nav_map_section(&mut out, &data, truncated, section);
+        render_nav_map_section(&mut out, data, truncated, section);
     }
     render_truncation_guide(&mut out, truncated);
     out
 }
 
+#[cfg(test)]
 fn nav_map_data(envelope: &str) -> Option<serde_json::Value> {
     let value: serde_json::Value = serde_json::from_str(envelope).ok()?;
-    (value.get("ok").and_then(|value| value.as_bool()) == Some(true)).then(|| {
-        value
-            .get("data")
-            .cloned()
-            .unwrap_or(serde_json::Value::Null)
-    })
+    successful_nav_map_data(&value).cloned()
+}
+
+fn successful_nav_map_data(value: &serde_json::Value) -> Option<&serde_json::Value> {
+    (value.get("ok").and_then(|value| value.as_bool()) == Some(true))
+        .then(|| value.get("data").unwrap_or(&serde_json::Value::Null))
 }
 
 fn render_nav_map_section(
@@ -1250,8 +1453,8 @@ fn extract_output_input(path: &str) -> serde_json::Value {
 mod nav_map_text_tests {
     use super::{
         default_hook_dir, install_or_remove_hooks, json_with_unbounded_token_budget, nav_map_data,
-        nav_map_input_repo_root, render_nav_map_text, render_nav_map_text_with_toz,
-        resolve_hook_targets, run_hooks_list,
+        nav_map_input_repo_root, render_nav_map_orientation, render_nav_map_text,
+        render_nav_map_text_with_toz, resolve_hook_targets, run_hooks_list,
     };
 
     /// Serializes this module's `PATH`/`VARDE_CODE_TOZ` mutations, mirroring
@@ -1560,11 +1763,10 @@ mod nav_map_text_tests {
         assert_eq!(nav_map_input_repo_root("not json"), None);
     }
 
-    /// A `toz` stub on `PATH` that captures successfully replaces the
-    /// budgeted text with its own stdout, and receives the unbudgeted
-    /// render on stdin.
+    /// A successful `toz` capture appends its handle to the Varde orientation
+    /// and receives the unbudgeted render on stdin.
     #[test]
-    fn text_with_toz_uses_stub_preview_and_feeds_it_the_unbudgeted_render() {
+    fn text_with_toz_appends_handle_and_feeds_it_the_unbudgeted_render() {
         let stdin_capture = std::env::temp_dir().join(format!(
             "varde-code-navmap-toz-stdin-{}-{}",
             std::process::id(),
@@ -1574,7 +1776,7 @@ mod nav_map_text_tests {
                 .as_nanos()
         ));
         let script = format!(
-            "#!/bin/sh\ncat > {}\necho 'toz: captured 9 bytes -> handle ab12'\n",
+            "#!/bin/sh\ncat > {}\necho 'varde-toz: captured 9 bytes → handle ab12 (1 lines, 1 chunk)  label: \"nav_map\"'\n",
             stdin_capture.display()
         );
         let dir = stub_bin_dir("success", &script);
@@ -1589,7 +1791,10 @@ mod nav_map_text_tests {
 
         let result = render_nav_map_text_with_toz(&json, &envelope);
 
-        assert_eq!(result, "toz: captured 9 bytes -> handle ab12\n");
+        assert!(result.starts_with(&render_nav_map_orientation(&envelope)));
+        assert!(result.contains("Expanded map in Toz (handle ab12)"));
+        assert!(result.contains("varde-toz query --handle ab12 \"<term>\""));
+        assert!(!result.contains("varde-toz: captured"));
         assert_ne!(result, budgeted_envelope);
         let stdin_seen = std::fs::read_to_string(&stdin_capture).expect("stub wrote stdin capture");
         assert_eq!(stdin_seen, unbudgeted_envelope);
@@ -1623,19 +1828,20 @@ mod nav_map_text_tests {
 
         let result = render_nav_map_text_with_toz("{}", budgeted);
 
-        assert_eq!(result, render_nav_map_text(budgeted));
+        assert_eq!(result, render_nav_map_orientation(budgeted));
     }
 
-    /// No `toz` on `PATH` at all: the budgeted render passes through
-    /// byte-identical.
+    /// No `toz` on `PATH` at all: the compact orientation is returned.
     #[test]
     fn text_with_toz_falls_back_when_toz_binary_is_missing() {
         let _override = PathOverride::without_toz();
         let (repo, json, envelope) = nav_map_fixture("toz-missing");
 
-        let budgeted = render_nav_map_text(&envelope);
+        let orientation = render_nav_map_orientation(&envelope);
         let result = render_nav_map_text_with_toz(&json, &envelope);
-        assert_eq!(result, budgeted);
+        assert_eq!(result, orientation);
+        assert!(result.contains("## Repository outline"));
+        assert!(result.contains("varde-code context_pack"));
         let _ = std::fs::remove_dir_all(repo);
     }
 
@@ -1651,14 +1857,14 @@ mod nav_map_text_tests {
         unsafe { std::env::set_var("VARDE_CODE_TOZ", "0") };
         let (repo, json, envelope) = nav_map_fixture("toz-disabled");
 
-        let budgeted = render_nav_map_text(&envelope);
+        let orientation = render_nav_map_orientation(&envelope);
         let result = render_nav_map_text_with_toz(&json, &envelope);
-        assert_eq!(result, budgeted);
+        assert_eq!(result, orientation);
         let _ = std::fs::remove_dir_all(repo);
     }
 
-    /// A `toz` that exits non-zero falls back to the budgeted render,
-    /// byte-identical, even though it printed `"handle"` on stdout first.
+    /// A `toz` that exits non-zero falls back to the compact orientation,
+    /// even though it printed `"handle"` on stdout first.
     #[test]
     fn text_with_toz_falls_back_when_stub_exits_nonzero() {
         let dir = stub_bin_dir(
@@ -1668,9 +1874,9 @@ mod nav_map_text_tests {
         let _override = PathOverride::new(&dir);
         let (repo, json, envelope) = nav_map_fixture("toz-nonzero");
 
-        let budgeted = render_nav_map_text(&envelope);
+        let orientation = render_nav_map_orientation(&envelope);
         let result = render_nav_map_text_with_toz(&json, &envelope);
-        assert_eq!(result, budgeted);
+        assert_eq!(result, orientation);
         let _ = std::fs::remove_dir_all(repo);
     }
 

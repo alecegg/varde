@@ -2,11 +2,8 @@
 
 ## Rules for every category
 
-- `### Finding discipline` in `references/report-format.md` sets the evidence
-  bar.
 - **Auto-fix rule:** `auto-fix` only when the fix is precisely describable and
-  mirrors a pattern already in the file or its siblings; otherwise `triage` (a
-  standalone fix run skips it).
+  mirrors a pattern already in the file or its siblings; otherwise `triage`.
 - **Always `triage` (a human decides):** business-rule arithmetic or
   behavior-changing operators; splitting functions or restructuring control
   flow; any ARCHITECTURE change except a mechanical import reorder that breaks
@@ -23,12 +20,15 @@
   artifact) has a runtime reader. A green test that hand-builds the state
   production code should create is not coverage; nor is an assertion that
   recomputes the expected value with the code's own logic.
-- **Severity:** no covering tests raises a suspected bug one level; silently
+- **Severity:** no covering tests raises a confirmed bug one level; silently
   wrong output outranks a crash.
 
 ## CODE
 
 - **When:** function bodies added or modified.
+- **Check:** oversized functions, hard-to-follow control flow, duplicated logic
+  that wants a shared helper, dead code, flattenable nesting, and unnamed magic
+  values; read candidates in full to rule out a long switch or generated code.
 - **Severity:** hot path or poor coverage raises complexity to medium; high only
   when it already correlates with a bug in this review.
 
@@ -61,7 +61,6 @@
 - **When:** a new failure mode, external call, or background operation.
 - **Check:** before calling a gap uncovered, check whether the caller's metrics
   or tracing already surface it.
-- **Severity:** a swallowed error rates by the data loss it can hide.
 
 ## READABILITY
 

@@ -79,6 +79,35 @@ fn timeout_kills_group_with_no_survivor() {
 }
 
 #[test]
+fn successful_leader_exit_kills_remaining_group_members() {
+    let dir: TempDir = tempdir().expect("tempdir");
+    let pgid_path = dir.path().join("pgid");
+    let script = format!(
+        "echo $$ > {pgid}; sleep 30 & exit 0",
+        pgid = pgid_path.display()
+    );
+
+    let start = std::time::Instant::now();
+    let outcome = run_sh(dir.path(), &script, Duration::from_secs(5));
+    let elapsed = start.elapsed();
+
+    assert_eq!(outcome, RunOutcome::Completed(ExitResult::Code(0)));
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "successful leader cleanup took unexpectedly long: {elapsed:?}"
+    );
+    let pgid: i32 = std::fs::read_to_string(&pgid_path)
+        .expect("pgid file")
+        .trim()
+        .parse()
+        .expect("pgid is a number");
+    assert!(
+        !group_alive(pgid),
+        "process group {pgid} still has a member after successful leader exit"
+    );
+}
+
+#[test]
 fn timeout_covers_large_stdin_to_nonreader() {
     let dir = tempdir().unwrap();
     let pgid_path = dir.path().join("pgid");

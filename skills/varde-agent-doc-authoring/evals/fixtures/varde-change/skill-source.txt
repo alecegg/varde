@@ -5,7 +5,7 @@ description: "Plan, build, verify, or orchestrate a code change, show work in fl
 
 # Manage the change lifecycle
 
-Read the request, then open the matching reference. Never ask the user which mode to use.
+Never ask the user which mode to use.
 
 ## Entry routing
 
@@ -25,8 +25,8 @@ Resolve explicit intent before automatic routing. Use this precedence:
 | The request is | Read |
 |---|---|
 | "What's in flight?" — show current work and what to do next | `references/status.md` |
-| Plan a new feature, or answer a readiness question, before building | `references/plan-start.md` |
-| Resume planning with no feature idea given (empty invocation) | `references/plan-resume.md` |
+| Plan a new feature, or answer a readiness question, before building | `references/plan.md` |
+| Resume planning with no feature idea given (empty invocation) | `references/plan.md` (Resume a draft) |
 | Execute one plan, or make a bounded change described directly | `references/build.md` |
 | Report evidence for finished work without changing anything | `references/verify.md` |
 | Run a group of related plans end to end, in dependency order | `references/orchestrate.md` |
@@ -36,8 +36,9 @@ Then open every supporting file it explicitly requires.
 
 ## Gotchas
 
-- Paths written `<working>/…` and `<knowledge>/…` resolve per
-  `references/memory-locations.md`. Read it before the first memory read or write.
-- Load `references/worktree.md` before isolated edits.
+- A draft is a `plan.md` with `status: backlog` and an id ending in
+  `-draft` or a live Open Questions bullet.
+- Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside the repo, use plain file ops instead of git.
+- Load `references/build-worktree.md` before isolated edits.
 - Parallel waves need two or more tasks that `varde-code blast_radius` shows are
   independent; otherwise tasks run inline.

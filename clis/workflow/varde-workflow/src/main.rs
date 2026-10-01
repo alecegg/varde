@@ -17,7 +17,6 @@ mod commands {
     pub mod conclusion_action;
     pub mod conclusion_retry;
     pub mod conclusion_status;
-    pub mod config;
     pub mod create;
     pub mod delete;
     pub mod error;
@@ -59,7 +58,6 @@ fn main() -> Result<()> {
         Command::Concept { command } => run_concept(command)?,
         Command::Lint(args) => commands::lint::run(args)?,
         Command::Paths(args) => commands::paths::run(args)?,
-        Command::Config(args) => commands::config::run(args)?,
         Command::Spec(args) => match args.command {
             SpecCommand::Inventory(inventory) => commands::spec_inventory::run(inventory)?,
         },

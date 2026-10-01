@@ -51,6 +51,116 @@ fn help_lists_all_17_mode_subcommands() {
 }
 
 #[test]
+fn context_pack_help_documents_budget_controls_and_defaults() {
+    let help = run(&["context_pack", "--help"]);
+
+    for setting in [
+        "maxTokensEstimate",
+        "4000",
+        "includeReadingOrder",
+        "true",
+        "fullResults",
+    ] {
+        assert!(
+            help.contains(setting),
+            "context_pack --help must document {setting:?}; got:\n{help}"
+        );
+    }
+}
+
+#[test]
+fn context_pack_cli_budgets_standalone_and_batch_child_envelopes() {
+    let root =
+        std::env::temp_dir().join(format!("varde-qenv-context-budget-{}", std::process::id()));
+    let home = root.with_extension("home");
+    let source = root.join("src");
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(&source).expect("fixture source directory creates");
+    for index in 0..30 {
+        std::fs::write(
+            source.join(format!(
+                "needle_module_{index:02}_with_a_long_path_segment.rs"
+            )),
+            format!("pub fn needle_symbol_{index}() {{}}\n"),
+        )
+        .expect("fixture source writes");
+    }
+    std::fs::create_dir_all(&home).expect("isolated home creates");
+
+    let built = Command::new(BIN)
+        .args(["build", "--repo-root", root.to_str().unwrap()])
+        .env("HOME", &home)
+        .env("VARDE_CODE_TOZ", "0")
+        .output()
+        .expect("fixture index builds");
+    assert!(
+        built.status.success(),
+        "build failed: {}",
+        String::from_utf8_lossy(&built.stdout)
+    );
+
+    let budget = 250;
+    let repo_root = root.to_str().unwrap();
+    let standalone_input = serde_json::json!({
+        "repoRoot": repo_root,
+        "query": "needle",
+        "maxTokensEstimate": budget
+    })
+    .to_string();
+    let standalone = Command::new(BIN)
+        .args(["context_pack", "--json", &standalone_input])
+        .env("HOME", &home)
+        .env("VARDE_CODE_TOZ", "0")
+        .output()
+        .expect("standalone context_pack runs");
+    assert!(
+        standalone.status.success(),
+        "standalone failed: {}",
+        String::from_utf8_lossy(&standalone.stderr)
+    );
+    let standalone: serde_json::Value =
+        serde_json::from_slice(&standalone.stdout).expect("standalone output is JSON");
+
+    let batch_input = serde_json::json!({
+        "repoRoot": repo_root,
+        "calls": [{
+            "mode": "context_pack",
+            "query": "needle",
+            "maxTokensEstimate": budget
+        }]
+    })
+    .to_string();
+    let batch = Command::new(BIN)
+        .args(["batch", "--json", &batch_input])
+        .env("HOME", &home)
+        .env("VARDE_CODE_TOZ", "0")
+        .output()
+        .expect("batch context_pack runs");
+    assert!(
+        batch.status.success(),
+        "batch failed: {}",
+        String::from_utf8_lossy(&batch.stderr)
+    );
+    let batch: serde_json::Value =
+        serde_json::from_slice(&batch.stdout).expect("batch output is JSON");
+    let child = &batch["data"][0];
+
+    for (label, envelope) in [("standalone", &standalone), ("batch child", child)] {
+        assert_eq!(envelope["ok"], true, "{label}: {envelope}");
+        assert!(envelope["data"]["files"].as_array().is_some());
+        assert!(
+            serde_json::to_vec(envelope).unwrap().len() / 4 <= budget,
+            "{label} exceeds budget {budget}: {envelope}"
+        );
+    }
+    assert_eq!(child["mode"], "context_pack");
+
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn success_has_the_complete_machine_envelope() {
     // Build with the same CLI binary that will query the fixture; the index
     // build fingerprint intentionally differs between test and CLI binaries.
@@ -67,7 +177,11 @@ fn success_has_the_complete_machine_envelope() {
         .env("HOME", &home)
         .output()
         .expect("build runs");
-    assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stdout));
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stdout)
+    );
 
     let json = format!(r#"{{"repoRoot":"{}","filePath":"a.rs"}}"#, db_dir.display());
     let queried = Command::new(BIN)

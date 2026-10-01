@@ -707,6 +707,90 @@ pub fn capture(path: &Path) -> Result<CaptureOutput, LearnError> {
             format!("invalid strict capture request JSON: {cause}"),
         )
     })?;
+    capture_request(request)
+}
+
+/// Flag-form capture input; the request is built from the frozen bundle's own record.
+#[derive(Debug)]
+pub struct CaptureFlags {
+    pub snapshot_path: PathBuf,
+    pub source_id: String,
+    pub record_index: u64,
+    pub native_id: Option<String>,
+    pub kind: String,
+    pub item_id: Option<i64>,
+    pub item_source: Option<String>,
+    pub item_title: Option<String>,
+    pub item_target: Option<String>,
+    pub evidence: String,
+}
+
+/// Capture one incident from flags by matching a record in the frozen bundle.
+pub fn capture_from_flags(flags: CaptureFlags) -> Result<CaptureOutput, LearnError> {
+    let incident_kind: IncidentKind = serde_json::from_value(Value::String(flags.kind.clone()))
+        .map_err(|_| {
+            error(
+                "diagnose_capture_invalid",
+                format!("unknown incident kind `{}`", flags.kind),
+            )
+        })?;
+    let item = match (flags.item_id, flags.item_source, flags.item_title) {
+        (Some(id), None, None) if flags.item_target.is_none() => CaptureItem::Existing { id },
+        (None, Some(source), Some(title)) => CaptureItem::New {
+            source,
+            title,
+            target: flags.item_target,
+        },
+        _ => {
+            return Err(error(
+                "diagnose_capture_invalid",
+                "pass --item-id, or --item-source with --item-title",
+            ));
+        }
+    };
+    let snapshot = load_snapshot(&flags.snapshot_path)?;
+    let mut matches = snapshot.records.iter().filter(|record| {
+        record.anchor.source_id == flags.source_id
+            && record.anchor.record_index == flags.record_index
+            && flags
+                .native_id
+                .as_ref()
+                .is_none_or(|id| record.anchor.native_id.as_ref() == Some(id))
+    });
+    let Some(record) = matches.next() else {
+        return Err(error(
+            "diagnose_record_not_found",
+            "no record in the frozen evidence matches --source-id, --record-index, and --native-id",
+        ));
+    };
+    if matches.next().is_some() {
+        return Err(error(
+            "diagnose_record_ambiguous",
+            "more than one record matches; pass --native-id to select one",
+        ));
+    }
+    let request = CaptureFile {
+        snapshot_path: flags.snapshot_path.clone(),
+        snapshot_digest: snapshot.digest.clone(),
+        session_id: snapshot.session.thread_id.clone(),
+        anchor: record.anchor.clone(),
+        incident_kind,
+        item,
+        evidence: flags.evidence,
+    };
+    capture_loaded(request, Some(snapshot))
+}
+
+fn capture_request(request: CaptureFile) -> Result<CaptureOutput, LearnError> {
+    capture_loaded(request, None)
+}
+
+/// Captures `request`, loading its snapshot after validation unless the caller
+/// already loaded it.
+fn capture_loaded(
+    request: CaptureFile,
+    snapshot: Option<InspectionSnapshot>,
+) -> Result<CaptureOutput, LearnError> {
     if request.session_id.trim().is_empty() || request.evidence.trim().is_empty() {
         return Err(error(
             "diagnose_capture_invalid",
@@ -719,7 +803,10 @@ pub fn capture(path: &Path) -> Result<CaptureOutput, LearnError> {
             "observed evidence exceeds the 8 KiB limit",
         ));
     }
-    let snapshot = load_snapshot(&request.snapshot_path)?;
+    let snapshot = match snapshot {
+        Some(snapshot) => snapshot,
+        None => load_snapshot(&request.snapshot_path)?,
+    };
     if snapshot.digest != request.snapshot_digest {
         return Err(error(
             "diagnose_snapshot_invalid",

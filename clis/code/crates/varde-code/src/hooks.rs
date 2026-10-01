@@ -60,8 +60,7 @@ pub const CLAUDE_AGENT: &str = "claude";
 /// The command injected into Claude Code's `SessionStart` hook. `$(pwd)` is
 /// resolved by the shell at hook-run time (not baked in statically), so the
 /// `repoRoot` always reflects the session's actual working directory.
-pub const CLAUDE_SESSION_START_COMMAND: &str =
-    "varde-code nav_map --json \"{\\\"repoRoot\\\":\\\"$(pwd)\\\"}\" --format text";
+pub const CLAUDE_SESSION_START_COMMAND: &str = "varde-code nav_map --json \"{\\\"repoRoot\\\":\\\"$(pwd)\\\"}\" --format text --with-project-knowledge";
 
 /// Bare agent name for the Codex CLI hook target.
 pub const CODEX_AGENT: &str = "codex";

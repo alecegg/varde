@@ -6,12 +6,14 @@
 //! implemented in [`crate::codex`] (a port of
 //! `skills/eval-tools/parse-codex-trace.py`).
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::time::Duration;
 
 use serde_json::Value;
 
 use crate::error::LearnError;
+use crate::{RunOutcome, RunRequest, run_with_timeout};
 
 /// Harness a trigger eval is run against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +57,7 @@ pub struct TriggerRequest {
     pub queries_path: PathBuf,
     pub harness: Harness,
     pub runs: u32,
+    pub timeout_seconds: u64,
     pub skill_path: Option<PathBuf>,
 }
 
@@ -76,11 +79,22 @@ const AUTH_PHRASES: [&str; 4] = [
     "log in to continue",
 ];
 
+/// Maximum harness stdout retained for one trigger trace. The file-backed
+/// capture is read no further than this limit plus one byte before parsing.
+const MAX_TRACE_BYTES: usize = 16 * 1024 * 1024;
+/// Only the first diagnostic line is used for non-zero harness exits.
+const MAX_STDERR_BYTES: usize = 64 * 1024;
+
 /// Run a trigger eval for the claude, codex, or opencode harness.
 pub fn run_trigger(req: &TriggerRequest) -> Result<TriggerReport, LearnError> {
     if req.runs == 0 {
         return Err(LearnError::Usage(
             "--runs must be a positive integer".to_string(),
+        ));
+    }
+    if req.timeout_seconds == 0 {
+        return Err(LearnError::Usage(
+            "--timeout-seconds must be a positive integer".to_string(),
         ));
     }
     if !req.queries_path.is_file() {
@@ -116,7 +130,8 @@ pub fn run_trigger(req: &TriggerRequest) -> Result<TriggerReport, LearnError> {
         let query_number = index + 1;
         let mut hits = 0u32;
         for run in 1..=req.runs {
-            let (stdout, stderr, status) = invoke_harness(req.harness, &q.query)?;
+            let (stdout, stderr, status) =
+                invoke_harness(req.harness, &q.query, query_number, req.timeout_seconds)?;
             if status != 0 {
                 return Err(nonzero_exit_error(
                     req.harness,
@@ -272,24 +287,116 @@ fn is_executable_file(path: &Path) -> bool {
     path.is_file()
 }
 
-fn invoke_harness(harness: Harness, query: &str) -> Result<(Vec<u8>, Vec<u8>, i32), LearnError> {
-    let mut cmd = Command::new(harness.as_str());
+fn invoke_harness(
+    harness: Harness,
+    query: &str,
+    query_number: usize,
+    timeout_seconds: u64,
+) -> Result<(Vec<u8>, Vec<u8>, i32), LearnError> {
+    let mut args = Vec::new();
     match harness {
         Harness::Claude => {
-            cmd.args(["-p", query, "--output-format", "stream-json", "--verbose"]);
+            args.extend([
+                "-p".to_string(),
+                query.to_string(),
+                "--output-format".to_string(),
+                "stream-json".to_string(),
+                "--verbose".to_string(),
+            ]);
         }
         Harness::Opencode => {
-            cmd.args(["run", "--format", "json", query]);
+            args.extend([
+                "run".to_string(),
+                "--format".to_string(),
+                "json".to_string(),
+                query.to_string(),
+            ]);
         }
         Harness::Codex => {
-            cmd.args(["exec", "--json", query]);
+            args.extend(["exec".to_string(), "--json".to_string(), query.to_string()]);
         }
     }
-    let output = cmd.output().map_err(|err| {
-        LearnError::Usage(format!("failed to launch {} CLI: {err}", harness.as_str()))
+    let output_dir = tempfile::tempdir().map_err(|error| {
+        LearnError::Usage(format!(
+            "failed to create trigger output directory: {error}"
+        ))
     })?;
-    let status = output.status.code().unwrap_or(-1);
-    Ok((output.stdout, output.stderr, status))
+    let stdout_path = output_dir.path().join("stdout");
+    let stderr_path = output_dir.path().join("stderr");
+    let request = RunRequest {
+        program: harness.as_str(),
+        args: &args,
+        cwd: None,
+        env: &[],
+        stdin: &[],
+        stdout_path: &stdout_path,
+        stderr_path: &stderr_path,
+        timeout: Duration::from_secs(timeout_seconds),
+    };
+    let outcome = run_with_timeout(&request)?;
+    let status = match outcome {
+        RunOutcome::Completed(status) => status.as_shell_code(),
+        RunOutcome::TimedOut => {
+            return Err(LearnError::Usage(format!(
+                "{} CLI timed out after {timeout_seconds} seconds for query {query_number}; no score recorded",
+                harness.as_str()
+            )));
+        }
+    };
+    let stdout = read_capture(&stdout_path, harness, StreamKind::Trace)?;
+    let stderr = read_capture(&stderr_path, harness, StreamKind::Stderr)?;
+    Ok((stdout, stderr, status))
+}
+
+#[derive(Clone, Copy)]
+enum StreamKind {
+    Trace,
+    Stderr,
+}
+
+impl StreamKind {
+    fn label(self) -> &'static str {
+        match self {
+            StreamKind::Trace => "trace",
+            StreamKind::Stderr => "stderr",
+        }
+    }
+
+    fn limit(self) -> (usize, &'static str) {
+        match self {
+            StreamKind::Trace => (MAX_TRACE_BYTES, "16 MiB"),
+            StreamKind::Stderr => (MAX_STDERR_BYTES, "64 KiB"),
+        }
+    }
+}
+
+fn read_capture(path: &Path, harness: Harness, kind: StreamKind) -> Result<Vec<u8>, LearnError> {
+    let (limit, limit_label) = kind.limit();
+    let file = std::fs::File::open(path).map_err(|error| {
+        LearnError::Usage(format!(
+            "failed to open {} from {} CLI: {error}; no score recorded",
+            kind.label(),
+            harness.as_str()
+        ))
+    })?;
+    let mut bytes = Vec::with_capacity(limit.min(8 * 1024));
+    file.take(limit.saturating_add(1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            LearnError::Usage(format!(
+                "failed to read {} from {} CLI: {error}; no score recorded",
+                kind.label(),
+                harness.as_str()
+            ))
+        })?;
+    if bytes.len() > limit {
+        return Err(LearnError::Usage(format!(
+            "{} CLI {} exceeded the {limit_label} limit; no score recorded",
+            harness.trace_label(),
+            kind.label()
+        )));
+    }
+    Ok(bytes)
 }
 
 pub(crate) fn contains_auth_phrase(text: &str) -> bool {

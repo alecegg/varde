@@ -251,30 +251,30 @@ pub fn run_import_command(args: FrictionImportArgs) -> Result<()> {
         match file {
             FrictionImportFile::Skipped { file, reason } => {
                 summary.skipped += 1;
-                results.push(import_result(
+                results.push(ImportResult {
                     file,
-                    "skipped",
-                    Some(reason),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ));
+                    outcome: "skipped".to_owned(),
+                    reason: Some(reason),
+                    id: None,
+                    slug: None,
+                    title: None,
+                    source: None,
+                    status: None,
+                });
             }
             FrictionImportFile::Ready { file, entry } => {
                 if args.dry_run {
                     summary.would_import += 1;
-                    results.push(import_result(
+                    results.push(ImportResult {
                         file,
-                        "would_import",
-                        None,
-                        entry.id,
-                        Some(entry.slug),
-                        Some(entry.title),
-                        Some(entry.source),
-                        Some(entry.status.as_str().to_owned()),
-                    ));
+                        outcome: "would_import".to_owned(),
+                        reason: None,
+                        id: entry.id,
+                        slug: Some(entry.slug),
+                        title: Some(entry.title),
+                        source: Some(entry.source),
+                        status: Some(entry.status.as_str().to_owned()),
+                    });
                 } else {
                     let imported = store
                         .as_mut()
@@ -282,28 +282,28 @@ pub fn run_import_command(args: FrictionImportArgs) -> Result<()> {
                         .import_friction(&entry)?;
                     if let Some(item) = imported {
                         summary.imported += 1;
-                        results.push(import_result(
+                        results.push(ImportResult {
                             file,
-                            "imported",
-                            None,
-                            Some(item.id),
-                            Some(item.slug),
-                            Some(item.title),
-                            Some(item.source),
-                            Some(item.status),
-                        ));
+                            outcome: "imported".to_owned(),
+                            reason: None,
+                            id: Some(item.id),
+                            slug: Some(item.slug),
+                            title: Some(item.title),
+                            source: Some(item.source),
+                            status: Some(item.status),
+                        });
                     } else {
                         summary.skipped += 1;
-                        results.push(import_result(
+                        results.push(ImportResult {
                             file,
-                            "skipped",
-                            Some("slug already exists".to_owned()),
-                            None,
-                            Some(entry.slug),
-                            Some(entry.title),
-                            Some(entry.source),
-                            Some(entry.status.as_str().to_owned()),
-                        ));
+                            outcome: "skipped".to_owned(),
+                            reason: Some("slug already exists".to_owned()),
+                            id: None,
+                            slug: Some(entry.slug),
+                            title: Some(entry.title),
+                            source: Some(entry.source),
+                            status: Some(entry.status.as_str().to_owned()),
+                        });
                     }
                 }
             }
@@ -315,36 +315,31 @@ pub fn run_import_command(args: FrictionImportArgs) -> Result<()> {
     let page = &results[start..end];
     let next_offset = (end < results.len()).then_some(end);
     if args.json {
-        println!(
-            "{}",
+        crate::print_success_envelope(
             json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": { "summary": summary, "results": page },
-                "meta": {
-                    "total": results.len(),
-                    "offset": args.offset,
-                    "limit": args.limit,
-                    "next_offset": next_offset,
-                    "truncated": next_offset.is_some(),
-                },
-            })
+                "summary": summary,
+                "results": page.iter().map(ImportResult::to_json).collect::<Vec<_>>(),
+            }),
+            json!({
+                "total": results.len(),
+                "offset": args.offset,
+                "limit": args.limit,
+                "next_offset": next_offset,
+                "truncated": next_offset.is_some(),
+            }),
         );
     } else {
         for result in page {
-            let outcome = result["outcome"].as_str().unwrap_or("skipped");
-            let file = result["file"].as_str().unwrap_or("unknown");
-            if let Some(reason) = result["reason"].as_str() {
-                println!("{outcome}: {file} ({reason})");
+            if let Some(reason) = result.reason.as_deref() {
+                println!("{}: {} ({reason})", result.outcome, result.file);
             } else {
                 println!(
                     "{}: {}{}",
-                    outcome,
-                    file,
-                    result["title"]
-                        .as_str()
+                    result.outcome,
+                    result.file,
+                    result
+                        .title
+                        .as_deref()
                         .map(|title| format!(" - {title}"))
                         .unwrap_or_default()
                 );
@@ -364,26 +359,30 @@ pub fn run_import_command(args: FrictionImportArgs) -> Result<()> {
     Ok(())
 }
 
-fn import_result(
+struct ImportResult {
     file: String,
-    outcome: &str,
+    outcome: String,
     reason: Option<String>,
     id: Option<i64>,
     slug: Option<String>,
     title: Option<String>,
     source: Option<String>,
     status: Option<String>,
-) -> serde_json::Value {
-    json!({
-        "file": file,
-        "outcome": outcome,
-        "reason": reason,
-        "id": id,
-        "slug": slug,
-        "title": title,
-        "source": source,
-        "status": status,
-    })
+}
+
+impl ImportResult {
+    fn to_json(&self) -> serde_json::Value {
+        json!({
+            "file": self.file,
+            "outcome": self.outcome,
+            "reason": self.reason,
+            "id": self.id,
+            "slug": self.slug,
+            "title": self.title,
+            "source": self.source,
+            "status": self.status,
+        })
+    }
 }
 
 fn prepare_export_directory(path: &Path) -> Result<PathBuf> {

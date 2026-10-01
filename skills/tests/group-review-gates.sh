@@ -71,7 +71,7 @@ with tempfile.TemporaryDirectory(prefix='varde-group-gates-') as temporary:
                           implementation_review_required=True)
         else:
             record.update(change_fingerprint=inspection['change_fingerprint'],
-                          coverage='entire-subject-change')
+                          coverage='entire-subject-change', tier_confirmed=True)
         evidence = root / (phase + '.json')
         evidence.write_text(json.dumps(record))
         cli('review', 'record', '--subject', subject, '--expected-version',

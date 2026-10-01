@@ -1,3 +1,4 @@
+<!-- kind: reference -->
 ````
 ---
 type: task
@@ -8,12 +9,7 @@ creates: []
 renames: []
 verification_resources: []
 # requires_signoff: true  # plan-author opt-in; absent means false
-# Declare every written path. Each rename is `old/path -> new/path`.
-# List shared databases, snapshots, or other external state the task or checks
-# use or change.
-# Use [] for an empty category; omit any ownership field you cannot determine.
-# Missing ownership fields keep automatic scheduling serial.
-# kind: research   # optional: a cited doc, per references/build-execution.md
+# kind: research|spike   # optional: research is a cited doc; spike owns no paths, per references/plan-decomposition.md
 ---
 
 <title>

@@ -75,8 +75,6 @@ pub enum Command {
     Lint(LintArgs),
     /// Show or configure where working, knowledge, and learn memory live
     Paths(PathsArgs),
-    /// Show or edit user-wide settings
-    Config(ConfigArgs),
     /// Inspect specification source inventory and its verified cache
     Spec(SpecArgs),
 }
@@ -107,36 +105,6 @@ pub struct SpecInventoryArgs {
     /// Record inspected paths as non-architecture inputs at their current content hash
     #[arg(long = "acknowledge-architecture-path")]
     pub acknowledge_architecture_paths: Vec<PathBuf>,
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct ConfigArgs {
-    #[command(subcommand)]
-    pub command: Option<ConfigCommand>,
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum ConfigCommand {
-    Get(ConfigGetArgs),
-    Set(ConfigSetArgs),
-    Unset(ConfigGetArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct ConfigGetArgs {
-    pub key: String,
-    #[arg(long)]
-    pub json: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct ConfigSetArgs {
-    pub key: String,
-    pub value: String,
     #[arg(long)]
     pub json: bool,
 }
@@ -273,9 +241,9 @@ pub enum ReviewCommand {
     /// Archive abandoned authorization without deleting source or recovery refs
     AbandonWorktree(ReviewAbandonWorktreeArgs),
     /// Replace a bounded-work contract using an inspected revision
-    Contract(ReviewMutationArgs),
+    Contract(ReviewContractArgs),
     /// Extend a subject's coverage without replacing its baseline
-    Expand(ReviewMutationArgs),
+    Expand(ReviewExpandArgs),
     /// Show contract, record, baseline, and current change evidence
     Inspect(ReviewInspectArgs),
     /// Record reviewer-authored evidence against an inspected revision
@@ -307,26 +275,43 @@ pub struct ReviewInitArgs {
     /// Repository-relative path to exclude from coverage (repeatable)
     #[arg(long = "exclude")]
     pub exclude: Vec<String>,
+    /// `scripts/risk-tier.py` output JSON; missing or unreadable defaults to high tier
+    #[arg(long = "tier-evidence")]
+    pub tier_evidence: Option<PathBuf>,
     #[arg(long)]
     pub json: bool,
 }
 
 #[derive(Debug, Args)]
-pub struct ReviewMutationArgs {
+pub struct ReviewContractArgs {
     #[arg(long)]
     pub subject: String,
     /// Version returned by `review inspect`
     #[arg(long)]
     pub expected_version: String,
     /// Contract JSON (contract command only)
-    #[arg(long, conflicts_with_all = ["scope", "artifact"])]
-    pub file: Option<PathBuf>,
-    /// Additional repository-relative paths (expand command only)
-    #[arg(long = "scope", conflicts_with = "file")]
+    #[arg(long)]
+    pub file: PathBuf,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ReviewExpandArgs {
+    #[arg(long)]
+    pub subject: String,
+    /// Version returned by `review inspect`
+    #[arg(long)]
+    pub expected_version: String,
+    /// Additional repository-relative paths
+    #[arg(long = "scope")]
     pub scope: Vec<String>,
-    /// Additional absolute external files (expand command only)
-    #[arg(long, conflicts_with = "file")]
+    /// Additional absolute external files
+    #[arg(long)]
     pub artifact: Vec<PathBuf>,
+    /// Fresh `scripts/risk-tier.py` output JSON; omit to revert a low-tier subject to high
+    #[arg(long = "tier-evidence")]
+    pub tier_evidence: Option<PathBuf>,
     #[arg(long)]
     pub json: bool,
 }

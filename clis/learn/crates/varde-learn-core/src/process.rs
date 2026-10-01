@@ -153,6 +153,12 @@ fn wait_with_deadline(
             .try_wait()
             .map_err(|err| LearnError::Usage(format!("failed to poll child: {err}")))?
         {
+            // `try_wait` reaps the direct child. Its descendants can still
+            // hold the process group open after a successful leader exit.
+            let pgid = child.id() as i32;
+            if group_alive(pgid) {
+                kill_group_with_grace(pgid);
+            }
             return Ok(RunOutcome::Completed(to_exit_result(status)));
         }
         if Instant::now() >= deadline {

@@ -8,39 +8,32 @@ for another format, answer in chat in that format instead.
 
 | Target shape | Treat as |
 |---|---|
-| Git ref — branch name, commit range (`abc..def`), or PR reference (`pr/123`, `#123`) | a change explanation |
+| Git ref: branch name, commit range (`abc..def`), or PR reference (`pr/123`, `#123`) | a change explanation |
 | Feature-area keyword (e.g. `authentication`) or file/directory path (e.g. `src/core/auth/`) | an area explanation |
 | A set of named alternatives or a design question (e.g. "queue vs. pub/sub") | an options comparison |
 
-A bare word is ambiguous only when it is both an existing git ref
-(`git rev-parse --verify <word>`) **and** a matching path or area. Then ask
-the user to choose, inline in your message as a numbered menu, not a harness
-question tool. Otherwise infer the shape and state it in one line.
+A bare word that is both a git ref and a path or area is ambiguous: ask inline
+as a numbered menu. Otherwise infer the shape and state it in one line.
 
 ## Workflow
 
-1. **Explore the target.** Load `references/varde-code.md` for unknown scope
+1. **Explore the target.** Load `references/varde-code-cli.md` for unknown scope
    or several targets.
-2. **Gather shape-specific context.** Change: explain from the diff (PR:
+2. **Gather shape-specific context:** for a change, the diff (PR:
    `gh pr diff <n>`, else fetch `pull/<n>/head` and diff against the PR's
-   base, not the current checkout). Area: add notable commits from
-   `git log --oneline -20 <path>` to Background. Options: read the code each
-   alternative would touch before comparing.
-3. **Write the HTML output** into one file, using the sections for the
-   resolved shape below. Write to a path the user named; otherwise
-   `<working>/explanations/<YYYY-MM-DD>-<slug>.html`, `<slug>` a short
-   kebab-case name for the target. Use the resolved absolute `<working>` path.
-   Tell the user the exact path.
-4. **Record lessons.** Record real obstacles through `varde-learn` and durable
-   decisions through `varde-knowledge`; otherwise skip.
-
+   base, not the current checkout); for an area, recent notable commits for
+   Background; for options, the code each alternative would touch.
+3. **Write the HTML** with the sections for the resolved shape below, to a
+   path the user named or else
+   `<working>/explanations/<YYYY-MM-DD>-<slug>.html` (resolved absolute
+   `<working>`, short kebab-case `<slug>`), and tell the user the exact path.
 ## HTML output sections
 
 Change or area shape:
 
 | Section | Purpose |
 |---|---|
-| Background | Why it exists — the change's intent, or the area's `git log`. |
+| Background | Why it exists: the change's intent, or the area's `git log`. |
 | Intuition | How it works: analogies, invariants. |
 | Code (change) or How It Works (area) | Change: walk the hunks per file with affected callers. Area: key files, entry points, and data flow. |
 

@@ -187,13 +187,8 @@ does not fall back to resolving a relative value against the project root:
 after `~`/`{project}` expansion the `toz` value must be absolute, or toz
 treats the key as unset and falls back to its own default store location.
 
-`varde-workflow config` shows user-wide settings and the file path.
-`config set usage_limit 80%` records the usage threshold; `config get
-usage_limit --json` reads it, and `config unset usage_limit` removes it.
-The setting can also be a currency amount such as `$520`. Unknown CLI keys
-are rejected; unknown keys in a hand-edited `[settings]` table are preserved
-and reported as warnings. An existing `paths.toml` remains readable until the
-first `paths` or `config` write migrates its entries to `config.toml`.
+An existing `paths.toml` remains readable until the first `paths` write
+migrates its entries to `config.toml`.
 
 `conclude`, `conclusion-*`, `recover`, and the schema override honour the
 resolved directories: a plan may live in a redirected working directory and

@@ -1,18 +1,18 @@
 ---
 name: varde-prototype
-description: "Build a throwaway HTML prototype to answer a design question — a visual mockup, or a clickable walkthrough of a state model or data shape. Not for comparing options in chat."
+description: "Shape and prototype frontend pages, layouts, and interactions, or build a clickable walkthrough of a state model or data shape. Not for production implementation (varde-change) or formal review of a running UI (varde-review)."
 ---
 
-# Prototype a design question
+# Shape and prototype a design question
 
-Before implementation edits, apply `references/review-gates.md`. Carry its
-verdict through execution and completion, including changes made by this skill.
+Prototype files under `<storage>` need no review gate; production edits go
+through `varde-change`.
 
 ## Pick the track
 
 | The question is | Track |
 |---|---|
-| "What should this look like?" — a page, layout, or component's visual treatment | Visual — `references/visual-track.md` |
+| Shape, prototype, or refine a frontend page, layout, or component | Visual — `references/visual-track.md` |
 | "Does this state model, logic, or data shape feel right?" — state machine, reducer, API shape | Logic — `references/logic-track.md` |
 
 Ambiguous: pages/components → Visual; states/data → Logic; say which.
@@ -33,22 +33,10 @@ Ambiguous: pages/components → Visual; states/data → Logic; say which.
    the track references call it `<storage>`. Ask only if that path already
    exists.
 2. **Run the track's rounds**, per its reference.
-3. **Close when the user is done.** Report the final file path and key
-   decisions. For Logic, name the validated module to hand to `varde-change`;
-   the page shell is disposable.
-4. **Record lessons.** Record real obstacles through `varde-learn` and durable
-   decisions through `varde-knowledge`; otherwise skip.
+3. **Close when the user is done:** report the final file path and key
+   decisions (Logic: name the module to lift). If the user asked to plan or
+   build, start `varde-change` in the same turn; otherwise offer it and wait.
 
 ## Gotchas
 
-- `<working>` (local, uncommitted) and `<knowledge>` (committed): resolve once
-  before first use with `varde-workflow paths --json`; use its absolute
-  `data.working`/`data.knowledge` paths for this session and pass them to
-  subagents. If the command fails, retry it once with escalated access; if it
-  still fails, ask the user for the paths. Do not guess storage paths. A
-  location outside the repo skips git ops (`check-ignore`, `mv`, `status`);
-  use plain file ops.
-- Prototype files are throwaway. If the user explicitly asks to plan or build
-  afterward, start the matching `varde-change` route in the same turn without
-  reconfirming the request. Settled work uses bounded build; unresolved choices
-  follow the plan's own approval gates. Otherwise, offer the next step and wait.
+- Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.

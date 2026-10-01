@@ -1,68 +1,113 @@
 # Regenerate domain specifications
 
 Generate one reviewable specification per domain, plus architecture and index
-documents. Read the code directly — every spec is grounded only in source you
-read in this run, within the domain's boundary.
+documents. Ground every spec only in source read directly in this run, within
+the domain's boundary.
 
 ## Workflow
 
-Given specific domains (e.g. plan `observed_specs`): regenerate only those,
-skip full domain discovery and step 4 (no orphan deletion). Still inspect
-architecture provenance and covered paths, then refresh it only when affected.
-Report whether architecture was written or left unchanged.
-"Only <domain>" limits domain documents; the shared architecture document
-is an additional output when stale. If the user explicitly forbids an
-architecture edit, leave it unchanged and report the stale state.
-Read other domain roots for overlap and `unclassified_paths` classification without
-regenerating their documents.
-
-1. **Find domains needing updates.** Full procedure: `references/spec-plan.md`.
-2. **Generate domain documents.** Load `references/spec-format.md`. Generate
-   domains one at a time by default. Delegate only domains with independent
-   source and output paths, with at most three delegates active. Each
-   executor writes exactly one document under `<knowledge>/specs/`. With
-   `varde-code` on PATH, also load `references/varde-code.md` and batch
-   discovery and relationship queries across its domain. Brief each delegate
-   with resolved absolute `<working>` and `<knowledge>` paths (used without
-   re-resolving), the `varde-code` path (if on PATH), domain, changed files,
-   output path, and `spec-format.md`.
-3. **Check and, when affected, generate the architecture document.** Identify the files that declare
-   deployed units, their wiring, and package/workspace structure, such as
-   infrastructure-as-code, deployment config, and workspace manifests. Hash
-   these as `sources`. Read the entrypoint or handler code they reference to
-   map units to domains, and include every entrypoint or handler used for that
-   mapping in `sources` too. None found → skip and say so; never infer
-   architecture from folder layout alone. On a scoped run, compare the
-   architecture spec's source hashes and covered paths with current files.
-   Rediscover deployment and workspace declarations so a new declaration
-   outside the old roots also counts as affected; check whether a domain was
-   added or removed. Leave an up-to-date
-   architecture document byte-identical. On a full run, use the same
-   affected check from `references/spec-plan.md`. When affected, write
-   `<knowledge>/specs/architecture.md` with `domain: architecture`, format
-   per `references/spec-format.md`; list it in the index; exempt it from
-   orphan deletion.
-4. **Delete orphans.** Delete every domain document whose corresponding code
-   no longer exists, from the flat specs root (`specs/<slug>` maps to
-   `<knowledge>/specs/<slug>.md`). Deletion is confined to `specs/`,
-   to documents you have confirmed are orphans, and never to the architecture
-   document.
-5. **Render the index** after domain generation finishes. Format:
-   `references/spec-format.md`. Write it only when bytes differ.
+1. **Find domains needing updates** per Find domains below.
+2. **Generate domain documents** per `references/spec-format.md`, one at a
+   time by default. With `varde-code` on PATH, load
+   `references/varde-code-cli.md` and `references/code-lookups.md`, and batch
+   discovery and relationship queries per domain.
+3. **Check the architecture document** per Architecture below.
+4. **Delete orphans:** each domain document in the flat specs root
+   (`specs/<slug>` maps to `<knowledge>/specs/<slug>.md`) whose code you have
+   confirmed no longer exists, never the architecture document.
+5. **Render the index** after domain generation, per
+   `references/spec-format.md`.
 6. **Verify.** Compare each generated spec with the source it describes:
-   - writes stay under `<knowledge>/specs/`
+   - writes stay under `<knowledge>/specs/`;
    - spot-check operations, types, and invariants, and mark unverified areas
-     degraded
-   - recompute provenance; a mismatch means regenerate
-   - links resolve
-   - If `varde-workflow` is on PATH, run `varde-workflow lint --bundle
-     <knowledge>` and report findings; lint does not block.
-   - After changed specifications pass these checks, refresh the verified
-     inventory with `varde-workflow spec inventory --repository <repo-root>
-     --knowledge <knowledge> --working <working> --refresh --json` when the
-     command is available. Report a refresh failure; do not claim a cache hit.
-7. **Report the summary.** Output: the Domain/Written/Failed/Skipped table,
-   then the architecture decision and any extra write, orphans, overlapping
-   and unmatched/unclassified paths, broken links, drift, and degraded checks.
-8. **Record lessons.** Record real obstacles through `varde-learn` and durable
-   decisions through `varde-knowledge`.
+     degraded;
+   - recompute provenance; a mismatch means regenerate;
+   - links resolve;
+   - with `varde-workflow` on PATH, run `varde-workflow lint --bundle
+     <knowledge>` and report findings; lint does not block;
+   - once changed specifications pass, refresh the verified inventory with
+     `varde-workflow spec inventory --repository <repo-root> --knowledge
+     <knowledge> --working <working> --refresh --json` when available, and
+     report a refresh failure rather than claim a cache hit.
+7. **Report the summary:** the Domain/Written/Failed/Skipped table, then the
+   architecture decision and any extra write, orphans, overlapping and
+   unmatched/unclassified paths, broken links, drift, and degraded checks.
+8. **Record lessons:** real obstacles through `varde-learn`; skip otherwise.
+
+### Delegating domains
+
+Delegate only domains with independent source and output paths, to at most
+three active executors that each write one document under
+`<knowledge>/specs/`. Brief each with:
+
+- Resolved absolute `<working>` and `<knowledge>` paths, used without
+  re-resolving.
+- The `varde-code` path, if on PATH.
+- Domain, changed files, output path, and `spec-format.md`.
+
+## Find domains needing updates
+
+| Status | Condition |
+|---|---|
+| missing | No document. |
+| stale | `source_roots` or `covered_paths` is missing (legacy), or a fresh recompute changes any entry hash, the aggregate, or the covered-path inventory. |
+| `reuse` (up to date) | Otherwise; skip unless the user asked to force-regenerate. |
+
+1. Run `varde-workflow spec inventory --repository <repo-root> --knowledge
+   <knowledge> --working <working> --json` when available. On success, reuse
+   its per-domain statuses and its overlapping and `unclassified_paths`
+   inventory, and skip sub-step 2.
+2. If `spec inventory` is unavailable or fails, load
+   `references/spec-manual-inventory.md` for the fallback.
+3. Settle architecture and path classification per the sections below.
+
+No missing or stale domain skips only workflow step 2; continue with steps
+3-8.
+
+### Architecture
+
+- If no sources are found, skip and say so. Never infer architecture from
+  folder layout alone.
+- Otherwise, leave the document byte-identical unless it needs a refresh.
+
+Architecture sources are the files declaring deployed units, their wiring, and
+package/workspace structure (infrastructure-as-code, deployment config,
+workspace manifests), including new declaration files outside old roots, plus
+every entrypoint or handler read to map units to domains. Recompute their
+provenance and covered paths like a domain's.
+
+Refresh architecture only when it is missing or stale, its declaration set
+changed, or a domain was added or removed. A full scan alone is not a reason.
+Write `<knowledge>/specs/architecture.md` with `domain: architecture` per
+`references/spec-format.md`, and list it in the index.
+
+| Inventory `architecture_status` | Action |
+|---|---|
+| `none` | Inspect `architecture_candidates` first; a candidate can be a deployment or workspace declaration the inventory cannot identify by filename. |
+| `inspect` | Read each `architecture_inspect_paths` entry. Refresh architecture if it affects deployed units or wiring; otherwise acknowledge it with `varde-workflow spec inventory --repository <repo-root> --knowledge <knowledge> --working <working> --acknowledge-architecture-path <path> --json` (repeatable; binds the current content hash and expires when that content changes). |
+
+### Unclassified and overlapping paths
+
+Report these on every run, including scoped runs:
+
+- current source candidates (workspace members, source directories,
+  entrypoints, deployment declarations) outside all domain `source_roots`;
+- candidates covered by more than one domain root;
+- architecture overlap with domains, without changing a domain boundary.
+
+Inspect each `unclassified_paths` entry before classifying it as a new domain
+source, an architecture declaration, or unrelated; an unrecognized extension
+does not make it unrelated.
+
+## Scoped runs
+
+Given specific domains (e.g. plan `observed_specs`):
+
+- Regenerate only those domain documents; skip full domain discovery and
+  workflow step 4.
+- Still read other domain roots for overlap and `unclassified_paths`
+  classification.
+- Still refresh a stale architecture document; "only <domain>" limits domain
+  documents. Only an explicit user ban on architecture edits leaves it stale;
+  report that.
+- Report whether architecture was written or left unchanged.

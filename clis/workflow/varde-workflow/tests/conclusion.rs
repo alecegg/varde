@@ -181,6 +181,10 @@ fn fixture(tag: &str) -> (PathBuf, PathBuf) {
 }
 
 fn write_plan(plan_dir: &Path, extra: &str, checked: bool) -> PathBuf {
+    write_plan_and_subject(plan_dir, extra, checked).0
+}
+
+fn write_plan_and_subject(plan_dir: &Path, extra: &str, checked: bool) -> (PathBuf, String) {
     let mark = if checked { "x" } else { " " };
     let path = plan_dir.join("plan.md");
     fs::write(
@@ -200,8 +204,9 @@ fn write_plan(plan_dir: &Path, extra: &str, checked: bool) -> PathBuf {
         .unwrap()
         .parent()
         .unwrap();
-    common::review::approve_plan(root, &path);
-    path
+    let subject = common::review::approve_plan(root, &path);
+    common::review::approve_implementation(root, &subject);
+    (path, subject)
 }
 
 fn write_delta(plan_dir: &Path) {
@@ -625,8 +630,10 @@ fn conclusion_recovery_rejects_unsupported_journal_versions_without_writes() {
 fn refreshed_observed_spec_allows_conclusion_after_staleness() {
     let (root, plan_dir) = fixture("conclusion-spec-refresh");
     let spec = write_fresh_spec(&root);
-    let plan = write_plan(&plan_dir, "observed_specs:\n  - checkout\n", true);
+    let (plan, subject) =
+        write_plan_and_subject(&plan_dir, "observed_specs:\n  - checkout\n", true);
     fs::write(root.join("src/checkout.txt"), "new checkout source\n").unwrap();
+    common::review::approve_implementation(&root, &subject);
     assert_eq!(conclude(&plan).status.code(), Some(1));
 
     let source_hash = git_blob_hash(&fs::read(root.join("src/checkout.txt")).unwrap());
@@ -680,12 +687,12 @@ fn added_or_removed_file_under_source_root_blocks_conclusion() {
                 .replace("covered_paths:\n  - src/checkout.txt", covered),
         )
         .unwrap();
-        let plan = write_plan(&plan_dir, "observed_specs:\n  - checkout\n", true);
         if change == "added" {
             fs::write(root.join("src/extra.txt"), "extra\n").unwrap();
         } else {
             fs::remove_file(root.join("src/extra.txt")).unwrap();
         }
+        let plan = write_plan(&plan_dir, "observed_specs:\n  - checkout\n", true);
         let output = conclude(&plan);
         assert_eq!(output.status.code(), Some(1), "{change}");
         assert!(String::from_utf8_lossy(&output.stderr).contains("stale covered_paths"));
@@ -1050,6 +1057,51 @@ fn portable_outputs_follow_configured_roots_without_rewriting_documents() {
 }
 
 #[test]
+fn portable_outputs_replace_embedded_configured_paths_deepest_first() {
+    let (root, plan_dir) = fixture("portable-output-embedded-roots");
+    let plan = plan_dir.join("plan.md");
+    fs::write(
+        &plan,
+        "---\ntype: plan\nid: feature\nstatus: completed\n---\n",
+    )
+    .unwrap();
+    let working = root.join("redirected-working");
+    fs::create_dir_all(&working).unwrap();
+    let working = working.canonicalize().unwrap();
+    let knowledge = working.join("redirected-knowledge");
+    fs::create_dir_all(knowledge.join("workflow/post-conclusion")).unwrap();
+    let knowledge = knowledge.canonicalize().unwrap();
+    let document = knowledge.join("workflow/post-conclusion/feature.md");
+    fs::write(&document, POST_ACTION_STATE).unwrap();
+
+    let output = format!(
+        "review: {}; decision: {}",
+        working.join("reviews/result.md").display(),
+        knowledge.join("decisions/result.md").display()
+    );
+    let result = post_action_command(&root, &plan, "conclusion-action")
+        .env("VARDE_WORKING_DIR", &working)
+        .env("VARDE_KNOWLEDGE_DIR", &knowledge)
+        .arg("--output")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    assert_eq!(
+        common::json_data(&result.stdout)["outputs"],
+        serde_json::json!([
+            "review: <working>/reviews/result.md; decision: <knowledge>/decisions/result.md"
+        ])
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn portable_outputs_validate_before_mutation_and_preserve_labels() {
     let (root, plan_dir) = fixture("portable-validation");
     let plan = plan_dir.join("plan.md");
@@ -1276,5 +1328,113 @@ fn portable_repo_outputs_use_the_invoking_linked_checkout() {
             .to_str()
             .unwrap()
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn conclusion_and_action_use_linked_checkout_knowledge_for_external_plan() {
+    let (root, _) = fixture("conclusion-linked-external-plan");
+    for args in [
+        vec!["add", "."],
+        vec![
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "fixture",
+        ],
+    ] {
+        assert!(
+            Command::new("git")
+                .current_dir(&root)
+                .args(args)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    }
+    let checkout = root.join("linked");
+    assert!(
+        Command::new("git")
+            .current_dir(&root)
+            .args(["worktree", "add", "--detach"])
+            .arg(&checkout)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+
+    let working = root.join("external-working");
+    let config = root.join("isolated-config");
+    fs::create_dir_all(&config).unwrap();
+    fs::write(
+        config.join("config.toml"),
+        format!(
+            "[project.{}]\nworking = {}\n",
+            serde_json::to_string(root.to_str().unwrap()).unwrap(),
+            serde_json::to_string(working.to_str().unwrap()).unwrap(),
+        ),
+    )
+    .unwrap();
+    let plan = working.join("plans/feature/plan.md");
+    fs::create_dir_all(plan.parent().unwrap()).unwrap();
+    fs::write(
+        &plan,
+        "---\ntype: plan\nid: feature\nstatus: active\n---\n\n## Acceptance criteria\n\n- [x] behavior verified\n",
+    )
+    .unwrap();
+    let env = [("VARDE_WORKING_DIR", working.as_path())];
+    let subject = common::review::approve_plan_configured(&root, &plan, &config, &env);
+    common::review::approve_implementation_configured(&root, &config, &env, &subject);
+
+    let output = common::isolate_memory(&root)
+        .current_dir(&checkout)
+        .env("VARDE_CONFIG_DIR", &config)
+        .env("VARDE_WORKING_DIR", &working)
+        .args(["conclude", plan.to_str().unwrap(), "--json"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let linked_conclusion = conclusion_file(&checkout, "feature").unwrap();
+    assert!(linked_conclusion.is_file());
+    assert!(conclusion_file(&root, "feature").is_none());
+    let linked_promotion = checkout.join("memory-bank/knowledge/promotions/feature.md");
+    let main_promotion = root.join("memory-bank/knowledge/promotions/feature.md");
+    assert!(linked_promotion.is_file());
+    assert!(!main_promotion.exists());
+    let linked_post_action =
+        checkout.join("memory-bank/knowledge/workflow/post-conclusion/feature.md");
+    let main_post_action = root.join("memory-bank/knowledge/workflow/post-conclusion/feature.md");
+    assert!(linked_post_action.is_file());
+    assert!(!main_post_action.exists());
+
+    let action = post_action_command(&root, &plan, "conclusion-action")
+        .current_dir(&checkout)
+        .env("VARDE_CONFIG_DIR", &config)
+        .env("VARDE_WORKING_DIR", &working)
+        .output()
+        .unwrap();
+    assert!(
+        action.status.success(),
+        "{}",
+        String::from_utf8_lossy(&action.stdout)
+    );
+    assert!(
+        fs::read_to_string(&linked_post_action)
+            .unwrap()
+            .contains("reflection: completed")
+    );
+    assert!(!main_post_action.exists());
+
     fs::remove_dir_all(root).unwrap();
 }

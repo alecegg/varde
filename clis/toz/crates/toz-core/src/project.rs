@@ -42,15 +42,6 @@ impl Project {
                 ));
             }
         }
-        if let Some(root) = self.fallback_root() {
-            let path = self.store_db_in(&root)?;
-            if path.is_file() {
-                return Ok((
-                    path.parent().unwrap().to_path_buf(),
-                    StoreDirSource::Fallback,
-                ));
-            }
-        }
         let source = if std::env::var_os("VARDE_TOZ_CONFIG_DIR").is_some() {
             StoreDirSource::VardeTozConfigEnv
         } else if crate::config::env_os("TOZ_CONFIG_DIR").is_some() {
@@ -62,21 +53,13 @@ impl Project {
         Ok((path.parent().unwrap().to_path_buf(), source))
     }
 
-    /// The harness supplies a writable external directory. Explicit config wins.
+    /// An explicitly configured fallback is tried only after primary-store access fails.
     pub fn fallback_db_path(&self) -> Option<PathBuf> {
         self.fallback_root()
             .and_then(|root| self.store_db_in(&root).ok())
     }
 
     fn fallback_root(&self) -> Option<PathBuf> {
-        if crate::config::env_os("TOZ_CONFIG_DIR").is_some() {
-            return None;
-        }
-        // The varde `toz` key sets the store directory outright; a harness-supplied fallback
-        // would otherwise silently win when its store already exists (see `store_dir`).
-        if varde_toz_dir(&self.root).is_some() {
-            return None;
-        }
         let root = PathBuf::from(crate::config::env_os("TOZ_FALLBACK_DIR")?);
         if !root.is_absolute()
             || root
@@ -139,8 +122,6 @@ pub enum StoreDirSource {
     TozConfigEnv,
     /// The `toz` key in the varde user config (project-table or default).
     VardeConfig,
-    /// An existing store under `--fallback-dir` / `TOZ_FALLBACK_DIR`.
-    Fallback,
     /// `config_dir()`'s own default resolution (XDG, else `~/.config/tool-output-zone`).
     Default,
 }
@@ -151,7 +132,6 @@ impl std::fmt::Display for StoreDirSource {
             Self::VardeTozConfigEnv => "VARDE_TOZ_CONFIG_DIR",
             Self::TozConfigEnv => "TOZ_CONFIG_DIR",
             Self::VardeConfig => "varde config",
-            Self::Fallback => "fallback dir",
             Self::Default => "default",
         })
     }
@@ -316,7 +296,9 @@ mod tests {
 
     fn clear_env() {
         std::env::remove_var("VARDE_CONFIG_DIR");
+        std::env::remove_var("VARDE_TOZ_CONFIG_DIR");
         std::env::remove_var("TOZ_CONFIG_DIR");
+        std::env::remove_var("VARDE_TOZ_FALLBACK_DIR");
         std::env::remove_var("TOZ_FALLBACK_DIR");
     }
 
@@ -449,6 +431,65 @@ mod tests {
         let (dir, source) = project.store_dir_with_source().unwrap();
         assert_eq!(dir, store_dir.path().join(&project.key));
         assert_eq!(source, StoreDirSource::VardeConfig);
+        clear_env();
+    }
+
+    #[test]
+    fn store_dir_prefers_default_primary_over_existing_fallback() {
+        let _lock = ENV_GUARD.lock().unwrap();
+        clear_env();
+        let xdg = tempfile::tempdir().unwrap();
+        let varde_config = tempfile::tempdir().unwrap();
+        let fallback = tempfile::tempdir().unwrap();
+        let root = PathBuf::from("/tmp/default-primary-project");
+        let project = Project {
+            key: key_for(&root),
+            root,
+        };
+        let fallback_db = fallback.path().join(&project.key).join("toz.db");
+        std::fs::create_dir_all(fallback_db.parent().unwrap()).unwrap();
+        std::fs::write(&fallback_db, b"old fallback").unwrap();
+
+        let prior_xdg = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("XDG_CONFIG_HOME", xdg.path());
+        std::env::set_var("VARDE_CONFIG_DIR", varde_config.path());
+        std::env::set_var("VARDE_TOZ_FALLBACK_DIR", fallback.path());
+        let (dir, source) = project.store_dir_with_source().unwrap();
+        assert_eq!(dir, xdg.path().join("varde-toz").join(&project.key));
+        assert_eq!(source, StoreDirSource::Default);
+        match prior_xdg {
+            Some(value) => std::env::set_var("XDG_CONFIG_HOME", value),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+        clear_env();
+    }
+
+    #[test]
+    fn explicit_primary_still_allows_a_configured_fallback_on_access_failure() {
+        let _lock = ENV_GUARD.lock().unwrap();
+        clear_env();
+        let primary = tempfile::tempdir().unwrap();
+        let fallback = tempfile::tempdir().unwrap();
+        let root = PathBuf::from("/tmp/explicit-primary-project");
+        let project = Project {
+            key: key_for(&root),
+            root,
+        };
+
+        std::env::set_var("VARDE_TOZ_CONFIG_DIR", primary.path());
+        std::env::set_var("VARDE_TOZ_FALLBACK_DIR", fallback.path());
+        assert_eq!(
+            project.fallback_db_path().unwrap(),
+            fallback
+                .path()
+                .canonicalize()
+                .unwrap()
+                .join(&project.key)
+                .join("toz.db")
+        );
+        let (dir, source) = project.store_dir_with_source().unwrap();
+        assert_eq!(dir, primary.path().join(&project.key));
+        assert_eq!(source, StoreDirSource::VardeTozConfigEnv);
         clear_env();
     }
 

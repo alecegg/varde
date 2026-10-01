@@ -10,18 +10,14 @@ root = Path(sys.argv[1])
 def text(relative):
     return re.sub(r'\s+', ' ', (root / relative).read_text())
 
-dispatch = text('varde-change/references/build-dispatch.md')
-assert dispatch.index('classify each selected task') < dispatch.index('| `parallel`')
-assert 'Never put a spike in a parallel wave' in dispatch
-assert 'non-spike tasks retain the normal parallel eligibility' in dispatch
+dispatch = text('varde-change/references/build.md')
+assert '| `parallel` | `execution=auto` (the default)' in dispatch
 assert 'Skip the source commit/ownership audit only for spikes' in dispatch
 assert 'Before accepting a completed implementation task, compare' in dispatch
 assert 'Every `done` implementation task needs a matching source commit' in dispatch
-assert 'a done spike instead needs question/approach/answer, verification evidence' in dispatch
+assert 'Before accepting a completed spike, confirm its question/approach/answer' in dispatch
 execution = text('varde-change/references/build-execution.md')
 assert 'For a spike, commit no source changes' in execution
-assert 'whether the task file is tracked, untracked or external' in execution
-assert 'The parent owns tracked, untracked and external task status/Progress updates' in execution
 fix = text('varde-review/references/fix-pass.md')
 assert fix.index('process only the supplied `finding_ids`') < fix.index('For each eligible finding:')
 assert 'use its concrete approved solution without substituting another' in fix

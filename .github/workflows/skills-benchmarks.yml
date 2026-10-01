@@ -29,14 +29,14 @@ jobs:
       run:
         working-directory: skills
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build workflow CLI
         working-directory: ${{ github.workspace }}
         run: |
           rustup toolchain install stable --profile minimal
           cargo +stable build --locked --manifest-path clis/workflow/Cargo.toml --package varde-workflow --bin varde-workflow --target-dir clis/workflow/target
           echo "$GITHUB_WORKSPACE/clis/workflow/target/debug" >> "$GITHUB_PATH"
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - name: Install ripgrep
         run: sudo apt-get install -y ripgrep
       - name: Run deterministic benchmark checks
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build workflow CLI
         working-directory: ${{ github.workspace }}
         run: |

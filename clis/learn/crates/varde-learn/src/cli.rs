@@ -52,10 +52,52 @@ pub enum DiagnoseCommand {
 }
 
 #[derive(Debug, Args)]
+#[command(override_usage = "varde-learn diagnose capture [OPTIONS] --json")]
+#[command(group(clap::ArgGroup::new("capture_input").required(true).multiple(false).args(["file", "snapshot"])))]
 pub struct DiagnoseCaptureArgs {
     /// Strict JSON file describing one incident and its frozen source anchor.
-    #[arg(long, required = true)]
-    pub file: PathBuf,
+    #[arg(long, value_name = "incident.json", conflicts_with_all = ["source_id", "record_index", "native_id", "kind", "evidence", "item_id", "item_source", "item_title", "item_target"])]
+    pub file: Option<PathBuf>,
+
+    /// Frozen evidence bundle to build the request from (use instead of --file).
+    #[arg(long, requires_all = ["source_id", "record_index", "kind", "evidence"])]
+    pub snapshot: Option<PathBuf>,
+
+    /// Source ID of the record to capture.
+    #[arg(long)]
+    pub source_id: Option<String>,
+
+    /// Record index of the record to capture.
+    #[arg(long)]
+    pub record_index: Option<u64>,
+
+    /// Native record ID; needed when source ID and record index match several records.
+    #[arg(long)]
+    pub native_id: Option<String>,
+
+    /// Incident kind: failed-tool, repeated-work, or workflow-deviation.
+    #[arg(long)]
+    pub kind: Option<String>,
+
+    /// Observed evidence text (8 KiB limit).
+    #[arg(long)]
+    pub evidence: Option<String>,
+
+    /// Existing friction item ID.
+    #[arg(long, conflicts_with_all = ["item_source", "item_title", "item_target"])]
+    pub item_id: Option<i64>,
+
+    /// Source of a new friction item.
+    #[arg(long, requires = "item_title")]
+    pub item_source: Option<String>,
+
+    /// Title of a new friction item.
+    #[arg(long, requires = "item_source")]
+    pub item_title: Option<String>,
+
+    /// Target path of a new friction item.
+    #[arg(long, requires = "item_source")]
+    pub item_target: Option<String>,
 
     /// Print the shared machine-readable output envelope.
     #[arg(long)]
@@ -345,6 +387,10 @@ pub struct TriggerArgs {
     /// Number of runs per query.
     #[arg(long, default_value_t = 3)]
     pub runs: u32,
+
+    /// Per-harness timeout in seconds.
+    #[arg(long, default_value_t = 300)]
+    pub timeout_seconds: u64,
 
     /// Absolute path to the skill file, used by the Codex substring proxy.
     #[arg(long)]

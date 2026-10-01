@@ -1,44 +1,53 @@
-# Visual Track
+# Frontend design track
 
-Before the first mockup, grep the project for design tokens, component
-libraries, and existing styles, and build from them; fall back to a
-conventional `styles/` or `design-system/` directory only when none exist. Add
-only the interaction (animation, transition, state change) needed to confirm
-the design.
+## Understand the surface
 
-## Files
+1. Inspect the requested page or component, its neighboring routes, and the
+   project's design system (guidance, tokens, component library, styles);
+   preserve it unless the user asks to change it.
+2. Identify the user, their main task and primary action, and constraints
+   (brand, platform, viewport, accessibility). Ask only about missing details
+   that would materially change the design.
+3. Keep the route or component in its realistic page context, and cover the
+   states that affect the design (loading, empty, validation, error, success).
 
-| File | Rules |
-|---|---|
-| `<storage>/variant-<a\|b\|c...>.html` | Round 1 only, one per structurally distinct direction. Keeps its name after `v1.html` is seeded. |
-| `<storage>/v<N>.html` | The mockup for the current revision, starting at `v1.html` from the round-1 winner; each later revision writes the next `v<N>.html`. Earlier versions stay. |
+## Choose a direction
 
-Each mockup is a valid, self-contained HTML document with its CSS inlined in a
-`<style>` tag, so earlier versions never change. A static mockup is plain HTML
-and CSS; JavaScript and external dependencies (CDN links, web fonts, icon
-libraries) need the user's explicit agreement.
+If the user gave a specific direction, or asks to refine an existing
+prototype, write the next `v<N>.html` directly. Otherwise, make variants only
+when a real structural choice is unresolved:
 
-## Round 1 — Variants
+1. Pick 2–3 close directions or 3–5 substantially different directions;
+   default to 3 and state the count.
+2. Vary hierarchy, layout, and primary action; keep content and scope the same.
+3. Save one complete page per direction as `variant-a.html`, `variant-b.html`,
+   and so on. Give each the same fixed switcher of ordinary `<a href>` links to
+   the sibling files. Do not embed or scale the pages.
+4. Report the saved paths and ask the user to select a direction or hybrid.
+   Stop before writing `v1.html`; after selection, seed it from that direction.
 
-If the user already gave a specific direction, skip variants, write `v1.html`
-from that direction, and continue with the rounds below.
+## Build and refine
 
-1. **Pick N.** 2–3 close variants (narrow) or 3–5 unrelated shapes (wide);
-   default 3, max 5; state N.
-2. **Generate N different variants** as full-page mockups. Vary layout,
-   information hierarchy, and primary action, not just colors or copy; redo a
-   draft that is too similar.
-3. **Add the same switcher bar to every variant**: a small fixed element, such
-   as a bottom-center bar, with plain `<a href="variant-b.html">` links to
-   every sibling and no JavaScript. Each variant opens as its own full page,
-   never an embedded or scaled preview.
-4. **Say** the switcher bar opens the others at full fidelity.
-5. **Ask the user to pick** a winner or a hybrid ("the header from B with the
-   sidebar from C"). End round 1 here; do not write `v1.html` before the user
-   selects a direction.
-6. **After the selection, seed `v1.html`** from the winner, applying any hybrid
-   instructions, and continue with the rounds below.
+- **Artifact:** a valid, self-contained HTML document with inline CSS and no
+  framework, bundler, external dependency, or server. Add JavaScript, external
+  assets, or the project's runtime only when the design question needs them
+  and the user agrees.
+- **Quality:** semantic elements, labelled controls, visible focus, readable
+  contrast, and a responsive layout with a useful narrow viewport when the
+  surface must adapt.
+- **Revisions:** saved revisions stay unchanged; each refinement writes the
+  next `v<N>.html`. When the direction is clear, make the focused refinement
+  and state the assumption; otherwise ask per the round rules.
 
-## Rounds
+## Optional browser iteration
 
-Each round: ask one targeted question, then write `v<N+1>.html`.
+Use a browser only when a browser tool is available and a target exists: a
+user-supplied running URL or run command, or a development command named in
+project docs. Never guess a URL, route, or command.
+
+1. Refine against actual layout and reachable interactions at the primary and
+   narrow viewports, when resizing is supported.
+2. Save useful screenshots beside the prototype when the tool supports it,
+   and inspect them.
+3. Report what you could not inspect (browser access, resizing, a state) and
+   continue with the artifact.

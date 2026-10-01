@@ -9,21 +9,19 @@ description: "Compare design options or explain how existing code works, in chat
 
 | The request is | Do |
 |---|---|
-| An open question — problem, design, tradeoff, or how code works (default) | Answer in chat, grounded in files read (cite path:line). For options, name each one, its tradeoffs, and one recommendation. For structure (what exists, what depends on what, blast radius), load `references/varde-code.md`. |
-| A direct ask to explain a diff or code area, or compare options, as a document to keep | Read `references/explain.md` and follow it. It saves an HTML file under `<working>/explanations/` by default. |
+| An open question: problem, design, tradeoff, or how code works (default) | Answer in chat (default). |
+| A direct ask to explain a diff or code area, or compare options, as a document to keep | Read `references/explain.md` and follow it. |
+
+## Chat answers
+
+- Ground answers in files read and cite `path:line`.
+- For options, name each one, give its tradeoffs, and recommend one.
+- For structure questions (what exists, what depends on what, blast radius), load `references/varde-code-cli.md`.
 
 ## Gotchas
 
-- Resolve `<working>` (local, uncommitted) and `<knowledge>` (committed) only
-  when a route uses them; chat answers without a knowledge lookup skip this.
-  Before first use, run `varde-workflow paths --json`; use its absolute
-  `data.working`/`data.knowledge` paths for this session and pass them to
-  subagents. If the command fails, retry it once with escalated access; if it
-  still fails, ask the user for the paths. Do not guess storage paths. A
-  location outside the repo skips git ops (`check-ignore`, `mv`, `status`);
-  use plain file ops.
+- Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
 
 - If the user explicitly asks to plan or build after exploring, start the
-  matching `varde-change` route in the same turn without reconfirming the
-  request. Settled work uses bounded build; unresolved choices follow the
-  plan's own approval gates. Otherwise, offer the next step and wait.
+  matching `varde-change` route in the same turn without reconfirming; otherwise,
+  offer the next step and wait.

@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS stats_log (
 );
 CREATE INDEX IF NOT EXISTS stats_ts ON stats_log(ts);
 
+CREATE TABLE IF NOT EXISTS query_log (
+  id INTEGER PRIMARY KEY,
+  ts INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  bytes_out INTEGER NOT NULL,
+  session TEXT,
+  outcome TEXT NOT NULL DEFAULT 'ok',
+  details_json TEXT
+);
+CREATE INDEX IF NOT EXISTS query_ts ON query_log(ts);
+
 CREATE TABLE IF NOT EXISTS capture_records (
   id INTEGER PRIMARY KEY,
   capture_id INTEGER NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
@@ -199,6 +210,24 @@ pub struct KindStats {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+pub struct QueryKindStats {
+    pub kind: String,
+    pub queries: i64,
+    pub bytes_out: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct QueryEvent {
+    pub id: i64,
+    pub ts: i64,
+    pub kind: String,
+    pub bytes_out: i64,
+    pub session: Option<String>,
+    pub outcome: String,
+    pub details: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Stats {
     pub captures: i64,
     /// Bytes that would have entered the context window.
@@ -206,6 +235,10 @@ pub struct Stats {
     /// Bytes of preview actually emitted.
     pub bytes_out: i64,
     pub by_kind: Vec<KindStats>,
+    pub queries: i64,
+    pub query_bytes: i64,
+    pub by_query_kind: Vec<QueryKindStats>,
+    pub net_saved_bytes: i64,
     /// Captures currently in the store (not just the window).
     pub stored_captures: i64,
     pub db_bytes: i64,
@@ -297,6 +330,15 @@ fn open_initialized_connection(path: &Path) -> Result<Connection> {
             "ALTER TABLE captures ADD COLUMN state TEXT NOT NULL DEFAULT 'completed'",
             [],
         )?;
+    }
+    if !has_column(&conn, "query_log", "outcome")? {
+        conn.execute(
+            "ALTER TABLE query_log ADD COLUMN outcome TEXT NOT NULL DEFAULT 'ok'",
+            [],
+        )?;
+    }
+    if !has_column(&conn, "query_log", "details_json")? {
+        conn.execute("ALTER TABLE query_log ADD COLUMN details_json TEXT", [])?;
     }
     ensure_conditional_fts_triggers(&conn)?;
     conn.execute(
@@ -766,6 +808,69 @@ impl Store {
         Ok(())
     }
 
+    pub fn log_query(
+        &self,
+        kind: &str,
+        bytes_out: usize,
+        session: Option<&str>,
+        outcome: &str,
+        details: &serde_json::Value,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO query_log(ts, kind, bytes_out, session, outcome, details_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![now(), kind, bytes_out as i64, session, outcome, serde_json::to_string(details)?],
+        )?;
+        Ok(())
+    }
+
+    pub fn query_events(
+        &self,
+        session: Option<&str>,
+        since: Option<i64>,
+        limit: usize,
+    ) -> Result<Vec<QueryEvent>> {
+        let exists: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'query_log')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            return Ok(Vec::new());
+        }
+        let outcome = if has_column(&self.conn, "query_log", "outcome")? {
+            "outcome"
+        } else {
+            "'ok'"
+        };
+        let details = if has_column(&self.conn, "query_log", "details_json")? {
+            "details_json"
+        } else {
+            "NULL"
+        };
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT id, ts, kind, bytes_out, session, {outcome}, {details}
+             FROM query_log WHERE (?1 IS NULL OR session = ?1) AND (?2 IS NULL OR ts >= ?2)
+             ORDER BY ts DESC, id DESC LIMIT ?3"
+        ))?;
+        let rows = stmt.query_map(params![session, since, limit as i64], |r| {
+            let details: Option<String> = r.get(6)?;
+            let details = details
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or(serde_json::Value::Null);
+            Ok(QueryEvent {
+                id: r.get(0)?,
+                ts: r.get(1)?,
+                kind: r.get(2)?,
+                bytes_out: r.get(3)?,
+                session: r.get(4)?,
+                outcome: r.get(5)?,
+                details,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
     pub fn get_by_handle(&self, handle: &str) -> Result<Option<CaptureRow>> {
         self.conn
             .query_row(
@@ -1021,6 +1126,33 @@ impl Store {
                 })
             })?
             .collect::<std::result::Result<_, _>>()?;
+        let by_query_kind = if self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'query_log')",
+            [],
+            |r| r.get::<_, bool>(0),
+        )? {
+            let outcome_filter = if has_column(&self.conn, "query_log", "outcome")? {
+                "AND outcome IN ('ok', 'partial', 'no_store')"
+            } else {
+                ""
+            };
+            let mut stmt = self.conn.prepare(&format!(
+                "SELECT kind, COUNT(*), COALESCE(SUM(bytes_out),0)
+                 FROM query_log WHERE {filter} {outcome_filter} GROUP BY kind ORDER BY SUM(bytes_out) DESC"
+            ))?;
+            let rows = stmt.query_map([arg.as_ref()], |r| {
+                Ok(QueryKindStats {
+                    kind: r.get(0)?,
+                    queries: r.get(1)?,
+                    bytes_out: r.get(2)?,
+                })
+            })?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
+        let queries = by_query_kind.iter().map(|k| k.queries).sum();
+        let query_bytes = by_query_kind.iter().map(|k| k.bytes_out).sum();
         let total = by_kind.iter().fold(KindStats::default(), |mut acc, k| {
             acc.captures += k.captures;
             acc.bytes_in += k.bytes_in;
@@ -1035,6 +1167,10 @@ impl Store {
             bytes_in: total.bytes_in,
             bytes_out: total.bytes_out,
             by_kind,
+            queries,
+            query_bytes,
+            by_query_kind,
+            net_saved_bytes: total.bytes_in - total.bytes_out - query_bytes,
             stored_captures: stored,
             db_bytes: self.db_size_bytes()?,
         })
@@ -1224,6 +1360,49 @@ mod tests {
     fn store() -> Store {
         let dir = std::env::temp_dir().join(format!("toz-test-{}", crate::rand::next_u64()));
         Store::open(&dir.join("toz.db")).unwrap()
+    }
+
+    #[test]
+    fn query_events_read_and_upgrade_legacy_query_log() {
+        let s = store();
+        let path = s.path().to_path_buf();
+        s.conn()
+            .execute_batch(
+                "DROP TABLE query_log;
+                 CREATE TABLE query_log (
+                   id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, kind TEXT NOT NULL,
+                   bytes_out INTEGER NOT NULL, session TEXT
+                 );
+                 INSERT INTO query_log(ts, kind, bytes_out, session)
+                   VALUES (1, 'chunk', 12, 'old-session');",
+            )
+            .unwrap();
+        drop(s);
+
+        let readonly = Store::open_readonly(&path).unwrap();
+        let events = readonly
+            .query_events(Some("old-session"), None, 10)
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].outcome, "ok");
+        assert!(events[0].details.is_null());
+        assert_eq!(readonly.stats(None, None).unwrap().query_bytes, 12);
+        drop(readonly);
+
+        let upgraded = Store::open(&path).unwrap();
+        upgraded
+            .log_query(
+                "lines",
+                4,
+                Some("new-session"),
+                "ok",
+                &serde_json::json!({"handle":"abc"}),
+            )
+            .unwrap();
+        let events = upgraded.query_events(None, None, 10).unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].details["handle"], "abc");
+        assert_eq!(upgraded.stats(None, None).unwrap().query_bytes, 16);
     }
 
     fn cap<'a>(source: &'a str) -> NewCapture<'a> {

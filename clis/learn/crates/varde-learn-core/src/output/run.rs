@@ -4,8 +4,8 @@
 //! `timing.json`, `setup.txt`).
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
@@ -38,16 +38,28 @@ pub struct RunRecord {
     pub cost_usd: Option<f64>,
 }
 
-pub(super) fn execute_run(
-    skill_dir: &Path,
-    eval: &EvalCase,
-    cfg: Config,
-    run: u32,
-    eval_dir: &Path,
-    sandbox_template: Option<&Path>,
-    timeout_seconds: u64,
-    options: &OutputRequest,
-) -> Result<RunRecord, LearnError> {
+pub(super) struct ExecuteRunArgs<'a> {
+    pub(super) skill_dir: &'a Path,
+    pub(super) eval: &'a EvalCase,
+    pub(super) cfg: Config,
+    pub(super) run: u32,
+    pub(super) eval_dir: &'a Path,
+    pub(super) sandbox_template: Option<&'a Path>,
+    pub(super) timeout_seconds: u64,
+    pub(super) options: &'a OutputRequest,
+}
+
+pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnError> {
+    let ExecuteRunArgs {
+        skill_dir,
+        eval,
+        cfg,
+        run,
+        eval_dir,
+        sandbox_template,
+        timeout_seconds,
+        options,
+    } = args;
     let eval_run_start = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -124,6 +136,7 @@ pub(super) fn execute_run(
             eval_id: &eval.id,
             cfg,
             run,
+            timeout_seconds,
         })?;
     }
 
@@ -269,34 +282,80 @@ struct SetupScriptRequest<'a> {
     eval_id: &'a str,
     cfg: Config,
     run: u32,
+    timeout_seconds: u64,
 }
 
 fn run_setup_script(req: &SetupScriptRequest) -> Result<(), LearnError> {
     let script_path = req.skill_dir.join(req.script_rel);
-    let output = Command::new("bash")
-        .arg(&script_path)
-        .current_dir(req.sbox)
-        .envs(req.env.iter().map(|(key, value)| (key, value)))
-        .env("EVAL_ID", req.eval_id)
-        .env("EVAL_CONFIG", req.cfg.as_str())
-        .env("EVAL_RUN", req.run.to_string())
-        .env("EVAL_RUN_DIR", req.run_dir_abs)
-        .env("EVAL_SKILL_DIR", req.skill_dir)
-        .env("EVAL_SANDBOX_DIR", req.sbox)
-        .output()
-        .map_err(|err| LearnError::Usage(format!("failed to launch setup_script: {err}")))?;
-    let mut combined = output.stdout;
-    combined.extend_from_slice(&output.stderr);
-    fs::write(req.run_dir.join("setup.txt"), combined)
-        .map_err(|err| LearnError::Usage(format!("failed to write setup.txt: {err}")))?;
-    if !output.status.success() {
-        return Err(LearnError::Usage(format!(
+    let stdout_path = req.run_dir.join("setup.txt");
+    let stderr_path = req.run_dir.join("setup.stderr.tmp");
+    // Keep setup.txt's historical combined output while letting the shared
+    // process runner manage the deadline and the whole child process group.
+    let args = vec![
+        "-c".to_string(),
+        "exec 2>&1; exec bash \"$0\"".to_string(),
+        script_path.display().to_string(),
+    ];
+    let mut env = req.env.to_vec();
+    env.extend([
+        ("EVAL_ID".to_string(), req.eval_id.to_string()),
+        ("EVAL_CONFIG".to_string(), req.cfg.as_str().to_string()),
+        ("EVAL_RUN".to_string(), req.run.to_string()),
+        (
+            "EVAL_RUN_DIR".to_string(),
+            req.run_dir_abs.display().to_string(),
+        ),
+        (
+            "EVAL_SKILL_DIR".to_string(),
+            req.skill_dir.display().to_string(),
+        ),
+        (
+            "EVAL_SANDBOX_DIR".to_string(),
+            req.sbox.display().to_string(),
+        ),
+    ]);
+    let request = RunRequest {
+        program: "bash",
+        args: &args,
+        cwd: Some(req.sbox),
+        env: &env,
+        stdin: &[],
+        stdout_path: &stdout_path,
+        stderr_path: &stderr_path,
+        timeout: Duration::from_secs(req.timeout_seconds),
+    };
+    let outcome = run_with_timeout(&request);
+    let append_result = append_file(&stderr_path, &stdout_path);
+    let _ = fs::remove_file(&stderr_path);
+    append_result?;
+
+    match outcome? {
+        ProcessOutcome::Completed(ExitResult::Code(0)) => Ok(()),
+        ProcessOutcome::TimedOut => Err(LearnError::Usage(format!(
+            "setup_script timed out after {} seconds for eval {}, {} run {}",
+            req.timeout_seconds,
+            req.eval_id,
+            req.cfg.as_str(),
+            req.run
+        ))),
+        ProcessOutcome::Completed(_) => Err(LearnError::Usage(format!(
             "setup_script failed for eval {}, {} run {}",
             req.eval_id,
             req.cfg.as_str(),
             req.run
-        )));
+        ))),
     }
+}
+
+fn append_file(source: &Path, destination: &Path) -> Result<(), LearnError> {
+    let mut source = fs::File::open(source)
+        .map_err(|err| LearnError::Usage(format!("failed to read setup stderr: {err}")))?;
+    let mut destination = fs::OpenOptions::new()
+        .append(true)
+        .open(destination)
+        .map_err(|err| LearnError::Usage(format!("failed to append setup stderr: {err}")))?;
+    io::copy(&mut source, &mut destination)
+        .map_err(|err| LearnError::Usage(format!("failed to append setup stderr: {err}")))?;
     Ok(())
 }
 

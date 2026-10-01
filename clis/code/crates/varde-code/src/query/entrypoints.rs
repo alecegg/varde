@@ -727,6 +727,302 @@ pub fn detect_process_mains(conn: &Connection) -> Result<Vec<Entrypoint>, ApiErr
     Ok(results)
 }
 
+/// Detect Node process mains and Node HTTP request handlers when source files
+/// are available. These roots depend on syntax that the entity index does not
+/// retain (the direct-run guard and the `createServer` callback), so dbPath-only
+/// nav-map queries intentionally omit them.
+pub fn detect_node_entrypoints(
+    conn: &Connection,
+    repo_root: Option<&std::path::Path>,
+) -> Result<Vec<Entrypoint>, ApiError> {
+    let Some(repo_root) = repo_root else {
+        return Ok(Vec::new());
+    };
+    let mut stmt = conn
+        .prepare(
+            "SELECT e.id, f.path, e.name
+             FROM entities e
+             JOIN files f ON f.id = e.file_id
+             WHERE e.kind = ?1 AND f.is_test_path = 0
+               AND e.owner_type IS NULL
+               AND e.name IN ('main', 'handleRequest')",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map([EntityKind::Function.as_i64()], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+
+    let mut source_by_file = HashMap::new();
+    let mut results = Vec::new();
+    for (entity_id, file, name) in rows {
+        if is_generated_or_vendored_path(&file)
+            || is_scaffold_template_path(&file)
+            || is_frontend_asset_path(&file)
+        {
+            continue;
+        }
+        let source = source_by_file
+            .entry(file.clone())
+            .or_insert_with(|| std::fs::read_to_string(repo_root.join(&file)).ok());
+        let Some(source) = source.as_deref() else {
+            continue;
+        };
+        let Some(language) = language_for_path(std::path::Path::new(&file)) else {
+            continue;
+        };
+        if !matches!(
+            language,
+            SupportLang::TypeScript | SupportLang::Tsx | SupportLang::JavaScript
+        ) {
+            continue;
+        }
+        let parsed = crate::parse::parse_source(&language, source);
+        let root = parsed.root.root();
+        let is_main = name == "main" && has_node_direct_run_call(&root);
+        let is_request_handler = name == "handleRequest" && has_node_http_handler_call(&root);
+        if !is_main && !is_request_handler {
+            continue;
+        }
+        results.push(Entrypoint {
+            entity_id,
+            file,
+            symbol: name,
+            role: if is_main {
+                RoleTag::ProcessMain
+            } else {
+                RoleTag::RouteHandler
+            },
+            flow_root: true,
+            method: None,
+            path: None,
+        });
+    }
+    results.sort_by(|a, b| a.file.cmp(&b.file).then(a.symbol.cmp(&b.symbol)));
+    Ok(results)
+}
+
+/// Detect a `main()` call inside a top-level Node direct-run guard. Inspecting
+/// source keeps a helper named `main` from becoming a process entrypoint.
+fn has_node_direct_run_call(
+    root: &ast_grep_core::Node<'_, ast_grep_core::tree_sitter::StrDoc<SupportLang>>,
+) -> bool {
+    root.children().any(|node| {
+        if node.kind() != "if_statement" {
+            return false;
+        }
+        let condition = node.field("condition").map(|condition| condition.text());
+        let is_direct_run_guard = condition
+            .as_deref()
+            .is_some_and(is_positive_node_direct_run_condition);
+        is_direct_run_guard && contains_call_named(&node, "main")
+    })
+}
+
+fn is_positive_node_direct_run_condition(condition: &str) -> bool {
+    let condition = condition.trim();
+    if condition.starts_with('!') || condition.contains("!==") || condition.contains("!=") {
+        return false;
+    }
+    has_positive_equality_between(condition, "import.meta.url", "process.argv[1]")
+        || has_positive_equality_between(condition, "require.main", "module")
+}
+
+fn has_positive_equality_between(condition: &str, left_operand: &str, right_operand: &str) -> bool {
+    let condition = strip_outer_parentheses(condition);
+    ["===", "=="].into_iter().any(|operator| {
+        condition.split_once(operator).is_some_and(|(left, right)| {
+            let left = strip_outer_parentheses(left);
+            let right = strip_outer_parentheses(right);
+            let operands_match = |candidate_left: &str, candidate_right: &str| {
+                if left_operand == "import.meta.url" {
+                    candidate_left == left_operand && candidate_right.contains(right_operand)
+                } else {
+                    candidate_left == left_operand && candidate_right == right_operand
+                }
+            };
+            operands_match(left, right) || operands_match(right, left)
+        })
+    })
+}
+
+fn strip_outer_parentheses(mut expression: &str) -> &str {
+    loop {
+        let trimmed = expression.trim();
+        if !trimmed.starts_with('(') || !trimmed.ends_with(')') {
+            return trimmed;
+        }
+        let mut depth = 0usize;
+        let wraps_expression = trimmed.char_indices().all(|(index, ch)| {
+            match ch {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 && index + ch.len_utf8() < trimmed.len() {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+            true
+        });
+        if !wraps_expression || depth != 0 {
+            return trimmed;
+        }
+        expression = &trimmed[1..trimmed.len() - 1];
+    }
+}
+
+/// Detect a named handler invoked by a `createServer` callback in this module.
+fn has_node_http_handler_call(
+    root: &ast_grep_core::Node<'_, ast_grep_core::tree_sitter::StrDoc<SupportLang>>,
+) -> bool {
+    contains_node_kind(root, "call_expression", &mut |call| {
+        let is_create_server = call
+            .field("function")
+            .is_some_and(|function| function.text().trim() == "createServer");
+        is_create_server && contains_call_named(call, "handleRequest")
+    })
+}
+
+fn contains_call_named(
+    node: &ast_grep_core::Node<'_, ast_grep_core::tree_sitter::StrDoc<SupportLang>>,
+    name: &str,
+) -> bool {
+    contains_node_kind(node, "call_expression", &mut |call| {
+        call.field("function")
+            .is_some_and(|function| function.text().trim() == name)
+    })
+}
+
+fn contains_node_kind(
+    node: &ast_grep_core::Node<'_, ast_grep_core::tree_sitter::StrDoc<SupportLang>>,
+    kind: &str,
+    predicate: &mut impl FnMut(
+        &ast_grep_core::Node<'_, ast_grep_core::tree_sitter::StrDoc<SupportLang>>,
+    ) -> bool,
+) -> bool {
+    (node.kind() == kind && predicate(node))
+        || node
+            .children()
+            .any(|child| contains_node_kind(&child, kind, predicate))
+}
+
+/// SvelteKit page and layout files remain path-only: `.svelte` is inventoried
+/// in `files`, but has no parser-backed entity ID or call tree.
+pub fn detect_sveltekit_pages(conn: &Connection) -> Result<Vec<serde_json::Value>, ApiError> {
+    let mut stmt = conn
+        .prepare("SELECT path FROM files WHERE path LIKE '%/routes/%' OR path LIKE 'routes/%'")
+        .map_err(db_err)?;
+    let paths = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+    let mut entries = paths
+        .into_iter()
+        .filter_map(|file| {
+            let (filename, role, symbol) = if file.ends_with("/+page.svelte") {
+                ("+page.svelte", "page_component", "+page")
+            } else if file.ends_with("/+layout.svelte") {
+                ("+layout.svelte", "page_layout", "+layout")
+            } else {
+                return None;
+            };
+            let path = sveltekit_route_path(&file, filename)?;
+            if is_generated_or_vendored_path(&file) || is_scaffold_template_path(&file) {
+                return None;
+            }
+            Some(serde_json::json!({
+                "file": file,
+                "symbol": symbol,
+                "role": role,
+                "path": path,
+            }))
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left["file"].as_str().cmp(&right["file"].as_str()));
+    Ok(entries)
+}
+
+/// Detect named, exported SvelteKit server method functions. Arrow-function
+/// exports remain out until extraction can give them a stable function entity.
+pub fn detect_sveltekit_server_routes(conn: &Connection) -> Result<Vec<Entrypoint>, ApiError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT e.id, f.path, e.name
+             FROM entities e
+             JOIN files f ON f.id = e.file_id
+             WHERE e.kind = ?1 AND f.is_test_path = 0
+               AND (f.path LIKE '%/routes/%/+server.%' OR f.path LIKE 'routes/%/+server.%')
+               AND e.name IN ('GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD')
+               AND EXISTS (
+                   SELECT 1 FROM entities x
+                   WHERE x.file_id = e.file_id AND x.kind = ?2 AND x.name = e.name
+               )",
+        )
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map(
+            [EntityKind::Function.as_i64(), EntityKind::Export.as_i64()],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .map_err(db_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(db_err)?;
+    let mut entries = rows
+        .into_iter()
+        .filter_map(|(entity_id, file, method)| {
+            if is_generated_or_vendored_path(&file) || is_scaffold_template_path(&file) {
+                return None;
+            }
+            Some(Entrypoint {
+                entity_id,
+                path: Some(sveltekit_route_path(&file, file.rsplit('/').next()?)?),
+                file,
+                symbol: method.clone(),
+                role: RoleTag::RouteHandler,
+                flow_root: true,
+                method: Some(method),
+            })
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|a, b| a.file.cmp(&b.file).then(a.symbol.cmp(&b.symbol)));
+    Ok(entries)
+}
+
+/// Convert a SvelteKit `src/routes` file path to its URL path, omitting route
+/// groups such as `(app)` while preserving dynamic and optional segments.
+fn sveltekit_route_path(file: &str, filename: &str) -> Option<String> {
+    let parts = file.split('/').collect::<Vec<_>>();
+    let routes = parts.iter().rposition(|part| *part == "routes")?;
+    let route_parts = parts
+        .iter()
+        .skip(routes + 1)
+        .take_while(|part| **part != filename)
+        .filter(|part| !(part.starts_with('(') && part.ends_with(')')))
+        .copied()
+        .collect::<Vec<_>>();
+    Some(if route_parts.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", route_parts.join("/"))
+    })
+}
+
 /// Maximum names per `IN (...)` chunk when loading the handler index.
 /// SQLite's default `SQLITE_MAX_VARIABLE_NUMBER` is 999; stay well under it
 /// (the kind parameter shares the budget) so a route-heavy repo chunks rather

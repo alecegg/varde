@@ -3264,3 +3264,446 @@ fn codex_family_overlap_includes_a_current_linked_child() {
     assert_eq!(value["data"]["overlap"], "current");
     assert_eq!(value["data"]["coverage"]["analysis_ready"], false);
 }
+
+const OPENCODE_FAILED_TOOL: &str = r#"{"cwd":"/tool/actual","agent":"build","model":{"id":"synthetic-model","providerID":"synthetic-provider","variant":"default"},"content":[{"type":"tool","id":"TOOLID","name":"bash","state":{"status":"error","input":{"command":"false"},"error":{"type":"tool.execution","message":"Synthetic exit 1"}},"time":{"created":1700000000010,"ran":1700000000020,"completed":1700000000030}}],"time":{"created":1700000000010,"completed":1700000000040},"tokens":{"input":10,"output":3,"reasoning":2,"cache":{"read":7,"write":4}}}"#;
+
+const OPENCODE_SCHEMA: &str = r#"
+    CREATE TABLE project(id TEXT PRIMARY KEY);
+    CREATE TABLE session_v2 (
+      id TEXT PRIMARY KEY, project_id TEXT NOT NULL, workspace_id TEXT,
+      parent_id TEXT, fork_session_id TEXT, fork_boundary TEXT,
+      slug TEXT NOT NULL, directory TEXT NOT NULL, path TEXT, title TEXT,
+      version TEXT NOT NULL, share_url TEXT, summary_additions INTEGER,
+      summary_deletions INTEGER, summary_files INTEGER, summary_diffs TEXT,
+      metadata TEXT, cost REAL DEFAULT 0 NOT NULL,
+      tokens_input INTEGER DEFAULT 0 NOT NULL, tokens_output INTEGER DEFAULT 0 NOT NULL,
+      tokens_reasoning INTEGER DEFAULT 0 NOT NULL, tokens_cache_read INTEGER DEFAULT 0 NOT NULL,
+      tokens_cache_write INTEGER DEFAULT 0 NOT NULL, revert TEXT, permission TEXT,
+      agent TEXT, model TEXT, time_created INTEGER NOT NULL, time_updated INTEGER NOT NULL,
+      time_idle INTEGER, time_viewed INTEGER, idle_outcome TEXT, time_compacting INTEGER,
+      time_archived INTEGER, time_suspended INTEGER,
+      resume_attempts INTEGER DEFAULT 0 NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+    );
+    CREATE TABLE session_message (
+      id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES session_v2(id) ON DELETE CASCADE,
+      type TEXT NOT NULL, seq INTEGER NOT NULL, time_created INTEGER NOT NULL,
+      time_updated INTEGER NOT NULL, data TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX session_message_session_seq_idx ON session_message(session_id,seq);
+    CREATE INDEX session_message_session_type_seq_idx ON session_message(session_id,type,seq);
+"#;
+
+fn capture_flag_run(store_path: &Path, args: &[&str]) -> std::process::Output {
+    command()
+        .args(["diagnose", "capture", "--json"])
+        .args(args)
+        .env("VARDE_LEARN_STORE", store_path)
+        .output()
+        .unwrap()
+}
+
+fn capture_flag_new_item(snapshot: &Path, record_index: &str, evidence: &str) -> Vec<String> {
+    [
+        "--snapshot",
+        snapshot.to_str().unwrap(),
+        "--source-id",
+        "SOURCE",
+        "--record-index",
+        record_index,
+        "--kind",
+        "failed-tool",
+        "--evidence",
+        evidence,
+        "--item-source",
+        "varde-learn diagnosis",
+        "--item-title",
+        "Synthetic failed tool",
+        "--item-target",
+        "clis/learn",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+fn capture_flag_with_source(
+    store_path: &Path,
+    args: Vec<String>,
+    source_id: &str,
+    extra: &[&str],
+) -> std::process::Output {
+    let mut args: Vec<&str> = args
+        .iter()
+        .map(|arg| {
+            if arg == "SOURCE" {
+                source_id
+            } else {
+                arg.as_str()
+            }
+        })
+        .collect();
+    args.extend_from_slice(extra);
+    capture_flag_run(store_path, &args)
+}
+
+fn capture_flag_codex_bundle(root: &Path, thread_id: &str) -> (Value, PathBuf, Value) {
+    let home = root.join("codex-home");
+    codex_capture_rollout(&home, thread_id, "/historic/turn-cwd", "permission denied");
+    let snapshot_path = root.join(format!("{thread_id}.json"));
+    let inspection = inspect_codex_snapshot(&home, thread_id, &snapshot_path);
+    let anchor = inspection["data"]["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|record| record["anchor"]["native_id"] == "native-failure-1")
+        .unwrap()["anchor"]
+        .clone();
+    (inspection, snapshot_path, anchor)
+}
+
+#[test]
+fn capture_flag_jsonl_new_item_matches_the_file_form() {
+    let root = TempDir::new().unwrap();
+    let (inspection, snapshot_path, anchor) = capture_flag_codex_bundle(root.path(), THREAD);
+    let store_path = root.path().join("learn-store");
+    let source_id = anchor["source_id"].as_str().unwrap();
+    let record_index = anchor["record_index"].to_string();
+    let args = capture_flag_new_item(&snapshot_path, &record_index, "Observed a failed tool.");
+
+    let created = success_json(&capture_flag_with_source(
+        &store_path,
+        args.clone(),
+        source_id,
+        &[],
+    ));
+    assert_eq!(created["data"]["disposition"], "created");
+    let repeated = success_json(&capture_flag_with_source(&store_path, args, source_id, &[]));
+    assert_eq!(repeated["data"]["disposition"], "already-recorded");
+    assert_eq!(
+        repeated["data"]["occurrence_id"],
+        created["data"]["occurrence_id"]
+    );
+
+    let request = capture_request(
+        &snapshot_path,
+        &inspection,
+        "Synthetic failed tool",
+        "Observed a failed tool.",
+    );
+    let request_path = root.path().join("incident.json");
+    fs::write(&request_path, serde_json::to_vec(&request).unwrap()).unwrap();
+    let from_file = success_json(&run_capture(&request_path, &store_path));
+    assert_eq!(from_file["data"]["disposition"], "already-recorded");
+    assert_eq!(
+        from_file["data"]["occurrence_id"],
+        created["data"]["occurrence_id"]
+    );
+}
+
+#[test]
+fn capture_flag_existing_item_receives_a_second_occurrence() {
+    let root = TempDir::new().unwrap();
+    let store_path = root.path().join("learn-store");
+    let (_, first_snapshot, first_anchor) = capture_flag_codex_bundle(root.path(), THREAD);
+    let first_index = first_anchor["record_index"].to_string();
+    let first = success_json(&capture_flag_with_source(
+        &store_path,
+        capture_flag_new_item(&first_snapshot, &first_index, "First failure."),
+        first_anchor["source_id"].as_str().unwrap(),
+        &[],
+    ));
+    let (_, second_snapshot, second_anchor) =
+        capture_flag_codex_bundle(root.path(), "thread-codex-fixture-2");
+    let item_id = first["data"]["item_id"].to_string();
+    let second = success_json(&capture_flag_run(
+        &store_path,
+        &[
+            "--snapshot",
+            second_snapshot.to_str().unwrap(),
+            "--source-id",
+            second_anchor["source_id"].as_str().unwrap(),
+            "--record-index",
+            &second_anchor["record_index"].to_string(),
+            "--kind",
+            "failed-tool",
+            "--evidence",
+            "Second failure.",
+            "--item-id",
+            &item_id,
+        ],
+    ));
+    assert_eq!(second["data"]["disposition"], "created");
+    assert_eq!(second["data"]["item_id"], first["data"]["item_id"]);
+    assert_ne!(
+        second["data"]["occurrence_id"],
+        first["data"]["occurrence_id"]
+    );
+}
+
+#[test]
+fn capture_flag_unknown_record_is_not_found() {
+    let root = TempDir::new().unwrap();
+    let (_, snapshot_path, anchor) = capture_flag_codex_bundle(root.path(), THREAD);
+    let store_path = root.path().join("learn-store");
+    let output = capture_flag_with_source(
+        &store_path,
+        capture_flag_new_item(&snapshot_path, "999", "Observed."),
+        anchor["source_id"].as_str().unwrap(),
+        &[],
+    );
+    error_json(&output, 2, "diagnose_record_not_found");
+    assert!(!store_path.exists());
+}
+
+#[test]
+fn capture_flag_rejects_an_unknown_kind_and_incomplete_item() {
+    let root = TempDir::new().unwrap();
+    let (_, snapshot_path, anchor) = capture_flag_codex_bundle(root.path(), THREAD);
+    let store_path = root.path().join("learn-store");
+    let source_id = anchor["source_id"].as_str().unwrap();
+    let index = anchor["record_index"].to_string();
+    let base = [
+        "--snapshot",
+        snapshot_path.to_str().unwrap(),
+        "--source-id",
+        source_id,
+        "--record-index",
+        &index,
+        "--evidence",
+        "Observed.",
+    ];
+    let mut unknown_kind = base.to_vec();
+    unknown_kind.extend(["--kind", "bogus", "--item-id", "1"]);
+    error_json(
+        &capture_flag_run(&store_path, &unknown_kind),
+        2,
+        "diagnose_capture_invalid",
+    );
+    let mut no_item = base.to_vec();
+    no_item.extend(["--kind", "failed-tool"]);
+    error_json(
+        &capture_flag_run(&store_path, &no_item),
+        2,
+        "diagnose_capture_invalid",
+    );
+    assert!(!store_path.exists());
+}
+
+#[test]
+fn capture_flag_rejects_file_combined_with_flag_form_args() {
+    let root = TempDir::new().unwrap();
+    let request_path = root.path().join("incident.json");
+    fs::write(&request_path, "{}").unwrap();
+    command()
+        .args(["diagnose", "capture", "--json"])
+        .args(["--file", request_path.to_str().unwrap()])
+        .args(["--source-id", "source"])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicates::str::contains("cannot be used with"));
+}
+
+#[test]
+fn capture_flag_requires_exactly_one_input_form() {
+    command()
+        .args(["diagnose", "capture", "--json"])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicates::str::contains("--file"));
+}
+
+#[test]
+fn capture_flag_snapshot_requires_the_record_selectors() {
+    command()
+        .args(["diagnose", "capture", "--json", "--snapshot", "bundle.json"])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicates::str::contains("--source-id"));
+}
+
+fn capture_flag_opencode_family(root: &Path) -> (PathBuf, PathBuf) {
+    let db_path = root.join("opencode.db");
+    let tool = |id: &str| OPENCODE_FAILED_TOOL.replace("TOOLID", id);
+    let (parent_tool, child_tool) = (tool("tool_parent"), tool("tool_child"));
+    let sql = format!(
+        "{OPENCODE_SCHEMA}
+INSERT INTO project(id) VALUES ('project_fixture');
+INSERT INTO session_v2(id,project_id,slug,directory,version,time_created,time_updated)
+VALUES ('ses_parent','project_fixture','parent-slug','/fixture/B','2.0.12',1700000000000,1700000000100);
+INSERT INTO session_v2(id,project_id,parent_id,slug,directory,version,time_created,time_updated)
+VALUES ('ses_child','project_fixture','ses_parent','child-slug','/fixture/B','2.0.12',1700000000001,1700000000100);
+INSERT INTO session_message(id,session_id,type,seq,time_created,time_updated,data) VALUES
+ ('msg_parent_user','ses_parent','user',1,1700000000000,1700000000000,'{{\"text\":\"Question\",\"time\":{{\"created\":1700000000000}}}}'),
+ ('msg_parent_tool','ses_parent','assistant',2,1700000000010,1700000000040,'{parent_tool}'),
+ ('msg_child_user','ses_child','user',1,1700000000001,1700000000001,'{{\"text\":\"Child question\",\"time\":{{\"created\":1700000000001}}}}'),
+ ('msg_child_tool','ses_child','assistant',2,1700000000011,1700000000041,'{child_tool}');
+"
+    );
+    rusqlite::Connection::open(&db_path)
+        .expect("open the OpenCode fixture database")
+        .execute_batch(&sql)
+        .expect("build the OpenCode fixture");
+    let inspect_family = |snapshot_path: &Path, cutoff: Option<&Path>| {
+        let mut command = command();
+        command
+            .args(["diagnose", "inspect", "--harness", "opencode"])
+            .args(["--session", "ses_parent", "--json"])
+            .args(["--snapshot-out", snapshot_path.to_str().unwrap()]);
+        if let Some(cutoff) = cutoff {
+            command.args(["--cutoff-anchor", cutoff.to_str().unwrap()]);
+        }
+        success_json(&command.env("OPENCODE_DB", &db_path).output().unwrap())
+    };
+    let uncut_path = root.join("opencode-uncut.json");
+    inspect_family(&uncut_path, None);
+    let cutoff_path = root.join("opencode-cutoff.json");
+    fs::write(
+        &cutoff_path,
+        serde_json::to_vec(&json!({
+            "source_path": db_path.canonicalize().unwrap(),
+            "record_anchor": capture_flag_opencode_record(&uncut_path, "msg_child_tool")
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let snapshot_path = root.join("opencode-family.json");
+    let inspection = inspect_family(&snapshot_path, Some(&cutoff_path));
+    assert_eq!(inspection["data"]["coverage"]["cutoff_verified"], true);
+    (snapshot_path, db_path)
+}
+
+fn capture_flag_opencode_record(snapshot_path: &Path, native_id: &str) -> Value {
+    let frozen: Value = serde_json::from_slice(&fs::read(snapshot_path).unwrap()).unwrap();
+    frozen["records"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|record| record["anchor"]["native_id"] == native_id)
+        .unwrap()["anchor"]
+        .clone()
+}
+
+#[test]
+fn capture_flag_opencode_family_index_alone_is_ambiguous() {
+    let root = TempDir::new().unwrap();
+    let (snapshot_path, db_path) = capture_flag_opencode_family(root.path());
+    let store_path = root.path().join("learn-store");
+    let parent = capture_flag_opencode_record(&snapshot_path, "msg_parent_tool");
+    let child = capture_flag_opencode_record(&snapshot_path, "msg_child_tool");
+    assert_eq!(parent["source_id"], child["source_id"]);
+    assert_eq!(parent["record_index"], child["record_index"]);
+    let source_id = parent["source_id"].as_str().unwrap();
+    let args = capture_flag_new_item(
+        &snapshot_path,
+        &parent["record_index"].to_string(),
+        "Observed.",
+    );
+
+    let ambiguous = command()
+        .args(["diagnose", "capture", "--json"])
+        .args(
+            args.iter()
+                .map(|arg| if arg == "SOURCE" { source_id } else { arg }),
+        )
+        .env("VARDE_LEARN_STORE", &store_path)
+        .env("OPENCODE_DB", &db_path)
+        .output()
+        .unwrap();
+    let value = error_json(&ambiguous, 2, "diagnose_record_ambiguous");
+    assert!(
+        value["data"]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--native-id")
+    );
+
+    let capture_with_native_id = |native_id: &str| {
+        command()
+            .args(["diagnose", "capture", "--json", "--native-id", native_id])
+            .args(
+                args.iter()
+                    .map(|arg| if arg == "SOURCE" { source_id } else { arg }),
+            )
+            .env("VARDE_LEARN_STORE", &store_path)
+            .env("OPENCODE_DB", &db_path)
+            .output()
+            .unwrap()
+    };
+    let created = success_json(&capture_with_native_id("msg_child_tool"));
+    assert_eq!(created["data"]["disposition"], "created");
+    // The parent record is selected too, but lies outside the child-session cutoff.
+    error_json(
+        &capture_with_native_id("msg_parent_tool"),
+        2,
+        "diagnose_capture_uncertain",
+    );
+}
+
+#[test]
+fn capture_flag_opencode_sqlite_anchor_is_copied_whole() {
+    let root = TempDir::new().unwrap();
+    let (snapshot_path, db_path) = capture_flag_opencode_family(root.path());
+    let store_path = root.path().join("learn-store");
+    let anchor = capture_flag_opencode_record(&snapshot_path, "msg_child_tool");
+    for key in ["session_id", "storage_sequence", "context_digest"] {
+        assert!(!anchor[key].is_null(), "bundle anchor lacks {key}");
+    }
+    let source_id = anchor["source_id"].as_str().unwrap();
+    let args = capture_flag_new_item(
+        &snapshot_path,
+        &anchor["record_index"].to_string(),
+        "Observed.",
+    );
+    let flag_output = command()
+        .args([
+            "diagnose",
+            "capture",
+            "--json",
+            "--native-id",
+            "msg_child_tool",
+        ])
+        .args(
+            args.iter()
+                .map(|arg| if arg == "SOURCE" { source_id } else { arg }),
+        )
+        .env("VARDE_LEARN_STORE", &store_path)
+        .env("OPENCODE_DB", &db_path)
+        .output()
+        .unwrap();
+    let created = success_json(&flag_output);
+    assert_eq!(created["data"]["disposition"], "created");
+
+    let frozen: Value = serde_json::from_slice(&fs::read(&snapshot_path).unwrap()).unwrap();
+    let request_path = root.path().join("opencode-incident.json");
+    let request = json!({
+        "snapshot_path": snapshot_path.to_string_lossy(),
+        "snapshot_digest": frozen["digest"],
+        "session_id": frozen["session"]["thread_id"],
+        "anchor": anchor,
+        "incident_kind": "failed-tool",
+        "item": {"mode":"new", "source":"varde-learn diagnosis", "title":"Synthetic failed tool", "target":"clis/learn"},
+        "evidence": "Observed."
+    });
+    fs::write(&request_path, serde_json::to_vec(&request).unwrap()).unwrap();
+    let from_file = command()
+        .args([
+            "diagnose",
+            "capture",
+            "--json",
+            "--file",
+            request_path.to_str().unwrap(),
+        ])
+        .env("VARDE_LEARN_STORE", &store_path)
+        .env("OPENCODE_DB", &db_path)
+        .output()
+        .unwrap();
+    let from_file = success_json(&from_file);
+    assert_eq!(from_file["data"]["disposition"], "already-recorded");
+    assert_eq!(
+        from_file["data"]["occurrence_id"],
+        created["data"]["occurrence_id"]
+    );
+}

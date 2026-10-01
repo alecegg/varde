@@ -16,7 +16,7 @@
 /// bound, not a hard cutoff.
 const CHURN_WINDOW: &str = "--since=90 days ago";
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Batched replacement for calling [`commit_count`] once per file.
@@ -89,7 +89,11 @@ fn count_known_root(
     let Some(top) = toplevel.filter(|_| !files.is_empty()) else {
         return;
     };
-    let counts = commit_counts_for_root(top);
+    let indexed_paths: Vec<String> = files
+        .iter()
+        .map(|(_, relative)| relative.to_string_lossy().into_owned())
+        .collect();
+    let counts = commit_counts_for_root(top, &indexed_paths);
     for (file, relative) in files {
         let count = counts
             .get(relative.to_string_lossy().as_ref())
@@ -129,13 +133,26 @@ fn file_directory(file: &str) -> PathBuf {
 }
 
 fn count_root_files(result: &mut HashMap<String, u32>, root: &Path, files: Vec<&String>) {
-    let counts = commit_counts_for_root(root);
-    for file in files {
-        let count = Path::new(file)
-            .canonicalize()
-            .ok()
-            .and_then(|absolute| absolute.strip_prefix(root).ok().map(Path::to_path_buf))
-            .and_then(|relative| counts.get(relative.to_string_lossy().as_ref()).copied())
+    let files_with_paths: Vec<(&String, Option<String>)> = files
+        .into_iter()
+        .map(|file| {
+            let relative = Path::new(file)
+                .canonicalize()
+                .ok()
+                .and_then(|absolute| absolute.strip_prefix(root).ok().map(Path::to_path_buf))
+                .map(|relative| relative.to_string_lossy().into_owned());
+            (file, relative)
+        })
+        .collect();
+    let indexed_paths: Vec<String> = files_with_paths
+        .iter()
+        .filter_map(|(_, relative)| relative.clone())
+        .collect();
+    let counts = commit_counts_for_root(root, &indexed_paths);
+
+    for (file, relative) in files_with_paths {
+        let count = relative
+            .and_then(|relative| counts.get(&relative).copied())
             .unwrap_or(0);
         result.insert(file.clone(), count);
     }
@@ -151,33 +168,51 @@ fn repo_root(dir: &Path) -> Option<PathBuf> {
     Path::new(trimmed).canonicalize().ok()
 }
 
-/// One `git log --name-only` walk over `root`'s recent (90-day) history,
-/// counting how many commits touched each root-relative path.
-fn commit_counts_for_root(root: &Path) -> HashMap<String, u32> {
+/// Stream one `git log --name-only` walk over `root`'s recent (90-day)
+/// history, retaining counts only for indexed root-relative paths.
+fn commit_counts_for_root(root: &Path, indexed_paths: &[String]) -> HashMap<String, u32> {
     let mut counts = HashMap::new();
+    if indexed_paths.is_empty() {
+        return counts;
+    }
+    let indexed_paths: HashSet<&str> = indexed_paths.iter().map(String::as_str).collect();
     // `-c core.quotepath=false`: without it git octal-escapes and quotes any
     // path with non-ASCII/special bytes (e.g. `"src/caf\303\251.rs"`), which
     // never matches the un-quoted indexed path and silently yields churn=0 for
-    // those files. Disabling quotepath emits the raw UTF-8 path verbatim.
-    let Some(text) = crate::git::run_git(
+    // those files. With `-z`, path bytes remain unambiguous for whitespace or
+    // newline-containing names.
+    let succeeded = crate::git::run_git_records(
         &[
             "-c",
             "core.quotepath=false",
             "log",
             "--name-only",
+            "-z",
             "--pretty=format:",
             CHURN_WINDOW,
         ],
         root,
-    ) else {
-        return counts;
-    };
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        *counts.entry(line.to_string()).or_insert(0) += 1;
+        |record| {
+            let Some(path) = record.strip_suffix(b"\0") else {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "git path record is missing its NUL terminator",
+                ));
+            };
+            if path.is_empty() {
+                return Ok(());
+            }
+            let path = String::from_utf8_lossy(path);
+            if let Some(count) = counts.get_mut(path.as_ref()) {
+                *count += 1;
+            } else if indexed_paths.contains(path.as_ref()) {
+                counts.insert(path.into_owned(), 1);
+            }
+            Ok(())
+        },
+    );
+    if !succeeded {
+        return HashMap::new();
     }
     counts
 }
@@ -297,12 +332,42 @@ mod git_log_known_history_matches_expected {
             run(&dir, &["add", "--", name]);
             run(&dir, &["commit", "-q", "-m", &format!("c{i}")]);
         }
-        let counts = commit_counts_for_root(&dir);
+        let counts = commit_counts_for_root(&dir, &[name.to_string()]);
         assert_eq!(
             counts.get(name),
             Some(&2),
             "unquoted UTF-8 path is the count key: {counts:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn history_counts_only_indexed_paths() {
+        let dir =
+            std::env::temp_dir().join(format!("varde-churn-indexed-only-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("repo dir creates");
+        run(&dir, &["init", "-q"]);
+        run(&dir, &["config", "user.email", "test@example.com"]);
+        run(&dir, &["config", "user.name", "Churn Test"]);
+
+        for (name, commits) in [("indexed.rs", 2), ("unindexed.rs", 5)] {
+            let file = dir.join(name);
+            for revision in 0..commits {
+                std::fs::write(&file, format!("revision {revision}\n")).expect("writes");
+                run(&dir, &["add", "--", name]);
+                let message = format!("{name} revision {revision}");
+                run(&dir, &["commit", "-q", "-m", &message]);
+            }
+        }
+
+        let counts = commit_counts_for_root(&dir, &["indexed.rs".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(counts.get("indexed.rs"), Some(&2));
+        assert!(
+            !counts.contains_key("unindexed.rs"),
+            "unindexed history should not be retained: {counts:?}"
+        );
     }
 }

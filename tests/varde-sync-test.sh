@@ -420,7 +420,7 @@ test_repeated_install_and_foreign_file() {
   [ "$first" = "$(checksum "$home/.claude")" ] || fail "repeated install changed results"
   [ "$foreign_before" = "$(shasum "$home/.claude/skills/foreign/keep.txt" | awk '{print $1}')" ] || fail "foreign file changed"
   [ "$foreign_agent_before" = "$(shasum "$home/.claude/agents/build.md" | awk '{print $1}')" ] || fail "foreign agent changed"
-  assert_contains "varde-managed-agent" "$home/.claude/agents/plan.md"
+  assert_contains "varde-managed-agent" "$home/.claude/agents/varde-planner.md"
 }
 
 test_list_agents() {

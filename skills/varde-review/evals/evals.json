@@ -15,12 +15,13 @@
     {
       "id": 2,
       "prompt": "Review the error-handling in src/api and just go ahead and fix any bugs you find while you're in there.",
-      "expected_output": "Performs the structured review and writes the persisted findings first \u2014 report always precedes fix. Because fixing is requested, it then runs `fix` on that same review in standalone mode: only `Label: auto-fix` findings with `Disposition: blank` or `fix` are eligible for application, subject to verification. It returns triage-labeled findings and other non-eligible findings that need a decision to the parent. The Executor does not perform user triage or apply triage-labeled findings. Before applying fixes, obtains independent pre-edit approval or reuses a valid caller approval covering the fix scope. A fix that changes behavior or introduces structural risk gets targeted independent re-review after verification; local functionality-preserving corrections need targeted verification without an automatic re-review loop.",
+      "expected_output": "Performs the structured review and writes the persisted findings first \u2014 report always precedes fix. Because fixing is requested, it then runs `fix` on that same review in standalone mode, triage first: the fix request approves only eligible `Label: auto-fix` findings (`Disposition: blank` or `fix`) with one reliable solution, and the parent shows every other finding needing a decision in one triage table. No separate automated-pass Executor runs; one bounded build (one subject, one Executor) applies every approved fix, subject to verification. The Executor does not perform user triage or apply unapproved triage-labeled findings. Before applying fixes, obtains independent pre-edit approval or reuses a valid caller approval covering the fix scope. A fix that changes behavior or introduces structural risk gets targeted independent re-review after verification; local functionality-preserving corrections need targeted verification without an automatic re-review loop.",
       "assertions": [
         "Findings are written to the review folder before any fix is applied \u2014 report precedes fix",
         "Because the request explicitly asked to fix, `fix` mode runs on the same review in the same session rather than stopping after the report",
-        "Standalone application selects only `Label: auto-fix` findings with `Disposition: blank` or `fix`; other dispositions are skipped",
-        "Triage-labeled findings needing a decision are returned to the parent, which owns user triage; the Executor does not prompt the user, set dispositions, or create a companion plan",
+        "The fix request approves only `Label: auto-fix` findings with `Disposition: blank` or `fix` and one reliable solution; other dispositions are skipped",
+        "Triage-labeled findings needing a decision reach the parent's triage table before any fix build; the Executor does not prompt the user, set dispositions, or create a companion plan",
+        "All approved fixes, including requested auto-fix findings, go through one bounded build with one subject and one Executor, not a separate automated pass",
         "Captured execution events show independent pre-edit approval before fix edits, or valid caller approval covering the unchanged scope",
         "Captured execution events show targeted independent re-review of behavior-changing or structurally risky fixes; passing tests or coordinator prose alone do not prove re-review"
       ]
@@ -38,25 +39,27 @@
     },
     {
       "id": 4,
-      "prompt": "During `varde-review fix`, the automated fix pass applies a solution for finding CORRECTNESS-002, then the fix for CORRECTNESS-003 fails its verification step.",
-      "expected_output": "Per fix-pass.md's snapshot/restore behavior, only the files touched by the CORRECTNESS-003 fix are restored from their pre-fix snapshot. The already-applied and verified CORRECTNESS-002 fix is left in place untouched \u2014 a failed fix does not roll back other, unrelated successful fixes.",
+      "prompt": "During `varde-review fix`, the fix pass applies solutions for CORRECTNESS-002 and then CORRECTNESS-003, and the batch's single test run fails because of the CORRECTNESS-003 fix.",
+      "expected_output": "Per fix-pass.md, type check and tests run once per touched package after the batch, not per finding. On failure it restores the latest applied finding, CORRECTNESS-003, from its own pre-fix snapshot and reruns; the checks pass, so CORRECTNESS-003 keeps a blank disposition (reverted). The CORRECTNESS-002 fix stays in place and still needs its defect-gone confirmation before `Disposition: fix`.",
       "assertions": [
-        "Only the files the failing finding's fix touched are restored to their pre-fix state",
-        "The prior successful fix (CORRECTNESS-002) and the files it touched are not reverted",
+        "Type check and tests run once per touched package after the batch, not once per finding",
+        "Only the files the failing finding's fix touched are restored to their pre-fix state, latest applied finding first, with a rerun after each restore",
+        "The prior successful fix (CORRECTNESS-002) and the files it touched are not reverted, and its defect is still confirmed gone before `Disposition: fix`",
         "No repo-wide `git stash` or `git checkout` is used, since that would also discard the unrelated successful fix"
       ]
     },
     {
       "id": 5,
       "prompt": "Run `varde-review fix https://github.com/example/widgets/pull/42`. The read-only PR intake returns one unresolved outdated review thread at src/api.rs (line null, originalLine 18) asking to handle an empty token, one resolved thread, a failing `unit` check with link https://github.com/example/widgets/actions/runs/1, a pending check, and a general PR conversation comment asking for release notes. What local findings and next actions result?",
-      "expected_output": "Preflight requires gh and valid authentication before creating a review folder. With successful intake, writes one PR-REVIEW finding at src/api.rs:18 and one CI finding at the failing check URL in <working>/reviews/<date>-pr-42/. The resolved thread and pending check do not become findings; the conversation comment is context only. Both findings have Label: triage and blank Disposition, and enter the ordinary fix/dismiss/action-item table. Verified fixes are committed locally; pushing, replying, and resolving require a separate explicit choice.",
+      "expected_output": "Preflight requires gh and valid authentication before creating a review folder. With successful intake, writes one PR-REVIEW finding at src/api.rs:18 and one CI finding at the failing check URL in <working>/reviews/<date>-pr-42/. The resolved thread and pending check do not become findings; the conversation comment is context only. Both findings have Label: triage and blank Disposition, and go straight to the ordinary fix/dismiss/action-item table with no automated-pass Executor, since none is eligible; approved fixes then run as one bounded build. Verified fixes are committed locally; pushing, replying, and resolving require a separate explicit choice.",
       "assertions": [
         "PR number or URL routes through fix-pr.md; a review ID keeps the existing local review flow",
         "Missing gh, failed auth, or malformed PR data stops before a partial review folder is written",
         "Exactly one finding is made for the unresolved outdated thread and its originalLine 18 is used when line is null",
         "Exactly one CI finding is made for the failing check and its URL is the Location; pending is excluded",
         "Resolved thread and conversation comment are not separate findings",
-        "Both findings reach the existing triage choices without any unrequested GitHub write"
+        "Both findings go straight to the existing triage choices, with no automated-pass Executor, and without any unrequested GitHub write",
+        "Approved PR fixes run as one bounded build and are committed only on the local PR branch; pushing, replying, and resolving need an explicit user choice"
       ]
     },
     {
@@ -144,9 +147,9 @@
     {
       "id": 14,
       "prompt": "Fix the already recorded standalone review finding CORRECTNESS-001 in <working>/reviews/api/CORRECTNESS.md. It has one settled, user-approved solution and location src/api/token.rs:42. No other finding is selected.",
-      "expected_output": "Read the named finding and route its single settled fix through bounded varde-change in the same turn. Keep the review folder, finding ID, concrete solution, and user decision evidence in the bounded contract; include the category file and review.md as external artifacts in the review subject. Do not create another report, run the full review-fix pass, or create a plan or task file. After source verification, update only CORRECTNESS-001 disposition, add the bounded subject link, and recompute review.md triage_status. The final review and complete checkpoint cover source and review edits. Leave other findings unchanged.",
+      "expected_output": "Read the named finding and, from SKILL.md's One recorded finding, route its single settled fix through bounded varde-change build-micro-change in the same turn without loading fix.md. Keep the review folder, finding ID, concrete solution, and user decision evidence in the bounded contract; include the category file and review.md as external artifacts in the review subject. Do not create another report, run the full review-fix pass, or create a plan or task file. After source verification, update only CORRECTNESS-001 disposition, add the bounded subject link, and recompute review.md triage_status. The final review and complete checkpoint cover source and review edits. Leave other findings unchanged.",
       "assertions": [
-        "Single standalone finding routes to bounded varde-change without a new review or task file",
+        "Single standalone finding routes from SKILL.md to bounded varde-change build-micro-change without loading fix.md, a new review, or a task file",
         "The source finding, category file, and review.md remain traceable in the bounded contract and artifact scope",
         "Only the selected finding is updated, and review.md triage_status is recomputed after source verification",
         "Pre-edit and final review gates still apply"
@@ -160,6 +163,27 @@
         "Plan-owned findings retain the existing bounded task flow",
         "Unsettled standalone solutions return to triage",
         "The direct route does not process multiple findings or bypass approval gates"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Simplify what I just changed in src/api/error.rs. Keep behavior.",
+      "expected_output": "Routes to simplify.md, computes the change range, maps callers, tests, and existing helpers, edits only within the printed range, and verifies once. It reports the changed file and any obstacle without creating a findings store.",
+      "assertions": [
+        "Simplification routes to simplify.md and edits inline without creating a review folder or findings store",
+        "The changed range and related callers, tests, and reusable helpers are checked before editing",
+        "Verification runs once after the scoped edits, and the result is reported"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "A report-first review of src/api has one standalone finding: CORRECTNESS-001 is Label: auto-fix, Disposition: blank, and has one reliable solution. The user asked to review the area and fix any obvious local bugs. What does the parent record before edits?",
+      "expected_output": "The standalone fix request approves the eligible auto-fix finding. The parent records Disposition: fix, the chosen solution, and the user's review-and-fix request as decision evidence, then dispatches one bounded build with CORRECTNESS-001 selected. Its Executor processes only that ID. It does not use `fix (requested)` or edit source during triage.",
+      "assertions": [
+        "The user request is recorded as decision evidence alongside Disposition: fix and the concrete solution",
+        "The parent dispatches one bounded build for the selected finding after recording the decision",
+        "The Executor is limited to CORRECTNESS-001 and does not apply other findings",
+        "The workflow does not use the undefined `fix (requested)` disposition or edit source during triage"
       ]
     }
   ]

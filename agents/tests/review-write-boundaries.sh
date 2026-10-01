@@ -9,9 +9,9 @@ import sys
 import json
 
 root = pathlib.Path(sys.argv[1])
-claude = (root / "review/claude.md").read_text()
-codex = (root / "review/codex.toml").read_text()
-opencode = (root / "review/opencode.md").read_text()
+claude = (root / "varde-reviewer/claude.md").read_text()
+codex = (root / "varde-reviewer/codex.toml").read_text()
+opencode = (root / "varde-reviewer/opencode.md").read_text()
 assert "Write" in claude and "Edit" not in claude and "Task" not in claude
 # V2 has one edit action for both new artifacts and patches. The artifact-only
 # boundary remains in the prompt; broad shell access is not a hard sandbox.

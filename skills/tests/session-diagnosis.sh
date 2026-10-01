@@ -37,7 +37,7 @@ if "references/diagnose-quick.md" not in skill or not quick_path.is_file():
     raise SystemExit("FAIL: bounded visible-evidence triage lacks its own reference")
 contains("skills/varde-learn/references/diagnose-quick.md",
     "supplied", "partial", "do not open a session transcript",
-    "references/diagnose.md", "independent analyst", "do not save a diagnosis report",
+    "references/diagnose.md", "do not save a diagnosis report",
 )
 reference = reference_path.read_text(encoding="utf-8")
 checks += 1
@@ -70,15 +70,12 @@ contains("skills/varde-learn/references/diagnose.md",
 # Current aliases and unresolved overlap always require an independent analyst.
 contains("skills/varde-learn/references/diagnose.md",
     "overlap` is `current` or `unknown`",
-    "explicit `--session` IDs and `--path` inputs do not bypass this rule",
+    "never from the selector",
     "one independent analyst",
     "native agent delegation",
     "Do not include the coordinator's hypotheses, conclusions, or preferred fix in the handoff",
     "delegation is unavailable, stop and report that blocker",
     "Do not replace the analyst with self-analysis",
-    "mandatory seven-agent pass",
-    "separate grading judge",
-    "Unknown overlap does not prove the target is past",
     "An individual event can still be eligible for capture only when its source identity and historical context are revalidated",
 )
 
@@ -97,7 +94,6 @@ contains("skills/varde-learn/references/diagnose.md",
     "The analyst pages the supplied bundle",
     "must not run its own `--current` intake",
     "must preserve the bundle's saved overlap result",
-    "A snapshot digest is an integrity check, not source authenticity",
 )
 
 # Report quality, persistence ordering, and capture outcomes are observable.
@@ -117,37 +113,25 @@ contains("skills/varde-learn/references/diagnose.md",
     "reports stay in the working store until explicitly removed",
 )
 
-# The example input spelling must match the strict Rust request parser.
-contains("skills/varde-learn/references/diagnose.md",
-    '"snapshot_path"',
-    '"snapshot_digest"',
-    '"session_id"',
-    '"anchor"',
-    '"incident_kind"',
-    '"item"',
-    '"evidence"',
-    '"failed-tool"',
-    '"repeated-work"',
-    '"workflow-deviation"',
-    '"existing"',
-    '"new"',
-    '"native_id"',
-    '"already-recorded"',
-    '"occurrence_id"',
+# The example flags must match the Rust capture parser.
+contains("skills/varde-learn/references/diagnose-capture.md",
+    "--snapshot",
+    "--source-id",
+    "--record-index",
+    "--native-id",
+    "--kind",
+    "--evidence",
+    "--item-id",
+    "--item-source",
+    "`failed-tool`",
+    "`repeated-work`",
+    "`workflow-deviation`",
 )
 contains("skills/varde-learn/references/diagnose.md",
-    "64 KiB",
-    "8 KiB",
-    "2 MiB",
-    "16 MiB per source",
-    "32 MiB per family",
-    "256 KiB per record",
-    "10,000 records",
-    "1,000 records per page",
-    "32 linked children plus the selected root (up to 33 sessions)",
-    "5,000 discovered metadata entries",
-    "rewritten, inherited, or otherwise uncertain anchors",
-    "approved fallback is an independently revalidated, append-stable JSONL line position and record digest",
+    '"native_id"',
+)
+contains("skills/varde-learn/references/diagnose.md",
+    "rewritten or otherwise uncertain anchor",
 )
 
 # Source contracts: keep structural claims tied to the public parser/types.
@@ -158,7 +142,8 @@ contains("clis/learn/crates/varde-learn/src/cli.rs",
     "snapshot_out",
     "cutoff_anchor",
     "pub struct DiagnoseCaptureArgs",
-    "pub file: PathBuf",
+    "pub file: Option<PathBuf>",
+    "pub native_id: Option<String>",
 )
 contains("clis/learn/crates/varde-learn-core/src/diagnose/mod.rs",
     "pub const MAX_SOURCE_BYTES: usize = 16 * 1024 * 1024",

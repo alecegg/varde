@@ -6,22 +6,21 @@
 //! render behind a toz handle; truncated JSON result lists use `capture_items`.
 
 use serde_json::{Value, json};
-use std::io::{Read, Write};
-use std::process::{Command, Stdio};
+use std::io::{self, Read, Write};
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 pub const PAGE_LIMIT: usize = 20;
+const INPUT_CHUNK_SIZE: usize = 8 * 1024;
+// A small queue keeps backpressure bounded while the child consumes stdin.
+const INPUT_QUEUE_CHUNKS: usize = 4;
+const WORKER_CLEANUP_GRACE: Duration = Duration::from_millis(50);
 
 /// A reference to a complete JSONL result set stored in toz.
 pub fn capture_items(mode: &str, items: &[Value]) -> Option<Value> {
     if !available() {
         return None;
-    }
-    let mut jsonl = String::new();
-    for item in items {
-        jsonl.push_str(&serde_json::to_string(item).ok()?);
-        jsonl.push('\n');
     }
     let source = format!("varde-code results {mode}");
     let mut args = vec![
@@ -30,7 +29,18 @@ pub fn capture_items(mode: &str, items: &[Value]) -> Option<Value> {
     if mode == "find_pattern" {
         args.push("--defer-index");
     }
-    let stdout = capture_with_args(&args, &jsonl, CAPTURE_TIMEOUT)?;
+    let stdout = capture_with_args(
+        &args,
+        |input| {
+            for item in items {
+                serde_json::to_writer(&mut *input, item)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+                input.write_all(b"\n")?;
+            }
+            Ok(())
+        },
+        CAPTURE_TIMEOUT,
+    )?;
     let response: Value = serde_json::from_str(&stdout).ok()?;
     let handle = response.get("handle")?.as_str()?;
     Some(
@@ -107,56 +117,209 @@ fn capture_text_with_timeout(
 ) -> Option<String> {
     capture_with_args(
         &["capture", "--force", "--source", source, "--label", label],
-        text,
+        |input| input.write_all(text.as_bytes()),
         timeout,
     )
 }
 
-fn capture_with_args(args: &[&str], text: &str, timeout: Duration) -> Option<String> {
+fn capture_with_args<F>(args: &[&str], write_input: F, timeout: Duration) -> Option<String>
+where
+    F: FnOnce(&mut BoundedInputWriter) -> io::Result<()>,
+{
     if !enabled() {
         return None;
     }
-    let mut child = Command::new("toz")
+    let mut command = Command::new("toz");
+    command
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command.spawn().ok()?;
 
-    // Write stdin and read stdout on a dedicated thread. Doing either on the
-    // polling thread below risks a deadlock: a large `text` can block on a
-    // full stdin pipe while the child blocks writing a full stdout pipe.
+    // Keep input writes off the polling thread and drain stdout concurrently:
+    // either pipe can fill while the child is using the other one.
     let mut stdin = child.stdin.take().expect("stdin was piped");
     let mut stdout = child.stdout.take().expect("stdout was piped");
-    let text = text.to_owned();
+    let (input_tx, input_rx) = mpsc::sync_channel::<Vec<u8>>(INPUT_QUEUE_CHUNKS);
+    let writer_thread = std::thread::spawn(move || {
+        while let Ok(chunk) = input_rx.recv() {
+            if stdin.write_all(&chunk).is_err() {
+                break;
+            }
+        }
+    });
     let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = stdin.write_all(text.as_bytes());
-        drop(stdin);
+    let reader_thread = std::thread::spawn(move || {
         let mut buf = Vec::new();
         let _ = stdout.read_to_end(&mut buf);
         let _ = tx.send(buf);
     });
 
     let deadline = Instant::now() + timeout;
+    let input_result = {
+        let mut input = BoundedInputWriter::new(input_tx, deadline);
+        write_input(&mut input).and_then(|()| input.flush())
+    };
+    if input_result.is_err() {
+        cleanup_capture(&mut child, writer_thread, reader_thread);
+        return None;
+    }
+
     let status = loop {
-        match child.try_wait().ok()? {
-            Some(status) => break status,
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() >= deadline => {
+                cleanup_capture(&mut child, writer_thread, reader_thread);
                 return None;
             }
-            None => std::thread::sleep(Duration::from_millis(1)),
+            Ok(None) => std::thread::sleep(Duration::from_millis(1)),
+            Err(_) => {
+                cleanup_capture(&mut child, writer_thread, reader_thread);
+                return None;
+            }
         }
     };
     if !status.success() {
+        cleanup_capture(&mut child, writer_thread, reader_thread);
         return None;
     }
-    let stdout_buf = rx.recv_timeout(timeout).ok()?;
+    terminate_process_group(&child);
+    if !join_worker(writer_thread) {
+        let _ = join_worker(reader_thread);
+        return None;
+    }
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    let stdout_buf = match rx.recv_timeout(remaining) {
+        Ok(stdout) => stdout,
+        Err(_) => {
+            let _ = join_worker(reader_thread);
+            return None;
+        }
+    };
+    if !join_worker(reader_thread) {
+        return None;
+    }
     let stdout = String::from_utf8_lossy(&stdout_buf).into_owned();
     stdout.contains("handle").then_some(stdout)
+}
+
+struct BoundedInputWriter {
+    sender: mpsc::SyncSender<Vec<u8>>,
+    buffer: Vec<u8>,
+    deadline: Instant,
+}
+
+impl BoundedInputWriter {
+    fn new(sender: mpsc::SyncSender<Vec<u8>>, deadline: Instant) -> Self {
+        Self {
+            sender,
+            buffer: Vec::with_capacity(INPUT_CHUNK_SIZE),
+            deadline,
+        }
+    }
+
+    fn send_buffer(&mut self) -> io::Result<()> {
+        if self.buffer.is_empty() {
+            return Ok(());
+        }
+        let mut chunk = std::mem::replace(&mut self.buffer, Vec::with_capacity(INPUT_CHUNK_SIZE));
+        loop {
+            if Instant::now() >= self.deadline {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "toz input timed out",
+                ));
+            }
+            match self.sender.try_send(chunk) {
+                Ok(()) => return Ok(()),
+                Err(mpsc::TrySendError::Full(returned)) => {
+                    chunk = returned;
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Err(mpsc::TrySendError::Disconnected(_)) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::BrokenPipe,
+                        "toz closed stdin",
+                    ));
+                }
+            }
+        }
+    }
+}
+
+impl Write for BoundedInputWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.is_empty() {
+            return Ok(0);
+        }
+        if Instant::now() >= self.deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "toz input timed out",
+            ));
+        }
+        let remaining = INPUT_CHUNK_SIZE - self.buffer.len();
+        let written = bytes.len().min(remaining);
+        self.buffer.extend_from_slice(&bytes[..written]);
+        if self.buffer.len() == INPUT_CHUNK_SIZE {
+            self.send_buffer()?;
+        }
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.send_buffer()
+    }
+}
+
+fn terminate_and_wait(child: &mut Child) {
+    terminate_process_group(child);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn terminate_process_group(child: &Child) {
+    #[cfg(unix)]
+    {
+        // The child is the group leader. Killing the group also closes pipes
+        // inherited by descendants that would otherwise strand reader threads.
+        let pgid = child.id() as libc::pid_t;
+        unsafe {
+            libc::killpg(pgid, libc::SIGKILL);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = child;
+    }
+}
+
+fn cleanup_capture(
+    child: &mut Child,
+    writer_thread: std::thread::JoinHandle<()>,
+    reader_thread: std::thread::JoinHandle<()>,
+) {
+    terminate_and_wait(child);
+    let _ = join_worker(writer_thread);
+    let _ = join_worker(reader_thread);
+}
+
+fn join_worker(handle: std::thread::JoinHandle<()>) -> bool {
+    let deadline = Instant::now() + WORKER_CLEANUP_GRACE;
+    while !handle.is_finished() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    if handle.is_finished() {
+        handle.join().is_ok()
+    } else {
+        false
+    }
 }
 
 /// Whether toz capture should be attempted at all. Callers that also need to
@@ -179,6 +342,56 @@ pub fn available() -> bool {
 mod tests {
     use super::*;
     use crate::test_support::PathOverride;
+
+    #[test]
+    fn bounded_input_writer_chunks_large_writes() {
+        const CHUNK_SIZE: usize = 8 * 1024;
+        let payload = vec![b'x'; CHUNK_SIZE * 6 + 17];
+        let (tx, rx) = mpsc::sync_channel(2);
+        let collector = std::thread::spawn(move || rx.into_iter().collect::<Vec<_>>());
+        let mut writer = BoundedInputWriter::new(tx, Instant::now() + Duration::from_secs(2));
+
+        writer.write_all(&payload).expect("large payload writes");
+        writer.flush().expect("last chunk flushes");
+        drop(writer);
+
+        let chunks = collector.join().expect("collector finishes");
+        assert!(!chunks.is_empty());
+        assert!(
+            chunks
+                .iter()
+                .all(|chunk| !chunk.is_empty() && chunk.len() <= CHUNK_SIZE)
+        );
+        assert_eq!(chunks.concat(), payload);
+    }
+
+    #[test]
+    fn capture_items_streams_large_jsonl_to_child() {
+        let dir = stub_bin_dir(
+            "large-items",
+            "#!/bin/sh\ncat > \"$0.input\"\necho '{\"handle\":\"ab12\",\"toc\":[]}'\n",
+        );
+        let output_path = dir.join("toz.input");
+        let _override = PathOverride::new(&dir);
+        let payload = "x".repeat(256 * 1024);
+        let items = vec![json!({"payload": payload})];
+
+        let result = capture_items("query", &items).expect("capture returns a handle");
+
+        assert_eq!(result["handle"], "ab12");
+        assert_eq!(result["items"], 1);
+        let expected = format!("{{\"payload\":\"{}\"}}\n", "x".repeat(256 * 1024));
+        assert_eq!(std::fs::read_to_string(output_path).unwrap(), expected);
+    }
+
+    #[test]
+    fn capture_items_returns_none_on_child_failure() {
+        let dir = stub_bin_dir("items-failure", "#!/bin/sh\nexit 1\n");
+        let _override = PathOverride::new(&dir);
+        let items = vec![json!({"payload": "x".repeat(256 * 1024)})];
+
+        assert_eq!(capture_items("query", &items), None);
+    }
 
     #[test]
     fn toc_summary_is_bounded_for_many_files() {
@@ -289,10 +502,7 @@ mod tests {
     /// without the test itself waiting anywhere near the stall duration.
     #[test]
     fn capture_text_returns_none_when_child_stalls_past_timeout() {
-        let dir = stub_bin_dir(
-            "stall",
-            "#!/bin/sh\ncat > /dev/null\nsleep 30\necho handle\n",
-        );
+        let dir = stub_bin_dir("stall", "#!/bin/sh\ncat > /dev/null\nexec sleep 30\n");
         let _override = PathOverride::new(&dir);
 
         let start = std::time::Instant::now();
@@ -308,5 +518,53 @@ mod tests {
             "took {:?}",
             start.elapsed()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn capture_text_cleans_up_descendant_after_leader_exit() {
+        let dir = stub_bin_dir("descendant", "");
+        let pid_path = dir.join("leader.pid");
+        std::fs::write(
+            dir.join("toz"),
+            format!(
+                "#!/bin/sh\nsleep 30 &\nprintf '%s' \"$$\" > '{}'\necho handle\n",
+                pid_path.display()
+            ),
+        )
+        .expect("write Toz stub");
+        let _override = PathOverride::new(&dir);
+
+        let start = Instant::now();
+        let result = capture_text_with_timeout(
+            "varde-code nav_map /repo",
+            "nav_map",
+            "text",
+            Duration::from_secs(5),
+        );
+        let elapsed = start.elapsed();
+        let pgid: libc::pid_t = std::fs::read_to_string(&pid_path)
+            .expect("stub writes its process-group id")
+            .parse()
+            .expect("process-group id is numeric");
+        let cleanup_deadline = Instant::now() + Duration::from_secs(1);
+        while process_group_alive(pgid) && Instant::now() < cleanup_deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let group_cleaned = !process_group_alive(pgid);
+        if !group_cleaned {
+            unsafe {
+                libc::killpg(pgid, libc::SIGKILL);
+            }
+        }
+
+        assert_eq!(result.as_deref(), Some("handle\n"));
+        assert!(elapsed < Duration::from_secs(2), "capture took {elapsed:?}");
+        assert!(group_cleaned, "descendant process group {pgid} survived");
+    }
+
+    #[cfg(unix)]
+    fn process_group_alive(pgid: libc::pid_t) -> bool {
+        unsafe { libc::kill(-pgid, 0) == 0 }
     }
 }

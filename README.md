@@ -140,10 +140,10 @@ Install all agents for the current harness, or choose a supported harness:
 cd agents
 ./install.sh
 ./install.sh -t codex
-./install.sh -t opencode -a plan,review
+./install.sh -t opencode -a varde-planner,varde-reviewer
 ```
 
-The available agents are `plan`, `executor`, `review`, and `explore`. They use
+The available agents are `varde-planner`, `varde-executor`, `varde-reviewer`, and `varde-explorer`. They use
 generated Claude, Codex, and OpenCode adapters. Install the skills first. See the
 [agents README](agents/README.md) for harness-specific installation details.
 

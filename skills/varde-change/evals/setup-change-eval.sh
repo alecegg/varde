@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [ -z "${EVAL_ID:-}" ]; then
+  printf 'usage: EVAL_ID=<id> %s\n' "$0" >&2
+  exit 2
+fi
+
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  printf 'refusing to run in an existing git repository: %s\n' "$(pwd)" >&2
+  exit 2
+fi
+
 git init -q
 git config user.email "eval@example.invalid"
 git config user.name "Varde Eval"

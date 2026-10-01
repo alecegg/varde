@@ -19,6 +19,8 @@ use std::rc::Rc;
 const PROFILE_SCRIPT_TIMEOUT_MS: u64 = 1_000;
 const PROFILE_SCRIPT_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 const PROFILE_SCRIPT_MAX_OUTPUT_BYTES: usize = 4 * 1024;
+/// Profile previews retain complete text and chunk data, so bound their in-memory input.
+pub const MAX_PROFILED_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
 
 /// What the caller hands us.
 pub struct CaptureInput<'a> {
@@ -350,6 +352,15 @@ pub fn run(
     capture_accepted(cfg, store, input, profiles, total, label, sk)
 }
 
+/// Returns the profile that the normal capture path will apply to this input.
+pub fn matched_profile<'a>(
+    input: &CaptureInput<'_>,
+    profiles: &'a [Profile],
+) -> Option<&'a Profile> {
+    let is_command = input.kind == "run" || input.kind.starts_with("hook:");
+    profile::find_match(profiles, input.source, is_command)
+}
+
 fn capture_names(input: &CaptureInput<'_>) -> (String, String) {
     let key = source_key(input.source);
     let label = input
@@ -373,8 +384,7 @@ fn capture_accepted(
 ) -> Result<Outcome> {
     // A hook or wrapped-command origin is a literal command line; index/fetch/script origins
     // are paths or URLs, so only `match.source` (never `match.command`) applies to them.
-    let is_command = input.kind == "run" || input.kind.starts_with("hook:");
-    let matched = profile::find_match(profiles, input.source, is_command);
+    let matched = matched_profile(&input, profiles);
     let redactor = Redactor::from_config(&cfg.redact)?;
     let (all_chunks, redactions, stdout_text, stderr_text) =
         prepare_text(&input, &redactor, matched);
@@ -532,6 +542,7 @@ fn script_outcome_reason(outcome: &script::Outcome) -> String {
         script::Outcome::Timeout => "script timed out".to_string(),
         script::Outcome::MemoryLimit => "script exceeded memory limit".to_string(),
         script::Outcome::OutputLimit => "script exceeded output limit".to_string(),
+        script::Outcome::RecordLimit => "script exceeded record limit".to_string(),
         script::Outcome::Ok(_) => unreachable!("Ok is handled by the caller"),
     }
 }

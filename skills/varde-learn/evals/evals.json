@@ -34,7 +34,7 @@
     {
       "id": 4,
       "prompt": "Create a small trigger query set and `evals/evals.json` for this skill. Include close negative queries. Do not run any harness sessions or incur costs.",
-      "expected_output": "Read `references/evals.md`, author realistic positive and near-miss negative queries with `target_skill` or `should_trigger` labels appropriate to each file, and create valid JSON. Do static validation only; do not invoke a harness or billed judge.",
+      "expected_output": "Read `references/evals.md`, author realistic positive and near-miss negative queries with `should_trigger` labels, and create valid JSON. Do static validation only; do not invoke a harness or billed judge.",
       "assertions": [
         "The skill routes evaluation and query-set authoring to `references/evals.md`",
         "The query set includes plausible close negatives, not unrelated tasks",

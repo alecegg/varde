@@ -683,10 +683,10 @@ fn build_cluster(
 /// Output: `{"files": [{path, relevance}], "symbols": [{name, filePath,
 /// kind}], "tests": [{path, coversFile}], "readingOrder": [path, ...]}`.
 /// `relevance` is `"seed"` (direct match) or `"neighbor"` (one-hop
-/// pull-in); within each tier, files rank by `hotspots`-style
-/// complexity+churn score (richest first) so noisy low-relevance neighbors
-/// sink to the bottom. `readingOrder` is just that ranked path list — no
-/// separate ranking logic. `tests` reuses `tests_for_file`'s heuristic
+/// pull-in); seeds rank exact declarations and paths/basenames first, then
+/// by distinct query-token matches, then by complexity+churn. Neighbors use
+/// the complexity+churn score (richest first). `readingOrder` is just that
+/// ranked path list — no separate ranking logic. `tests` reuses `tests_for_file`'s heuristic
 /// per seed file (neighbors aren't probed for coverage, to keep the query
 /// count bounded).
 ///
@@ -726,7 +726,7 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     // Step 4: topical seed matches first, then complexity+churn. Neighbors
     // retain complexity+churn ranking because they lack direct query matches.
     let scores = context_scores(&conn)?;
-    let topical_scores = context_topicality(&conn, &tokens)?;
+    let topical_scores = context_topicality(&conn, &tokens, &symbol_rows)?;
     let seed_ranked = rank_context_files(&graph, &scores, &seed_ids, Some(&topical_scores));
     let neighbor_ranked = rank_context_files(&graph, &scores, &neighbor_ids, None);
     context_pack_output(&conn, &graph, &symbol_rows, &seed_ranked, &neighbor_ranked)
@@ -881,11 +881,21 @@ fn escape_like(value: &str) -> String {
         .collect()
 }
 
-/// Count how many distinct query tokens match each file's path or symbols.
-/// This score orders direct matches before the complexity/churn tie-breaker.
-fn context_topicality(conn: &Connection, tokens: &[&str]) -> Result<HashMap<i64, usize>, ApiError> {
+#[derive(Clone, Copy, Default)]
+struct ContextTopicality {
+    exact_match: bool,
+    matched_tokens: usize,
+}
+
+/// Rank exact declarations and paths/basenames ahead of substring matches,
+/// then count distinct matching query tokens before the complexity/churn tie.
+fn context_topicality(
+    conn: &Connection,
+    tokens: &[&str],
+    symbol_rows: &[ContextSymbol],
+) -> Result<HashMap<i64, ContextTopicality>, ApiError> {
     let mut path_stmt = conn
-        .prepare("SELECT id FROM files WHERE lower(path) LIKE ?1 ESCAPE '\\'")
+        .prepare("SELECT id, path FROM files WHERE lower(path) LIKE ?1 ESCAPE '\\'")
         .map_err(db_err)?;
     let mut symbol_stmt = conn
         .prepare(
@@ -900,11 +910,24 @@ fn context_topicality(conn: &Connection, tokens: &[&str]) -> Result<HashMap<i64,
     for token in tokens {
         let pattern = format!("%{}%", escape_like(&token.to_lowercase()));
         let mut matched_files = HashSet::new();
-        for id in path_stmt
-            .query_map([&pattern], |row| row.get::<_, i64>(0))
+        for row in path_stmt
+            .query_map([&pattern], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
             .map_err(db_err)?
         {
-            matched_files.insert(id.map_err(db_err)?);
+            let (id, path) = row.map_err(db_err)?;
+            let basename = std::path::Path::new(&path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            if path.eq_ignore_ascii_case(token) || basename.eq_ignore_ascii_case(token) {
+                scores
+                    .entry(id)
+                    .or_insert_with(ContextTopicality::default)
+                    .exact_match = true;
+            }
+            matched_files.insert(id);
         }
         for id in symbol_stmt
             .query_map([&pattern], |row| row.get::<_, i64>(0))
@@ -913,7 +936,30 @@ fn context_topicality(conn: &Connection, tokens: &[&str]) -> Result<HashMap<i64,
             matched_files.insert(id.map_err(db_err)?);
         }
         for id in matched_files {
-            *scores.entry(id).or_insert(0) += 1;
+            scores
+                .entry(id)
+                .or_insert_with(ContextTopicality::default)
+                .matched_tokens += 1;
+        }
+    }
+    for (name, kind, id) in symbol_rows {
+        if tokens.iter().any(|token| name.eq_ignore_ascii_case(token))
+            && matches!(
+                crate::model::EntityKind::from_i64(*kind),
+                Some(
+                    crate::model::EntityKind::Function
+                        | crate::model::EntityKind::Class
+                        | crate::model::EntityKind::Interface
+                        | crate::model::EntityKind::Variable
+                        | crate::model::EntityKind::Export
+                        | crate::model::EntityKind::Route
+                )
+            )
+        {
+            scores
+                .entry(*id)
+                .or_insert_with(ContextTopicality::default)
+                .exact_match = true;
         }
     }
     Ok(scores)
@@ -941,7 +987,7 @@ fn rank_context_files(
     graph: &Graph,
     scores: &HashMap<i64, i64>,
     ids: &HashSet<i64>,
-    topical_scores: Option<&HashMap<i64, usize>>,
+    topical_scores: Option<&HashMap<i64, ContextTopicality>>,
 ) -> Vec<(i64, String)> {
     let mut ranked: Vec<_> = ids
         .iter()
@@ -954,14 +1000,22 @@ fn rank_context_files(
         })
         .collect();
     ranked.sort_by(|a, b| {
-        topical_scores
+        let a_topicality = topical_scores
+            .and_then(|topical| topical.get(&a.0))
+            .copied()
+            .unwrap_or_default();
+        let b_topicality = topical_scores
             .and_then(|topical| topical.get(&b.0))
-            .unwrap_or(&0)
-            .cmp(
-                topical_scores
-                    .and_then(|topical| topical.get(&a.0))
-                    .unwrap_or(&0),
-            )
+            .copied()
+            .unwrap_or_default();
+        b_topicality
+            .exact_match
+            .cmp(&a_topicality.exact_match)
+            .then_with(|| {
+                b_topicality
+                    .matched_tokens
+                    .cmp(&a_topicality.matched_tokens)
+            })
             .then_with(|| {
                 scores
                     .get(&b.0)

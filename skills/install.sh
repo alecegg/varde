@@ -151,6 +151,35 @@ copy_skill_tree() {
   done
 }
 
+SHARED_ROOT="$SCRIPT_DIR/shared"
+SHARED_MANIFEST="$SHARED_ROOT/MANIFEST"
+
+# Relative paths this skill lists in skills/shared/MANIFEST (`<path> <skill>...`).
+shared_files_for_skill() {
+  local skill="$1" line rel_path skills_field
+  [ -f "$SHARED_MANIFEST" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    rel_path="${line%% *}"
+    skills_field=" ${line#* } "
+    case "$skills_field" in
+      *" $skill "*) printf '%s\n' "$rel_path" ;;
+    esac
+  done < "$SHARED_MANIFEST"
+}
+
+copy_shared_files() {
+  local skill="$1" staged="$2" rel_path source_file target_file
+  while IFS= read -r rel_path; do
+    [ -n "$rel_path" ] || continue
+    source_file="$SHARED_ROOT/$rel_path"
+    target_file="$staged/$rel_path"
+    [ -f "$source_file" ] || return 1
+    mkdir -p "$(dirname "$target_file")" || return 1
+    cp -p "$source_file" "$target_file" || return 1
+  done < <(shared_files_for_skill "$skill")
+}
+
 validate_selected_skills() {
   local skill
   for skill in "${SELECTED[@]-}"; do
@@ -197,7 +226,7 @@ remove_retired_installs() {
 }
 
 preview_skill_install() {
-  local source_dir="$1" destination="$2" source_file
+  local source_dir="$1" destination="$2" source_file rel_path
   if [ -n "$LINK_SOURCE" ]; then
     printf 'Would link %s -> %s\n' "$LINK_SOURCE/$(basename "$source_dir")" "$destination"
     return
@@ -206,6 +235,10 @@ preview_skill_install() {
     [ -f "$source_file" ] || continue
     printf 'Would install %s -> %s/%s\n' "$source_file" "$destination" "${source_file#"$source_dir"/}"
   done
+  while IFS= read -r rel_path; do
+    [ -n "$rel_path" ] || continue
+    printf 'Would install %s -> %s/%s\n' "$SHARED_ROOT/$rel_path" "$destination" "$rel_path"
+  done < <(shared_files_for_skill "$(basename "$source_dir")")
   printf 'Would install marker -> %s/%s\n' "$destination" "$OWNERSHIP_MARKER"
 }
 
@@ -252,6 +285,7 @@ install_skill() {
     ln -s "$LINK_SOURCE/$skill" "$staged" || return 1
   else
     if ! copy_skill_tree "$source_dir" "$staged" || [ ! -f "$staged/SKILL.md" ] ||
+       ! copy_shared_files "$skill" "$staged" ||
        ! printf 'varde-managed-skill\n' > "$staged/$OWNERSHIP_MARKER"; then
       rm -rf "$staged"
       return 1
@@ -279,13 +313,28 @@ install_skill() {
 }
 
 preflight_skill_install() {
-  local skill="$1" destination="$TARGET/$1" confirm_status source_root symlink
+  local skill="$1" destination="$TARGET/$1" confirm_status source_root symlink canonical_unwritten
   PREFLIGHT_ACTION=install
-  if [ -n "$LINK_SOURCE" ] && [ ! -f "$LINK_SOURCE/$skill/SKILL.md" ]; then
+  # Under a dry run, a canonical pass into $LINK_SOURCE never wrote it (see
+  # the DRY_RUN guard on `mkdir -p "$TARGET"` above), so a missing
+  # $LINK_SOURCE directory itself is that same dry run's own doing, not a
+  # real problem: both the canonical-skill check and the symlink scan below
+  # fall back to the real on-disk skill source in that case. If $LINK_SOURCE
+  # does exist (an earlier real install, or a source unrelated to this dry
+  # run — including one deliberately missing or containing a symlink) the
+  # normal checks against it still apply.
+  canonical_unwritten=0
+  [ "$DRY_RUN" -eq 1 ] && [ -n "$LINK_SOURCE" ] && [ ! -d "$LINK_SOURCE" ] && canonical_unwritten=1
+
+  if [ -n "$LINK_SOURCE" ] && [ ! -f "$LINK_SOURCE/$skill/SKILL.md" ] && [ "$canonical_unwritten" -ne 1 ]; then
     echo "Missing canonical skill: $LINK_SOURCE/$skill" >&2
     return 1
   fi
-  source_root="${LINK_SOURCE:-$SCRIPT_DIR}/$skill"
+  if [ "$canonical_unwritten" -eq 1 ]; then
+    source_root="$SCRIPT_DIR/$skill"
+  else
+    source_root="${LINK_SOURCE:-$SCRIPT_DIR}/$skill"
+  fi
   symlink="$(find "$source_root" -type l -print -quit)" || return 1
   if [ -n "$symlink" ]; then
     echo "Symlink in skill package: $symlink" >&2
@@ -327,8 +376,24 @@ preflight_skill_install() {
   fi
 }
 
+check_readable_ownership_markers() {
+  local skill destination marker
+  [ "$MANAGED" -eq 1 ] || return 0
+  for skill in "${SELECTED[@]-}"; do
+    [ -n "$skill" ] || continue
+    destination="$TARGET/$skill"
+    marker="$destination/$OWNERSHIP_MARKER"
+    if destination_exists "$destination" && [ ! -L "$destination" ] &&
+       [ -f "$marker" ] && [ ! -r "$marker" ]; then
+      printf 'Cannot read ownership marker: %s\n' "$marker" >&2
+      return 1
+    fi
+  done
+}
+
 install_selected_skills() {
   local skill source_dir destination
+  check_readable_ownership_markers || return 1
   for skill in "${SELECTED[@]-}"; do
     [ -n "$skill" ] || continue
     source_dir="$SCRIPT_DIR/$skill"
