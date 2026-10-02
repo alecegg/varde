@@ -285,12 +285,20 @@ fn evaluate_script<'js>(
     }
 }
 
-/// Hitting the memory limit does not surface as a normal exception: QuickJS cannot allocate an
-/// `Error` object to throw, so the pending exception value is null. That null is the signal.
+/// QuickJS signals the memory limit by throwing `InternalError("out of memory")`, or a null
+/// exception value when even that error cannot be allocated. Which one appears depends on the
+/// platform allocator, so both count.
 fn classify(caught: CaughtError<'_>) -> Outcome {
     match caught {
         CaughtError::Error(rquickjs::Error::Allocation) => Outcome::MemoryLimit,
         CaughtError::Value(v) if v.is_null() || v.is_undefined() => Outcome::MemoryLimit,
+        CaughtError::Exception(e)
+            if e.message().as_deref() == Some("out of memory")
+                && e.as_object().get::<_, String>("name").ok().as_deref()
+                    == Some("InternalError") =>
+        {
+            Outcome::MemoryLimit
+        }
         CaughtError::Exception(e) => {
             let msg = e.message().unwrap_or_else(|| "error".into());
             // The first stack frame carries the line number, which is what makes the message
@@ -696,6 +704,16 @@ mod tests {
                 timeout_ms: 10_000,
                 ..Limits::default()
             },
+        );
+        assert!(matches!(out, Outcome::MemoryLimit), "got {out:?}");
+    }
+
+    #[test]
+    fn out_of_memory_internal_error_is_the_memory_limit() {
+        let out = run_src(
+            VecSource::stdout(&[]),
+            "throw new InternalError('out of memory')",
+            Limits::default(),
         );
         assert!(matches!(out, Outcome::MemoryLimit), "got {out:?}");
     }

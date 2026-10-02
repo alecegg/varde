@@ -43,9 +43,9 @@ pub fn check_fresh(
 
 fn scope_within_repo(scope: &Scope, canonical_root: &Path) -> bool {
     match scope {
-        Scope::File(path) => std::fs::canonicalize(path)
-            .unwrap_or_else(|_| Path::new(path).to_path_buf())
-            .starts_with(canonical_root),
+        Scope::File(path) => {
+            std::fs::canonicalize(path).is_ok_and(|path| path.starts_with(canonical_root))
+        }
         Scope::Repo => true,
     }
 }
@@ -1237,12 +1237,14 @@ mod tests {
             let scope = Scope::File(file.to_string_lossy().into_owned());
 
             assert!(check_fresh(&conn, &[Slice::Edges], repo, &scope).unwrap());
+            // Canonical, so the lexical `..` path starts with the root on macOS too.
+            let outside = std::fs::canonicalize(&root).unwrap().join("../outside.rs");
             assert!(
                 !check_fresh(
                     &conn,
                     &[Slice::Raw],
                     repo,
-                    &Scope::File(root.join("../outside.rs").to_string_lossy().into_owned())
+                    &Scope::File(outside.to_string_lossy().into_owned())
                 )
                 .unwrap()
             );

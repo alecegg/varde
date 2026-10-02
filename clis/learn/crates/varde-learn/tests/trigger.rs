@@ -329,15 +329,15 @@ fn skill_path_is_rejected_for_claude_and_opencode() {
 
 /// Confirms the claude/opencode path needs no `jq` (the shell runner's one
 /// hard dependency beyond the harness CLI): PATH holds only the mock-cli
-/// directory plus `/bin`, where the mock's own `bash`/`cat` live but jq
-/// (installed under `/usr/bin` on this machine) does not.
+/// directory plus a `cat` symlink, the one tool the mock runs. `/bin` itself
+/// is not on PATH because on some Linux systems it is `/usr/bin`, where jq lives.
 #[test]
 fn claude_hit_runs_with_only_mock_cli_on_path() {
     let mock = MockHarness::new();
     let trace = write_trace(mock.root(), "claude", "hit", None);
     let queries = write_queries(mock.root(), true);
-    let path =
-        std::env::join_paths([mock.bin_dir().to_path_buf(), "/bin".into()]).expect("join PATH");
+    std::os::unix::fs::symlink("/bin/cat", mock.bin_dir().join("cat")).expect("symlink cat");
+    let path = std::env::join_paths([mock.bin_dir()]).expect("join PATH");
     assert!(
         !path
             .to_string_lossy()

@@ -1154,7 +1154,9 @@ fn hook_event_uses_fallback_when_default_diagnostics_are_unwritable() {
     let mut event = Command::cargo_bin("varde-toz").unwrap();
     event
         .env("HOME", home.path())
+        .env_remove("VARDE_TOZ_CONFIG_DIR")
         .env_remove("TOZ_CONFIG_DIR")
+        .env_remove("XDG_CONFIG_HOME")
         .env("TOZ_FALLBACK_DIR", fallback.path())
         .args([
             "event",
@@ -1171,7 +1173,9 @@ fn hook_event_uses_fallback_when_default_diagnostics_are_unwritable() {
 
     let mut note = Command::cargo_bin("varde-toz").unwrap();
     note.env("HOME", home.path())
+        .env_remove("VARDE_TOZ_CONFIG_DIR")
         .env_remove("TOZ_CONFIG_DIR")
+        .env_remove("XDG_CONFIG_HOME")
         .env("TOZ_FALLBACK_DIR", fallback.path())
         .args(["note", "--harness", "codex"])
         .assert()
@@ -2919,7 +2923,12 @@ fn script_exit_codes_distinguish_failures_and_reserve_two() {
             ])
             .output()
             .unwrap();
-        assert_eq!(out.status.code(), Some(want), "for `{code}`");
+        assert_eq!(
+            out.status.code(),
+            Some(want),
+            "for `{code}`: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         if code.contains("toz.record") {
             assert!(
                 String::from_utf8_lossy(&out.stderr).contains("record limit"),
