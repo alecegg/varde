@@ -22,8 +22,9 @@ dispatches tasks.
 
 ## Order children
 
-1. Run `varde-workflow readiness` on each child (blockers = unmet deps);
-   `depends_on` holds sibling slugs only.
+1. Run `varde-workflow readiness` on each child and order by
+   `data.planning_ready` and dependency blockers; leave review blockers to the
+   child build. `depends_on` holds sibling slugs only.
 2. Skip completed children; completed dependencies are satisfied.
 3. A missing dependency blocks its child; a cycle stops the feature. Report
    blockers before any child runs.
@@ -54,16 +55,10 @@ task isolation that returns `created=false` stays there too.
    acceptance/verification outside Progress match them. Material drift
    updates that contract and needs fresh independent approval before any child
    runs.
-2. Initialize the group's own subject over the aggregate source scope; on
-   resume, reuse the existing subject and never reset its baseline. Pass
-   the output of
-   `python3 <skill-dir>/scripts/risk-tier.py <scope-path>...` over that scope,
-   run from the repository root:
-
-   ```sh
-   varde-workflow review init --plan <group-plan.md> --repository <owning-approval-repoRoot> --scope <path> [--scope <path> ...] --tier-evidence <risk-tier.json> --json
-   ```
-
+2. Load `references/review-gate-plan.md`, then initialize the group's own
+   subject over the aggregate source scope (§1, with the group plan and the
+   owning approval repoRoot); on resume, reuse the existing subject and never
+   reset its baseline.
 3. Apply `references/review-gates.md` and obtain independent pre-edit approval
    of the combined contract. Keep each child's own subject and gates; group
    approval does not replace them. Batch the group contract with every child
@@ -110,11 +105,14 @@ child, the reason, and the completed children.
    and released at its owning approval checkout before group completion.
 3. **Review the group.** After all children are completed:
    1. Verify the aggregate acceptance criteria and combined behavior.
-   2. Finish findings, source/spec/documentation edits, and checks.
-   3. Obtain an independent entire-group implementation review. The reviewer
-      uses the group subject, aggregate contract, child results, and execution
-      location, and records current entire-subject evidence per
+   2. Route remaining findings and source, spec, and documentation edits
+      through bounded `varde-change` builds, then run checks.
+   3. Obtain an independent entire-group implementation review, using the
+      group subject, aggregate contract, child results, and execution
+      location; it records current entire-subject evidence per
       `references/review-gates.md`.
+   4. Fix its findings per `references/build-finish.md` §3, then refresh the
+      group evidence before Conclude (step 4).
 4. **Conclude.** Run `varde-workflow review check --subject
    <group-subject-id> --checkpoint complete --json`, then `varde-workflow
    conclude <group-plan.md> --json`. Missing/stale approval or an incomplete

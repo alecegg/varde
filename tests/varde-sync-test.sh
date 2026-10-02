@@ -426,7 +426,7 @@ test_repeated_install_and_foreign_file() {
 test_list_agents() {
   local output="$TEMP_DIR/list.out"
   "$ROOT_DIR/varde" sync --list-agents >"$output"
-  [ "$(cat "$output")" = $'claude\ncodex\nopencode' ] || fail "unexpected harness listing"
+  [ "$(cat "$output")" = $'claude\ncodex\nopencode\npi' ] || fail "unexpected harness listing"
 }
 
 test_listed_agents_are_valid() {
@@ -448,6 +448,9 @@ test_listed_agents_are_valid() {
       opencode)
         assert_contains "$home/.config/opencode/skills" "$output"
         assert_contains "$home/.config/opencode/agents" "$output"
+        ;;
+      pi)
+        assert_contains "$home/.pi/agent/agents" "$output"
         ;;
       *) fail "listed harness lacks target assertions: $agent" ;;
     esac
@@ -481,6 +484,239 @@ test_install_preserves_harness_startup_config() {
     fail "OpenCode advisory bootstrap was installed"
 }
 
+make_hook_stubs() {
+  local stub_dir="$1"
+  local log="$2"
+  local skipped="${3:-false}"
+  local instruction_targets="${4:-}"
+  mkdir -p "$stub_dir"
+  cat >"$stub_dir/varde-code" <<STUB
+#!/bin/sh
+echo "varde-code \$@" >> "$log"
+printf '%s\n' '{"data":{"removed":[{"skippedModified":$skipped}]}}'
+STUB
+  cat >"$stub_dir/varde-workflow" <<STUB
+#!/bin/sh
+if [ "\$1" = "paths" ] && [ "\$2" = "--json" ]; then
+  printf '%s\n' '{"data":{"toz":"x"}}'
+  exit 0
+fi
+if [ "\$1" = "instructions" ] && [ "\$2" = "targets" ]; then
+  [ -z "$instruction_targets" ] || printf '%s\n' "$instruction_targets"
+  exit 0
+fi
+if [ "\$1" = "instructions" ] && [ "\$2" = "install" ]; then
+  echo "varde-workflow \$@" >> "$log"
+  if [ "\$#" -eq 2 ]; then
+    printf '%s\n' 'Varde will not work as designed until its instruction block is installed: agents will not delegate as designed or use toz captures. Install it with \`varde-workflow instructions install --target <file>\`. Use one canonical \`AGENTS.md\` symlinked into each harness.'
+  fi
+  exit 0
+fi
+echo "varde-workflow \$@" >> "$log"
+STUB
+  chmod +x "$stub_dir/varde-code" "$stub_dir/varde-workflow"
+}
+
+test_instructions_install_for_configured_targets() {
+  local home="$TEMP_DIR/instructions-configured-home"
+  local stub_dir="$TEMP_DIR/instructions-configured-stub"
+  local log="$TEMP_DIR/instructions-configured.log"
+  local target="$TEMP_DIR/shared-instructions/AGENTS.md"
+  mkdir -p "$home"
+  make_hook_stubs "$stub_dir" "$log" false "$target"
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --no-cli --agents claude --yes >/dev/null
+
+  local hook_line install_line
+  hook_line="$(line_of "varde-workflow hook install --harness claude" "$log")"
+  install_line="$(line_of "varde-workflow instructions install" "$log")"
+  [ -n "$hook_line" ] || fail "missing hook install before instruction block install"
+  [ -n "$install_line" ] || fail "configured instruction target was not installed"
+  [ "$hook_line" -lt "$install_line" ] || fail "instruction block install must follow per-harness wiring"
+}
+
+test_instructions_warn_without_targets_under_yes() {
+  local home="$TEMP_DIR/instructions-yes-home"
+  local stub_dir="$TEMP_DIR/instructions-yes-stub"
+  local log="$TEMP_DIR/instructions-yes.log"
+  local output="$TEMP_DIR/instructions-yes.out"
+  mkdir -p "$home"
+  make_hook_stubs "$stub_dir" "$log"
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --no-cli --agents claude --yes >"$output"
+
+  assert_contains "Varde will not work as designed until its instruction block is installed:" "$output"
+  assert_contains "varde-workflow instructions install --target <file>" "$output"
+}
+
+test_instructions_dry_run_prints_install_command() {
+  local home="$TEMP_DIR/instructions-dry-home"
+  local stub_dir="$TEMP_DIR/instructions-dry-stub"
+  local log="$TEMP_DIR/instructions-dry.log"
+  local output="$TEMP_DIR/instructions-dry.out"
+  mkdir -p "$home"
+  make_hook_stubs "$stub_dir" "$log"
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --dry-run --agents claude >"$output"
+
+  assert_contains "would run: varde-workflow instructions install" "$output"
+  [ ! -s "$log" ] || fail "dry run executed an instruction install command"
+}
+
+test_prompted_home_targets_expand_tilde() {
+  local home="$TEMP_DIR/instructions-tilde-home"
+  local stub_dir="$TEMP_DIR/instructions-tilde-stub"
+  local log="$TEMP_DIR/instructions-tilde.log"
+  mkdir -p "$home"
+  make_hook_stubs "$stub_dir" "$log"
+
+  python3 - "$ROOT_DIR/varde" "$stub_dir" "$home" <<'PY'
+import os
+import pty
+import select
+import subprocess
+import sys
+
+master, slave = pty.openpty()
+env = os.environ.copy()
+env.update({"PATH": f"{sys.argv[2]}:/usr/bin:/bin:/usr/sbin:/sbin", "HOME": sys.argv[3]})
+process = subprocess.Popen(
+    [sys.argv[1], "sync", "--no-cli", "--agents", "claude"],
+    stdin=slave,
+    stdout=slave,
+    stderr=slave,
+    env=env,
+    close_fds=True,
+)
+os.close(slave)
+os.write(master, b"~/AGENTS.md\n")
+while process.poll() is None:
+    ready, _, _ = select.select([master], [], [], 0.1)
+    if ready:
+        try:
+            os.read(master, 4096)
+        except OSError:
+            break
+status = process.wait()
+os.close(master)
+sys.exit(status)
+PY
+
+  assert_contains "varde-workflow instructions install --target $home/AGENTS.md" "$log"
+  [ "$(grep -cF 'varde-workflow instructions install' "$log")" -eq 1 ] ||
+    fail "prompted instruction install should run exactly once"
+}
+
+test_session_hook_remove_then_install() {
+  local home="$TEMP_DIR/hook-home"
+  local stub_dir="$TEMP_DIR/hook-stub"
+  local log="$TEMP_DIR/hook.log"
+  local agent
+  mkdir -p "$home"
+  make_hook_stubs "$stub_dir" "$log"
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --no-cli --agents claude,codex,opencode --yes >/dev/null
+  for agent in claude codex opencode; do
+    local remove_line install_line
+    remove_line="$(grep -nF -- "varde-code hooks remove --agent $agent" "$log" | head -1 | cut -d: -f1)"
+    install_line="$(grep -nF -- "varde-workflow hook install --harness $agent" "$log" | head -1 | cut -d: -f1)"
+    [ -n "$remove_line" ] || fail "missing hooks remove for $agent"
+    [ -n "$install_line" ] || fail "missing hook install for $agent"
+    [ "$remove_line" -lt "$install_line" ] || fail "hooks remove must precede hook install for $agent"
+  done
+}
+
+test_session_hook_dry_run() {
+  local home="$TEMP_DIR/hook-dry-home"
+  local stub_dir="$TEMP_DIR/hook-dry-stub"
+  local log="$TEMP_DIR/hook-dry.log"
+  local output="$TEMP_DIR/hook-dry.out"
+  mkdir -p "$home"
+  make_hook_stubs "$stub_dir" "$log"
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --dry-run --agents claude,codex >"$output"
+  assert_contains "would run: varde-code hooks remove --agent codex" "$output"
+  assert_contains "would run: varde-workflow hook install --harness codex" "$output"
+  [ ! -s "$log" ] || fail "dry run executed hook commands"
+}
+
+test_session_hook_reports_skipped_modified() {
+  local home="$TEMP_DIR/hook-skip-home"
+  local stub_dir="$TEMP_DIR/hook-skip-stub"
+  local log="$TEMP_DIR/hook-skip.log"
+  local output="$TEMP_DIR/hook-skip.out"
+  mkdir -p "$home"
+  make_hook_stubs "$stub_dir" "$log" true
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --no-cli --agents claude --yes >"$output"
+  assert_contains "skipped locally modified claude entries" "$output"
+}
+
+make_pi_stubs() {
+  local stub_dir="$1"
+  local log="$2"
+  make_hook_stubs "$stub_dir" "$log"
+  cat >"$stub_dir/varde-toz" <<STUB
+#!/bin/sh
+echo "varde-toz \$@" >> "$log"
+STUB
+  chmod +x "$stub_dir/varde-toz"
+}
+
+line_of() {
+  grep -nF -- "$1" "$2" | head -1 | cut -d: -f1
+}
+
+test_pi_sync_order_and_no_skills_link() {
+  local home="$TEMP_DIR/pi-home"
+  local stub_dir="$TEMP_DIR/pi-stub"
+  local log="$TEMP_DIR/pi.log"
+  mkdir -p "$home/.pi"
+  make_pi_stubs "$stub_dir" "$log"
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --no-cli --yes >/dev/null
+  local toz_line remove_line install_line
+  toz_line="$(line_of "varde-toz install pi" "$log")"
+  remove_line="$(line_of "varde-code hooks remove --agent pi" "$log")"
+  install_line="$(line_of "varde-workflow hook install --harness pi" "$log")"
+  [ -n "$toz_line" ] && [ -n "$remove_line" ] && [ -n "$install_line" ] || fail "missing pi wiring call"
+  [ "$toz_line" -lt "$remove_line" ] && [ "$remove_line" -lt "$install_line" ] ||
+    fail "pi calls must run toz, hooks remove, hook install in order"
+  [ -f "$home/.pi/agent/agents/varde-executor.md" ] || fail "pi agents were not installed"
+  [ ! -e "$home/.pi/agent/skills" ] || fail "pi skills were linked"
+  [ -d "$home/.agents/skills" ] || fail "canonical skills missing"
+}
+
+test_pi_detected_by_env_dir() {
+  local home="$TEMP_DIR/pi-env-home"
+  local stub_dir="$TEMP_DIR/pi-env-stub"
+  local log="$TEMP_DIR/pi-env.log"
+  local pi_dir="$TEMP_DIR/pi-env-dir"
+  mkdir -p "$home" "$pi_dir"
+  make_pi_stubs "$stub_dir" "$log"
+  PI_CODING_AGENT_DIR="$pi_dir" PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --no-cli --yes >/dev/null
+  assert_contains "varde-toz install pi --dir $pi_dir" "$log"
+  assert_contains "varde-code hooks remove --agent pi --dir $pi_dir/extensions" "$log"
+  assert_contains "varde-workflow hook install --harness pi" "$log"
+  [ -f "$pi_dir/agents/varde-executor.md" ] || fail "pi agents missed PI_CODING_AGENT_DIR"
+}
+
+test_pi_dry_run() {
+  local home="$TEMP_DIR/pi-dry-home"
+  local stub_dir="$TEMP_DIR/pi-dry-stub"
+  local log="$TEMP_DIR/pi-dry.log"
+  local output="$TEMP_DIR/pi-dry.out"
+  mkdir -p "$home"
+  make_pi_stubs "$stub_dir" "$log"
+  PATH="$stub_dir:$SAFE_PATH" HOME="$home" "$ROOT_DIR/varde" sync --dry-run --agents pi >"$output"
+  assert_contains "would run: varde-toz install pi" "$output"
+  assert_contains "would run: varde-code hooks remove --agent pi" "$output"
+  assert_contains "would run: varde-workflow hook install --harness pi" "$output"
+  [ ! -s "$log" ] || fail "dry run executed pi commands"
+  [ ! -e "$home/.pi" ] || fail "dry run wrote pi files"
+}
+
+test_pi_agent_format_accepted() {
+  local home="$TEMP_DIR/pi-format-home"
+  local target="$TEMP_DIR/pi-format-agents"
+  mkdir -p "$home"
+  HOME="$home" "$ROOT_DIR/varde" sync --no-cli --agents-dir "$target" --agent-format pi >/dev/null
+  [ -f "$target/varde-executor.md" ] || fail "--agent-format pi did not install agents"
+}
+
 test_dry_run
 test_skill_dry_run_parity
 test_no_tty
@@ -510,5 +746,16 @@ test_toz_store_dry_run
 test_toz_store_set_failure_prints_hint
 test_toz_store_paths_read_failure_skips
 test_toz_store_paths_bad_json_skips
+test_session_hook_remove_then_install
+test_session_hook_dry_run
+test_session_hook_reports_skipped_modified
+test_instructions_install_for_configured_targets
+test_instructions_warn_without_targets_under_yes
+test_instructions_dry_run_prints_install_command
+test_prompted_home_targets_expand_tilde
+test_pi_sync_order_and_no_skills_link
+test_pi_detected_by_env_dir
+test_pi_dry_run
+test_pi_agent_format_accepted
 
 echo "varde sync tests passed"

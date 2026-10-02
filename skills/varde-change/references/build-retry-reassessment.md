@@ -12,9 +12,5 @@ Report a brief reassessment in chat. For a task, its owner also records it in
    - an environment or test limitation
    - a design problem
 3. State what evidence, approach, access, or design must change before another
-   attempt; a retry names what changed.
-
-Rules:
-
-- Escalate to the human only for unresolved choices or scope changes needing
-  their input.
+   attempt; a retry names what changed. Escalate to the human only for
+   unresolved choices or scope changes needing their input.

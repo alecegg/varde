@@ -198,7 +198,11 @@ fn envelope(mode: &str, db_path: &std::path::Path, extra: &str) -> serde_json::V
     } else {
         db_path.parent().unwrap().parent().unwrap().to_path_buf()
     };
-    let input = format!(r#"{{"repoRoot":"{repo}","dbPath":"{db}",{extra}}}"#, repo = repo.display(), db = db_path.display());
+    let input = format!(
+        r#"{{"repoRoot":"{repo}","dbPath":"{db}",{extra}}}"#,
+        repo = repo.display(),
+        db = db_path.display()
+    );
     let stdout = query::run_mode(mode, &input);
     serde_json::from_str(&stdout).expect("envelope is JSON")
 }
@@ -346,7 +350,12 @@ mod symbol_blast_radius_mode {
     fn file_imports_are_not_symbol_references() {
         let db = persist_synthetic("sbr", 3, &[(0, 1), (1, 2)]);
         let result = data("symbol_blast_radius", &db, r#""name":"fn1""#);
-        assert!(result["declaring_file"].as_str().unwrap().ends_with("/f1.rs"));
+        assert!(
+            result["declaring_file"]
+                .as_str()
+                .unwrap()
+                .ends_with("/f1.rs")
+        );
         assert_eq!(paths_array(&result["blast_radius"]), Vec::<String>::new());
         assert_eq!(result["analysis"]["status"], "partial");
     }
@@ -577,19 +586,27 @@ mod rust_module_graph {
             entities,
             symbols,
             diagnostics: vec![],
-            file_meta: files.iter().map(|file| {
-                let state = varde_code::scan::list_source_files(file).expect("source metadata").remove(0);
-                FileMeta {
-                    mtime: state.mtime,
-                    size: state.size,
-                    content_hash: state.content_hash.unwrap_or_default(),
-                }
-            }).collect(),
+            file_meta: files
+                .iter()
+                .map(|file| {
+                    let state = varde_code::scan::list_source_files(file)
+                        .expect("source metadata")
+                        .remove(0);
+                    FileMeta {
+                        mtime: state.mtime,
+                        size: state.size,
+                        content_hash: state.content_hash.unwrap_or_default(),
+                    }
+                })
+                .collect(),
             files,
         };
         let mut graph =
             resolve::resolve(&output.entities, &output.symbols, &output.files).expect("resolve");
-        for state in varde_code::scan::list_source_listing(root.to_str().unwrap()).unwrap().files {
+        for state in varde_code::scan::list_source_listing(root.to_str().unwrap())
+            .unwrap()
+            .files
+        {
             if output.files.contains(&state.path) {
                 continue;
             }
@@ -609,7 +626,16 @@ mod rust_module_graph {
         let db = temp_db(tag);
         persist::persist(&db, std::slice::from_ref(&output), &graph, &root).expect("persist");
         let conn = varde_code::db::open_read_only(&db).unwrap();
-        assert!(varde_code::slice::check_fresh(&conn, &[varde_code::slice::Slice::Edges], root.to_str().unwrap(), &varde_code::slice::Scope::Repo).unwrap(), "fixture index stale");
+        assert!(
+            varde_code::slice::check_fresh(
+                &conn,
+                &[varde_code::slice::Slice::Edges],
+                root.to_str().unwrap(),
+                &varde_code::slice::Scope::Repo
+            )
+            .unwrap(),
+            "fixture index stale"
+        );
         (db, root)
     }
 

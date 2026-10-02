@@ -42,7 +42,7 @@
       "assertions": [
         "The validate-manifest-before-push correction is captured as a Gotcha or verification loop paired with its rationale, not dropped or stated generically",
         "The description front-loads the user's leading trigger word ('release'/'cut a release') and leads with the user's likely request rather than a 'This skill does...' summary",
-        "The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and is checked with validate-frontmatter.py",
+        "The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and passes validate-frontmatter.py",
         "Multi-step release procedure is expressed as a numbered ## Workflow checklist with an inline Gotchas section, not narrative prose",
         "The skill file exists at deploy-release/SKILL.md inside the evaluation workspace"
       ]
@@ -60,7 +60,7 @@
         "The duplicate-instruction finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation",
         "The report marks the applied duplicate-removal option Fixed and explains its accuracy-preserving benefit",
         "A numbered Markdown review report is saved and the final response links it with a summary",
-        "The trace captures independent pre-edit approval and the required implementation review results before completion; prose claims alone do not pass"
+        "The trace captures the independent pre-edit approval when the gate requires one and the required implementation review results before completion; prose claims alone do not pass"
       ]
     },
     {

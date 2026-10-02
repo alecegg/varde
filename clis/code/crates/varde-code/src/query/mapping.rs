@@ -681,7 +681,11 @@ fn build_cluster(
 /// pulled in as neighbors. `not_found` when nothing matches.
 ///
 /// Output: `{"files": [{path, relevance}], "symbols": [{name, filePath,
-/// kind}], "tests": [{path, coversFile}], "readingOrder": [path, ...]}`.
+/// kind, span: {start_line, end_line}}], "tests": [{path, coversFile}],
+/// "readingOrder": [path, ...]}`. Symbol spans use persisted 1-based source
+/// lines. By default symbols include Function, Class, Interface, Variable,
+/// Export, and Route entities; `includeOccurrences=true` restores other
+/// matching entity kinds.
 /// `relevance` is `"seed"` (direct match) or `"neighbor"` (one-hop
 /// pull-in); seeds rank exact declarations and paths/basenames first, then
 /// by distinct query-token matches, then by complexity+churn. Neighbors use
@@ -697,6 +701,24 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     freshen_for_mode("context_pack", input)?;
     let conn = open_db(input)?;
     let query = req_str(input, "query")?;
+    let include_occurrences = input
+        .get("includeOccurrences")
+        .map(|value| {
+            value.as_bool().ok_or_else(|| {
+                ApiError::new("invalid_input", "includeOccurrences must be a boolean")
+            })
+        })
+        .transpose()?
+        .unwrap_or(false);
+    let include_tests = input
+        .get("includeTests")
+        .map(|value| {
+            value
+                .as_bool()
+                .ok_or_else(|| ApiError::new("invalid_input", "includeTests must be a boolean"))
+        })
+        .transpose()?
+        .unwrap_or(true);
 
     // Split the query into whitespace-delimited keywords so a multi-word query
     // ("http router") does keyword search instead of matching the literal phrase
@@ -710,8 +732,8 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     let symbol_rows = matching_symbols(&conn, &tokens)?;
 
     // Step 2: every direct match becomes a seed.
-    for (_, _, fid) in &symbol_rows {
-        seed_ids.insert(*fid);
+    for symbol in &symbol_rows {
+        seed_ids.insert(symbol.file_id);
     }
     if seed_ids.is_empty() {
         return Err(ApiError::not_found(format!(
@@ -729,7 +751,15 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     let topical_scores = context_topicality(&conn, &tokens, &symbol_rows)?;
     let seed_ranked = rank_context_files(&graph, &scores, &seed_ids, Some(&topical_scores));
     let neighbor_ranked = rank_context_files(&graph, &scores, &neighbor_ids, None);
-    context_pack_output(&conn, &graph, &symbol_rows, &seed_ranked, &neighbor_ranked)
+    context_pack_output(
+        &conn,
+        &graph,
+        &symbol_rows,
+        &seed_ranked,
+        &neighbor_ranked,
+        include_occurrences,
+        include_tests,
+    )
 }
 
 fn context_pack_output(
@@ -738,6 +768,8 @@ fn context_pack_output(
     symbol_rows: &[ContextSymbol],
     seed_ranked: &[(i64, String)],
     neighbor_ranked: &[(i64, String)],
+    include_occurrences: bool,
+    include_tests: bool,
 ) -> Result<serde_json::Value, ApiError> {
     let mut files = Vec::with_capacity(seed_ranked.len() + neighbor_ranked.len());
     let mut reading_order = Vec::with_capacity(files.capacity());
@@ -754,28 +786,39 @@ fn context_pack_output(
 
     let symbols: Vec<serde_json::Value> = symbol_rows
         .iter()
-        .filter_map(|(name, kind, fid)| {
-            graph.paths_of(&[*fid]).into_iter().next().map(|file_path| {
-                serde_json::json!({
-                    "name": name,
-                    "filePath": file_path,
-                    "kind": crate::model::EntityKind::from_i64(*kind)
-                        .map(crate::model::EntityKind::as_str)
-                        .unwrap_or("unknown"),
+        .filter(|symbol| include_occurrences || is_context_declaration(symbol.kind))
+        .filter_map(|symbol| {
+            graph
+                .paths_of(&[symbol.file_id])
+                .into_iter()
+                .next()
+                .map(|file_path| {
+                    serde_json::json!({
+                        "name": symbol.name,
+                        "filePath": file_path,
+                        "kind": crate::model::EntityKind::from_i64(symbol.kind)
+                            .map(crate::model::EntityKind::as_str)
+                            .unwrap_or("unknown"),
+                        "span": {
+                            "start_line": symbol.start_line,
+                            "end_line": symbol.end_line,
+                        },
+                    })
                 })
-            })
         })
         .collect();
 
-    // `tests` reuses `tests_for_file`'s heuristic per seed file only —
-    // neighbors aren't probed, to keep the query count bounded. Loaded once
-    // and reused across seeds (not `covering_tests` per seed) so this stays
-    // O(repo_size) instead of O(seeds * repo_size).
-    let coverage = crate::query::simple::TestCoverage::load(conn)?;
     let mut tests = Vec::new();
-    for (fid, path) in seed_ranked {
-        for t in coverage.covering(*fid) {
-            tests.push(serde_json::json!({ "path": t, "coversFile": path }));
+    if include_tests {
+        // `tests` reuses `tests_for_file`'s heuristic per seed file only —
+        // neighbors aren't probed, to keep the query count bounded. Loaded once
+        // and reused across seeds (not `covering_tests` per seed) so this stays
+        // O(repo_size) instead of O(seeds * repo_size).
+        let coverage = crate::query::simple::TestCoverage::load(conn)?;
+        for (fid, path) in seed_ranked {
+            for t in coverage.covering(*fid) {
+                tests.push(serde_json::json!({ "path": t, "coversFile": path }));
+            }
         }
     }
 
@@ -813,12 +856,19 @@ fn matching_file_ids(conn: &Connection, tokens: &[&str]) -> Result<HashSet<i64>,
     Ok(ids)
 }
 
-type ContextSymbol = (String, i64, i64);
+struct ContextSymbol {
+    id: i64,
+    name: String,
+    kind: i64,
+    file_id: i64,
+    start_line: i64,
+    end_line: i64,
+}
 
 fn matching_symbols(conn: &Connection, tokens: &[&str]) -> Result<Vec<ContextSymbol>, ApiError> {
-    let exact =
-        "SELECT name, kind, file_id FROM entities WHERE lower(name) = lower(?1) ORDER BY id";
-    let fuzzy = "SELECT name, kind, file_id FROM entities
+    let exact = "SELECT id, name, kind, file_id, start_line, end_line
+                 FROM entities WHERE lower(name) = lower(?1) ORDER BY id";
+    let fuzzy = "SELECT id, name, kind, file_id, start_line, end_line FROM entities
                  WHERE lower(name) LIKE ?1 ESCAPE '\\'
                  ORDER BY CASE kind
                     WHEN 0 THEN 0 WHEN 1 THEN 0 WHEN 2 THEN 0 WHEN 13 THEN 0
@@ -829,9 +879,9 @@ fn matching_symbols(conn: &Connection, tokens: &[&str]) -> Result<Vec<ContextSym
     let mut rows = matching_symbol_query(conn, tokens, exact, false)?;
     rows.extend(matching_symbol_query(conn, tokens, fuzzy, true)?);
     let mut seen = HashSet::new();
-    rows.retain(|row| seen.insert(row.clone()));
-    rows.sort_by_key(|(name, kind, _)| {
-        let declaration_rank = match crate::model::EntityKind::from_i64(*kind) {
+    rows.retain(|row| seen.insert(row.id));
+    rows.sort_by_key(|symbol| {
+        let declaration_rank = match crate::model::EntityKind::from_i64(symbol.kind) {
             Some(
                 crate::model::EntityKind::Function
                 | crate::model::EntityKind::Class
@@ -844,8 +894,18 @@ fn matching_symbols(conn: &Connection, tokens: &[&str]) -> Result<Vec<ContextSym
             Some(crate::model::EntityKind::Call) => 5,
             _ => 4,
         };
-        let exact_rank = i32::from(!tokens.iter().any(|token| name.eq_ignore_ascii_case(token)));
-        (declaration_rank, exact_rank, name.to_lowercase(), *kind)
+        let exact_rank = i32::from(
+            !tokens
+                .iter()
+                .any(|token| symbol.name.eq_ignore_ascii_case(token)),
+        );
+        (
+            declaration_rank,
+            exact_rank,
+            symbol.name.to_lowercase(),
+            symbol.kind,
+            symbol.id,
+        )
     });
     Ok(rows)
 }
@@ -862,7 +922,16 @@ fn matching_symbol_query(
         let pattern = fuzzy.then(|| format!("%{}%", escape_like(token)));
         let value = pattern.as_deref().unwrap_or(token);
         let rows = stmt
-            .query_map([value], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .query_map([value], |row| {
+                Ok(ContextSymbol {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    kind: row.get(2)?,
+                    file_id: row.get(3)?,
+                    start_line: row.get(4)?,
+                    end_line: row.get(5)?,
+                })
+            })
             .map_err(db_err)?;
         for row in rows {
             found.push(row.map_err(db_err)?);
@@ -942,27 +1011,33 @@ fn context_topicality(
                 .matched_tokens += 1;
         }
     }
-    for (name, kind, id) in symbol_rows {
-        if tokens.iter().any(|token| name.eq_ignore_ascii_case(token))
-            && matches!(
-                crate::model::EntityKind::from_i64(*kind),
-                Some(
-                    crate::model::EntityKind::Function
-                        | crate::model::EntityKind::Class
-                        | crate::model::EntityKind::Interface
-                        | crate::model::EntityKind::Variable
-                        | crate::model::EntityKind::Export
-                        | crate::model::EntityKind::Route
-                )
-            )
+    for symbol in symbol_rows {
+        if tokens
+            .iter()
+            .any(|token| symbol.name.eq_ignore_ascii_case(token))
+            && is_context_declaration(symbol.kind)
         {
             scores
-                .entry(*id)
+                .entry(symbol.file_id)
                 .or_insert_with(ContextTopicality::default)
                 .exact_match = true;
         }
     }
     Ok(scores)
+}
+
+fn is_context_declaration(kind: i64) -> bool {
+    matches!(
+        crate::model::EntityKind::from_i64(kind),
+        Some(
+            crate::model::EntityKind::Function
+                | crate::model::EntityKind::Class
+                | crate::model::EntityKind::Interface
+                | crate::model::EntityKind::Variable
+                | crate::model::EntityKind::Export
+                | crate::model::EntityKind::Route
+        )
+    )
 }
 
 fn neighbors_of(graph: &Graph, seeds: &HashSet<i64>) -> HashSet<i64> {

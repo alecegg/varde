@@ -44,12 +44,12 @@ When the failure runs locally, build one fast, deterministic pass/fail command
 that asserts the user's exact symptom, run it, and show its output. Use it for
 bisection, hypothesis testing, and instrumentation.
 
-Without local reproduction, name the attempts and use a bounded trace or
-versioned source path that supports the symptom, labeled **unreproduced**,
-stating its origin and what it cannot establish, and separating observation
-from what the code suggests. Without either, stop and
-ask for the reproducing environment, an artifact, or permission to add
-temporary instrumentation.
+- **Without local reproduction:** name the attempts and use a bounded trace
+  or versioned source path that supports the symptom, labeled
+  **unreproduced**, stating its origin and what it cannot establish, and
+  separating observation from what the code suggests.
+- **Without either:** stop and ask for the reproducing environment, an
+  artifact, or permission to add temporary instrumentation.
 
 ## Phase 2 — Reproduce and minimize
 
@@ -65,6 +65,10 @@ temporary instrumentation.
 3. An untested hypothesis is not evidence for a fix.
 
 ## Phase 4 — Instrument
+
+For `fix`, initialize the review gate after Phase 3 and before the first
+production edit (Phase 4 instrumentation in production source, or Phase 5);
+`diagnose` needs no gate.
 
 - Tag every debug log with a unique prefix (e.g. `[DEBUG-a4f2]`).
 
@@ -90,5 +94,7 @@ Before declaring done:
 - [ ] Throwaway prototypes deleted.
 - [ ] When committing, state the proven hypothesis in the commit message.
 
-With a task file, complete through the execution cycle's own Completion
-step: transition it, then commit once. Standalone, commit only when asked.
+With a task file, complete through `references/build-execution.md`
+Completion. A standalone `fix` finishes with the implementation review and
+complete checkpoint per `references/review-gates.md` §5; commit only when
+asked.

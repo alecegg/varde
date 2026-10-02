@@ -1,6 +1,6 @@
 ---
 name: varde-learn
-description: "Diagnose an agent session or briefly triage supplied agent-session evidence; capture or reconcile friction, distill recurring issues, track recurrence, or create skill tests. Not for project notes, plans, code changes, or reviews."
+description: "Diagnose an agent session or briefly triage supplied agent-session evidence; capture or reconcile friction, distill recurring issues, track recurrence, or create skill tests. Not for project notes, plans, code changes, code or UI reviews (varde-review), or reviewing skill text (varde-agent-doc-authoring)."
 ---
 
 # Maintain friction and skill evaluations

@@ -11,6 +11,11 @@
 
 ## Workflow
 
+Unless a caller's gate covers this work, initialize the
+`references/review-gates.md` subject and pass its `start` checkpoint before
+the first edit (step 4); after step 4's verification, finish its final review
+and `complete` checkpoint before reporting (step 5).
+
 1. **Edit in the current checkout, no worktree;** if concurrent edits make it
    unsafe, stop and ask.
 2. **Compute scope** with `scripts/change-ranges.sh [--staged | --ref <ref>] [-- <file>...]`
@@ -21,8 +26,7 @@
    helpers that a new one duplicates (`varde-code` per
    `references/varde-code-cli.md`, else grep). A changed symbol used outside scope
    keeps its name and signature; replacing new code with a call to an existing
-   helper is in scope. Scope lookups to the diff and include untracked files
-   separately with `git ls-files --others --exclude-standard`.
+   helper is in scope. Scope lookups to the diff.
 4. **Edit one file at a time, then verify once.** Before editing or creating a
    file, run `scripts/snapshot.sh save <backup-dir> <file>...` with a per-run
    `mktemp -d` directory; after all edits, run the project's tests (only

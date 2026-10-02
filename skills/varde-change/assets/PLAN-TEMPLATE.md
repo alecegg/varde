@@ -52,7 +52,7 @@ What will be true after this plan that isn't now?
 
 ## Open Questions
 
-<!-- answerable in chat or by editing here; "n/a — <reason>" if none -->
+<!-- answerable in chat or by editing here; if none, replace the bullet with plain text (not a bullet): n/a — <reason> -->
 - **<question>** — <why it matters or what it blocks>. Recommendation: <suggested answer — one-line reason>.
 
 ## Assumptions
@@ -69,9 +69,14 @@ What will be true after this plan that isn't now?
       (assert: <command or structural check> → <expected result>
        | retrieve: <file(s) or grep to read> → context for judgment)
 
+## Progress
+
+<!-- one line per event; first line: subject: <review-subject-id> -->
+
 ## Related
 
 <!-- knowledge this plan relies on: [title](/decision/x.md), /specs/, /pattern/, /definition/ -->
 ```
 
-No `## Tasks`: build writes task files; evidence lives in each task's Progress.
+No `## Tasks`: build writes task files; task evidence lives in each task's
+Progress.

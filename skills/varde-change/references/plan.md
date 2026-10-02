@@ -4,12 +4,13 @@
 
 When asked to resume planning with no feature named:
 
-- **Find drafts.** Use the draft definition in `SKILL.md` and search at any
-  depth under `<working>/plans/`. Nested child plans count; their id is their
-  path, such as `<group-id>/<child-id>`.
+- **Find drafts.** A draft is a `plan.md` with `status: backlog` and an id
+  ending in `-draft` or `-draft-<n>`, or a live Open Questions bullet. Search
+  at any depth under `<working>/plans/`. Nested child plans count; their id is
+  their path, such as `<group-id>/<child-id>`.
 - **Ask.** List every draft as a numbered `title - plan id` list and ask which
-  to resume. If there are none, wait for the user's idea.
-  Continue with [The growth loop](#the-growth-loop).
+  to resume, then continue with [The growth loop](#the-growth-loop). If there
+  are none, wait for the user's idea and [start a plan](#start-a-plan).
 
 ## Start a plan
 
@@ -20,9 +21,15 @@ terms when available. In the same read-only discovery call, scan
 `<working>/reviews/deferred/` for relevant findings.
 
 1. Work in the current checkout. Isolate only when requested, when a caller
-   owns a worktree, or when concurrent edits risk collision. Probe whether
-   plan files are ignored first; ignored plans stay in the caller checkout.
-   If isolation is needed, read `references/build-worktree.md`.
+   owns a worktree, or when concurrent edits risk collision, after probing
+   whether plan files are ignored (ignored plans stay in the caller checkout).
+   To isolate:
+   - Run `scripts/worktree-create.sh <id>`; edit only inside its `path=`.
+   - `created=false`: a caller owns it; reuse it, never merge or clean up.
+   - Otherwise this run owns it: at Finalize step 9, offer to merge from the
+     original checkout with `scripts/worktree-merge.sh <id>`, then run
+     `scripts/worktree-cleanup.sh <id>` after exit 0; on another exit, report
+     it and ask.
 2. Pick a temporary slug from the prompt and run
    `scripts/plan-path.py draft --working <working> --slug <slug>`; it creates
    and prints the draft directory, whose name is the plan id until
@@ -34,8 +41,9 @@ terms when available. In the same read-only discovery call, scan
    for the user to include or defer. Match blank-`Disposition` findings whose
    `Location` falls in scope, deduplicating copies by `Source` and original id.
    The user decides; never add a finding automatically.
-4. Tell the user the plan path and welcome direct edits. Ask the one
-   highest-value question per SKILL.md `## Asking questions`, then wait.
+4. Tell the user the plan path (inside the worktree when isolated) and
+   welcome direct edits. Ask the one highest-value question per
+   [Asking questions](#asking-questions), then wait.
 
 ## The growth loop
 
@@ -83,7 +91,10 @@ decisions, definitions, and patterns on the feature:
 - Put any that look stale into `## Open Questions` as one item.
 - Record a missing definition with `varde-knowledge`.
 - When `<knowledge>/specs/<domain>.md` covers code this plan changes, add the
-  domain to `observed_specs`.
+  domain to `observed_specs` and pass its spec file at Finalize step 3's
+  `review init` (`--scope`, or `--artifact <absolute-file>` outside the
+  repository); after init, add it with `review expand` and a fresh pre-edit
+  verdict.
 
 ### Per-turn steps
 
@@ -96,7 +107,7 @@ decisions, definitions, and patterns on the feature:
    `<question> → <answer>` to `## Decisions so far`, remove the resolved
    line, and add any unknowns the answer exposes. An accepted assumption moves
    to the decision log too.
-3. **Ask** the highest-value Open Question per SKILL.md `## Asking questions`,
+3. **Ask** the highest-value Open Question per [Asking questions](#asking-questions),
    solution-shape questions before spelling ones.
 
 Throughout:
@@ -169,20 +180,16 @@ full set before the final completeness check:
      and `ignored: true|false`; record `ignored`.
    - Run `varde-workflow validate <plan-dir>/plan.md --json` and fix
      diagnostics before review.
-2. **Decompose before review.** Follow `references/plan-decomposition.md`.
+2. **Split or decompose before review.** For several independently shippable
+   changes, [split](#split-into-child-plans) first: the parent gets no tasks or
+   subject. Otherwise follow `references/plan-decomposition.md`.
 3. **Review before confirming.** Apply `references/review-gates.md` to the
-   persisted plan and initialize a subject before implementation, with
-   the output of
-   `python3 <skill-dir>/scripts/risk-tier.py <scope-path>...` over the plan's
-   full scope, run from the repository root:
-
-   ```sh
-   varde-workflow review init --plan <plan.md> --repository <repo-root> --scope <path> [--scope <path> ...] --tier-evidence <risk-tier.json> --json
-   ```
-
+   persisted plan and initialize its subject (`review init --plan <plan.md>`,
+   with any `observed_specs` spec files)
+   before implementation, per `references/review-gate-plan.md` §1.
    Give an independent agent the plan, task breakdown, returned subject id,
    scope, and resolved absolute `<working>`/`<knowledge>` paths. Ask it to
-   check task splits, independence (`scripts/resolve-execution-wave.py` waves),
+   check task splits, independence (`varde-workflow execution-wave` waves),
    each task's context estimate, unstated assumptions, unresolved human
    choices, unverifiable criteria, and independently shippable changes. It
    inspects `pre-edit` and writes its own review record through
@@ -213,7 +220,9 @@ full set before the final completeness check:
 
 ### Split into child plans
 
-Use this at Finalize step 4 when review finds several shippable changes.
+Use this at Finalize step 2, or step 4 when review finds several shippable
+changes; from step 4, first delete the parent's task files and note in
+Progress that its subject is abandoned.
 
 1. With `varde-code` available, run `clusters` on affected files; dense
    interconnections suggest one candidate. This is a starting point, not a
@@ -223,10 +232,29 @@ Use this at Finalize step 4 when review finds several shippable changes.
 3. Create nested child plans at
    `<working>/plans/<plan-id>/<child-slug>/plan.md`. The path gives each child
    its compound id and group membership, so no `children:`/`parent:` fields
-   are needed. Review and finalize each child separately; build decomposes
-   each later.
+   are needed. Finalize each child with Finalize step 1's validate only
+   (never `plan-path.py finalize`), then steps 2-9; build decomposes each
+   later.
 4. Keep the current plan as the group parent with `shape: group` in
    frontmatter. Keep its goal, non-goals, constraints, and aggregate contract
    outside Progress: source scope, child ids/dependencies/contracts,
    assumptions, and aggregate acceptance/verification. Validate and commit the
-   parent with its children in tracked storage.
+   parent with its children in tracked storage, then finish the parent with
+   Finalize steps 7-9 only.
+
+## Asking questions
+
+Up to three questions may share a turn when they are facets of one decision
+or share candidate solutions, such as naming sibling commands or edge cases of
+one input. Silence and surrounding context leave the decision open. Use this
+menu:
+
+```
+<Question>
+
+  1. <Option A>
+  2. <Option B>
+  3. Other - describe what you want
+
+Recommendation: <n> (<label>) - <one-sentence reason>.
+```

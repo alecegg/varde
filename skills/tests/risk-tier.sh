@@ -17,7 +17,9 @@ test -f "$REAL_SKILLS/shared/scripts/risk-tier.py" || fail "risk-tier.py is miss
 # so signal evaluation never touches the real repo's skills/tests inventory or
 # a live varde-code index.
 fixtures="$TEST_ROOT/skills"
-mkdir -p "$fixtures/varde-change/scripts" "$fixtures/varde-agent-doc-authoring/scripts" "$fixtures/tests"
+mkdir -p "$fixtures/varde-change/scripts" "$fixtures/varde-agent-doc-authoring/scripts" \
+  "$fixtures/tests" "$fixtures/shared"
+: > "$fixtures/shared/MANIFEST"
 cp "$REAL_SKILLS/shared/scripts/risk-tier.py" "$fixtures/varde-change/scripts/risk-tier.py"
 cp "$REAL_SKILLS/varde-agent-doc-authoring/scripts/skill-flow.py" \
    "$fixtures/varde-agent-doc-authoring/scripts/skill-flow.py"
@@ -45,7 +47,7 @@ assert_clean() {
   local desc="$1"; shift
   local out
   out="$(run "$@")"
-  [[ "$out" == '{"tier": "low", "signals": [], "evidence": {}}' ]] \
+  [[ "$out" == '{"tier": "low", "signals": [], "evidence": {}, "tests_to_run": []}' ]] \
     || fail "$desc: expected empty low-tier output, got $out"
 }
 
@@ -90,8 +92,12 @@ esac
 FAKE
 chmod +x "$fake_bin/varde-code"
 
+# Demoted: a dependent outside scope is evidence only, so the tier stays low.
 RISK_TIER_CASE=dependent_outside_scope PATH="$fake_bin:$PATH" \
-  check_tier "dependent-outside-scope" high dependent_outside_scope code/scope-a.py
+  check_tier "dependent-outside-scope" low "" code/scope-a.py
+out="$(RISK_TIER_CASE=dependent_outside_scope PATH="$fake_bin:$PATH" run code/scope-a.py)"
+python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert 'dependent_outside_scope' in d['evidence'] and d['signals']==[], d" \
+  "$out" || fail "dependent-outside-scope: expected evidence only, got $out"
 
 RISK_TIER_CASE=foundational_file PATH="$fake_bin:$PATH" \
   check_tier "foundational-file" high foundational_file code/scope-a.py
@@ -140,14 +146,14 @@ python3 -c "import json,sys; sys.exit(0 if 'varde_code_unavailable' in json.load
   "$out" || fail "self-contained code file: expected varde_code_unavailable in evidence, got $out"
 
 out="$(run_git code/referenced.py)"
-[[ "$(field "$out" tier)" == '"high"' ]] || fail "stem mentioned elsewhere: expected high tier, got $out"
+[[ "$(field "$out" tier)" == '"low"' ]] || fail "stem mentioned elsewhere: expected low tier, got $out"
 python3 -c "
 import json, sys
 data = json.loads(sys.argv[1])
-assert 'dependent_outside_scope' in data['signals'], data
+assert 'dependent_outside_scope' not in data['signals'], data
 detail = data['evidence']['dependent_outside_scope'][0]
 assert detail.get('source') == 'text-fallback', data
-" "$out" || fail "stem mentioned elsewhere: expected dependent_outside_scope with source text-fallback, got $out"
+" "$out" || fail "stem mentioned elsewhere: expected dependent_outside_scope evidence with source text-fallback, got $out"
 
 out="$(run_git code/solo.py code/second.py)"
 [[ "$(field "$out" tier)" == '"high"' ]] || fail "two code files: expected high tier, got $out"
@@ -201,8 +207,11 @@ cat > "$fixtures/varde-fixture-b/references/mode-x.md" <<'EOF'
 Some reference content for mode x.
 EOF
 
-check_tier "skill-doc reach leaves skill" high skill_reach_external \
-  skills/varde-fixture-a/SKILL.md
+# Demoted: reach leaving the skill is evidence only.
+check_tier "skill-doc reach leaves skill" low "" skills/varde-fixture-a/SKILL.md
+out="$(run skills/varde-fixture-a/SKILL.md)"
+python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert 'skill_reach_external' in d['evidence'] and d['signals']==[], d" \
+  "$out" || fail "skill-doc reach: expected evidence only, got $out"
 
 # Installed-copy resolution: an on-PATH risk-tier.py, installed outside the
 # analyzed repo, must still resolve skill-flow.py and skills/tests/* from the
@@ -247,13 +256,46 @@ cp "$fixtures/varde-fixture-c/references/shared-ref.md" "$fixtures/varde-fixture
 check_tier "byte-identical vendored copy" high vendored_copy_exists \
   skills/varde-fixture-c/references/shared-ref.md
 
-# named_by_test_file: a file under skills/tests/ names the changed file.
+# tests_to_run: any `tests` directory names the changed file; never a signal.
 mkdir -p "$fixtures/varde-fixture-c/scripts"
 printf "print('hi')\n" > "$fixtures/varde-fixture-c/scripts/helper.py"
 printf '# exercises helper.py\n' > "$fixtures/tests/helper-test.sh"
 
-check_tier "named by a test file" high named_by_test_file \
-  skills/varde-fixture-c/scripts/helper.py
+check_tier "named by a test file stays low" low "" skills/varde-fixture-c/scripts/helper.py
+out="$(run skills/varde-fixture-c/scripts/helper.py)"
+[[ "$(field "$out" tests_to_run)" == '["skills/tests/helper-test.sh"]' ]] \
+  || fail "skills test: expected tests_to_run helper-test.sh, got $out"
+
+# A tests dir outside skills/, a path boundary, a generic basename, and fixtures.
+mkdir -p "$TEST_ROOT/agents/tests" "$TEST_ROOT/pkg/tests/fixtures" "$TEST_ROOT/lib"
+printf 'x\n' > "$TEST_ROOT/lib/util.py"
+printf 'x\n' > "$TEST_ROOT/lib/README.md"
+printf 'x\n' > "$TEST_ROOT/lib/other.py"
+printf 'run lib/util.py\n' > "$TEST_ROOT/agents/tests/names-util.sh"
+printf 'see myutil.py and other.py\n' > "$TEST_ROOT/agents/tests/boundary.sh"
+printf 'see README.md only\n' > "$TEST_ROOT/agents/tests/generic-bare.sh"
+printf 'see lib/README.md\n' > "$TEST_ROOT/agents/tests/generic-parent.sh"
+printf 'lib/util.py\n' > "$TEST_ROOT/pkg/tests/fixtures/skipped.sh"
+
+PATH="$fake_bin:$PATH" RISK_TIER_CASE=clean check_tier "tests outside skills" low "" lib/util.py
+out="$(PATH="$fake_bin:$PATH" RISK_TIER_CASE=clean run lib/util.py)"
+[[ "$(field "$out" tests_to_run)" == '["agents/tests/names-util.sh"]' ]] \
+  || fail "tests outside skills: expected names-util.sh only (not boundary or fixtures), got $out"
+out="$(PATH="$fake_bin:$PATH" RISK_TIER_CASE=clean run lib/other.py)"
+[[ "$(field "$out" tests_to_run)" == '["agents/tests/boundary.sh"]' ]] \
+  || fail "basename at boundary: expected boundary.sh, got $out"
+out="$(PATH="$fake_bin:$PATH" RISK_TIER_CASE=clean run lib/README.md)"
+[[ "$(field "$out" tests_to_run)" == '["agents/tests/generic-parent.sh"]' ]] \
+  || fail "generic basename: expected only the parent/basename match, got $out"
+
+# Without skills/shared/MANIFEST, skills/ paths are code, not skill-doc.
+nomanifest="$TEST_ROOT/no-manifest"
+mkdir -p "$nomanifest/skills/shared/references" "$nomanifest/skills/varde-change/scripts"
+cp "$REAL_SKILLS/shared/scripts/risk-tier.py" "$nomanifest/skills/varde-change/scripts/risk-tier.py"
+printf 'x\n' > "$nomanifest/skills/shared/references/a.md"
+out="$(cd "$nomanifest" && PATH="$fake_bin:$PATH" RISK_TIER_CASE=clean python3 -B skills/varde-change/scripts/risk-tier.py skills/shared/references/a.md)"
+python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert 'shared_file' not in d['signals'] and d['signals']==[] and 'varde_code_unavailable' not in d['evidence'] and d['tier']=='low', d" \
+  "$out" || fail "no MANIFEST: expected code-path handling (low, no skill signals), got $out"
 
 # Clean skill-doc scope: no dispatch, no manifest entry, no naming test file.
 assert_clean "clean skill-doc scope" skills/varde-fixture-b/references/mode-x.md

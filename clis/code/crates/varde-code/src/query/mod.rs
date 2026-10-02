@@ -149,7 +149,7 @@ fn open_db_impl(
         return Err(ApiError::new(
             "index_missing",
             format!(
-                "index missing at {}; ensure the watcher is ready",
+                "index missing at {}; the coordinator can build it with `varde-code watch --ensure --repo <repo-root>`; find_pattern needs no index",
                 path.display()
             ),
         ));
@@ -498,7 +498,7 @@ pub fn freshen_for_mode(
     if !fresh {
         return Err(ApiError::new(
             "index_stale",
-            "index is stale for this source root; wait for the watcher or search source directly",
+            "index is stale for this source root; the coordinator can refresh it with `varde-code watch --ensure --repo <repo-root>`; find_pattern needs no index",
         ));
     }
 

@@ -7,33 +7,43 @@
 
 Usage: risk-tier.py [--contract <file>] <scope-path>...
 
-Prints `{"tier": "low"|"high", "signals": [...], "evidence": {...}}` to
-stdout. Tier is "high" when any of these trigger, by scope kind:
+Prints `{"tier": "low"|"high", "signals": [...], "evidence": {...},
+"tests_to_run": [...]}` to stdout. `tests_to_run` is always present: the
+sorted repo-relative files under any `tests` directory (skipping `.git`,
+`target`, `node_modules`, `.varde`, and any `fixtures` path component) whose
+text names a scope path. A match is the repo-relative path, or the basename,
+or `<parent-dir>/<basename>` for generic basenames (SKILL.md, FLOW.md,
+README.md, AGENTS.md, CLAUDE.md, main.rs, lib.rs, mod.rs, __init__.py,
+index.*); basename matches count only at a path boundary (preceding character
+not in `[A-Za-z0-9._-]`). Tier is "high" when any of these trigger, by scope
+kind. `dependent_outside_scope` and `skill_reach_external` are recorded in
+`evidence` only and never raise the tier:
 
-- Code scope (any path not under `skills/`): `varde-code blast_radius`,
-  `nav_map`, and `clusters` per path. High when a dependent falls outside
-  scope, a scope file is marked foundational/entrypoint by `nav_map`, or
-  scope spans more than one cluster.
-- Skill-doc scope (a path under `skills/<skill>/...` or `skills/shared/...`):
+- Code scope (any path not classified as skill-doc): `varde-code
+  blast_radius`, `nav_map`, and `clusters` per path. High when a scope file
+  is marked foundational/entrypoint by `nav_map`, or scope spans more than
+  one cluster.
+- Skill-doc scope (a path under `skills/<skill>/...` or `skills/shared/...`,
+  only when `skills/shared/MANIFEST` is a file; otherwise such paths are
+  code):
   `skill-flow.py`'s reach, `skills/shared/MANIFEST`'s shared-file list,
-  `skills/tests/vendored-copies.sh`'s partial-section pins, and
-  `skills/tests/*` contents. High when reach leaves the owning skill (a
-  route's `inline`, `unresolved`, or `dispatches`, or a `handoffs` entry that
-  is not one of the skill's own files, signal `skill_reach_external`); the
+  and `skills/tests/vendored-copies.sh`'s partial-section pins. High when the
   path is a file under `skills/shared/` or a skill's copy of one that
-  `skills/shared/MANIFEST` lists for that skill (signal `shared_file`); a
+  `skills/shared/MANIFEST` lists for that skill (signal `shared_file`); or a
   byte-identical copy of a vendored-copies.sh-pinned file exists under
-  another skill's `references/` (signal `vendored_copy_exists`); or a test
-  file names it. A bare directory scope
+  another skill's `references/` (signal `vendored_copy_exists`). Reach
+  leaving the owning skill (a route's `inline`, `unresolved`, or
+  `dispatches`, or a `handoffs` entry that is not one of the skill's own
+  files) is evidence `skill_reach_external` only. A bare directory scope
   that cannot resolve to one skill (e.g. `skills` itself) expands to every
   contained skill; if that finds none, or another scope path still can't be
   resolved, signal `scope_not_individually_classified` instead of a silent
   empty-signal low tier.
 - `varde-code` missing, not indexed, or a failing query (only checked when
   the scope includes code paths): falls back to a `git grep` text check by
-  file stem. High when a hit falls outside scope (`dependent_outside_scope`,
-  detail adds `"source": "text-fallback"`) or more than one code path is in
-  scope (`multi_file_scope_unverified`); `git grep` itself failing keeps
+  file stem. A hit outside scope is evidence `dependent_outside_scope`
+  (detail adds `"source": "text-fallback"`) only; high when more than one
+  code path is in scope (`multi_file_scope_unverified`); `git grep` itself failing keeps
   `varde_code_unavailable` as a signal. Otherwise `varde_code_unavailable` is
   recorded in evidence only and the scope stays low.
 
@@ -57,9 +67,9 @@ def add_signal(signals, evidence, name, detail):
     evidence.setdefault(name, []).append(detail)
 
 
-def classify(path):
+def classify(path, has_manifest):
     parts = Path(path).parts
-    return "skill" if parts and parts[0] == "skills" else "code"
+    return "skill" if has_manifest and parts and parts[0] == "skills" else "code"
 
 
 def run_varde_code(mode, payload):
@@ -90,8 +100,8 @@ def code_signals(paths, repo_root, signals, evidence):
             continue
         outside = sorted(set(dependents) - scope)
         if outside:
-            add_signal(signals, evidence, "dependent_outside_scope",
-                       {"path": path, "dependents": outside[:5]})
+            evidence.setdefault("dependent_outside_scope", []).append(
+                {"path": path, "dependents": outside[:5]})
 
     nav = run_varde_code("nav_map", {"repoRoot": str(repo_root)})
     if nav is None:
@@ -121,10 +131,9 @@ def text_fallback_signals(code_paths, repo_root, signals, evidence):
 
     For each code path, search tracked files for its stem (`Path(path).stem`)
     with `git grep -l -w -F`, dropping hits that are themselves scope paths.
-    A hit outside scope signals `dependent_outside_scope` (detail adds
-    `"source": "text-fallback"`). More than one code path in scope signals
-    `multi_file_scope_unverified`. Generic stems (`main`, `mod`, `lib`,
-    `index`) usually match elsewhere and fail high. If `git grep` itself
+    A hit outside scope is recorded as `dependent_outside_scope` in `evidence`
+    only (detail adds `"source": "text-fallback"`). More than one code path in scope signals
+    `multi_file_scope_unverified`. If `git grep` itself
     fails (not a git checkout, git missing), `varde_code_unavailable` stays a
     signal, matching the varde-code-unavailable behavior. Otherwise
     `varde_code_unavailable` is recorded in `evidence` only, so a clean scope
@@ -146,8 +155,8 @@ def text_fallback_signals(code_paths, repo_root, signals, evidence):
             return
         hits = sorted(set(proc.stdout.splitlines()) - scope)
         if hits:
-            add_signal(signals, evidence, "dependent_outside_scope",
-                       {"path": path, "dependents": hits[:5], "source": "text-fallback"})
+            evidence.setdefault("dependent_outside_scope", []).append(
+                {"path": path, "dependents": hits[:5], "source": "text-fallback"})
 
     if len(code_paths) > 1:
         add_signal(signals, evidence, "multi_file_scope_unverified", {"paths": code_paths})
@@ -219,20 +228,60 @@ def vendored_copy_elsewhere(target_file, name, skills_dir):
     return matches
 
 
-def named_by_test_file(name, tests_dir):
-    hits = []
-    if not tests_dir.is_dir():
-        return hits
-    for candidate in sorted(tests_dir.iterdir()):
-        if not candidate.is_file():
+SKIP_DIRS = {".git", "target", "node_modules", ".varde"}
+GENERIC_BASENAMES = {"SKILL.md", "FLOW.md", "README.md", "AGENTS.md", "CLAUDE.md",
+                     "main.rs", "lib.rs", "mod.rs", "__init__.py"}
+
+
+def is_generic(name):
+    return name in GENERIC_BASENAMES or re.fullmatch(r"index\..+", name) is not None
+
+
+def names_at_boundary(text, needle):
+    pattern = r"(?<![A-Za-z0-9._-])" + re.escape(needle)
+    return re.search(pattern, text) is not None
+
+
+def test_files(repo_root):
+    """Yield repo-relative files under any directory named `tests`."""
+    stack = [repo_root]
+    while stack:
+        current = stack.pop()
+        try:
+            children = sorted(current.iterdir())
+        except OSError:
             continue
+        for child in children:
+            rel_parts = child.relative_to(repo_root).parts
+            if child.is_symlink() or any(p in SKIP_DIRS or p == "fixtures" for p in rel_parts):
+                continue
+            if child.is_dir():
+                stack.append(child)
+            elif child.is_file() and "tests" in rel_parts[:-1]:
+                yield child
+
+
+def tests_naming_scope(paths, repo_root):
+    needles = []
+    for path in paths:
+        posix = Path(path).as_posix()
+        name = Path(path).name
+        if is_generic(name):
+            parent = Path(path).parent.name
+            base = f"{parent}/{name}" if parent else name
+        else:
+            base = name
+        needles.append((posix, base))
+    hits = set()
+    for candidate in test_files(repo_root):
         try:
             text = candidate.read_text(errors="replace")
         except OSError:
             continue
-        if name in text:
-            hits.append(str(candidate.relative_to(tests_dir.parent)))
-    return hits
+        if any(names_at_boundary(text, full) or names_at_boundary(text, base)
+               for full, base in needles):
+            hits.add(candidate.relative_to(repo_root).as_posix())
+    return sorted(hits)
 
 
 def skill_relative(path):
@@ -260,7 +309,7 @@ def skill_signals(paths, signals, evidence, skills_dir):
                 flow_cache[skill_name] = skill_flow_data(skill_dir, skill_flow_script)
             flow = flow_cache[skill_name]
             if flow and reach_leaves_skill(flow, within):
-                add_signal(signals, evidence, "skill_reach_external", {"path": path})
+                evidence.setdefault("skill_reach_external", []).append({"path": path})
 
         consumers = shared_files.get(within, [])
         if skill_name == "shared" or skill_name in consumers:
@@ -271,10 +320,6 @@ def skill_signals(paths, signals, evidence, skills_dir):
             copies = vendored_copy_elsewhere(target_file, name, skills_dir)
             if copies:
                 add_signal(signals, evidence, "vendored_copy_exists", {"path": path, "copies": copies})
-
-        test_hits = named_by_test_file(name, tests_dir)
-        if test_hits:
-            add_signal(signals, evidence, "named_by_test_file", {"path": path, "tests": test_hits})
 
     for path in paths:
         rel = skill_relative(path)
@@ -309,8 +354,9 @@ def main(argv):
     repo_root = Path.cwd()
     signals, evidence = [], {}
 
-    code_paths = [p for p in args.paths if classify(p) == "code"]
-    skill_paths = [p for p in args.paths if classify(p) == "skill"]
+    has_manifest = (repo_root / "skills" / "shared" / "MANIFEST").is_file()
+    code_paths = [p for p in args.paths if classify(p, has_manifest) == "code"]
+    skill_paths = [p for p in args.paths if classify(p, has_manifest) == "skill"]
 
     if code_paths:
         code_signals(code_paths, repo_root, signals, evidence)
@@ -318,7 +364,8 @@ def main(argv):
         skill_signals(skill_paths, signals, evidence, repo_root / "skills")
 
     tier = "high" if signals else "low"
-    print(json.dumps({"tier": tier, "signals": signals, "evidence": evidence}))
+    print(json.dumps({"tier": tier, "signals": signals, "evidence": evidence,
+                      "tests_to_run": tests_naming_scope(args.paths, repo_root)}))
     return 0
 
 

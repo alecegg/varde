@@ -13,8 +13,8 @@
 
 ## Choose a direction
 
-If the user gave a specific direction, or asks to refine an existing
-prototype, write the next `v<N>.html` directly. Otherwise, make variants only
+If the user gave a specific direction or is refining, write the next
+`v<N>.html` directly. Otherwise, make variants only
 when a real structural choice is unresolved:
 
 1. Pick 2–3 close directions or 3–5 substantially different directions;
@@ -41,9 +41,9 @@ when a real structural choice is unresolved:
 
 ## Optional browser iteration
 
-Use a browser only when a browser tool is available and a target exists: a
-user-supplied running URL or run command, or a development command named in
-project docs. Never guess a URL, route, or command.
+Open the prototype file directly when a browser tool is available; use a
+running app only from a user-supplied URL or command. Never guess a URL,
+route, or command.
 
 1. Refine against actual layout and reachable interactions at the primary and
    narrow viewports, when resizing is supported.

@@ -4,13 +4,20 @@
 
 - **Auto-fix rule:** `auto-fix` only when the fix is precisely describable and
   mirrors a pattern already in the file or its siblings; otherwise `triage`.
-- **Always `triage` (a human decides):** business-rule arithmetic or
-  behavior-changing operators; splitting functions or restructuring control
-  flow; any ARCHITECTURE change except a mechanical import reorder that breaks
-  a false-positive cycle; authorization logic; complexity redesign or caching;
-  what counts as sensitive log data; retry and partial-failure policy;
-  transactions, concurrency checks, migration idempotency; breaking a consumed
-  API. Confirm a rename's blast radius before labelling it `auto-fix`.
+- **Always `triage` (a human decides):**
+  - business-rule arithmetic or behavior-changing operators
+  - splitting functions or restructuring control flow
+  - any ARCHITECTURE change except a mechanical import reorder that breaks a
+    false-positive cycle
+  - authorization logic
+  - complexity redesign or caching
+  - what counts as sensitive log data
+  - retry and partial-failure policy
+  - transactions
+  - concurrency checks
+  - migration idempotency
+  - breaking a consumed API
+- **Renames:** confirm a rename's blast radius before labelling it `auto-fix`.
 
 ## CORRECTNESS
 

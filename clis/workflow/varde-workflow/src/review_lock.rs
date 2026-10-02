@@ -39,6 +39,15 @@ impl ProjectLock {
         Self::acquire_at(root, git_dir.join(LOCK_NAME))
     }
 
+    /// Acquire after the project lock, before reading shared escalation inputs.
+    pub fn acquire_escalation_store(working: &Path) -> Result<Self> {
+        let working = working.canonicalize()?;
+        Self::acquire_at(
+            working.clone(),
+            working.join(".varde-workflow-escalation.lock"),
+        )
+    }
+
     fn acquire_at(root: PathBuf, lock_path: PathBuf) -> Result<Self> {
         let file = OpenOptions::new()
             .create(true)

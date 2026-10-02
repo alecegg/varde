@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just test-agents
+
+  clis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [code, workflow, toz, learn]
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install stable --profile minimal
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "clis/${{ matrix.module }} -> target"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Allow sandbox tests
+        if: matrix.module == 'toz'
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: just test-cli ${{ matrix.module }}
+
+  pi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just test-pi

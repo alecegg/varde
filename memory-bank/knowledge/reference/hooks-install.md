@@ -8,6 +8,19 @@ related:
 
 # hooks install: session-start nav_map injection for agent harnesses
 
+> **Legacy for claude, codex, opencode, and pi.** Those harnesses now use the
+> unified hook: `varde-workflow hook session-start --harness <h>`, installed
+> with `varde-workflow hook install --harness <h>`. It runs the providers in
+> `[hooks.session_start] providers` of `~/.config/varde/config.toml` (default
+> `nav_map`; legacy `orchestration` and `toz_note` entries are skipped);
+> `nav_map` produces the content specified below. With no configured
+> instruction targets, the hook reports a setup warning. `varde sync` runs
+> `varde-code hooks remove --agent <a>` and then the unified install. For `pi`
+> the unified install writes
+> `extensions/varde-session.ts` and sync removes the legacy
+> `pi-extension.js`; the rest of this spec describes `varde-code hooks`
+> behavior.
+
 `hooks install`/`hooks remove`/`hooks list` are CLI subcommands (parallel to
 `skills install`/`skills remove`/`skills list`) that wire `varde-code report
 nav_map` into an agent harness's session-start mechanism, so nav-map

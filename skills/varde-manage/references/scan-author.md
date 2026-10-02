@@ -8,27 +8,30 @@ shows what loads.
 1. **Get examples.** Reuse concrete code that should and should not match; ask
    for missing cases. A vague request ("catch bad error handling") needs
    before-and-after examples first.
-2. **Choose the kind** per Choosing pattern vs sql.
-3. **Draft the payload.** Start from the closest active rule: `rules_list`
-   returns each rule's full `pattern` or `query`, and `rules_seed` writes the
-   built-in packs as TOML files. The `hardcoded-credential-*` pair shows
-   multi-pattern, multi-constraint rules; `function-complexity-gate` shows SQL
+2. **Place it** per Scopes and precedence (default repo scope; ask when
+   unclear). To customize a built-in, `rules_seed` and edit in place, keeping
+   its `id`.
+3. **Choose the kind** per Choosing pattern vs sql.
+4. **Draft the payload.** Start from the closest active rule: `rules_list`
+   returns each rule's full `pattern` or `query`, and `rules_seed` (`--user`
+   for user scope) writes the built-in packs as TOML files. The
+   `hardcoded-credential-*` pair shows multi-pattern, multi-constraint rules; `function-complexity-gate` shows SQL
    aggregation; `circular-import` shows a self-join.
-4. **Fill the fields.** Choose `severity` and any `thresholds`/`strings`
+5. **Fill the fields.** Choose `severity` and any `thresholds`/`strings`
    defaults from the stated policy; ask when the choice changes its meaning.
-5. **Write `[[rule.test]]` self-tests** with at least one positive and one
+6. **Write `[[rule.test]]` self-tests** with at least one positive and one
    negative case, and `expect_rewrite` when `rewrite` is set. Verify positive
    and negative cases separately for every declared language; the runner
    unions matches across languages.
-6. **Place it** per Scopes and precedence (default repo scope; ask when
-   unclear). To customize a built-in, `rules_seed` and edit in place, keeping
-   its `id`.
 7. **Validate.** Run
    `varde-code test --json '{"rulesDir":"<dir-containing-the-toml>"}'` until it
    exits zero, then confirm with `rules_list` that the rule's `source`
    (`custom`, `override`, or `builtin`) matches the intended scope.
-8. **Optional dry-run:** `varde-code scan` against real code, especially for
-   `sql` rules.
+8. **Optional dry-run:** run `varde-code scan` against real code, especially
+   for `sql` rules. On `index_missing` or `index_stale`, a coordinator applies
+   the varde-code skill's Index readiness and Fallback, then retries; a
+   worker, or a coordinator whose `watch --ensure` fails, reports the scan as
+   unavailable.
 
 ## Rule pack format
 
@@ -117,8 +120,10 @@ no natural line).
 
 Read the schema live:
 
-1. **Tables and columns.** Run `varde-code build`; its `--help` names the
-   `index.db` it writes. Read it with `sqlite3 -readonly <index.db> .schema`.
+1. **Tables and columns.** Run
+   `varde-code slice_state --json '{"repoRoot":"<abs-root>"}'` (read-only) and
+   take `data.db_path`; if `data.db` is `"missing"`, first confirm index
+   coverage as in Workflow step 8. Read it with `sqlite3 -readonly <db_path> .schema`.
 2. **Integer `kind` codes** for `entities.kind` and `resolved_edges.kind`: copy
    the code a shipped rule uses, or sample
    `SELECT name FROM entities WHERE kind = <n> LIMIT 5`.
@@ -179,6 +184,5 @@ line = 1
 Rules merge by `id`, silently, in this order of precedence:
 
 1. Repo: `<repo_root>/.varde-code/rules/`.
-2. User: `$VARDE_CODE_USER_RULES_DIR` (legacy fallback `VARDE_USER_RULES_DIR`),
-   else `~/.config/varde-code/rules/`.
+2. User: `$VARDE_CODE_USER_RULES_DIR`, else `~/.config/varde-code/rules/`.
 3. Built-ins embedded in the binary.

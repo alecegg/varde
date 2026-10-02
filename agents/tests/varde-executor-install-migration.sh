@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Pin the OpenCode adapter generation so results never depend on the host.
+export VARDE_AGENTS_OPENCODE_VERSION="${VARDE_AGENTS_OPENCODE_VERSION:-1.4.0}"
+OPENCODE_VARIANT=opencode.md
+[ "${VARDE_AGENTS_OPENCODE_VERSION%%.*}" -lt 2 ] || OPENCODE_VARIANT=opencode-v2.md
 
 AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/varde-executor-install.XXXXXX")"
@@ -9,7 +13,7 @@ for harness in claude codex opencode; do
   case "$harness" in
     claude) extension="md"; variant="claude.md" ;;
     codex) extension="toml"; variant="codex.toml" ;;
-    opencode) extension="md"; variant="opencode.md" ;;
+    opencode) extension="md"; variant="$OPENCODE_VARIANT" ;;
   esac
 
   managed="$TEST_ROOT/managed-$harness"

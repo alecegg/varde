@@ -9,8 +9,8 @@ the domain's boundary.
 1. **Find domains needing updates** per Find domains below.
 2. **Generate domain documents** per `references/spec-format.md`, one at a
    time by default. With `varde-code` on PATH, load
-   `references/varde-code-cli.md` and `references/code-lookups.md`, and batch
-   discovery and relationship queries per domain.
+   `references/varde-code-cli.md`, and batch discovery and relationship queries
+   per domain; use `get_symbol`/`batch` for exact bodies and related lookups.
 3. **Check the architecture document** per Architecture below.
 4. **Delete orphans:** each domain document in the flat specs root
    (`specs/<slug>` maps to `<knowledge>/specs/<slug>.md`) whose code you have
@@ -21,7 +21,7 @@ the domain's boundary.
    - writes stay under `<knowledge>/specs/`;
    - spot-check operations, types, and invariants, and mark unverified areas
      degraded;
-   - recompute provenance; a mismatch means regenerate;
+   - recompute provenance; a mismatch means regenerate once, then report any remaining mismatch;
    - links resolve;
    - with `varde-workflow` on PATH, run `varde-workflow lint --bundle
      <knowledge>` and report findings; lint does not block;
@@ -29,9 +29,13 @@ the domain's boundary.
      `varde-workflow spec inventory --repository <repo-root> --knowledge
      <knowledge> --working <working> --refresh --json` when available, and
      report a refresh failure rather than claim a cache hit.
-7. **Report the summary:** the Domain/Written/Failed/Skipped table, then the
-   architecture decision and any extra write, orphans, overlapping and
-   unmatched/unclassified paths, broken links, drift, and degraded checks.
+7. **Report the summary:** the Domain/Written/Failed/Skipped table, then:
+   - the architecture decision and any extra write
+   - orphans
+   - overlapping and unmatched/unclassified paths
+   - broken links
+   - drift
+   - degraded checks
 8. **Record lessons:** real obstacles through `varde-learn`; skip otherwise.
 
 ### Delegating domains
@@ -54,11 +58,12 @@ three active executors that each write one document under
 | `reuse` (up to date) | Otherwise; skip unless the user asked to force-regenerate. |
 
 1. Run `varde-workflow spec inventory --repository <repo-root> --knowledge
-   <knowledge> --working <working> --json` when available. On success, reuse
-   its per-domain statuses and its overlapping and `unclassified_paths`
-   inventory, and skip sub-step 2.
-2. If `spec inventory` is unavailable or fails, load
-   `references/spec-manual-inventory.md` for the fallback.
+   <knowledge> --working <working> --json` and reuse its per-domain statuses
+   and its `overlapping`, `unmatched`, and `unclassified_paths` inventory. If it is
+   unavailable or fails, stop spec mode and report it.
+2. Group the inventory's `missing` source directories into domains: one per
+   workspace member/package, else one per top-level source directory with its
+   own entry point. On a first run (no `index.md`), state the list.
 3. Settle architecture and path classification per the sections below.
 
 No missing or stale domain skips only workflow step 2; continue with steps
@@ -77,7 +82,7 @@ every entrypoint or handler read to map units to domains. Recompute their
 provenance and covered paths like a domain's.
 
 Refresh architecture only when it is missing or stale, its declaration set
-changed, or a domain was added or removed. A full scan alone is not a reason.
+changed, or a domain was added or removed.
 Write `<knowledge>/specs/architecture.md` with `domain: architecture` per
 `references/spec-format.md`, and list it in the index.
 

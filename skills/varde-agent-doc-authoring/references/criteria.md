@@ -1,3 +1,4 @@
+<!-- kind: reference -->
 # Agent document criteria
 
 ## Prescribe contracts, leave judgment
@@ -45,11 +46,10 @@ flags.
    - explains rationale the agent does not need to act;
    - guards an edge case with no evidence of failure;
    - describes internals of a script or CLI the agent only calls.
-3. **Script it?** Move remaining deterministic work into a bundled script (PEP
-   723 inline dependencies) or CLI flag: scope computation, output paging,
-   snapshots, validation. Leave one line naming its skill-root-relative
-   invocation and what to do with its result; give repeated outputs a
-   template or validator.
+3. **Script it?** Move remaining deterministic work into a bundled script or
+   CLI flag: scope computation, output paging, snapshots, validation. Leave
+   one line naming its skill-root-relative invocation and what to do with its
+   result; give repeated outputs a template or validator.
 
 ## Structure
 
@@ -63,10 +63,11 @@ flags.
 - End every line-per-item entry with its punctuation, and put a blank line
   after a list.
 
-## Length limits
+## Scripts and length checks
 
-Run bundled scripts as `uv run <this-skill-dir>/scripts/<name>.py`; in a
-sandbox, prefix `UV_PYTHON_PREFERENCE=only-system`.
+Give a bundled script with third-party dependencies a PEP 723 header and run
+it with `uv run <this-skill-dir>/scripts/<name>.py` (in a sandbox, prefix
+`UV_PYTHON_PREFERENCE=only-system`); run stdlib-only scripts with `python3`.
 `check-length.py <skill-dir-or-file>...` exits 1 only on defects. Optimize
 each item it flags: a warning needs a reason, an error is a defect.
 
@@ -74,16 +75,16 @@ each item it flags: a warning needs a reason, an error is a defect.
 
 Make the entry file a run sheet of always-needed instructions.
 Split references only:
-- at a real branch of about 400 words or more across distinct routes or agents, or a conditional path many runs skip;
-- keep sequential content from one path in one file; state each load condition and prefix child filenames with the parent's name.
+- at a real branch of about 400 words or more across distinct routes or agents, or a conditional path many runs skip.
 
 Other layout rules:
 
+- keep sequential content from one path in one file; state each load condition and prefix child filenames with the parent's name;
 - merge other references and chains into their caller, keeping short
   procedures and gates inline; state each rule once and point to it;
 - keep each route a shallow tree (`SKILL.md` -> entry file -> leaf references);
-  leaves never point to each other or back up, and shared rules load once from
-  the entry file.
+  a leaf links to a sibling only to switch routes or for a conditional
+  sub-step and never forms a cycle. Shared rules load once from the entry file.
 
 A file's kind:
 
@@ -96,10 +97,11 @@ Reference checks:
 
 - mark a reference with `<!-- kind: reference -->` as its first line (in a
   template, above the outer fence or the `Frontmatter:` line);
-- map loading with `skill-flow.py`; treat chain and single-caller findings as
-  merge candidates and any warning or defect as a route too big;
-- name a backticked path after `skip` in the entry file to drop it from that
-  route's metrics.
+- map loading with `skill-flow.py`; treat chain findings as merge candidates
+  (also single-caller findings when the caller is not a `SKILL.md` route) and
+  any warning or defect as a route too big;
+- name a backticked path after `skip` in the entry file, with its reason
+  beside it, to drop it from that route's metrics.
 
 ## Ordered skill layout
 
@@ -135,6 +137,7 @@ Keep workflows scannable:
 
 ## Measure changes
 
-For substantive wording or loading edits, measure affected files with `wc -w`
-before and after (or the target model's tokenizer) and report the delta. For
+For substantive wording or loading edits to a skill, report each affected
+route's `scripts/skill-flow.py` token range before and after; for other
+documents, report the `wc -w` delta (or the target model's tokenizer). For
 small fixes, state the concrete benefit instead.

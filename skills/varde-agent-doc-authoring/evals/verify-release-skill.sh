@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VALIDATOR="$SKILL_DIR/scripts/validate-frontmatter.py"
 
-assertion="The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and is checked with validate-frontmatter.py"
+assertion="The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and passes validate-frontmatter.py"
 skill_dir="$EVAL_SANDBOX_DIR/deploy-release"
 skill_file="$skill_dir/SKILL.md"
 verdict=FAIL

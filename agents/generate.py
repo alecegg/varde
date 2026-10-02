@@ -7,6 +7,7 @@ import argparse
 import filecmp
 import json
 import pathlib
+import re
 import tempfile
 
 
@@ -15,9 +16,12 @@ VARIANTS = {
     "claude": "claude.md",
     "codex": "codex.toml",
     "opencode": "opencode.md",
+    "opencode-v2": "opencode-v2.md",
+    "pi": "pi.md",
 }
 OPENCODE_TOOLS = ("read", "write", "edit", "grep", "glob", "bash")
-HARNESSES = ("claude", "codex", "opencode")
+PI_TOOLS = ("read", "bash", "edit", "write", "grep", "find", "ls")
+HARNESSES = ("claude", "codex", "opencode", "pi")
 
 
 def arguments() -> argparse.Namespace:
@@ -69,10 +73,19 @@ def validate_profile(manifest: dict, skills: list, profile: dict) -> None:
     if not isinstance(models, dict) or set(models) != set(HARNESSES):
         raise ValueError(f"{profile['name']} must define models for every harness")
     for harness in HARNESSES:
-        validate_model_policy(profile["name"], harness, models[harness])
+        validate_model_policy(profile["name"], harness, models[harness], harness == "pi")
+    spawns = profile.get("spawns", [])
+    if not isinstance(spawns, list) or spawns != sorted(set(spawns)):
+        raise ValueError(f"{profile['name']} spawns must be a sorted, unique list")
+    unknown_spawns = set(spawns) - {item["name"] for item in manifest["profiles"]}
+    if unknown_spawns:
+        raise ValueError(f"{profile['name']} spawns unknown profiles: {sorted(unknown_spawns)}")
     tools = profile.get("opencode_tools", [])
     if not isinstance(tools, list) or set(tools) - set(OPENCODE_TOOLS):
         raise ValueError(f"{profile['name']} has unknown OpenCode capabilities")
+    pi_tools = profile.get("pi_tools", [])
+    if not isinstance(pi_tools, list) or not pi_tools or set(pi_tools) - set(PI_TOOLS):
+        raise ValueError(f"{profile['name']} has unknown Pi tools")
 
 
 def validate_instructions(manifest: dict, profile: dict, instructions: str) -> None:
@@ -89,8 +102,8 @@ def validate_instructions(manifest: dict, profile: dict, instructions: str) -> N
         raise ValueError(f"{profile['name']} instructions contain TOML delimiter")
 
 
-def validate_model_policy(name: str, harness: str, policy: dict) -> None:
-    if not isinstance(policy, dict) or not policy.get("model"):
+def validate_model_policy(name: str, harness: str, policy: dict, model_optional: bool = False) -> None:
+    if not isinstance(policy, dict) or not (policy.get("model") or model_optional and "model" in policy):
         raise ValueError(f"{name} {harness} model is required")
     if not isinstance(policy.get("reasoning_efforts"), list):
         raise ValueError(f"{name} {harness} reasoning_efforts must be a list")
@@ -116,7 +129,18 @@ def context(profile: dict) -> dict[str, str]:
     sandbox = codex.get("sandbox_mode")
     claude = profile["models"]["claude"]
     opencode = profile["models"]["opencode"]
+    pi_model = profile["models"]["pi"]["model"]
     enabled = set(profile["opencode_tools"])
+    spawns = profile.get("spawns", [])
+    access = {
+        "read": "allow" if "read" in enabled else "deny",
+        "glob": "allow" if "glob" in enabled else "deny",
+        "grep": "allow" if "grep" in enabled else "deny",
+        "shell": "allow" if "bash" in enabled else "deny",
+        "edit": "allow" if enabled & {"write", "edit"} else "deny",
+        "skill": "allow",
+    }
+    subagents = {"*": "deny", **{name: "allow" for name in spawns}}
     return {
         "name": profile["name"],
         "name_toml": json.dumps(profile["name"]),
@@ -125,21 +149,23 @@ def context(profile: dict) -> dict[str, str]:
         "claude_model": json.dumps(claude["model"], ensure_ascii=False),
         "claude_tools": ", ".join(profile["claude_tools"]),
         "skills": ", ".join(profile["skills"]),
+        "opencode_permission": json.dumps({
+            **{("bash" if action == "shell" else action): effect for action, effect in access.items()},
+            "task": subagents if spawns else "deny",
+        }),
         "opencode_permissions": json.dumps([
-            {"action": action, "resource": "*", "effect": effect}
-            for action, effect in (
-                ("read", "allow" if "read" in enabled else "deny"),
-                ("glob", "allow" if "glob" in enabled else "deny"),
-                ("grep", "allow" if "grep" in enabled else "deny"),
-                ("shell", "allow" if "bash" in enabled else "deny"),
-                ("edit", "allow" if enabled & {"write", "edit"} else "deny"),
-                ("skill", "allow"),
-                ("subagent", "deny"),
+            {"action": action, "resource": resource, "effect": effect}
+            for action, resource, effect in (
+                *((action, "*", effect) for action, effect in access.items()),
+                *(("subagent", resource, effect) for resource, effect in subagents.items()),
             )
         ]),
         "model_toml": json.dumps(codex["model"]),
         "reasoning_toml": json.dumps(codex["reasoning_effort"]),
         "opencode_model": json.dumps(opencode["model"], ensure_ascii=False),
+        "pi_model_line": f"model: {json.dumps(pi_model, ensure_ascii=False)}\n" if pi_model else "",
+        "pi_tools": ", ".join(profile["pi_tools"]),
+        "pi_allowed_subagents_line": f"allowed_subagents: {', '.join(spawns)}\n" if spawns else "",
         "sandbox_line": f"sandbox_mode = {json.dumps(sandbox)}\n" if sandbox else "",
         "instructions": profile["instructions"].rstrip(),
     }
@@ -149,7 +175,7 @@ def render(template: str, values: dict[str, str]) -> str:
     rendered = template
     for name, value in values.items():
         rendered = rendered.replace("{{" + name + "}}", value)
-    if "{{" in rendered or "}}" in rendered:
+    if re.search(r"\{\{[a-z_]+\}\}", rendered):
         raise ValueError("template contains an unresolved placeholder")
     return rendered.rstrip() + "\n"
 

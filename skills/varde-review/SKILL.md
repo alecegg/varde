@@ -1,12 +1,12 @@
 ---
 name: varde-review
-description: "Review code or a running UI and act on findings: report without editing, fix a review or GitHub PR feedback and CI failures, run visual QA, simplify just-changed lines, or triage code-scan findings. Not for scan-rule authoring or agent documents like SKILL.md or AGENTS.md."
+description: "Review code or a running UI and act on findings: report without editing, fix a review or GitHub PR feedback and CI failures, run visual QA, simplify just-changed lines, or triage code-scan findings. Not for scan-rule authoring, agent documents like SKILL.md or AGENTS.md, or fixing a bug no review or PR recorded (varde-change)."
 ---
 
 # Review and improve code
 
 Reporting is the default; when a new review also asks for fixes, write the
-report, then run `fix` on that review in the same session.
+report, then apply that review's findings in the same session (the "Apply the findings" row below).
 
 Before implementation edits, apply `references/review-gates.md` unless a
 caller's approved gate already covers them.
@@ -18,7 +18,7 @@ caller's approved gate already covers them.
 | Review a diff, branch, or code area and write down what is wrong | `references/report.md` |
 | Fix one named, already recorded standalone finding | `## One recorded finding` below |
 | Apply the findings an earlier review already wrote down | `references/fix.md` |
-| Address review threads or failing checks on an open GitHub PR | `references/fix.md` (PR source routes to `references/fix-pr.md`) |
+| Address review threads or failing checks on an open GitHub PR | `references/fix.md` (`## PR source`) |
 | Inspect a running web, iOS simulator, or macOS app visually and through its interactions | `references/visual.md` |
 | Tidy up what was just changed — naming, redundancy, consistency — with no findings file | `references/simplify.md` |
 | Run a `varde-code` scan and decide what its findings mean | `references/scan.md` |

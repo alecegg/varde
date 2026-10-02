@@ -7,7 +7,7 @@ for code intelligence, markdown workflows, skill evaluations, and friction.
 This repository is a monorepo for convenience, not a unified application.
 The `skills/` and `agents/` folders and each workspace under `clis/` are
 self-contained modules with their own dependencies,
-build commands, and documentation. There is no root build or test command.
+build commands, and documentation. Run `just test` at the root to run every module's tests.
 
 Use `varde sync` to install the four CLIs and wire supported agent harnesses.
 It delegates to the existing skills and agents installers and runs `varde-toz install`
@@ -49,7 +49,8 @@ Run the root entry point from this checkout:
 
 It copies the skills into `~/.agents/skills`, links each harness's skills
 directory to those copies, installs the agents, and removes retired skills it
-installed. It detects Claude, Codex, and opencode configurations. Use `--agents` to
+installed. It detects Claude, Codex, opencode, and Pi configurations (Pi: `~/.pi` or
+`PI_CODING_AGENT_DIR`). Use `--agents` to
 choose harnesses explicitly, or `--list-agents` to print their identifiers:
 
 `varde-review` is a harness skill, not a terminal command. The installer makes
@@ -65,11 +66,39 @@ Use `--skills-dir` and `--agents-dir`/`--agent-format` to install into a
 harness this repository does not auto-detect. Both flags are repeatable and
 not persisted between runs; pass them again on the next `./varde sync`. When
 given without `--agents`, they replace detection instead of adding to it. For
-example, to install the skills for pi:
+example, to install the skills for another harness:
 
 ```sh
-./varde sync --skills-dir ~/.pi/agent/skills
+./varde sync --skills-dir ~/.example/agent/skills
 ```
+
+For Claude, Codex, opencode, and Pi, sync also wires one SessionStart hook,
+`varde-workflow hook session-start`, and removes the legacy `varde-code hooks`
+entries it replaces.
+
+Varde will not work as designed until its instruction block is installed:
+agents will not delegate as designed or use Toz captures. On the first
+interactive `varde sync`, choose the target when prompted; `--yes` and
+noninteractive runs warn when no target is configured. Or install it directly:
+
+```sh
+varde-workflow instructions install --target <file>
+```
+
+Use one canonical `AGENTS.md` in a standard global location or a personal
+Git-tracked location, then symlink it into each harness. To change the agent
+limit, run
+`varde-workflow instructions install --max-agents <n>`; after hand-editing
+`[orchestration].max_agents`, rerun `varde sync` to refresh the block. Remove it
+from configured targets with `varde-workflow instructions remove`. This strips
+the block and clears `[instructions].targets`; run `install --target <file>` to
+configure targets again.
+
+For Pi, sync installs the toz Pi bundle, the unified hook
+(`varde-workflow hook install --harness pi`, written to
+`extensions/varde-session.ts`), and the Varde Pi agents
+(`agents/install.sh -t pi`, in the pi-subagents format). It creates no Pi
+skills links, because Pi reads the canonical `~/.agents/skills`.
 
 ### Upgrade
 

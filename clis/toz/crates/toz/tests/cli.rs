@@ -297,11 +297,9 @@ fn fetch_persists_completed_pages_while_preserving_input_order() {
         .spawn()
         .unwrap();
 
-    assert!(
-        slow_started_rx
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .is_ok()
-    );
+    assert!(slow_started_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .is_ok());
     let project = toz_core::Project::resolve(Some(e.project.path())).unwrap();
     let database = e.cfg_path.join(project.key).join("toz.db");
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
@@ -548,8 +546,18 @@ fn script_result(e: &Env, args: &[&str], stdin: Option<&str>) -> (String, String
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    let handle = value["handle"].as_str().unwrap().to_string();
+    let value = serde_json::from_slice::<serde_json::Value>(&output.stdout).ok();
+    let Some(handle) = value
+        .as_ref()
+        .and_then(|value| {
+            value["handle"]
+                .as_str()
+                .filter(|_| value["preview"].is_string())
+        })
+        .map(str::to_owned)
+    else {
+        return (String::new(), String::from_utf8(output.stdout).unwrap());
+    };
     let output = toz(e)
         .args(["query", "--handle", &handle])
         .output()
@@ -1114,6 +1122,12 @@ fn doctor_reports_recent_hook_failures_without_payloads() {
         .as_str()
         .unwrap()
         .contains("2 hook failure(s)"));
+
+    let block = toz(&e).args(["note", "--block"]).output().unwrap();
+    assert!(block.status.success());
+    let block = String::from_utf8(block.stdout).unwrap();
+    assert!(!block.contains("hook failure(s)"));
+    assert!(!block.contains("diagnostics are unavailable"));
 }
 
 #[test]
@@ -1371,6 +1385,71 @@ fn hook_structured_mcp_round_trip_and_replacement_contracts() {
 }
 
 #[test]
+fn hook_retained_output_is_recoverable_when_summary_omits_handle() {
+    let full = format!(
+        "{}middle-recovery-sentinel\n{}tail-recovery-sentinel\n",
+        "before\n".repeat(12_000),
+        "after\n".repeat(12_000)
+    );
+    for (harness, persisted) in [
+        ("claude-code", true),
+        ("codex", true),
+        ("pi", false),
+        ("opencode", false),
+    ] {
+        let e = env();
+        let source = format!("generate-retained-{harness}");
+        let response = if persisted {
+            let full_path = e.project.path().join("full-output.txt");
+            std::fs::write(&full_path, &full).unwrap();
+            serde_json::json!({"stdout": "tiny clipped output", "stderr": "", "exit_code": 0, "persistedOutputPath": full_path})
+        } else {
+            serde_json::json!(full)
+        };
+        let payload = serde_json::json!({"tool_name": "Bash", "tool_input": {"command": source}, "tool_response": response});
+        // Discard all hook feedback, as a native script may omit it from its final summary.
+        toz(&e)
+            .args(["capture", "--hook", "--harness", harness])
+            .write_stdin(payload.to_string())
+            .assert()
+            .success();
+        let listed = toz(&e)
+            .args(["query", "--list", "--limit", "5", "--json"])
+            .output()
+            .unwrap();
+        assert!(
+            listed.status.success(),
+            "{harness}: {}",
+            String::from_utf8_lossy(&listed.stderr)
+        );
+        let rows: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
+        let rows = rows.as_array().unwrap();
+        assert_eq!(
+            rows.len(),
+            1,
+            "{harness} retains exactly one result without rerunning"
+        );
+        assert_eq!(rows[0]["source"], source);
+        let handle = rows[0]["handle"].as_str().unwrap();
+        let archived = toz(&e)
+            .args(["query", "--handle", handle])
+            .output()
+            .unwrap();
+        assert!(archived.status.success());
+        assert_eq!(
+            String::from_utf8(archived.stdout).unwrap(),
+            full,
+            "{harness} retains middle/tail and exact length"
+        );
+        toz(&e)
+            .args(["query", "middle-recovery-sentinel", "--source", &source])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("middle-recovery-sentinel"));
+    }
+}
+
+#[test]
 fn hook_codex_stream_completion_and_unfinished_stream_contract_stays_unchanged() {
     let e = env();
     let big: String = (1..=2000).map(|i| format!("line {i} ")).collect();
@@ -1571,6 +1650,103 @@ fn hook_skips_toz_commands() {
 }
 
 #[test]
+fn hook_skips_toz_only_shell_invocations_across_harnesses() {
+    let sources = [
+        "toz query --handle abcd",
+        "varde-toz query --handle abcd",
+        "toz doctor --json",
+        "varde-toz run --code 'print(1)'",
+        "'/usr/local/bin/toz' query --handle abcd",
+        "\"/usr/local/bin/varde-toz\" query --handle abcd",
+        "cd /tmp && varde-toz query --handle abcd",
+        "cd /tmp; /usr/local/bin/toz query --handle abcd",
+        "env FLAG=1 varde-toz query --handle abcd",
+        "FLAG='some value' varde-toz query --handle abcd",
+        "command varde-toz query --handle abcd",
+        "FLAG=1 command varde-toz query --handle abcd",
+        "exec /usr/local/bin/varde-toz query --handle abcd",
+        "toz query --handle one && varde-toz query --handle two",
+        "varde-toz query --handle one\ntoz query --handle two",
+        "varde-toz query 'literal && | ;'",
+    ];
+
+    for harness in ["codex", "claude-code", "pi", "opencode"] {
+        let e = env();
+        for source in sources {
+            let output = hook_shell_output(&e, harness, source);
+            assert!(
+                output.is_empty(),
+                "{harness} should skip Toz-only source {source:?}, got {output:?}"
+            );
+        }
+        let cmd_payload = serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "", "cmd": "'/usr/local/bin/varde-toz' query --handle abcd"},
+            "tool_response": {"stdout": "x".repeat(40_000), "stderr": "", "exit_code": 0}
+        });
+        assert!(
+            hook_stdout(&e, harness, cmd_payload.to_string()).is_empty(),
+            "{harness} should classify the cmd field when command is empty"
+        );
+        let cmd_only_payload = serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"cmd": "'/usr/local/bin/varde-toz' query --handle abcd"},
+            "tool_response": {"stdout": "x".repeat(40_000), "stderr": "", "exit_code": 0}
+        });
+        assert!(
+            hook_stdout(&e, harness, cmd_only_payload.to_string()).is_empty(),
+            "{harness} should classify a cmd-only source"
+        );
+    }
+}
+
+#[test]
+fn hook_captures_mixed_and_ambiguous_shell_sources_across_harnesses() {
+    let sources = [
+        "varde-toz query --handle abcd; echo done",
+        "echo before && varde-toz query --handle abcd",
+        "echo 'varde-toz query --handle abcd'",
+        "varde-toz query --handle abcd | cat",
+        "varde-toz query --handle abcd > /tmp/result",
+        "echo $(varde-toz query --handle abcd)",
+        "varde-toz query --handle \"$(echo abcd)\"",
+        "'/usr/local/bin/varde-toz-helper' query --handle abcd",
+        "node -e \"toz query --handle abcd\"",
+        "varde-toz query 'unterminated",
+        "cd - && varde-toz query --handle abcd",
+        "cd -P /tmp && varde-toz query --handle abcd",
+        "env -- varde-toz query --handle abcd",
+        "env -i varde-toz query --handle abcd",
+        "'FLAG=value' varde-toz query --handle abcd",
+        "varde-toz\\ query --handle abcd",
+        "varde-toz \\\nquery --handle abcd",
+        "varde-toz\u{00a0}-helper query --handle abcd",
+        "varde-toz query --handle abcd\necho after",
+    ];
+
+    for harness in ["codex", "claude-code", "pi", "opencode"] {
+        let e = env();
+        for source in sources {
+            let output = hook_shell_output(&e, harness, source);
+            assert!(
+                output.contains("varde-toz: captured"),
+                "{harness} should capture ambiguous or mixed source {source:?}, got {output:?}"
+            );
+        }
+        let wrapper = serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"code": "toz.exec({shell:'varde-toz query --handle abcd'})"},
+            "tool_response": {"stdout": "x".repeat(40_000), "stderr": "", "exit_code": 0}
+        });
+        let output = hook_stdout(&e, harness, wrapper.to_string());
+        assert!(
+            output.contains("varde-toz: captured"),
+            "{harness} should capture a JavaScript wrapper that mentions Toz"
+        );
+    }
+}
+
+#[test]
 fn hook_structured_shapes_replace_payload_in_place() {
     let e = env();
     let big: String = (1..=2000).map(|i| format!("l{i} ")).collect();
@@ -1609,7 +1785,7 @@ fn hook_structured_shapes_replace_payload_in_place() {
     assert_eq!(f["numLines"], 8000);
     assert_eq!(v["hookSpecificOutput"]["updatedToolOutput"]["type"], "text");
 
-    // Explicit ranges use the same threshold as every other result.
+    // Explicit ranges use the same read-class threshold as whole-file reads.
     let ranged = serde_json::json!({
         "tool_name": "Read", "tool_input": {"file_path": "/x/a.rs", "offset": 1, "limit": 9000},
         "tool_response": {"type": "text", "file": {"filePath": "/x/a.rs", "content": huge}}
@@ -1752,6 +1928,116 @@ fn per_tool_threshold_from_config() {
         .stdout("");
 }
 
+fn read_class_payload(tool: &str, input: serde_json::Value, bytes: usize) -> String {
+    let text = "x".repeat(bytes);
+    let response = if tool == "Read" {
+        serde_json::json!({"type": "text", "file": {"filePath": "/x/a.rs", "content": text}})
+    } else {
+        serde_json::json!({"stdout": text, "stderr": "", "exit_code": 0})
+    };
+    serde_json::json!({"tool_name": tool, "tool_input": input, "tool_response": response})
+        .to_string()
+}
+
+fn hook_stdout(e: &Env, harness: &str, payload: String) -> String {
+    let out = toz(e)
+        .args(["capture", "--hook", "--harness", harness])
+        .write_stdin(payload)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    String::from_utf8(out.stdout).unwrap()
+}
+
+fn hook_shell_output(e: &Env, harness: &str, source: &str) -> String {
+    let payload = serde_json::json!({
+        "tool_name": "Bash",
+        "tool_input": {"command": source},
+        "tool_response": {"stdout": "x".repeat(40_000), "stderr": "", "exit_code": 0}
+    });
+    hook_stdout(e, harness, payload.to_string())
+}
+
+#[test]
+fn read_class_passes_through_up_to_16_kib() {
+    let e = env();
+    let cases = [
+        (
+            "claude-code",
+            "Read",
+            serde_json::json!({"file_path": "/x/a.rs"}),
+        ),
+        (
+            "opencode",
+            "read",
+            serde_json::json!({"filePath": "/x/a.rs"}),
+        ),
+        (
+            "codex",
+            "Bash",
+            serde_json::json!({"command": "sed -n 1,400p f"}),
+        ),
+        ("codex", "Bash", serde_json::json!({"cmd": "cat f"})),
+        (
+            "claude-code",
+            "Bash",
+            serde_json::json!({"command": "head -n 50 f"}),
+        ),
+    ];
+    for (harness, tool, input) in cases {
+        let payload = read_class_payload(tool, input, 10_000);
+        assert_eq!(hook_stdout(&e, harness, payload), "", "{harness} {tool}");
+    }
+}
+
+#[test]
+fn shell_command_outside_read_class_is_captured_at_default_threshold() {
+    let e = env();
+    for command in [
+        "cat f | grep x",
+        "cat f > g",
+        "sed 1,4p f",
+        "ls",
+        "cat f; ls",
+        "cat f & ls",
+    ] {
+        let payload = read_class_payload("Bash", serde_json::json!({"command": command}), 10_000);
+        assert_ne!(hook_stdout(&e, "codex", payload), "", "{command}");
+    }
+}
+
+#[test]
+fn read_threshold_key_overrides_read_class_default() {
+    let e = env();
+    std::fs::write(
+        e.cfg_path.join("config.toml"),
+        "[thresholds]\nread = 2048\n",
+    )
+    .unwrap();
+    let payload = read_class_payload("Read", serde_json::json!({"file_path": "/x/a.rs"}), 3000);
+    assert_ne!(hook_stdout(&e, "claude-code", payload), "");
+}
+
+#[test]
+fn exact_tool_threshold_wins_over_read_key() {
+    let e = env();
+    std::fs::write(
+        e.cfg_path.join("config.toml"),
+        "[thresholds]\nread = 100000\nRead = 1024\n",
+    )
+    .unwrap();
+    let payload = read_class_payload("Read", serde_json::json!({"file_path": "/x/a.rs"}), 3000);
+    assert_ne!(hook_stdout(&e, "claude-code", payload), "");
+}
+
+#[test]
+fn higher_global_threshold_applies_to_read_class() {
+    let e = env();
+    std::fs::write(e.cfg_path.join("config.toml"), "threshold = 32768\n").unwrap();
+    let payload = read_class_payload("Read", serde_json::json!({"file_path": "/x/a.rs"}), 20_000);
+    assert_eq!(hook_stdout(&e, "claude-code", payload), "");
+}
+
 // ---------------------------------------------------------------------------------------------
 // index
 
@@ -1820,7 +2106,9 @@ fn doctor_warns_when_installed_harness_version_is_unavailable() {
 #[test]
 fn cargo_test_output_titles_failures() {
     let e = env();
-    let mut text = String::from("running 3 tests\ntest alpha ... ok\ntest beta ... FAILED\ntest gamma ... ok\n\nfailures:\n\n---- beta stdout ----\n");
+    let mut text = String::from(
+        "running 3 tests\ntest alpha ... ok\ntest beta ... FAILED\ntest gamma ... ok\n\nfailures:\n\n---- beta stdout ----\n",
+    );
     for i in 0..40 {
         text.push_str(&format!(
             "thread 'beta' assertion line {i}: left != right for widget {i}\n"
@@ -1893,7 +2181,7 @@ fn install_pi_opencode_codex_into_dirs() {
         .contains("\"execute.after\""));
     assert!(!oc.join("skills/toz").exists());
 
-    // Codex: merges into an existing hooks.json and AGENTS.md, idempotently.
+    // Codex: merges into hooks.json and leaves AGENTS.md alone, idempotently.
     let cx = root.join("codex-home");
     std::fs::create_dir_all(&cx).unwrap();
     std::fs::write(
@@ -1901,7 +2189,8 @@ fn install_pi_opencode_codex_into_dirs() {
         r#"{"hooks":{"PostToolUse":[{"hooks":[{"type":"command","command":"/x/other.sh"}]}]}}"#,
     )
     .unwrap();
-    std::fs::write(cx.join("AGENTS.md"), "# My rules\n\nBe nice.\n").unwrap();
+    let original_agents = "# My rules\n\nBe nice.\n";
+    std::fs::write(cx.join("AGENTS.md"), original_agents).unwrap();
     toz(&e)
         .args(["install", "codex", "--dir", cx.to_str().unwrap()])
         .assert()
@@ -1920,23 +2209,36 @@ fn install_pi_opencode_codex_into_dirs() {
         .as_str()
         .unwrap()
         .contains("capture --hook --harness codex"));
-    assert!(hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-        .as_str()
-        .unwrap()
-        .ends_with("note --harness codex"));
-    let agents = std::fs::read_to_string(cx.join("AGENTS.md")).unwrap();
-    assert!(
-        agents.starts_with("# My rules\n\nBe nice.\n\n<!-- varde-toz:start -->"),
-        "{agents}"
+    assert!(hooks["hooks"].get("SessionStart").is_none());
+    assert_eq!(
+        std::fs::read_to_string(cx.join("AGENTS.md")).unwrap(),
+        original_agents
     );
-    assert!(agents.contains("varde-toz (tool-output-zone) is active"));
     assert!(!cx.join("skills/toz").exists());
+
+    let cx_without_agents = root.join("codex-no-agents");
+    toz(&e)
+        .args([
+            "install",
+            "codex",
+            "--dir",
+            cx_without_agents.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    assert!(!cx_without_agents.join("AGENTS.md").exists());
+
     // Second install: nothing changes.
     toz(&e)
         .args(["install", "codex", "--dir", cx.to_str().unwrap()])
         .assert()
         .success()
         .stdout(predicate::str::contains("wrote").not());
+
+    let agents_with_legacy_block = format!(
+        "{original_agents}\n<!-- varde-toz:start -->\n## varde-toz (tool-output-zone)\nlegacy note\n<!-- varde-toz:end -->\n"
+    );
+    std::fs::write(cx.join("AGENTS.md"), agents_with_legacy_block).unwrap();
 
     // Uninstall reverses each mode and leaves foreign content alone.
     toz(&e)
@@ -1950,7 +2252,7 @@ fn install_pi_opencode_codex_into_dirs() {
     assert!(hooks["hooks"].get("SessionStart").is_none());
     assert_eq!(
         std::fs::read_to_string(cx.join("AGENTS.md")).unwrap(),
-        "# My rules\n\nBe nice.\n"
+        original_agents
     );
     assert!(!cx.join("skills/toz").exists());
     assert!(cx.exists());
@@ -1974,6 +2276,119 @@ fn install_pi_opencode_codex_into_dirs() {
         .assert()
         .success();
     assert!(!cc.exists());
+}
+
+#[test]
+fn note_block_emits_static_codex_instructions() {
+    let e = env();
+    let output = toz(&e).args(["note", "--block"]).output().unwrap();
+    assert!(output.status.success());
+    let block = String::from_utf8(output.stdout).unwrap();
+    assert!(block.starts_with("## varde-toz (tool-output-zone)\n"));
+    assert!(block.contains("varde-toz (tool-output-zone) is active."));
+    assert!(block.contains("read the varde-toz skill"));
+    assert!(!block.contains("varde-toz:start"));
+    assert!(!block.contains("varde-toz:end"));
+    assert!(!block.contains("hook failure(s)"));
+    assert!(!block.contains("diagnostics are unavailable"));
+}
+
+#[test]
+fn install_codex_preserves_empty_and_whitespace_agents_files() {
+    let e = env();
+    let root = e.project.path();
+
+    for (name, contents) in [("empty", ""), ("whitespace", " \n\t\n")] {
+        let cx = root.join(name);
+        std::fs::create_dir_all(&cx).unwrap();
+        let agents = cx.join("AGENTS.md");
+        std::fs::write(&agents, contents).unwrap();
+
+        toz(&e)
+            .args(["install", "codex", "--dir", cx.to_str().unwrap()])
+            .assert()
+            .success();
+        assert_eq!(std::fs::read(&agents).unwrap(), contents.as_bytes());
+
+        toz(&e)
+            .args(["uninstall", "codex", "--dir", cx.to_str().unwrap()])
+            .assert()
+            .success();
+        assert_eq!(std::fs::read(&agents).unwrap(), contents.as_bytes());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn install_codex_preserves_whitespace_agents_symlink() {
+    let e = env();
+    let root = e.project.path();
+    let cx = root.join("codex-home");
+    let shared = root.join("shared");
+    std::fs::create_dir_all(&cx).unwrap();
+    std::fs::create_dir_all(&shared).unwrap();
+
+    let target = shared.join("AGENTS.md");
+    let link = cx.join("AGENTS.md");
+    let contents = " \n\t\n";
+    std::fs::write(&target, contents).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    toz(&e)
+        .args(["install", "codex", "--dir", cx.to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert!(std::fs::symlink_metadata(&link)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(std::fs::read(&target).unwrap(), contents.as_bytes());
+
+    toz(&e)
+        .args(["uninstall", "codex", "--dir", cx.to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert!(std::fs::symlink_metadata(&link)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(std::fs::read(&target).unwrap(), contents.as_bytes());
+}
+
+#[cfg(unix)]
+#[test]
+fn install_codex_strips_legacy_block_through_agents_symlink() {
+    let e = env();
+    let root = e.project.path();
+    let cx = root.join("codex-home");
+    let shared = root.join("shared");
+    std::fs::create_dir_all(&cx).unwrap();
+    std::fs::create_dir_all(&shared).unwrap();
+
+    let target = shared.join("AGENTS.md");
+    let link = cx.join("AGENTS.md");
+    let prefix = "# User rules  \n\nKeep this sentence.  \n";
+    let legacy_block =
+        "<!-- varde-toz:start -->\n## old Toz note\nlegacy text\n<!-- varde-toz:end -->";
+    let suffix = "\n\nKeep these bytes too.  \n";
+    std::fs::write(&target, format!("{prefix}{legacy_block}{suffix}")).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+
+    toz(&e)
+        .args(["install", "codex", "--dir", cx.to_str().unwrap()])
+        .assert()
+        .success();
+
+    assert!(std::fs::symlink_metadata(&link)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(
+        std::fs::read_to_string(target).unwrap(),
+        "# User rules  \n\nKeep this sentence.  \n\nKeep these bytes too.  \n"
+    );
 }
 
 #[test]
@@ -2152,23 +2567,10 @@ fn harness_bundles_use_primary_store_by_default() {
         assert!(!text.contains("{{TOZ_"));
         if is_json {
             let doc: serde_json::Value = serde_json::from_str(&text).unwrap();
-            let command = doc["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            assert!(doc["hooks"].get("SessionStart").is_none());
+            let command = doc["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
                 .as_str()
                 .unwrap();
-            let output = std::process::Command::new("sh")
-                .args(["-c", command])
-                .env_remove("TOZ_CONFIG_DIR")
-                .env_remove("TOZ_FALLBACK_DIR")
-                .env("VARDE_CONFIG_DIR", &e.varde_cfg_path)
-                .output()
-                .unwrap();
-            assert!(output.status.success(), "{:?}", output);
-            let note: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-            let note = note["hookSpecificOutput"]["additionalContext"]
-                .as_str()
-                .unwrap();
-            assert!(!note.contains("TOZ_FALLBACK_DIR="));
-            assert!(note.contains("toz query --handle"));
             assert!(!command.contains("--fallback-dir"));
         } else {
             assert!(!text.contains("TOZ_FALLBACK_DIR: FALLBACK"));
@@ -2335,7 +2737,14 @@ fn sandboxed_script_command_captures_short_output_and_cannot_read_store_db() {
     let (_, denied) = script_result(&e, &["--code", &read_private], None);
     assert_eq!(denied, "1\n");
 
-    let (_, text) = script_result(&e, &["--code", "let r=toz.exec({shell:'printf short',capture:true}); print(JSON.stringify({capture:r.capture,stdout:r.stdout}))"], None);
+    let (_, text) = script_result(
+        &e,
+        &[
+            "--code",
+            "let r=toz.exec({shell:'printf short',capture:true}); print(JSON.stringify({capture:r.capture,stdout:r.stdout}))",
+        ],
+        None,
+    );
     let result: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(result["stdout"], "short");
     assert_eq!(result["capture"]["state"], "captured");
@@ -2529,6 +2938,7 @@ fn script_exit_codes_distinguish_failures_and_reserve_two() {
 #[test]
 fn script_large_result_becomes_a_handle() {
     let e = env();
+    std::fs::write(e.cfg_path.join("config.toml"), "threshold = 100\n").unwrap();
     let h = capture_lines(&e, "log", 500);
     let out = toz(&e)
         .args([
@@ -2543,7 +2953,10 @@ fn script_large_result_becomes_a_handle() {
     assert_eq!(out.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("handle"), "{stdout}");
-    assert!(!stdout.contains("ok req=1"), "{stdout}");
+    assert!(
+        stdout.len() < 6000,
+        "preview should bound the aggregate: {stdout}"
+    );
 }
 
 /// User-scope profiles (`<VARDE_CONFIG_DIR>/toz/profiles.toml`) never need `trusted_projects`;

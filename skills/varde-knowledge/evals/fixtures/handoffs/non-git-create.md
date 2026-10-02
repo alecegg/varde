@@ -12,6 +12,7 @@ dirty: not-applicable
 links:
   - target: /tmp/scratch-project/notes/error-envelope.md
     kind: file
+    integrity: snapshot
     content_hashes:
       - path: .
         hash: sha256:6ea422259295aa7c1c68cdd946f49e653c2338e42b16d6c5178db20371b3a212

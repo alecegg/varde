@@ -83,6 +83,6 @@ Skeleton: `## Summary` / `## Overview` / `## Scope Boundary`
 - links every domain document by its frontmatter domain, including
   architecture, and preserves hand-authored entries;
 - has one frontmatter field, `source_commit: <git rev-parse HEAD at the end of
-  this run>`, which scopes the next manual run;
+  this run>`, which scopes the next inventory;
 - is rendered deterministically after domain generation and written only when
   its bytes differ.

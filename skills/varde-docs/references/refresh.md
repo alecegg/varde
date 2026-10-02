@@ -3,15 +3,16 @@
 ## Workflow
 
 1. **List the documents:**
-   - Given `docPath`, list only that file.
+   - Given a named file, list only that file.
    - Otherwise list `README.md`, `docs/*.md`, and existing CHANGELOG and release
      notes of the current module (or the Git root outside a module).
    - For a cross-module request, also list each named or touched module's
      documents.
-2. Many `docs/` files and `varde-code` on PATH → load
-   `references/varde-code-cli.md` and `references/code-lookups.md`;
+2. When mapping docs to source is unclear and `varde-code` is on PATH, load
+   `references/varde-code-cli.md`;
    `varde-code context_pack --json '{"repoRoot":"<repo>","query":"<doc subject>"}'`
-   maps each doc to source.
+   maps each doc to source; use `get_symbol`/`batch` for exact bodies and
+   related lookups.
 3. **Edit each document** one at a time, or with up to three delegates for
    independent documents, given absolute `<working>`/`<knowledge>` paths:
    1. Read it in full, then the source its subject describes and any spec

@@ -261,7 +261,11 @@ fn build_cli_index(root: &std::path::Path, home: &std::path::Path) {
         .env("HOME", home)
         .output()
         .unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
 }
 fn rule() -> Rule {
     builtin_rules()

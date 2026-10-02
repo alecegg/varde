@@ -33,16 +33,19 @@ If no category matches the named concern, list the ten categories and ask.
 5. **Gather signals:** file failures from the project's lint/test/typecheck
    commands under matching categories; with `varde-code`, follow
    `references/varde-code-cli.md`. For each changed file, query tests and
-   dependents together:
+   dependents in one `varde-code batch` call holding every file's calls:
 
    ```bash
    ROOT=$(git rev-parse --show-toplevel)
    varde-code batch --json '{"repoRoot":"'"$ROOT"'","calls":[
      {"mode":"tests_for_file","filePath":"src/foo.ts"},
-     {"mode":"dependents","filePath":"src/foo.ts"}]}'
+     {"mode":"dependents","filePath":"src/foo.ts"},
+     {"mode":"tests_for_file","filePath":"src/bar.ts"},
+     {"mode":"dependents","filePath":"src/bar.ts"}]}'
    ```
 
-   Changed symbols used by dependents keep their signatures.
+   Flag a changed signature that a dependent still uses the old way, under
+   `API-DESIGN` if active, else `CORRECTNESS` if active.
 
    Use `nav_map` for an unfamiliar area or multi-module diff. Reserve
    `hotspots` and `scan` for whole-repository review.
@@ -56,7 +59,8 @@ If no category matches the named concern, list the ten categories and ask.
    `Violates` link when it breaks a spec, decision, or pattern found by one
    `<knowledge>/` search for the reviewed area.
 8. **Roll up and report.** Confirm a category file exists for every active
-   category that ran, update `review.md`, and tell the user the line below
+   category that ran (a category with zero findings still gets its file;
+   skipped categories get none), update `review.md`, and tell the user the line below
    plus each skipped category with its reason:
    ```text
    Review complete. <N> findings across <C> categories. Review folder: `<path>`.

@@ -706,6 +706,10 @@ pub struct WatchInstance {
     pub index_ready: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ownership_error: Option<String>,
+    /// Why `registered` could not be confirmed (for example, a sandbox that
+    /// denies reading the host service directory); `registered` is then false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_error: Option<String>,
     pub repos: Vec<String>,
     pub lock_path: String,
     /// Paths that triggered each repo's most recent reconcile — the
@@ -809,14 +813,21 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
                     Err(err) => (None, Some(format!("inspecting watcher lock: {err:#}"))),
                 },
             };
-            let registered = repos.len() == 1 && service_path_is_file(Path::new(&repos[0]))?;
+            let (registered, registration_error) = if repos.len() == 1 {
+                registration_status(Path::new(&repos[0]))
+            } else {
+                (false, None)
+            };
             let index_ready =
                 !repos.is_empty() && repos.iter().all(|repo| index_ready(Path::new(repo)));
             let ownership_error = ownership_error.or_else(|| {
                 (alive.is_none())
                     .then(|| format!("could not confirm watcher ownership for {}", path.display()))
             });
-            if alive == Some(false) && !registered && meta.as_ref().is_some_and(|meta| meta.stopped)
+            if alive == Some(false)
+                && !registered
+                && registration_error.is_none()
+                && meta.as_ref().is_some_and(|meta| meta.stopped)
             {
                 continue;
             }
@@ -842,6 +853,7 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
                     }),
                 index_ready,
                 ownership_error,
+                registration_error,
                 repos,
                 lock_path: path.to_string_lossy().into_owned(),
                 changed_paths,
@@ -858,7 +870,8 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
             else {
                 continue;
             };
-            if !service_path_is_file(Path::new(&repo))? {
+            let (registered, registration_error) = registration_status(Path::new(&repo));
+            if !registered && registration_error.is_none() {
                 continue;
             }
             if instances.iter().any(|item| item.repos.contains(&repo)) {
@@ -866,11 +879,12 @@ pub fn list_instances() -> Result<Vec<WatchInstance>> {
             }
             instances.push(WatchInstance {
                 pid: 0,
-                registered: true,
+                registered,
                 alive: Some(false),
                 ready: false,
                 index_ready: index_ready(Path::new(&repo)),
                 ownership_error: None,
+                registration_error,
                 repos: vec![repo],
                 lock_path: String::new(),
                 changed_paths: Vec::new(),
@@ -975,6 +989,9 @@ fn ensure_existing(
             }),
         );
     };
+    if let Some(error) = &item.registration_error {
+        return readonly(Some(alive), error.clone());
+    }
     if !alive || !item.registered {
         return Ok(EnsureDecision::Replace);
     }
@@ -1062,6 +1079,15 @@ fn service_path_is_file(repo: &Path) -> Result<bool> {
                 repo.display()
             )
         }),
+    }
+}
+
+/// Registration for one listed repo. An inspection error is reported with the
+/// entry rather than failing the whole listing.
+fn registration_status(repo: &Path) -> (bool, Option<String>) {
+    match service_path_is_file(repo) {
+        Ok(registered) => (registered, None),
+        Err(err) => (false, Some(format!("{err:#}"))),
     }
 }
 
@@ -2022,6 +2048,7 @@ mod tests {
             ready: false,
             index_ready: false,
             ownership_error: None,
+            registration_error: None,
             repos: vec![repo.into()],
             lock_path: format!("/locks/{pid}.lock"),
             changed_paths: Vec::new(),
@@ -2294,6 +2321,7 @@ mod tests {
                 ready: false,
                 index_ready: true,
                 ownership_error: Some("permission denied".into()),
+                registration_error: None,
                 repos: vec![repo.to_string_lossy().into_owned()],
                 lock_path: lock_path.to_string_lossy().into_owned(),
                 changed_paths: Vec::new(),
@@ -2311,6 +2339,73 @@ mod tests {
         });
     }
 
+    /// Makes the isolated home's host service directory unreadable, runs
+    /// `list_instances`, then restores access so the home can be cleaned up.
+    #[cfg(unix)]
+    fn list_with_unreadable_service_dir(repo: &Path) -> Result<Vec<WatchInstance>> {
+        let service_dir = service_path(repo).parent().unwrap().to_path_buf();
+        std::fs::create_dir_all(&service_dir).unwrap();
+        std::fs::set_permissions(&service_dir, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let listed = list_instances();
+        std::fs::set_permissions(&service_dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        listed
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_reports_unreadable_registration_for_lock_entry() {
+        crate::test_support::with_isolated_home("watch-unreadable-lock", || {
+            let root = crate::db::path::config_dir().join("unreadable-lock-repo");
+            std::fs::create_dir_all(&root).unwrap();
+            let repo = std::fs::canonicalize(root).unwrap();
+            let watcher = acquire_instance_lock(std::slice::from_ref(&repo)).unwrap();
+
+            let listed = list_with_unreadable_service_dir(&repo).unwrap();
+            assert_eq!(listed.len(), 1);
+            assert!(!listed[0].registered);
+            assert!(listed[0].registration_error.is_some());
+            assert_eq!(listed[0].alive, Some(true));
+            drop(watcher);
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_reports_unreadable_registration_for_registry_entry() {
+        crate::test_support::with_isolated_home("watch-unreadable-registry", || {
+            let repo = PathBuf::from("/tmp/watch-unreadable-registry");
+            let registration = registration_path(&repo);
+            std::fs::create_dir_all(registration.parent().unwrap()).unwrap();
+            std::fs::write(
+                &registration,
+                serde_json::to_string(&repo.display().to_string()).unwrap(),
+            )
+            .unwrap();
+
+            let listed = list_with_unreadable_service_dir(&repo).unwrap();
+            assert_eq!(listed.len(), 1);
+            assert!(!listed[0].registered);
+            assert!(listed[0].registration_error.is_some());
+            assert_eq!(listed[0].repos, vec![repo.display().to_string()]);
+        });
+    }
+
+    #[test]
+    fn ensure_never_replaces_live_watcher_with_unknown_registration() {
+        let mut item = test_instance(Some(true), false, true);
+        item.registration_error = Some("permission denied".into());
+
+        let decision = ensure_existing(&item, Path::new("/tmp/watcher-repo"), || {
+            panic!("unknown registration must not reach supervisor inspection")
+        })
+        .unwrap();
+        let EnsureDecision::Return(status) = decision else {
+            panic!("unknown registration must not replace a live watcher");
+        };
+        assert_eq!(status.alive, Some(true));
+        assert!(!status.ready);
+    }
+
     fn test_instance(alive: Option<bool>, registered: bool, index_ready: bool) -> WatchInstance {
         WatchInstance {
             pid: 123,
@@ -2319,6 +2414,7 @@ mod tests {
             ready: false,
             index_ready,
             ownership_error: alive.is_none().then(|| "permission denied".into()),
+            registration_error: None,
             repos: vec!["/tmp/watcher-repo".into()],
             lock_path: "/tmp/watcher.lock".into(),
             changed_paths: Vec::new(),

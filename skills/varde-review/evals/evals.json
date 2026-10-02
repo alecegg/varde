@@ -53,7 +53,7 @@
       "prompt": "Run `varde-review fix https://github.com/example/widgets/pull/42`. The read-only PR intake returns one unresolved outdated review thread at src/api.rs (line null, originalLine 18) asking to handle an empty token, one resolved thread, a failing `unit` check with link https://github.com/example/widgets/actions/runs/1, a pending check, and a general PR conversation comment asking for release notes. What local findings and next actions result?",
       "expected_output": "Preflight requires gh and valid authentication before creating a review folder. With successful intake, writes one PR-REVIEW finding at src/api.rs:18 and one CI finding at the failing check URL in <working>/reviews/<date>-pr-42/. The resolved thread and pending check do not become findings; the conversation comment is context only. Both findings have Label: triage and blank Disposition, and go straight to the ordinary fix/dismiss/action-item table with no automated-pass Executor, since none is eligible; approved fixes then run as one bounded build. Verified fixes are committed locally; pushing, replying, and resolving require a separate explicit choice.",
       "assertions": [
-        "PR number or URL routes through fix-pr.md; a review ID keeps the existing local review flow",
+        "PR number or URL routes through fix.md's PR source section; a review ID keeps the existing local review flow",
         "Missing gh, failed auth, or malformed PR data stops before a partial review folder is written",
         "Exactly one finding is made for the unresolved outdated thread and its originalLine 18 is used when line is null",
         "Exactly one CI finding is made for the failing check and its URL is the Location; pending is excluded",
@@ -168,11 +168,12 @@
     {
       "id": 16,
       "prompt": "Simplify what I just changed in src/api/error.rs. Keep behavior.",
-      "expected_output": "Routes to simplify.md, computes the change range, maps callers, tests, and existing helpers, edits only within the printed range, and verifies once. It reports the changed file and any obstacle without creating a findings store.",
+      "expected_output": "Routes to simplify.md, computes the change range, maps callers, tests, and existing helpers, edits only within the printed range, and verifies once. It reports the changed file and any obstacle without creating a findings store. Unless a caller's gate covers the work, it passes the review-gates `start` checkpoint before the first edit and finishes the final review and `complete` checkpoint before reporting; if the gate CLI or a reviewer is unavailable, it reports that instead of claiming completion.",
       "assertions": [
         "Simplification routes to simplify.md and edits inline without creating a review folder or findings store",
         "The changed range and related callers, tests, and reusable helpers are checked before editing",
-        "Verification runs once after the scoped edits, and the result is reported"
+        "Verification runs once after the scoped edits, and the result is reported",
+        "Places the review-gates `start` checkpoint before the first edit and the final review and `complete` checkpoint before the report; if the gate CLI or a reviewer is unavailable, it reports that instead of claiming completion"
       ]
     },
     {

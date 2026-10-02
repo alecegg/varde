@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLAN_PATH="$SCRIPT_DIR/../varde-change/scripts/plan-path.py"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/plan-path.XXXXXX")"
+TEST_ROOT="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/plan-path.XXXXXX")" && pwd -P)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 fail() {

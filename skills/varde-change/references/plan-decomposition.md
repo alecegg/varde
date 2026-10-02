@@ -15,7 +15,7 @@ Check these:
 | Names a shared symbol, type, or interface (with `varde-code`, run `symbol_blast_radius` rather than guessing from package structure) | Wide refactor: expand, N migrate batches, contract, plus an integrate task if batches can't stay green |
 | Deletes a generated or intermediate file another task may read | Deletion: grep draft task bodies for the path, tests for hardcoded paths under the deleted dir, and dependents/importers of the deleted source |
 | Creates or renames a path another task body mentions | File pointer: grep draft task bodies for the new path and add `depends_on` |
-| Has an unsettled interface | Stop decomposing and hand off to `varde-change plan` |
+| Has an unsettled interface | Stop decomposing; in plan mode return to the plan growth loop, otherwise hand off to `varde-change plan` |
 
 Investigate codebase unknowns directly; `kind: research` is only for lasting
 external output. Add a doc task (writing `<knowledge>/reference/` or
@@ -53,6 +53,8 @@ needs independent reviewer approval per `references/review-gates.md`.
   them.
 - Use `[]` for an empty category; omit a field whose contents are unknown so
   automatic scheduling stays serial.
+- A behavior-preserving restructuring task sets `posture: refactor` so
+  `varde-workflow execution-wave` isolates it in a worktree.
 - A `spike` posture task owns no paths by design: set `kind: spike` with
   empty `modifies`/`creates`/`renames` so `varde-workflow transition` skips
   the ownership check instead of rejecting it.

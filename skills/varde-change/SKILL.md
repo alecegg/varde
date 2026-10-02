@@ -8,7 +8,7 @@ description: "Plan, build, verify, or orchestrate a code change, list plans in f
 Never ask the user which mode to use.
 
 Before implementation edits, apply `references/review-gates.md` and carry its
-verdict through completion, including changes made by this skill. An executor
+verdict through completion, including skill and doc edits. An executor
 with a caller-supplied subject runs only the checks in
 `references/build-execution.md` instead.
 
@@ -34,33 +34,10 @@ bug.
 | Report evidence for finished work without changing anything | `references/verify.md` |
 | Run a group of related plans end to end, in dependency order | `references/orchestrate.md` |
 
-## Asking questions
-
-- **One topic per turn.** Ask one question, or up to three that are facets of
-  the same decision or share candidate solutions, such as naming sibling
-  commands or edge cases of one input. Never mix unrelated problems in one
-  turn. End your turn and wait before the next.
-- **Recommend one option** and say why in one sentence, using severity,
-  confidence, blast radius, or a context clue.
-- **Wait for an explicit answer.** Silence and surrounding context leave the
-  decision open.
-
-Write the question inline in your message, using a numbered menu:
-
-```
-<Question>
-
-  1. <Option A>
-  2. <Option B>
-  3. Other - describe what you want
-
-Recommendation: <n> (<label>) - <one-sentence reason>.
-```
-
 ## Gotchas
 
-- A draft is a `plan.md` with `status: backlog` and an id ending in
-  `-draft` or a live Open Questions bullet.
+- Ask one topic per turn as an inline numbered menu with a recommendation;
+  wait for an explicit answer.
 - Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
 - A `varde-workflow` call that is denied, errors, or returns
   `workflow_blocked`: load `references/varde-workflow-cli.md` for its fallback

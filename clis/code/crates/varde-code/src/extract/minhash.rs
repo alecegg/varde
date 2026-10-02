@@ -119,7 +119,9 @@ fn hash_shingle(bytes: &[u8], starts: &[usize], ends: &[usize], w: usize, seed: 
 /// Fold contiguous MinHash rows into persisted LSH bands.
 fn band_signatures(minima: &[u64; NUM_HASHES]) -> Vec<u64> {
     minima
-        .chunks_exact(ROWS)
+        .as_chunks::<ROWS>()
+        .0
+        .iter()
         .enumerate()
         .map(|(band, rows)| {
             let mut hash = HASH_SEEDS[band];

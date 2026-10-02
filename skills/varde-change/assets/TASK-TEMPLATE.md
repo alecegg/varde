@@ -10,6 +10,7 @@ renames: []
 verification_resources: []
 # requires_signoff: true  # plan-author opt-in; absent means false
 # kind: research|spike   # optional: research is a cited doc; spike owns no paths, per references/plan-decomposition.md
+# posture: refactor      # optional: behavior-preserving restructuring; forces a worktree wave
 ---
 
 <title>

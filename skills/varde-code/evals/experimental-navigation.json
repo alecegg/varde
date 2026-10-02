@@ -1,0 +1,39 @@
+{
+  "skill_name": "varde-code",
+  "rubrics": [
+    {
+      "id": "efficiency-v3.1",
+      "frozen": false,
+      "eval_ids": [
+        6,
+        7
+      ]
+    }
+  ],
+  "evals": [
+    {
+      "id": 6,
+      "prompt": "The parent prepared the auth fixture in ./project and confirmed coverage and index readiness for that repoRoot. The Rust project contains live auth refresh code and a separate metrics refresh path. Follow the live auth credential refresh from its entry point through active session mutation and token persistence. Query only; do not build an index or start a watcher. Return exactly one JSON object and no prose. Its only key is readingOrder, an array of rows with exactly filePath and span; span has one-based integer start_line and end_line fields. Include src/auth/coordinator.rs, src/auth/session.rs, and src/auth/store.rs once each in that order, with their exact function spans. You may add useful source-backed registration rows from src/auth/mod.rs or src/lib.rs. Do not include metrics files or unrelated paths.",
+      "expected_output": "The final answer is JSON only, with a readingOrder array. It lists refresh_auth_session in src/auth/coordinator.rs, replace_access_token in src/auth/session.rs, and persist_access_token in src/auth/store.rs exactly once in that order with exact fixture spans. Optional rows are source-backed registrations from src/auth/mod.rs or src/lib.rs. No extra fields, unrelated paths, or prose.",
+      "assertions": [
+        "Uses indexed or source declaration evidence with fixture-verified spans",
+        "Inspects the auth coordinator body from actual source evidence",
+        "Final JSON orders the auth coordinator, session, and store with exact fixture spans, allowing only useful auth module files"
+      ],
+      "setup_script": "evals/setup-navigation.sh",
+      "verification_script": "evals/verify-navigation.sh"
+    },
+    {
+      "id": 7,
+      "prompt": "The parent prepared the existing auth-refresh fixture in ./project and confirmed coverage and index readiness. Query only. Read the sandbox-root context-result.json. From its recorded capture, recover every remaining file starting at zero-based resultsOffset:20 (skip the first 20), then retrieve actual refresh_session import or call occurrences and their source locations. Do not build an index or start a watcher. Return exactly one JSON object and no prose, with only recoveredFiles and occurrences keys. recoveredFiles is an array of unique repository-relative paths. occurrences is a nonempty array of groups, each with exactly files (a nonempty path array), kind (import or call), and span (one-based integer start_line and end_line). Each group must match actual source lines; groups may combine paths with the same occurrence and may cite fixture files outside the recovered tail.",
+      "expected_output": "The final answer is JSON only. recoveredFiles contains every path after offset 20 exactly once and no other paths. occurrences contains one or more groups whose files, kind, and span match actual refresh_session import or call lines. Groups may combine paths and may use source-valid fixture files outside the recovered tail. No extra fields or prose.",
+      "assertions": [
+        "Reads the supplied capture envelope and recovers the complete later-file tail from its recorded handle",
+        "Returns actual matching occurrences with source-verified spans",
+        "Final JSON lists the complete recovered tail and source-valid refresh_session occurrence groups"
+      ],
+      "setup_script": "evals/setup-context-pack.sh",
+      "verification_script": "evals/verify-navigation.sh"
+    }
+  ]
+}

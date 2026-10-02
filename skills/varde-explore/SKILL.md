@@ -9,8 +9,8 @@ description: "Compare design options or explain how existing code works, in chat
 
 | The request is | Do |
 |---|---|
-| An open question: problem, design, tradeoff, or how code works (default) | Answer in chat (default). |
-| A direct ask to explain a diff or code area, or compare options, as a document to keep | Read `references/explain.md` and follow it. |
+| An open question: problem, design, tradeoff, or how code works (default) | Answer in chat. |
+| An explicit ask to explain a diff or code area, or compare options, as an HTML page or file to keep (an explicitly named non-HTML format, or a bare "explain this diff", stays in chat) | Read `references/explain.md` and follow it. |
 
 ## Chat answers
 
@@ -21,7 +21,6 @@ description: "Compare design options or explain how existing code works, in chat
 ## Gotchas
 
 - Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
-
 - If the user explicitly asks to plan or build after exploring, start the
   matching `varde-change` route in the same turn without reconfirming; otherwise,
   offer the next step and wait.

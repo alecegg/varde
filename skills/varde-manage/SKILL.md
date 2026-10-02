@@ -6,7 +6,7 @@ description: "Install, upgrade, or configure Varde skills, CLIs, and harness hoo
 # Manage Varde setup and customization
 
 Before editing repository files (scan rules or project profiles), route the
-change through `varde-change` and apply `references/review-gates.md`. User-level
+change through `varde-change` (it owns the review gate). User-level
 setup such as `varde-workflow paths set` and `./varde sync` needs no gate.
 
 ## Choose the task
@@ -22,9 +22,6 @@ output presentation, redaction, or excluding captures, then select the row.
 
 ## Gotchas
 
-- Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`;
-  retry once with escalated access, then ask; never guess. Outside a repo,
-  use `mv`, not `git mv`.
 - `varde-manage` is a harness skill, not a shell executable.
 - Inspect existing configuration and loaded provenance before replacing an
   entry. Preserve unrelated settings; prefer a scoped override to a new tool.

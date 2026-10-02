@@ -12,7 +12,7 @@ fail() {
 
 grep -Fq "| Plan build (\`mode=build\`) | Any label with \`Disposition: fix\` | Send blank findings to parent triage without applying them; skip \`dismiss\`, \`action-item\`, and \`escalated\`. |" "$PASS_DOC" ||
   fail "fix-pass.md does not define plan-build eligibility"
-grep -Fq "| Standalone (\`mode=standalone\`) | \`Label: auto-fix\` with \`Disposition: blank\` or \`fix\` | Skip \`dismiss\`, \`action-item\`, and \`escalated\`" "$PASS_DOC" ||
+grep -Fq "| Standalone (\`mode=standalone\`) | Only supplied \`finding_ids\` with \`Disposition: fix\` and decision evidence | Skip \`dismiss\`, \`action-item\`, and \`escalated\`" "$PASS_DOC" ||
   fail "fix-pass.md does not define standalone eligibility"
 grep -Fq 'Check eligibility before doing' "$PASS_DOC" ||
   fail "fix-pass.md does not check eligibility first"
@@ -21,7 +21,7 @@ grep -Fq "| Plan build (\`mode=build\`) | Any label with \`Disposition: fix\` | 
 
 fixtures="$(
   cat <<'EOF'
-standalone|auto-fix|blank|apply
+standalone|auto-fix|blank|parent
 standalone|auto-fix|fix|apply
 standalone|auto-fix|dismiss|skip
 standalone|auto-fix|action-item|skip
@@ -41,7 +41,7 @@ EOF
 select_action() {
   local route="$1" label="$2" disposition="$3"
   case "$route:$label:$disposition" in
-    standalone:auto-fix:blank|standalone:auto-fix:fix|build:*:fix) printf 'apply' ;;
+    standalone:auto-fix:fix|build:*:fix) printf 'apply' ;;
     build:*:blank) printf 'triage' ;;
     *:dismiss|*:action-item|*:escalated) printf 'skip' ;;
     standalone:*) printf 'parent' ;;

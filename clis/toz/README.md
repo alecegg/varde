@@ -15,18 +15,23 @@ varde-toz install claude-code       # or: pi | opencode | codex
 varde-toz doctor
 ```
 
-`varde-toz install` places a hook and usage guidance in the harness's normal locations. It is idempotent. Rerun it after upgrading toz or a harness. `varde-toz uninstall <harness>` removes unchanged toz-owned files and hook entries while preserving local edits. The `varde-toz` skill is installed separately through Varde’s `skills/install.sh` or `varde sync`; the CLI installer owns only harness adapters and usage notes. The opencode installer detects its 1.x or 2.x API from `opencode --version`; `--for-version X.Y.Z` overrides that choice.
+`varde-toz install` places hooks and adapters in their normal locations. It is idempotent. Rerun it after upgrading toz or a harness. `varde-toz uninstall <harness>` removes unchanged toz-owned files and hook entries while preserving local edits. Codex install removes the legacy Toz block from `~/.codex/AGENTS.md` and leaves the rest of that file intact; it no longer installs a standalone block. Run `varde-workflow instructions install` to install the shared Varde block, which includes `varde-toz note --block` output when the CLI is available. Toz no longer ships its own SessionStart hook for Claude Code or Codex; reinstalling strips a legacy Toz SessionStart entry. The `varde-toz` skill is installed separately through Varde’s `skills/install.sh` or `varde sync`; the CLI installer owns only harness adapters and usage notes. The opencode installer detects its 1.x or 2.x API from `opencode --version`; `--for-version X.Y.Z` overrides that choice.
+
+`varde-toz note --block` prints the static Codex guidance used in Varde's shared
+instruction block. The regular `varde-toz note` output may include diagnostics.
 
 | Harness | Capture path |
 |---|---|
-| Claude Code | `PostToolUse` replaces tool output; `SessionStart` adds guidance |
+| Claude Code | `PostToolUse` replaces tool output; the unified `varde-workflow hook session-start` hook adds guidance |
 | pi | `tool_result` replaces text; the system prompt gets guidance |
 | opencode | Tool hook replaces text; context hook adds guidance |
 | Codex | `PostToolUse` captures supported results; structured results may keep their original content and receive a handle hint |
 
-Pi codemode nested results are captured while their original text and structured values stay available to the calling script. Large direct and final codemode text results still receive the usual preview, with nontext blocks kept in place.
+Pi codemode nested results are captured while their original text and structured values stay available to the calling script. For clipped shell results, Toz reads the complete `full_output_path` file before capture. An unreadable supplied file records a diagnostic and leaves the result untouched. Large direct and final codemode text results still receive the usual preview, with nontext blocks kept in place.
 
-Codex may truncate command output before hooks can inspect it. Use `varde-toz run` when the full output matters; its parent captures command streams before the harness can truncate them.
+Prefer harness-native code mode or Programmatic Tool Calling when it can call the required tools and results remain recoverable after the script ends. Retain results before filtering and print a concise summary. If the summary omits a detail, query the retained output instead of executing the command again; `query --list` discovers handles the script did not print, and `--source` narrows searches by command.
+
+Hooks capture only output the harness supplies, subject to capture thresholds and exclusions. Codex can clip command output before hooks inspect it. Use a verified complete persisted file for analysis, or `varde-toz run` when you need a complete capture handle. Toz captures its child command streams before the harness can truncate them; `capture: true` also retains small command results. Native code mode availability alone does not guarantee callable local tools or complete captures.
 
 ## Query stored output
 
@@ -63,21 +68,27 @@ Project searches refresh indexed files when their contents change. `fetch` cache
 varde-toz run --script - <<'JS'
 const files = vardeToz.exec({argv: ['/bin/ls', '-la']});
 const location = vardeToz.exec({argv: ['/bin/pwd']});
-print(JSON.stringify({files: files.capture.handle || files.stdout, directory: location.stdout.trim()}));
+print(JSON.stringify({files: files.capture.preview || files.stdout, directory: location.stdout.trim()}));
 JS
 ```
 
 `--code '<js>'` accepts a one-liner. A heredoc avoids shell quoting problems. `run` executes the script in QuickJS. By default, its command subprocesses inherit the permissions of the process that launched toz. `vardeToz.exec()` accepts `argv` or `shell`, plus optional `cwd`, `env`, `timeoutMs`, `capture`, and `raw`. A nonzero command exit is returned in `exitCode`; startup errors raise a script exception.
 
 After each command finishes, the parent compares combined stdout and stderr
-bytes with the configured capture threshold, capped at the 64 KiB inline
+bytes with the configured capture threshold (not the file-read limit), capped at the 64 KiB inline
 preview limit. Short output returns complete `stdout`/`stderr`,
 `capture.state: "inline"`, and no handle; larger output is stored with a
 searchable handle and bounded previews. `capture: true` forces searchable
 capture for short output. `raw: true` also forces searchable capture and
 requests exact-byte retention when enabled. Never-capture rules override both.
-The script's printed result is captured separately and can return its own
-handle. Use `query` to read captured output.
+For captured commands, `capture.preview` contains the normal preview,
+including configured output profiles. `stdout` and `stderr` remain bounded
+excerpts for scripts; `capture.handle` retrieves the full stored output.
+
+The final printed result passes through under the capture threshold. Larger
+results return the normal preview and a searchable handle. `--json` renders
+captured previews as JSON; under-threshold output stays as printed. `--quiet`
+hides preview detail only on overflow.
 
 Pass an existing capture with `--handle` to analyze it without bringing its body into the agent context:
 
@@ -144,7 +155,12 @@ exact retained bytes.
 Default project databases live under `~/.config/varde-toz/<project-key>/toz.db`. Database files use `0600`; parent directories use `0700`. Harness adapters use this primary store by default. If access fails and the user declines the needed permission, `VARDE_TOZ_FALLBACK_DIR` or `--fallback-dir` opts into an external store. Toz tries it only after a primary-store access error. Use the same fallback for hooks, `query`, and `run`; it cannot recover captures that a failed hook never saved. `VARDE_TOZ_CONFIG_DIR` relocates the primary store.
 
 Capture hooks pass output under the default 4 KiB threshold through unchanged.
-Above it, they save normalized, redacted text and return a preview.
+Above it, they save normalized, redacted text and return a preview. File reads
+use a higher limit: 16 KiB, or the global `threshold` if larger. A file read is
+a tool named `read` (any case) or, in any harness, a single simple shell
+`cat`, `head`, `tail`, `nl`, or `sed -n` command with no pipe, redirect, `;`,
+`&` (covers `&&`), `||`, `$(`, backtick, or newline. `[thresholds] read = N` overrides the
+read limit; an exact tool key such as `Read = N` wins over both.
 `vardeToz.exec()` uses the completed command's actual byte count and the same
 configured threshold, capped at 64 KiB. The normal store strips ANSI escapes,
 normalizes line endings, and replaces invalid UTF-8. Raw retention requires an

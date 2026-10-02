@@ -5,7 +5,7 @@ description: "Shape and prototype frontend pages, layouts, and interactions, or 
 
 # Shape and prototype a design question
 
-Prototype files under `<storage>` need no review gate; production edits go
+Prototype files under `<storage>` (set in Workflow step 1) need no review gate; production edits go
 through `varde-change`.
 
 ## Pick the track

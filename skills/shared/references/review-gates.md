@@ -1,8 +1,9 @@
 # Independent review gates
 
 Gate every implementation change (source, configuration, documentation,
-fixes, refactors, prototypes) through `varde-change`. Read-only investigation
-and workflow bookkeeping need no gate.
+fixes, refactors, prototypes in source) through `varde-change`. Read-only
+investigation, workflow bookkeeping, and prototype files under `<working>`
+need no gate.
 
 Coordinators read this file; an executor with a caller-supplied subject runs
 only the checkpoints its brief names, and a gate reviewer follows
@@ -52,8 +53,8 @@ Pick the branch first:
 For bounded work:
 
 1. Store a JSON contract under `subjects/<safe-id>/` in the configured
-   working store, not in its CLI-created `review-gates/` subject directories,
-   with these keys:
+   working store, not inside the CLI-owned `review-gates/` directory, with
+   these keys:
    - `outcome`
    - `scope`
    - `assumptions`
@@ -62,7 +63,10 @@ For bounded work:
    - `verification`
 2. Compute the risk tier: run
    `python3 <skill-dir>/scripts/risk-tier.py <scope-path>...` from the
-   repository root and keep its JSON output beside the contract.
+   repository root and keep its JSON output beside the contract. Add every
+   `tests_to_run` entry to `verification`, run by type (`.sh` with bash, `.py`
+   with python3, files under `clis/<module>/` with that module's test
+   command); the list is a minimum, so module test commands still apply.
 3. Initialize the subject:
 
    ```sh
@@ -86,7 +90,7 @@ pre-edit record. High tier runs the steps below.
 1. Give an agent with a clean, independent context:
    - subject id
    - repository
-   - resolved memory paths
+   - resolved `<working>` and `<knowledge>` paths
    - outcome and scope
    - assumptions and open questions
    - verification with expected results

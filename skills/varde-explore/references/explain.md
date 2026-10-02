@@ -27,6 +27,7 @@ as a numbered menu. Otherwise infer the shape and state it in one line.
    path the user named or else
    `<working>/explanations/<YYYY-MM-DD>-<slug>.html` (resolved absolute
    `<working>`, short kebab-case `<slug>`), and tell the user the exact path.
+
 ## HTML output sections
 
 Change or area shape:

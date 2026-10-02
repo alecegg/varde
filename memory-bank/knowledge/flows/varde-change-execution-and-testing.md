@@ -10,7 +10,7 @@ in one isolated parallel wave.
 
 ## Execution strategies
 
-`scripts/resolve-execution-wave.py` reports facts: ready tasks, conflicts, and
+`varde-workflow execution-wave` reports facts: ready tasks, conflicts, and
 a `next_wave` of tasks safe to run together. The orchestrator picks the
 strategy from `execution=<auto|serial|inline>`:
 

@@ -19,14 +19,16 @@ Scripts (each has `--help`):
 2. `scripts/worktree-merge.sh <id>` merges into the checked-out branch; from an
    integration worktree it resolves sibling task worktrees through the shared
    Git directory.
-3. `scripts/worktree-cleanup.sh <id>`, only after merge exits 0.
+3. `scripts/worktree-cleanup.sh <id>`, only after merge exits 0, or 2 when no
+   commits were expected.
 
 | Merge exit | Meaning | Action |
 |---|---|---|
-| 2 | nothing to merge | none needed |
+| 2 | nothing to merge | success only when no commits were expected (such as a spike); otherwise the task failed |
+| 1 | usage error | fix the arguments and retry |
 | 3 | conflict | resolve below |
 | 4 | source or destination branch missing or invalid | inspect the named refs before retrying |
-| 5 | uncommitted changes | commit first |
+| 5 | uncommitted changes | the task did not finish; treat it as failed and never commit on its behalf |
 
 To resolve conflicts:
 
@@ -54,7 +56,6 @@ varde-workflow review bind-worktree --subject <subject-id> --binding <task-bindi
 - Scope the binding to the task's declared writes, both rename sides. A
   bounded refactor without a task file omits `--task` and uses its approved
   bounded scope.
-- Never initialize a separate subject per task or broaden repository identity.
 - Put the approval checkout, worker path, subject ID, and binding ID in the
   executor brief. The worker passes all three context flags at start and
   resume:
@@ -79,7 +80,7 @@ varde-workflow review release-worktree --subject <subject-id> --binding <task-bi
   - verified source;
   - parent completion as pending;
   - worktree path.
-  Write a handoff.
+  Write a handoff with `varde-knowledge`.
 
 ### Abandon
 
@@ -101,26 +102,3 @@ checkout for its serial children:
 - Keep external plans in their configured store.
 - Never substitute a main-checkout subject for a feature-checkout subject or
   copy approval records.
-
-## Finish an isolated run
-
-An isolated run may enter at integration choice once source and checks are
-verified and only post-integration parent bookkeeping remains. After
-Merge/release, all tasks and nested children must be complete before final
-review or conclusion.
-
-When this run owns an unmerged isolated checkout, present applicable finish
-choices before parent review or conclusion:
-
-- **Merge:**
-  1. Integrate verified source.
-  2. Release bindings and apply parent-owned task bookkeeping.
-  3. Continue with step 1 at the approval checkout.
-- **Keep as is** or **Push and open PR:** follow Release.
-
-A caller-owned feature child:
-
-- **Subject in another approval checkout:** return pending integration to its
-  owner without a merge choice.
-- **Subject in the feature checkout:** conclude locally through its normal
-  gates; leave the enclosing merge to the feature owner.

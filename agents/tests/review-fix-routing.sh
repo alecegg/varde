@@ -41,7 +41,7 @@ for phrase in (
     "standalone review folder",
     "the parent owns review orchestration and user triage",
     "the parent shows every unresolved blank finding",
-    "do not perform human triage",
+    "decides a blank disposition",
     "never prompts the user",
     "bounded build task",
 ):
@@ -51,22 +51,22 @@ for phrase in (
 fix_pass = " ".join((repo / "skills/varde-review/references/fix-pass.md").read_text().lower().split())
 for phrase in (
     "any label with `disposition: fix`",
-    "`label: auto-fix` with `disposition: blank` or `fix`",
+    "only supplied `finding_ids` with `disposition: fix` and decision evidence",
     "send blank findings to parent triage",
 ):
     assert phrase in fix_pass, f"fix-pass.md omits {phrase!r}"
+assert "`disposition: blank` or `fix`" not in fix_pass, "fix-pass.md makes blank findings standalone-eligible"
 
 finish = (repo / "skills/varde-change/references/build-finish.md").read_text().lower()
 for phrase in (
     "mode=build",
     "plan_context",
-    "mode=standalone",
-    "review_dir",
     "repoRoot",
     "finding_ids",
     "parent receives deferred findings",
 ):
     assert phrase.lower() in finish, f"build-finish.md omits {phrase!r}"
+assert "mode=standalone" not in finish, "build-finish.md dispatches a standalone fix pass that fix.md skips"
 
 print("Review-fix parent-routing contract passed.")
 PY

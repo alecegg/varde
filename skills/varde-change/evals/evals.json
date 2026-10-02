@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "What's in flight right now?",
-      "expected_output": "Dispatches to references/status.md without asking the user which mode to use. Globs memory-bank/working/plans/*/plan.md and memory-bank/working/handoffs/*/handoff.md, shows the non-terminal plans table (top 5, most recent by date-prefixed id) and the open handoffs panel, then names exactly one next varde-change mode. Reads only \u2014 no plan, task, or handoff file is written or modified.",
+      "expected_output": "Dispatches to references/status.md without asking the user which mode to use. Finds every plan.md at any depth under memory-bank/working/plans/ and globs memory-bank/working/handoffs/*/handoff.md, shows the non-terminal plans table (top 5, most recent by date-prefixed id) and the open handoffs panel, then names exactly one next varde-change mode. Reads only \u2014 no plan, task, or handoff file is written or modified.",
       "assertions": [
         "Reports status without asking the user to choose a mode",
         "Derives status from files on disk, not from conversation memory or inference",
@@ -31,13 +31,13 @@
     {
       "id": 3,
       "prompt": "The retry backoff in src/queue/worker.mjs is using a fixed delay \u2014 make it exponential with jitter.",
-      "expected_output": "Dispatches to references/build-micro-change.md. This is a clear micro-change, so build persists a bounded JSON contract, initializes its review subject, obtains a reviewer-authored approval record, and passes the start checkpoint, then edits src/queue/worker.mjs, runs the narrowest relevant check (the repository's node --test suite), and reports the result without creating plan or task artifacts. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
+      "expected_output": "Dispatches to references/build-micro-change.md. This is a clear micro-change, so build persists a bounded JSON contract, computes its risk tier, initializes its review subject, and passes the start checkpoint, then edits src/queue/worker.mjs, runs the narrowest relevant check (the repository's node --test suite), and reports the result without creating plan or task artifacts. When the risk tier is high or a contract trigger applies, obtains independent pre-edit review of scope, verification, assumptions, and structural risk before implementation, and stops if that reviewer is unavailable; human decisions go to persisted planning. Carries any verdict through execution and always performs implementation review; reviewer chosen per tier.",
       "assertions": [
         "Implements exponential backoff with jitter in src/queue/worker.mjs",
         "Reports running a test command, and the repository's tests pass on the changed worker",
         "Creates no plan or task artifacts for the micro-change",
         "Changes production source for the requested bounded change",
-        "Captured execution events show an independent reviewer approved the actual plan before the first implementation edit; coordinator prose alone is not evidence"
+        "Captured execution events show an independent reviewer recorded implementation review before completion was reported, and approved before the first implementation edit whenever the subject was high tier; coordinator prose alone is not evidence"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
@@ -95,7 +95,7 @@
     {
       "id": 8,
       "prompt": "Build the existing 2026-09-20-retry-policy plan.",
-      "expected_output": "Dispatches to references/build-plan.md and selects the named existing plan without creating a replacement. Decomposes the plan into task files, executes them sequentially, creates src/retry-policy.ts with maxAttempts returning 5, verifies both plan acceptance criteria, marks every task done, checks every criterion, and completes the plan. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
+      "expected_output": "Dispatches to references/build.md and selects the named existing plan without creating a replacement. Decomposes the plan into task files, executes them sequentially, creates src/retry-policy.ts with maxAttempts returning 5, verifies both plan acceptance criteria, marks every task done, checks every criterion, and completes the plan. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and always performs implementation review; reviewer chosen per tier.",
       "assertions": [
         "Builds the named existing plan without creating a replacement plan",
         "Decomposes the plan specification into task files before implementation",
@@ -110,13 +110,13 @@
     {
       "id": 9,
       "prompt": "The cache invalidation regression described in ISSUE.md came back after the last release. Find the cause and fix it.",
-      "expected_output": "Automatically enters the debugging path in fix mode. Builds a deterministic reproduction of the ISSUE.md symptom (invalidate(\"user\") leaves \"user:42\" cached), records ranked hypotheses and tested experiments before editing source, adds a regression test that fails on the seeded code, fixes src/cache.mjs, then records the root cause and reruns the original reproduction and regression verification. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
+      "expected_output": "Automatically enters the debugging path in fix mode. Builds a deterministic reproduction of the ISSUE.md symptom (invalidate(\"user\") leaves \"user:42\" cached), records ranked hypotheses and tested experiments before editing source, adds a regression test that fails on the seeded code, fixes src/cache.mjs, then records the root cause and reruns the original reproduction and regression verification. When the risk tier is high or a contract trigger applies, obtains independent pre-edit review of scope, verification, assumptions, and structural risk before implementation, and stops if that reviewer is unavailable; human decisions go to persisted planning. Carries any verdict through execution and always performs implementation review; reviewer chosen per tier.",
       "assertions": [
         "Records reproduction, hypotheses, and experiments before implementation",
         "Records cause and verification after the fix",
         "Fixes the reported symptom: invalidating a namespace evicts its namespaced entries",
         "Adds a regression test that fails on the seeded source and passes after the fix",
-        "Captured execution events show an independent reviewer approved the actual plan before the first implementation edit; coordinator prose alone is not evidence"
+        "Captured execution events show an independent reviewer recorded implementation review before completion was reported, and approved before the first implementation edit whenever the subject was high tier; coordinator prose alone is not evidence"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
@@ -148,12 +148,12 @@
     {
       "id": 12,
       "prompt": "Build the direct fix for the parser regression now. Change parse() in src/parser.mjs to return \"fixed\". Do not enter diagnosis mode.",
-      "expected_output": "Routes to the normal build path because explicit build intent overrides automatic debugging, changes src/parser.mjs, and runs the focused parser test (node --test), which passes. Before implementation, obtains independent pre-edit review of scope, verification, assumptions, and structural risk. Stops if that reviewer is unavailable; human decisions go to persisted planning. Carries the verdict through execution and performs implementation review only when structural risk requires it.",
+      "expected_output": "Routes to the normal build path because explicit build intent overrides automatic debugging, changes src/parser.mjs, and runs the focused parser test (node --test), which passes. When the risk tier is high or a contract trigger applies, obtains independent pre-edit review of scope, verification, assumptions, and structural risk before implementation, and stops if that reviewer is unavailable; human decisions go to persisted planning. Carries any verdict through execution and always performs implementation review; reviewer chosen per tier.",
       "assertions": [
         "Builds directly without entering the debugging path: records no debug evidence fields or debug mode",
         "Changes the seeded parser source so parse() returns \"fixed\"",
         "Reports running a test command, and the unchanged parser test passes",
-        "Captured execution events show an independent reviewer approved the actual plan before the first implementation edit; coordinator prose alone is not evidence"
+        "Captured execution events show an independent reviewer recorded implementation review before completion was reported, and approved before the first implementation edit whenever the subject was high tier; coordinator prose alone is not evidence"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
@@ -173,13 +173,13 @@
     {
       "id": 14,
       "prompt": "You are the executor for task memory-bank/working/plans/2026-09-21-logger-fix/tasks/flush-on-exit.md, assigned by the orchestrator. Complete only this task.",
-      "expected_output": "Matches SKILL.md's 'one task file assigned by an orchestrator' row and reads references/build-execution.md directly \u2014 no plan discovery, no decomposition, and no new task files. Checks the caller supplied independent pre-edit reviewer verdict covering this task and that captured execution evidence supports it, without repeating valid review. If approval is missing or stale, obtains review before editing. Implements the flush in src/logger.ts's close() method, verifies, marks the task done with an evidence line, and commits.",
+      "expected_output": "Matches SKILL.md's 'one task file assigned by an orchestrator' row and reads references/build-execution.md directly \u2014 no plan discovery, no decomposition, and no new task files. Checks the caller supplied independent pre-edit reviewer verdict covering this task and that captured execution evidence supports it, without repeating valid review. If approval is missing or stale, or the start check exits 4, returns that to the caller without editing. Implements the flush in src/logger.ts's close() method, verifies, ends Progress with an evidence entry, leaves the task in_progress for the orchestrator, and commits.",
       "assertions": [
-        "Reads build-execution.md directly rather than build-plan.md's decomposition path",
+        "Reads build-execution.md directly rather than build.md's decomposition path",
         "Creates no additional task files",
         "Implements flush() in src/logger.ts's close() method",
-        "Marks the task done with evidence in its Progress",
-        "Captured execution events support a separate reviewer verdict supplied by the caller or a new independent review before edits; a user/coordinator claim alone is not proof, and unchanged approved scope does not get repeated review"
+        "Ends Progress with an evidence entry and leaves the task in_progress",
+        "Captured execution events support a separate reviewer verdict supplied by the caller before edits; a missing or stale verdict, or a start check exit 4, is returned to the caller without editing; a user/coordinator claim alone is not proof, and unchanged approved scope does not get repeated review"
       ],
       "setup_script": "evals/setup-change-eval.sh",
       "verification_script": "evals/verify-change-eval.sh"
@@ -241,19 +241,19 @@
     {
       "id": 20,
       "prompt": "Run the named notifications group with two ready children in sequence. Both build successfully in a varde-created feature worktree. The first child has finished; what finish choice is shown before the second child, and what happens after both complete?",
-      "expected_output": "Each child has independent pre-edit approval; the first child completes acceptance, conclusion, and lessons, then returns its diff/branch state to orchestrate without showing or executing a finish choice. Orchestrate builds the second child. Structural-risk implementation review is performed once on the aggregate applicable scope, rather than after every task. After the group completes, it shows the aggregate diff and one applicable Merge / Push and open PR / Keep as is menu, recommending Merge for the created worktree; it waits for the user's choice before merging or pushing.",
+      "expected_output": "Each child has independent pre-edit approval; the first child completes acceptance, conclusion, and lessons, then returns its diff/branch state to orchestrate without showing or executing a finish choice. Orchestrate builds the second child. Implementation review is always performed once on the aggregate applicable scope, rather than after every task. After the group completes, it shows the aggregate diff and one applicable Merge / Push and open PR / Keep as is menu, recommending Merge for the created worktree; it waits for the user's choice before merging or pushing.",
       "assertions": [
         "No per-child finish choice interrupts the unattended group build",
         "The second child runs after the first succeeds",
         "Exactly one aggregate finish menu offers applicable Merge, Push and open PR, and Keep as is choices",
         "No merge, push, PR creation, or worktree cleanup happens before the user chooses",
-        "Describes implementation review once on the aggregate applicable scope when structural risk requires it, rather than an automatic per-task review loop"
+        "Describes implementation review once on the aggregate applicable scope (always performed; reviewer chosen per tier), rather than an automatic per-task review loop"
       ]
     },
     {
       "id": 21,
-      "prompt": "Change src/parser.mjs so parse() returns \"fixed\". Independent reviewer delegation is unavailable in this run. Do not substitute self-review.",
-      "expected_output": "Recognizes a settled bounded change but stops before any implementation edit because independent pre-edit review is unavailable. Reports the missing reviewer capability without claiming approval or proceeding to self-review.",
+      "prompt": "Change src/parser.mjs so parse() returns \"fixed\". parse() is a shared contract that other packages consume. Independent reviewer delegation is unavailable in this run. Do not substitute self-review.",
+      "expected_output": "Recognizes a settled bounded change whose shared contract requires independent pre-edit review, but stops before any implementation edit because that review is unavailable. Reports the missing reviewer capability without claiming approval or proceeding to self-review.",
       "assertions": [
         "Leaves src and test byte-identical to the seed when independent review is unavailable",
         "Reports reviewer unavailability and stops without treating self-review as independent approval"

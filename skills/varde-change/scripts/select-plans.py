@@ -8,7 +8,7 @@
 Usage: select-plans.py --working DIR
 
 Reads every `plan.md` at any depth under DIR/plans. Skips `shape: group` plans
-and drafts (id ending `-draft`, or a live bullet under `## Open Questions`).
+and drafts (id ending `-draft` or `-draft-<digits>`, or a live bullet under `## Open Questions`).
 Keeps `backlog` and `active` plans. With `varde-workflow` on PATH it runs
 `readiness <plan> --json` per plan and `graph <plan> --json --all` per
 candidate (graph covers one plan's `depends_on` closure, so every candidate is
@@ -74,7 +74,7 @@ def read_plan(path):
     live = False
     section = re.search(r"^## Open Questions\s*\n(.*?)(?=^## |\Z)", body, re.S | re.M)
     if section:
-        live = bool(re.search(r"^\s*(?:[-*]|\d+\.)\s+\S", section.group(1), re.M))
+        live = bool(re.search(r"^\s*[-*] ", section.group(1), re.M))
     return (front.get("id") or path.parent.name, front.get("title", ""),
             front.get("status", ""), front.get("shape", ""), live, depends)
 
@@ -119,7 +119,7 @@ def main():
             continue
         plan_id, title, status, shape, live, depends = info
         statuses[path.resolve()] = status
-        if shape == "group" or plan_id.endswith("-draft") or live:
+        if shape == "group" or re.search(r"-draft(-\d+)?$", plan_id) or live:
             continue
         if status in ("backlog", "active"):
             candidates.append({"id": plan_id, "title": title, "status": status,

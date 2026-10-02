@@ -2,5 +2,8 @@
 
 - Snapshot a directory only for a small owned artifact folder, such as one
   review folder.
-- Run `python3 <skill-dir>/scripts/handoff-snapshot.py -- <target>...` and
-  record the entries it prints as printed.
+- Check every target exists first; one missing target makes
+  `scripts/handoff-snapshot.py` exit 1 for all.
+- Run `python3 scripts/handoff-snapshot.py -- <target>...`, copy
+  `snapshots[<target>]` into that link's `content_hashes` as printed, and
+  report `skipped_symlinks`.

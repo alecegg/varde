@@ -68,14 +68,16 @@ xcrun simctl io <device> screenshot <file>
    window ID is known (an app name is never a window ID), else
    `screencapture -i -w <file>` and select the window (interactive: the user
    clicks the window; if no user is present, ask for a window ID).
-2. If neither works, ask for a window ID or stop.
+2. If neither works, stop and name the missing capture.
 
 ## 3. Write findings
 
 - Without an owning source file, use a review-relative screenshot path as
   `Location`; put the route/screen, viewport/device, and before image in
   Summary.
-- Label design choices and uncertain fixes `triage`; label `auto-fix` only when
-  the fix is precisely describable and mirrors an existing style, otherwise
-  `triage`.
-- Report coverage and limits with the counts.
+- Label per `references/report-categories.md` Auto-fix rule; design choices
+  are `triage`.
+- Report coverage and limits with the counts, with the completion line
+  `` Review complete. <N> findings across <C> categories. Review folder: `<path>`. ``.
+- Roll up per `references/report-format.md`: set the `review.md`
+  `## Categories` table and `status: complete`.

@@ -26,6 +26,7 @@ plan 2026-01-a backlog
 plan 2026-01-act active
 plan 2026-01-done completed
 plan 2026-01-x-draft backlog
+plan 2026-01-x-draft-2 backlog
 plan 2026-01-oq backlog single $'## Open Questions\n\n- Which shape?'
 plan 2026-01-oq-empty backlog single $'## Open Questions\n\nNone.\n\n## Design'
 mkdir -p "$W/plans/group/child"

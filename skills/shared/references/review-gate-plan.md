@@ -4,7 +4,10 @@
 
 Run `python3 <skill-dir>/scripts/risk-tier.py <scope-path>...` over the plan's
 full scope first, from the repository root, and keep its JSON output; missing or
-unreadable evidence defaults to high tier.
+unreadable evidence defaults to high tier. Add every `tests_to_run` entry to
+the plan's acceptance checks, run by type (`.sh` with bash, `.py` with
+python3, `clis/<module>/` with its test command); module test commands still
+apply.
 
 `review check` treats a plan as high tier, whatever `data.subject.tier` says, if
 `## Open Questions` holds a `-` or `*` bullet, the frontmatter has a non-empty
@@ -33,7 +36,7 @@ readiness fields gate different work:
 Run `conclude`; it requires current final evidence and a passing complete
 checkpoint.
 
-## Bounded work
+## Contract or scope updates
 
 - Replace the contract with `review contract`, or add `--scope`/`--artifact`
   coverage with `review expand` (`--tier-evidence` optional; omitted evidence

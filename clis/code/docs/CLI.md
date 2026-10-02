@@ -46,7 +46,9 @@ slices are checked against that database. `find_pattern` parses live source.
 `dbPath` alone. `batch` applies these rules to each child after inheriting its
 parent input. Missing and stale indexes return `index_missing` and
 `index_stale` error codes in the normal JSON envelope. Queries never update
-the index; search source directly while watcher coverage is unavailable.
+the index; on either code, run `watch --ensure` and retry. `find_pattern` needs
+no index. If `watch --ensure` fails, search source until watcher coverage
+returns.
 
 Two output-shaping fields are accepted by every query mode and by `scan`:
 
@@ -56,7 +58,7 @@ Two output-shaping fields are accepted by every query mode and by `scan`:
   paths round-trip: a relative `filePath` fed back into another mode still
   resolves (paths are matched by suffix). No effect on paths outside the repo.
 - **`includeSpanDetail?`** (default `false`) — a `span` carries only
-  `start_line`/`end_line` by default; set `true` to also include the
+  `start_line`/`end_line` by default; set `true` to retain available
   `start_byte`/`end_byte`/`start_col`/`end_col` fields.
 
 `scan` also accepts **`fullFindings?`**, **`findingsLimit?`**, and
@@ -115,7 +117,7 @@ metadata. Pattern search uses the equivalent `matches*` fields.
 | `tests_for_file` | `filePath` | Test-path files that transitively import the target through resolved import edges |
 | `hotspots` | `resultsLimit?`, `resultsOffset?`, `fullResults?` | Risk hotspots ranked by complexity × churn (falls back to complexity alone when no file has churn) |
 | `clusters` | `minSize?`, `maxClusters?`, `seedPath?` | Community-detection (Louvain) partition of the resolution graph into densely-interconnected file clusters; each `{id, files, label, cohesion}` (`label` always `null`, `cohesion` is the fraction of touching edges kept inside). `seedPath` returns only the cluster containing that file |
-| `context_pack` | `query`, `resultsLimit?`, `resultsOffset?`, `fullResults?`, `maxTokensEstimate?`, `includeReadingOrder?` | Keyword-driven context bundle. Files match paths or symbol names; one-hop dependency neighbors follow. Symbols prioritize declarations. `files`, `symbols`, `tests`, and `readingOrder` remain available. Structural only; no doc corpus or semantic search |
+| `context_pack` | `query`, `resultsLimit?`, `resultsOffset?`, `fullResults?`, `maxTokensEstimate?`, `includeReadingOrder?`, `includeOccurrences?` | Keyword-driven context bundle. Files match paths or symbol names; one-hop dependency neighbors follow. Symbols default to Function, Class, Interface, Variable, Export, and Route declarations. `includeOccurrences: true` adds matching occurrence/control entities. `files`, `symbols`, `tests`, and `readingOrder` remain available. Structural only; no doc corpus or semantic search |
 | `nav_map` | `maxTokensEstimate?` (plus `--format json\|text`) | Session-start repo orientation map: entrypoints, foundational files, module layers, subsystems, symbols, flows, and hotspots assembled from the persisted index. Trimmed to a total token budget (default 12000, override with `maxTokensEstimate`) spent section-by-section in priority order; per-section hard caps also apply. A `guide.truncated` block reports `{shown, total, more}` per trimmed section (after section caps) and names the follow-up query for more data. The fallback's counts describe items present in its capped map, not repository totals. Raise `maxTokensEstimate` for an expanded map, while keeping in mind section caps still apply. The `symbols` leaderboard ranks by **caller breadth** (distinct calling files, reported as `callers`) rather than raw call count, and drops low-orientation accessor/stdlib names (`getName`, `push`, `ConfigureAwait`, …). The `flows` section lists only genuine multi-node call trees — single-node trees that merely restate an entrypoint are omitted; each flow summary carries a deduplicated `files` path table and its tree nodes reference paths by `f` index into that table (so a tree of many nodes in a few files pays each path once, not per node). Orientation sections (`foundational_files`, `symbols`, `entrypoints`) exclude front-end asset code (JS/TS/CSS under `assets/`), and `foundational_files` ranks pure data classes (all-accessor/boilerplate methods) below real modules. `entrypoints` covers annotation-based handlers and call-based routes, Node `main()` functions inside recognized direct-run guards, named `handleRequest` functions called by Node `createServer` callbacks, and SvelteKit page/layout files plus named exported HTTP methods in `+server` modules. Node guard detection reads source through `repoRoot`; dbPath-only queries omit Node roots. Svelte page/layout entries are path-only and do not produce symbol or flow roots. JSON is canonical; `--format text` renders the same data as plain text |
 | `map_file` | `filePath` | Map a file to its persisted node info |
 | `map_symbol` | `name`, `sourceFile?` | Map a symbol to its persisted entity |
@@ -150,12 +152,15 @@ reached references whose named caller could not be established. An empty
 result does not prove isolation. Use file-level impact and source inspection
 when those limitations matter to the decision.
 
-`context_pack` pages files as one unit. Its symbols and tests match those files.
-The default estimate allows 4,000 tokens. Increase `maxTokensEstimate` for
-larger windows. `fullResults: true` bypasses that estimate. The estimate uses
-serialized characters divided by four, not a model tokenizer.
-The token estimate also bounds symbols per file. Pagination metadata reports
-the omitted symbol count. Increase the estimate for more symbols.
+`context_pack` pages files as one unit. Its symbols and tests match those files;
+tests are import-reachability hints, not measured coverage. Each symbol's
+`span.start_line` and `span.end_line` are persisted 1-based source lines. Set
+`includeOccurrences: true` to add matching occurrence/control entities.
+`fullResults: true` bypasses token and result caps without changing symbol-kind
+filtering, and still honors `resultsOffset`. The default estimate allows 4,000
+tokens and uses serialized JSON bytes divided by four, not a model tokenizer.
+The estimate also bounds symbols per file; pagination metadata reports omitted
+symbols. Increase the estimate for more symbols.
 `readingOrder` mirrors the returned files for compatibility. Set
 `includeReadingOrder: false` to return an empty array and save tokens.
 

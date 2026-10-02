@@ -26,7 +26,7 @@ case "$EVAL_ID" in
     ;;
   8)
     if git diff --quiet HEAD -- docs/config-reference.md &&
-       grep -Fq '30' "$EVAL_TRANSCRIPT"; then verdict=PASS; fi
+       grep -Fq 'timeout is 30' "$EVAL_TRANSCRIPT"; then verdict=PASS; fi
     jq -n --arg verdict "$verdict" \
       '{results:[{assertion:"The proposal-only request leaves the document unchanged",verdict:$verdict,evidence:"checked unchanged doc and proposed value in transcript"}]}'
     ;;

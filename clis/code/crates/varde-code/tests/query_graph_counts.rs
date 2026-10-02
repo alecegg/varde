@@ -110,13 +110,7 @@ fn persist_chain(n: usize) -> PathBuf {
         file_meta,
         files,
     };
-    persist::persist(
-        &db,
-        std::slice::from_ref(&output),
-        &graph,
-        &dir,
-    )
-    .expect("persist succeeds");
+    persist::persist(&db, std::slice::from_ref(&output), &graph, &dir).expect("persist succeeds");
     db
 }
 
@@ -124,7 +118,11 @@ fn count_statements(mode: &str, db: &std::path::Path) -> usize {
     STMT_COUNT.store(0, Ordering::SeqCst);
     varde_code::query::set_trace_hook(Some(trace_hook));
     let repo = db.parent().unwrap().parent().unwrap();
-    let input = format!(r#"{{"repoRoot":"{}","dbPath":"{}","filePath":"c0.rs"}}"#, repo.display(), db.display());
+    let input = format!(
+        r#"{{"repoRoot":"{}","dbPath":"{}","filePath":"c0.rs"}}"#,
+        repo.display(),
+        db.display()
+    );
     let stdout = query::run_mode(mode, &input);
     let value: serde_json::Value = serde_json::from_str(&stdout).expect("envelope is JSON");
     assert_eq!(value["ok"], true, "mode {mode} succeeded: {stdout}");

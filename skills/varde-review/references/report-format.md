@@ -7,8 +7,6 @@
 | Standalone (no plan id passed) | `<working>/reviews/<YYYY-MM-DD>-<slug>/` |
 | Nested (review runs for a plan build, a plan id was passed) | `<working>/plans/<plan-id>/<review-id>/`, where `<review-id>` = `review-<YYYY-MM-DD>` (append `-2`, `-3`, ... on a same-day collision in that plan folder) |
 
-`<fix-id>` = `<review-id>-fixes`.
-
 `review.md` frontmatter: `type: review`, date, branch, target, `status`
 (`in_progress` until roll-up, then `complete`), categories[], triage_status;
 body `## Categories` table (Category | Status [`complete` or `skipped`] |
@@ -87,7 +85,8 @@ Use `blank` until a human chooses an outcome.
   acceptance criteria.
 - Triage edits only `Disposition`, optionally adding a decision note below the
   solutions; identifier, severity, label, location, summary, and solutions stay
-  intact. A visual fix may append before/after verification evidence below the
-  solutions without changing those fields.
+  intact, except that the build-mode escalation gate (`fix-pass.md`) relabels a
+  rejected finding `triage`. A visual fix may append before/after verification
+  evidence below the solutions without changing those fields.
 - `escalated` marks a source finding copied into the standing deferred review;
   the copy keeps `Disposition: blank` for future triage.

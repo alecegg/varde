@@ -37,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the text nav_map. Tests: `route_method_and_path_captured_for_annotation_handlers`,
   `semantic_entrypoint_nestjs_controller_routes`.
 
+### Changed
+- **`context_pack` defaults to declaration rows.** It returns Function, Class,
+  Interface, Variable, Export, and Route symbols with persisted 1-based span
+  lines. Set `includeOccurrences: true` to add matching occurrence/control
+  rows; `fullResults: true` changes result caps, not kind filtering.
+- **`context_pack` can omit import-based test hints.** `includeTests` defaults
+  to `true`; setting it to `false` returns an empty `tests` array and skips
+  hint calculation.
+
 ### Fixed
 - **File `blast_radius` now reports potential downstream impact.** It follows
   transitive dependents through resolved edges and excludes the changed file.

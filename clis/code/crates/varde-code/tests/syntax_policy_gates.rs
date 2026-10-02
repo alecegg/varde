@@ -35,7 +35,11 @@ impl Repo {
             .env("HOME", &self.home)
             .output()
             .unwrap();
-        assert!(build.status.success(), "index build failed: {:?}", build.stderr);
+        assert!(
+            build.status.success(),
+            "index build failed: {:?}",
+            build.stderr
+        );
         let mut input = serde_json::json!({"repoRoot": self.root});
         if let Some(id) = selection {
             input["gateRules"] = serde_json::json!([id]);

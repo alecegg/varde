@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Pin the OpenCode adapter generation so results never depend on the host.
+export VARDE_AGENTS_OPENCODE_VERSION="${VARDE_AGENTS_OPENCODE_VERSION:-1.4.0}"
+OPENCODE_VARIANT=opencode.md
+[ "${VARDE_AGENTS_OPENCODE_VERSION%%.*}" -lt 2 ] || OPENCODE_VARIANT=opencode-v2.md
 
 AGENTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/varde-agent-generation.XXXXXX")"
@@ -12,19 +16,22 @@ fail() {
 
 "$AGENTS_DIR/generate.py" --check
 
-for harness in claude codex opencode; do
+for harness in claude codex opencode pi; do
   destination="$TEST_ROOT/install-$harness"
   "$AGENTS_DIR/install.sh" -t "$harness" -d "$destination" -f >/dev/null
   case "$harness" in
     claude) variant="claude.md"; extension="md" ;;
     codex) variant="codex.toml"; extension="toml" ;;
-    opencode) variant="opencode.md"; extension="md" ;;
+    opencode) variant="$OPENCODE_VARIANT"; extension="md" ;;
+    pi) variant="pi.md"; extension="md" ;;
   esac
   for profile in varde-executor varde-explorer varde-planner varde-reviewer; do
     stripped="$TEST_ROOT/$harness-$profile-stripped.$extension"
-    # install.sh -f now always appends the ownership marker (F4); drop the
-    # trailing blank line + marker line it adds before comparing.
-    sed '$d' "$destination/$profile.$extension" | sed '$d' >"$stripped"
+    # install.sh -f always appends a blank line, the ownership marker, and
+    # recorded-default lines; drop them before comparing.
+    sed -e '/^<!-- varde-default: /d' -e '/^# varde-default: /d' \
+      -e '/^<!-- varde-managed-agent -->$/d' -e '/^# varde-managed-agent$/d' \
+      "$destination/$profile.$extension" | sed '$d' >"$stripped"
     cmp "$AGENTS_DIR/$profile/$variant" "$stripped" ||
       fail "$harness installer changed generated $profile output"
   done
@@ -119,5 +126,62 @@ set -e
 [ "$drift_status" -eq 1 ] || fail "modified adapter passed verification"
 printf '%s\n' "$drift_output" | grep -F "stale: varde-planner/codex.toml" >/dev/null ||
   fail "drift output omitted exact changed path"
+
+# Spawn rules: only varde-explorer may be spawned, and only where granted.
+python3 - "$AGENTS_DIR" "$OPENCODE_VARIANT" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+opencode_variant = sys.argv[2]
+spawn_line = (
+    "spawn only `varde-explorer` (up to 2 at a time), and only if you have a spawn tool. "
+    "otherwise use the brief's explorer notes, then `varde-explore` for gaps."
+)
+
+
+def text(profile, variant):
+    return " ".join((root / profile / variant).read_text().lower().split())
+
+
+def header(profile, variant):
+    return (root / profile / variant).read_text().split("---", 2)[1]
+
+
+for variant in ("claude.md", "codex.toml", "opencode.md", "opencode-v2.md", "pi.md"):
+    explorer = text("varde-explorer", variant)
+    assert "never spawn agents" in explorer, variant
+    assert "spawn only `varde-explorer`" not in explorer, variant
+    for profile in ("varde-planner", "varde-executor", "varde-reviewer"):
+        body = text(profile, variant)
+        assert spawn_line in body, (profile, variant)
+        assert "without spawning or delegating" not in body, (profile, variant)
+    planner = text("varde-planner", variant)
+    assert "if this agent cannot delegate" not in planner, variant
+    assert "return to the caller requesting it, and finish only after the caller reports the verdict; never substitute self-review" in planner, variant
+    assert "do the task yourself; spawn no agent but `varde-explorer`" in text("varde-executor", variant), variant
+    assert "wait for the verdict" not in planner and "wait at the gate" not in text("varde-executor", variant), variant
+    reviewer = text("varde-reviewer", variant)
+    assert "no agent tool" not in reviewer, variant
+    assert "when the read is over budget, report back to the caller to split the review; never split it yourself" in reviewer, variant
+
+for profile in ("varde-planner", "varde-executor", "varde-reviewer", "varde-explorer"):
+    grants = profile != "varde-explorer"
+    v1 = json.loads(next(l.removeprefix("permission: ") for l in header(profile, "opencode.md").splitlines() if l.startswith("permission: ")))
+    v2 = json.loads(next(l.removeprefix("permissions: ") for l in header(profile, "opencode-v2.md").splitlines() if l.startswith("permissions: ")))
+    subagent = [(r["resource"], r["effect"]) for r in v2 if r["action"] == "subagent"]
+    if grants:
+        assert v1["task"] == {"*": "deny", "varde-explorer": "allow"}, profile
+        assert subagent == [("*", "deny"), ("varde-explorer", "allow")], profile
+    else:
+        assert v1["task"] == "deny", profile
+        assert subagent == [("*", "deny")], profile
+    claude_tools = next(l for l in (root / profile / "claude.md").read_text().splitlines() if l.startswith("tools:"))
+    assert not {"Agent", "Task"} & {t.strip() for t in claude_tools.removeprefix("tools:").split(",")}, (profile, claude_tools)
+    codex_lines = (root / profile / "codex.toml").read_text().splitlines()
+    assert not [l for l in codex_lines if l.startswith("[") or l.split("=")[0].strip() in ("agents", "max_depth", "max_threads", "spawn")], profile
+print("Spawn rule assertions passed.")
+PY
 
 echo "Generated adapter and installer tests passed."

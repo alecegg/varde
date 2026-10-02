@@ -14,6 +14,7 @@ use std::process::{ChildStdin, ChildStdout, Stdio};
 use std::rc::Rc;
 use std::time::Duration;
 use toz_core::capture::{self, CaptureInput, Outcome as CaptureOutcome};
+use toz_core::profile;
 use toz_core::raw::{RawError, RawStore};
 use toz_core::redact::NeverCapture;
 use toz_core::script::{CommandCaller, Limits, LineSource, Meta, Outcome};
@@ -265,7 +266,8 @@ fn capture_worker_output(
 ) -> Result<Value> {
     let mut store = open_store(cfg, project)?;
     let session = toz_core::config::env("TOZ_SESSION").ok();
-    let outcome = streaming::run(
+    let (profiles, _) = profile::load_profiles(project);
+    let outcome = streaming::run_with_profiles(
         cfg,
         &mut store,
         CaptureInput {
@@ -285,9 +287,12 @@ fn capture_worker_output(
         stdout,
         stderr,
         usize::try_from(stdout_bytes.saturating_add(stderr_bytes)).unwrap_or(usize::MAX),
+        &profiles,
     )?;
     Ok(match outcome {
-        CaptureOutcome::Captured(preview) => json!({"state":"captured","handle":preview.handle}),
+        CaptureOutcome::Captured(preview) => {
+            json!({"state":"captured","handle":preview.handle,"preview":preview.render()})
+        }
         CaptureOutcome::Skipped { rule } => json!({"state":"excluded","rule":rule}),
         CaptureOutcome::PassThrough => json!({"state":"unavailable"}),
     })

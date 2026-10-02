@@ -6,7 +6,7 @@
       "prompt": "I'm not sure what the new dashboard landing page should look like. Can you prototype three directions for the layout and hierarchy? Use the slug dashboard-layout. Save the standalone files under memory-bank/working/prototypes/dashboard-layout/ in this evaluation sandbox.",
       "expected_output": "Standalone visual-track invocation. The skill states the resolved storage path memory-bank/working/prototypes/dashboard-layout/ and creates exactly three structurally different full-page variants at variant-a.html through variant-c.html. Each has an identical fixed switcher bar with real <a href> links and no JavaScript. It reports a file path first, then asks the user to select a direction or hybrid with a recommendation. It ends that round without writing v1.html; v1 follows the user's selection.",
       "assertions": [
-        "Storage root is under the resolved <working>/prototypes/<slug>/ (standalone, not the plan= path)",
+        "Storage root is under the resolved <working>/prototypes/<slug>/ (standalone, not the plan-owned path)",
         "Round 1 variants are written to variant-<a|b|c...>.html files, each a complete standalone full-page mockup",
         "The inter-variant switcher uses plain <a href> navigation with no JavaScript",
         "Each round reports the HTML file path on disk first; any Artifact/mcp__visualize preview is additive, never the sole delivery",
@@ -25,13 +25,14 @@
     },
     {
       "id": 2,
-      "prompt": "This prototype looks great. Ship it \u2014 write the plan and start implementing the real component so we don't lose the momentum.",
+      "prompt": "The prototype at memory-bank/working/prototypes/profile-panel/v1.html looks great. Ship it \u2014 write the plan and start implementing the real component so we don't lose the momentum.",
       "expected_output": "The explicit follow-up authorizes starting `varde-change` in this turn without asking for renewed confirmation. The agent carries the prototype's decisions into the matching plan or bounded build route; unresolved design still follows the plan's own approval gates. Prototype HTML remains a throwaway artifact rather than production source.",
       "assertions": [
         "The explicit user request starts the matching varde-change route in the same turn without reconfirming that request",
         "The prototype's decisions inform the production work, but the HTML shell is not copied into production as-is",
         "Any unresolved design follows varde-change's own plan approval and implementation checks"
       ],
+      "setup_script": "evals/setup-prototype-eval.sh",
       "env": {
         "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
         "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",

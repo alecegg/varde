@@ -8,7 +8,7 @@ Read-only: never fix, change status, or tick criteria.
 |---|---|
 | Plan identifier or slug | Matching `<working>/plans/<plan-id>/plan.md` |
 | Feature or group | Group plan and every nested child plan |
-| No target | Most recent completed date-prefixed plan |
+| No target | Most recent completed date-prefixed plan; none: report that and stop |
 
 List ambiguous slug matches and ask once.
 State the resolved identifier and current status.

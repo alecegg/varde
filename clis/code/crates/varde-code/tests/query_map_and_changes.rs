@@ -44,6 +44,306 @@ mod context_pack_mode {
         db
     }
 
+    fn test_hint_db() -> PathBuf {
+        let db = temp_db("context-pack-test-hints");
+        let files = vec!["src/product.ts".into(), "tests/product_test.ts".into()];
+        let entities = vec![
+            context_entity(0, EntityKind::Function, "needle_handler", 1, 1),
+            context_entity(1, EntityKind::Import, "../src/product.ts", 1, 1),
+        ];
+        let graph = resolve::resolve(&entities, &[], &files).expect("resolve fixture imports");
+        assert!(
+            graph.edges.iter().any(|edge| {
+                edge.from == 1
+                    && edge.to == EdgeTarget::File(0)
+                    && edge.kind == EdgeKind::Import
+                    && edge.resolved
+            }),
+            "test fixture must contain a resolved import from the test file"
+        );
+        let output = ExtractOutput {
+            entities,
+            symbols: vec![],
+            diagnostics: vec![],
+            file_meta: vec![
+                FileMeta {
+                    mtime: 0,
+                    size: 0,
+                    content_hash: "0000000000000000".to_string(),
+                };
+                files.len()
+            ],
+            files,
+        };
+        persist_fixture(&db, output, &graph);
+        db
+    }
+
+    fn context_entity(
+        file_id: u32,
+        kind: EntityKind,
+        name: &str,
+        start_line: u32,
+        end_line: u32,
+    ) -> Entity {
+        let mut entity = fn_entity(file_id, name);
+        entity.kind = kind;
+        entity.span.start_line = start_line;
+        entity.span.end_line = end_line;
+        entity
+    }
+
+    fn declaration_contract_db() -> PathBuf {
+        context_db(
+            vec![
+                context_entity(0, EntityKind::Function, "route", 1, 1),
+                context_entity(0, EntityKind::Function, "route_handler", 2, 4),
+                context_entity(0, EntityKind::Function, "route_handler", 8, 10),
+                context_entity(0, EntityKind::Class, "route_class", 12, 14),
+                context_entity(0, EntityKind::Interface, "route_interface", 16, 18),
+                context_entity(0, EntityKind::Variable, "route_value", 20, 20),
+                context_entity(0, EntityKind::Export, "route_export", 22, 23),
+                context_entity(0, EntityKind::Route, "route_endpoint", 25, 27),
+                context_entity(1, EntityKind::Parameter, "route_parameter", 2, 2),
+                context_entity(1, EntityKind::Call, "route_call", 4, 4),
+                context_entity(1, EntityKind::ControlFlow, "route_branch", 6, 7),
+            ],
+            vec!["src/route.rs".into(), "src/occurrence_only.rs".into()],
+        )
+    }
+
+    #[test]
+    fn defaults_to_declarations_with_persisted_spans_and_keeps_occurrence_seeds() {
+        let db = declaration_contract_db();
+        let env = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"route handler route route_handler","fullResults":true}}"#,
+                db.display()
+            ),
+        );
+
+        assert_eq!(env["ok"], true, "{env}");
+        let symbols = env["data"]["symbols"].as_array().expect("symbols array");
+        let names: Vec<_> = symbols
+            .iter()
+            .map(|symbol| symbol["name"].as_str().unwrap())
+            .collect();
+        for name in [
+            "route",
+            "route_handler",
+            "route_class",
+            "route_interface",
+            "route_value",
+            "route_export",
+            "route_endpoint",
+        ] {
+            assert!(names.contains(&name), "missing declaration {name}: {env}");
+        }
+        assert_eq!(
+            names.iter().filter(|name| **name == "route").count(),
+            1,
+            "{env}"
+        );
+        assert_eq!(
+            names
+                .iter()
+                .filter(|name| **name == "route_handler")
+                .count(),
+            2,
+            "same-name declarations with distinct persisted spans must survive: {env}"
+        );
+        assert!(
+            symbols.iter().all(|symbol| matches!(
+                symbol["kind"].as_str(),
+                Some("function" | "class" | "interface" | "variable" | "export" | "route")
+            )),
+            "default symbols must contain declaration kinds only: {env}"
+        );
+
+        let handler_spans: Vec<_> = symbols
+            .iter()
+            .filter(|symbol| symbol["name"] == "route_handler")
+            .map(|symbol| symbol["span"].clone())
+            .collect();
+        assert_eq!(
+            handler_spans,
+            vec![
+                serde_json::json!({"start_line": 2, "end_line": 4}),
+                serde_json::json!({"start_line": 8, "end_line": 10}),
+            ],
+            "persisted line spans must be preserved in deterministic entity order: {env}"
+        );
+
+        let occurrence_seed = env["data"]["files"]
+            .as_array()
+            .expect("files array")
+            .iter()
+            .find(|file| file["path"] == "src/occurrence_only.rs")
+            .expect("occurrence-only file remains discoverable");
+        assert_eq!(occurrence_seed["relevance"], "seed", "{env}");
+    }
+
+    #[test]
+    fn test_hints_can_be_disabled_without_changing_navigation_facts() {
+        let db = test_hint_db();
+        let default = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"needle","fullResults":true}}"#,
+                db.display()
+            ),
+        );
+        let explicit_true = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"needle","includeTests":true,"fullResults":true}}"#,
+                db.display()
+            ),
+        );
+        let without_tests = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"needle","includeTests":false,"fullResults":true}}"#,
+                db.display()
+            ),
+        );
+
+        assert_eq!(default["ok"], true, "{default}");
+        assert_eq!(explicit_true["ok"], true, "{explicit_true}");
+        assert_eq!(without_tests["ok"], true, "{without_tests}");
+        assert_eq!(
+            default["data"]["tests"],
+            serde_json::json!([{
+                "path": "tests/product_test.ts",
+                "coversFile": "src/product.ts"
+            }])
+        );
+        assert_eq!(explicit_true["data"], default["data"]);
+        assert_eq!(without_tests["data"]["tests"], serde_json::json!([]));
+        for key in ["files", "symbols", "readingOrder"] {
+            assert_eq!(without_tests["data"][key], default["data"][key], "{key}");
+        }
+
+        for invalid in [
+            serde_json::json!("false"),
+            serde_json::json!(0),
+            serde_json::Value::Null,
+            serde_json::json!([]),
+        ] {
+            let input = serde_json::json!({
+                "dbPath": db.display().to_string(),
+                "query": "needle",
+                "includeTests": invalid,
+                "fullResults": true
+            });
+            let invalid_env = envelope("context_pack", &input.to_string());
+            assert_eq!(invalid_env["ok"], false, "{invalid_env}");
+            assert_eq!(invalid_env["data"]["error"]["code"], "invalid_input");
+        }
+    }
+
+    #[test]
+    fn occurrences_are_opt_in_and_full_results_only_bypass_caps() {
+        let db = declaration_contract_db();
+        let bounded = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"route","maxTokensEstimate":4000}}"#,
+                db.display()
+            ),
+        );
+        assert_eq!(bounded["ok"], true, "{bounded}");
+        let bounded_symbols = bounded["data"]["symbols"]
+            .as_array()
+            .expect("symbols array");
+        assert!(
+            bounded_symbols.iter().all(|symbol| matches!(
+                symbol["kind"].as_str(),
+                Some("function" | "class" | "interface" | "variable" | "export" | "route")
+            )),
+            "bounded results must still apply declaration filtering: {bounded}"
+        );
+
+        let bounded_with_occurrences = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"route","includeOccurrences":true,"maxTokensEstimate":4000}}"#,
+                db.display()
+            ),
+        );
+        let bounded_occurrence_symbols = bounded_with_occurrences["data"]["symbols"]
+            .as_array()
+            .expect("symbols array");
+        assert!(
+            bounded_occurrence_symbols.len() < 11,
+            "{bounded_with_occurrences}"
+        );
+        assert!(
+            bounded_occurrence_symbols
+                .iter()
+                .any(|symbol| symbol["kind"] == "call"),
+            "occurrence selection still respects caps: {bounded_with_occurrences}"
+        );
+
+        let complete = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"route","fullResults":true,"resultsLimit":1,"maxTokensEstimate":1}}"#,
+                db.display()
+            ),
+        );
+        assert_eq!(complete["ok"], true, "{complete}");
+        let complete_symbols = complete["data"]["symbols"]
+            .as_array()
+            .expect("symbols array");
+        assert!(complete_symbols.len() > bounded_symbols.len(), "{complete}");
+        assert_eq!(
+            complete_symbols.len(),
+            8,
+            "fullResults returns every declaration: {complete}"
+        );
+        assert!(
+            complete_symbols.iter().all(|symbol| matches!(
+                symbol["kind"].as_str(),
+                Some("function" | "class" | "interface" | "variable" | "export" | "route")
+            )),
+            "fullResults must not disable declaration filtering: {complete}"
+        );
+        assert_eq!(
+            complete["data"]["files"].as_array().unwrap().len(),
+            2,
+            "fullResults bypasses the file result cap: {complete}"
+        );
+
+        let with_occurrences = envelope(
+            "context_pack",
+            &format!(
+                r#"{{"dbPath":"{}","query":"route","includeOccurrences":true,"fullResults":true}}"#,
+                db.display()
+            ),
+        );
+        assert_eq!(with_occurrences["ok"], true, "{with_occurrences}");
+        let symbols = with_occurrences["data"]["symbols"]
+            .as_array()
+            .expect("symbols array");
+        assert_eq!(symbols.len(), 11, "{with_occurrences}");
+        assert!(symbols.iter().any(|symbol| symbol["kind"] == "parameter"));
+        assert!(symbols.iter().any(|symbol| symbol["kind"] == "call"));
+        assert!(
+            symbols
+                .iter()
+                .any(|symbol| symbol["kind"] == "control_flow")
+        );
+        assert!(
+            symbols[..8].iter().all(|symbol| matches!(
+                symbol["kind"].as_str(),
+                Some("function" | "class" | "interface" | "variable" | "export" | "route")
+            )),
+            "declarations remain ahead of occurrence rows: {with_occurrences}"
+        );
+    }
+
     #[test]
     fn unions_exact_and_fuzzy_tokens_and_ranks_declarations_first() {
         let mut declaration = fn_entity(0, "router_handler");
@@ -75,8 +375,11 @@ mod context_pack_mode {
             .map(|symbol| symbol["name"].as_str().unwrap())
             .collect();
         assert!(names.contains(&"router_handler"), "{env}");
-        assert!(names.contains(&"router"), "{env}");
         assert!(names.contains(&"handler"), "{env}");
+        assert!(
+            !names.contains(&"router"),
+            "occurrence rows are hidden by default: {env}"
+        );
         assert_eq!(symbols[0]["name"], "router_handler", "{env}");
     }
 

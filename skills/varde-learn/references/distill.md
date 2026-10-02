@@ -27,12 +27,12 @@ Run this workflow only when the user asks to review recurring friction.
 5. Ask for approval of (a) the exact source scope, including installed copies,
    and (b) billed eval runs with cost (`references/evals.md`); the request to
    review friction implies neither.
-6. Apply the approved source change through
-   `varde-change build` (micro-change route); have
-   `varde-agent-doc-authoring` review any skill or agent-document diff first.
-   If evals were approved, run the same cases from `references/evals.md`
-   before and after it and compare results.
-7. After applying the approved source change, record one adoption for its source
+6. If evals were approved, run the cases from `references/evals.md` first, as
+   the "before" run.
+7. Apply the approved source change through
+   `varde-change build` (micro-change route). If evals were approved, rerun
+   the same cases and compare results.
+8. After applying the approved source change, record one adoption for its source
    items:
 
    ```sh

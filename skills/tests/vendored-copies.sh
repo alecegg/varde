@@ -28,8 +28,8 @@ for skill_md in sorted(glob.glob("varde-*/SKILL.md")):
     if normalized_paragraph not in normalized_text:
         sys.exit(f"FAIL: {skill_md}'s memory paragraph differs from the pinned text")
 
-if checked != 7:
-    sys.exit(f"FAIL: expected 7 SKILL.md files to inline the memory paragraph, found {checked}")
+if checked != 6:
+    sys.exit(f"FAIL: expected 6 SKILL.md files to inline the memory paragraph, found {checked}")
 
 print(f"memory-location paragraph: pinned text matched in {checked} SKILL.md file(s)")
 PY

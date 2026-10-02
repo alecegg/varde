@@ -10,7 +10,13 @@
         "Output is a single self-contained HTML file at <working>/explanations/YYYY-MM-DD-<slug>.html with no external stylesheets, scripts, images, or fonts",
         "Contains exactly the three sections Background, Intuition, and How It Works"
       ],
-      "setup_script": "evals/setup-explore-fixture.sh"
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 2,
@@ -21,18 +27,30 @@
         "The confirmation is posed inline in the message text as a numbered menu, not via a native question-prompt tool like AskUserQuestion",
         "No HTML file is written until the target shape is resolved"
       ],
-      "setup_script": "evals/setup-explore-fixture.sh"
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 3,
       "prompt": "Walk me through the changes on the feature/rate-limiter branch versus main and give me a markdown write-up.",
-      "expected_output": "The target is a git ref, so it is a change explanation: the git ref is resolved to a concrete diff against main and the changed hunks are read. Because the user asked for a markdown write-up, the skill answers in the conversation in markdown instead of writing the default HTML file, still grounded in the changed hunks file by file.",
+      "expected_output": "An explicitly named non-HTML format stays in chat, so explain mode is not used. The branch is resolved to a concrete diff against main and the changed hunks are read; the answer is markdown in the conversation, grounded in the changed hunks file by file, and no file is written.",
       "assertions": [
-        "Resolves to a change explanation because the target is a git ref (branch comparison)",
+        "Answers in chat rather than explain mode because the request names a non-HTML format (markdown)",
         "The explanation is grounded in the concrete diff's changed hunks, not only current file contents",
         "Honors the markdown request by answering in the conversation in markdown; no HTML file is written"
       ],
-      "setup_script": "evals/setup-explore-fixture.sh"
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 4,
@@ -45,7 +63,13 @@
         "Creates no plan file, task file, or production code change",
         "Any offer to move to varde-change plan waits for explicit user confirmation"
       ],
-      "setup_script": "evals/setup-explore-fixture.sh"
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 5,
@@ -57,7 +81,13 @@
         "Cites specific files or symbols as evidence for the mechanism described",
         "Does not treat 'how does it work' as a request for the explain-mode artifact"
       ],
-      "setup_script": "evals/setup-explore-fixture.sh"
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 6,
@@ -68,7 +98,13 @@
         "Does not ask for a second confirmation of the user's explicit request",
         "Follows varde-change's planning and implementation checks rather than treating the exploration answer as an implementation contract"
       ],
-      "setup_script": "evals/setup-explore-fixture.sh"
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     }
   ]
 }

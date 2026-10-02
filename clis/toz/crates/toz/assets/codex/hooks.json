@@ -1,12 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          { "type": "command", "command": "{{TOZ_BIN_SHELL}} note --harness codex", "timeout": 5 }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "*",

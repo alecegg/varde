@@ -8,11 +8,13 @@ the user explicitly approves the run and its cost.
 
 ## Cases and assertions
 
-1. Create `evals/evals.json` with:
-   - realistic prompts;
+Eval files edit the skill: route them through `varde-change`.
+
+1. Create `evals/evals.json` as `{skill_name, evals:[...]}`, each eval with:
+   - `id` and a realistic `prompt`;
    - a human-readable `expected_output`;
-   - optional input `files`;
-   - objectively checkable `assertions`.
+   - objectively checkable `assertions`;
+   - optional `files`, `setup_script`, and `verification_script`.
 2. Start with 2-3 cases, including an edge case.
 3. Review outputs before writing assertions.
 
@@ -58,6 +60,6 @@ copy (`skills/install.sh -d <temp-dir> -s <skill>`, then
    varde-learn eval trigger <skill-name> <queries.json> --harness <harness> --runs 1
    ```
 
-3. Expect positive cases to pass above 0.5. Repeat uncertain cases with
-   `--runs 3`.
+3. A positive passes when it triggers in more than half its runs; a negative
+   passes otherwise. Repeat uncertain cases with `--runs 3`.
 4. Expand to ~20 prompts × 3 runs only when misfires persist.

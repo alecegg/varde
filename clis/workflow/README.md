@@ -56,9 +56,12 @@ varde-workflow spec inventory --repository <root> --knowledge <dir> --working <d
 varde-workflow validate <artifact> [--json]
 varde-workflow recover [--root <dir>] [--json]
 varde-workflow graph <plan> [--limit <n>] [--offset <n>] [--all] [--json]
+varde-workflow check-task-ownership --task <file> --commit <ref> [--repo-root <dir>] [--json]
+varde-workflow execution-wave <plan-dir> [--repo-root <dir>] [--max-workers <n>] [--json]
 varde-workflow readiness <plan> [--json]
 varde-workflow transition <artifact> <state> [--json]
 varde-workflow conclude <plan> [--json]
+varde-workflow escalate-deferred --plan-dir <absolute-dir> --deferred-dir <absolute-dir> [--json]
 varde-workflow review init --plan <plan> --repository <root> (--scope <path> | --artifact <absolute-file>)... [--json]
 varde-workflow review init --subject <id> --contract <file> --repository <root> (--scope <path> | --artifact <absolute-file>)... [--json]
 varde-workflow review inspect --subject <id> --phase <phase> [--json]
@@ -74,10 +77,55 @@ varde-workflow review expand --subject <id> --expected-version <revision> (--sco
 varde-workflow conclusion-status <plan> [--json]
 varde-workflow conclusion-retry <plan> [--json]
 varde-workflow conclusion-action <plan> <reflection|friction|handoff> [--output <path>] [--failed] [--json]
+varde-workflow instructions install [--target <path>]... [--max-agents <n>] [--dry-run]
+varde-workflow instructions targets
+varde-workflow instructions remove [--dry-run]
 varde-workflow paths [--project <root>] [--json]
 varde-workflow paths set [--project <root> | --default] [--working <dir>] [--knowledge <dir>] [--toz <dir>] [--learn <dir>] [--json]
 varde-workflow paths unset [--project <root> | --default] [--working] [--knowledge] [--toz] [--learn] [--json]
 ```
+
+`check-task-ownership` audits one source commit against a task's `modifies`,
+`creates`, and both rename endpoints. Paths use exact Git spelling; the task
+file itself is excluded when it resolves inside the repository. Repository
+root defaults to the current directory. Root commits include their files;
+merge commits are rejected. Missing ownership fields or `kind: spike` skip
+commit inspection; present empty lists still audit every changed source path.
+
+Plain output is `{status, stray, declared, changed}` JSON. `--json` wraps the
+same data in the shared success envelope, including a `stray` result. Exit 0
+means `ok` or `skipped`; exit 2 means stray paths (also command-line syntax
+errors); task, revision, Git, and merge errors exit 1 with typed errors in
+JSON mode. The command writes no repository or workflow state.
+
+`execution-wave` reads `<plan-dir>/tasks/*.md` and proposes an ordered wave
+of ready tasks. The worker default and ceiling are 3. Repository discovery
+uses Git; pass `--repo-root` when the plan is outside a Git checkout.
+Plain output is the scheduler JSON object (`schema_version: 3`); `--json`
+places that object in the shared envelope's `data` field. Input errors exit
+1, command-line syntax errors exit 2, and dependency cycles exit 3.
+
+Writes, transitive code reach, and verification resources determine conflicts.
+The command uses the installed `varde-code` through `PATH`, with bounded
+read-only queries and Git basename fallback for successful empty graphs.
+Failed queries exclude that task from parallel candidates; uncertain ownership
+keeps the whole wave serial. With no parallel wave, the first eligible ready
+task runs alone. Tasks mentioning another unfinished task's created or renamed
+path are held pending an explicit dependency. Shared compile units, refactor
+posture, and spike kind select `worktree` mode for multi-task waves.
+It dispatches nothing, writes no workflow state, and starts no index or watcher.
+
+`escalate-deferred` copies blank findings with valid escalation notes from a
+plan's direct child reviews, preserves their Markdown and provenance, then
+marks the originals escalated. The plan must be under configured
+`<working>/plans`; the destination must be disjoint and under `<working>`.
+Reruns deduplicate by source review and finding ID, including legacy partial
+copies. A shared working-store lock serializes allocation across checkouts.
+Interrupted writes leave `<working>/.varde-workflow-escalation.json`; run
+`recover --root <repository>` before retrying. Recovery validates source
+revisions and the permitted bookkeeping writes. Conclusion approval remains
+required for `conclude` and its recovery.
+New reviews use the local calendar date from the platform `date` command.
 
 `--bundle` points at a Knowledge Bundle root directory (holds Concept `.md`
 files); when omitted, `list`, `search`, and `lint` default to the project's
@@ -116,6 +164,66 @@ roots yields `architecture_status: inspect` and appears in
 `--acknowledge-architecture-path` records its current hash and clears that
 status; a content change requires inspection again. Its cache is advisory;
 `conclude` still validates source hashes and covered paths independently.
+
+## Instruction block
+
+`varde sync` installs or refreshes the managed Varde block in configured global
+instruction files. When no targets are configured, an interactive sync prompts
+for them; `--yes` and noninteractive runs print a setup warning. This block is
+required: Varde will not work as designed until it is installed. Use one
+canonical `AGENTS.md` in a standard global or personal Git-tracked location, then
+symlink it into each harness.
+
+```sh
+varde-workflow instructions install --target <path>
+varde-workflow instructions install --max-agents <n>
+varde-workflow instructions targets
+varde-workflow instructions remove
+```
+
+`--target` can be repeated and replaces the configured target list. Targets are
+persisted, so `varde sync` refreshes them on later runs. `--max-agents` persists
+the new cap and rewrites the blocks; after editing `[orchestration].max_agents`
+by hand, rerun `varde sync`. `targets` prints the configured files, and `remove`
+strips the managed block from each target and clears `[instructions].targets`.
+
+## Session-start hook
+
+`varde-workflow hook session-start --harness claude|codex|opencode|pi` prints
+session-start context for one harness. It runs the providers listed in
+`~/.config/varde/config.toml` in order, each limited to 5 seconds, and reports
+a failed or timed-out provider as a notice in the context. It always exits 0.
+
+```toml
+[hooks.session_start]
+providers = ["nav_map"]  # default
+```
+
+Legacy `orchestration` and `toz_note` entries are skipped. The orchestration
+brief is in the managed Varde instruction block.
+
+`varde-workflow hook install|remove --harness <h> [--dry-run]` writes or
+removes the hook entry (Claude `settings.json`, Codex `hooks.json`, opencode
+`plugin/varde-session.ts`, Pi `extensions/varde-session.ts`) with a 20 second entry timeout. `varde sync` runs
+`varde-code hooks remove` and then `hook install` for each of these harnesses.
+For Codex, `hook install` also drops leftover `varde-code nav_map` SessionStart
+entries from `hooks.json`; `varde-code hooks remove` owns the Claude one.
+`varde sync` also removes the legacy varde-code Pi hook.
+
+### Child sessions
+
+The brief is for main sessions; harnesses handle child sessions differently:
+
+- **Claude Code:** subagents were verified not to receive the brief.
+- **OpenCode v1:** the plugin skips child sessions (`Session.parentID`), as does the
+  v2 plugin (`session.get`). Both bound the lookup at 2s and inject on failure.
+- **Pi:** the extension skips sessions with no session file or with a
+  `parentSession`. So `--no-session`, `/fork`, and `/clone` main sessions get
+  no brief, and a persisted child of a `--no-session` main session does.
+- **pi-subagents:** Varde's Pi agents use `prompt_mode: replace`, so they get
+  no brief. Agents in `append` mode (for example its default
+  `general-purpose`) inherit the parent's final system prompt, brief and toz
+  note included, by that package's design.
 
 ## Memory locations
 

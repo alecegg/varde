@@ -3,18 +3,18 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
-SUPPORTED_AGENTS="claude codex opencode"
+SUPPORTED_AGENTS="claude codex opencode pi"
 
 usage() {
   cat <<'EOF'
 Usage: varde sync [--agents ids] [--yes] [--dry-run] [--no-cli] [--list-agents]
                    [--skills-dir path]...
-                   [--agents-dir path --agent-format <claude|codex|opencode>]...
+                   [--agents-dir path --agent-format <claude|codex|opencode|pi>]...
                    [-h]
 
 Install varde CLIs and wire skills and agents into supported agent harnesses.
 
-  --agents ids     Comma-separated harness ids: claude, codex, opencode
+  --agents ids     Comma-separated harness ids: claude, codex, opencode, pi
   --yes            Install every detected harness without prompting
   --dry-run        Show files that would be installed without writing
   --no-cli         Skip installing varde-code, varde-workflow, varde-toz, and varde-learn
@@ -26,11 +26,8 @@ Install varde CLIs and wire skills and agents into supported agent harnesses.
   --agents-dir     Install agents into this directory. Must be followed by
                     --agent-format. Repeatable.
   --agent-format   Agent file format for the preceding --agents-dir:
-                    claude, codex, or opencode.
+                    claude, codex, opencode, or pi.
   -h               Show this help
-
-Example (pi harness, which has no built-in detection):
-  varde sync --skills-dir ~/.pi/agent/skills
 EOF
 }
 
@@ -50,6 +47,7 @@ skills_dir() {
     claude) printf '%s\n' "$HOME/.claude/skills" ;;
     codex) printf '%s\n' "$HOME/.codex/skills" ;;
     opencode) printf '%s\n' "$HOME/.config/opencode/skills" ;;
+    pi) ;; # Pi reads the canonical ~/.agents/skills directly.
   esac
 }
 
@@ -57,6 +55,7 @@ detected_agents() {
   [ -d "$HOME/.claude" ] && printf '%s\n' claude
   [ -d "$HOME/.codex" ] && printf '%s\n' codex
   [ -d "$HOME/.config/opencode" ] && printf '%s\n' opencode
+  if [ -d "$HOME/.pi" ] || [ -n "${PI_CODING_AGENT_DIR:-}" ]; then printf '%s\n' pi; fi
 }
 
 toz_harness_for() {
@@ -64,6 +63,7 @@ toz_harness_for() {
     claude) printf '%s\n' "claude-code" ;;
     codex) printf '%s\n' "codex" ;;
     opencode) printf '%s\n' "opencode" ;;
+    pi) printf '%s\n' "pi" ;;
   esac
 }
 
@@ -261,7 +261,7 @@ if [ -n "$SELECTED" ] || [ -n "$CUSTOM_SKILLS_DIRS" ]; then
   if [ "$DRY_RUN" -eq 1 ]; then
     "$ROOT_DIR/skills/install.sh" -d "$CANONICAL_SKILLS_DIR" -m -n
   else
-    "$ROOT_DIR/skills/install.sh" -d "$CANONICAL_SKILLS_DIR" -m
+    VARDE_SKILLS_SKIP_CLI_CHECK=1 "$ROOT_DIR/skills/install.sh" -d "$CANONICAL_SKILLS_DIR" -m
   fi
 fi
 
@@ -313,25 +313,101 @@ fi
 for agent in $SELECTED; do
   skill_target=$(skills_dir "$agent")
   if [ "$DRY_RUN" -eq 1 ]; then
-    "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m -n
+    [ -z "$skill_target" ] || "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m -n
     "$ROOT_DIR/agents/install.sh" -t "$agent" -m -n
   else
-    "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m
+    [ -z "$skill_target" ] || "$ROOT_DIR/skills/install.sh" -d "$skill_target" -l "$CANONICAL_SKILLS_DIR" -m
     "$ROOT_DIR/agents/install.sh" -t "$agent" -m
   fi
+
+  # Pi's config and extension directories follow PI_CODING_AGENT_DIR when set.
+  pi_dir=""
+  [ "$agent" != pi ] || pi_dir=${PI_CODING_AGENT_DIR:-}
 
   toz_harness=$(toz_harness_for "$agent")
   if [ "$HAVE_TOZ" -eq 1 ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
-      echo "would run: $TOZ_CLI install $toz_harness"
+      echo "would run: $TOZ_CLI install $toz_harness${pi_dir:+ --dir $pi_dir}"
     else
-      "$TOZ_CLI" install "$toz_harness"
+      "$TOZ_CLI" install "$toz_harness" ${pi_dir:+--dir "$pi_dir"}
     fi
   elif [ "$TOZ_WARNED" -eq 0 ]; then
     echo "varde-toz not found; install it with: cargo install --path $ROOT_DIR/clis/toz/crates/toz --locked"
     TOZ_WARNED=1
   fi
+
+  # Replace legacy varde-code nav_map hooks with the unified session hook.
+  if command -v varde-code >/dev/null 2>&1; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "would run: varde-code hooks remove --agent $agent${pi_dir:+ --dir $pi_dir/extensions}"
+    else
+      remove_out=$(varde-code hooks remove --agent "$agent" ${pi_dir:+--dir "$pi_dir/extensions"}) || remove_out=""
+      case "$remove_out" in
+        *'"skippedModified":true'*)
+          echo "varde-code hooks remove skipped locally modified $agent entries; to discard them run: varde-code hooks remove --agent $agent${pi_dir:+ --dir $pi_dir/extensions} --force"
+          ;;
+      esac
+    fi
+  fi
+  if command -v varde-workflow >/dev/null 2>&1; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo "would run: varde-workflow hook install --harness $agent"
+    elif ! varde-workflow hook install --harness "$agent"; then
+      echo "could not install the $agent session hook; run: varde-workflow hook install --harness $agent"
+    fi
+  elif [ "$DRY_RUN" -eq 1 ]; then
+    echo "would run: varde-workflow hook install --harness $agent"
+  else
+    echo "varde-workflow not found; install it with: cargo install --path $ROOT_DIR/clis/workflow/varde-workflow --locked, then run: varde-workflow hook install --harness $agent"
+  fi
 done
+
+if ! command -v varde-workflow >/dev/null 2>&1; then
+  echo "varde-workflow not found; install it with: cargo install --path $ROOT_DIR/clis/workflow/varde-workflow --locked --target-dir $ROOT_DIR/clis/workflow/target"
+  echo "Varde will not work as designed until its instruction block is installed: agents will not delegate as designed or use toz captures. Install it with \`varde-workflow instructions install --target <file>\`. Use one canonical \`AGENTS.md\` symlinked into each harness."
+elif [ "$DRY_RUN" -eq 1 ]; then
+  echo "would run: varde-workflow instructions install"
+else
+  set --
+  if [ -z "$(varde-workflow instructions targets 2>/dev/null)" ] && [ "$ASSUME_YES" -eq 0 ] && [ -t 0 ]; then
+    instruction_suggestions=
+    instruction_suggestion_paths=
+    for instruction_agent in $SELECTED; do
+      case "$instruction_agent" in
+        claude) instruction_candidate="$HOME/.claude/CLAUDE.md" ;;
+        codex) instruction_candidate="${CODEX_HOME:-$HOME/.codex}/AGENTS.md" ;;
+        opencode) instruction_candidate="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/AGENTS.md" ;;
+        pi) instruction_candidate="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/AGENTS.md" ;;
+      esac
+      instruction_resolved=$(realpath "$instruction_candidate" 2>/dev/null || printf '%s' "$instruction_candidate")
+      if ! printf '%s\n' "$instruction_suggestion_paths" | grep -Fxq -- "$instruction_resolved"; then
+        instruction_suggestion_paths="${instruction_suggestion_paths}${instruction_suggestion_paths:+
+}$instruction_resolved"
+        instruction_suggestions="${instruction_suggestions}${instruction_suggestions:+, }$instruction_resolved"
+      fi
+    done
+    if [ -n "$instruction_suggestions" ]; then
+      printf 'Suggested instruction targets: %s\n' "$instruction_suggestions"
+    fi
+    echo 'Recommendation: use one canonical AGENTS.md symlinked into each harness.'
+    printf 'Instruction target paths (comma-separated, or Enter to skip): '
+    INSTRUCTION_ANSWER=
+    IFS= read -r INSTRUCTION_ANSWER || INSTRUCTION_ANSWER=
+    instruction_original_ifs=$IFS
+    case $- in *f*) instruction_had_noglob=1 ;; *) instruction_had_noglob=0 ;; esac
+    set -f
+    IFS=,
+    for instruction_raw_target in $INSTRUCTION_ANSWER; do
+      instruction_target=$(printf '%s\n' "$instruction_raw_target" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+      [ -n "$instruction_target" ] || continue
+      case "$instruction_target" in "~/"*) instruction_target=$HOME/${instruction_target#\~/} ;; esac
+      set -- "$@" --target "$instruction_target"
+    done
+    IFS=$instruction_original_ifs
+    [ "$instruction_had_noglob" -eq 1 ] || set +f
+  fi
+  varde-workflow instructions install "$@" || echo "could not install the instruction block; run: varde-workflow instructions install --target <file>"
+fi
 
 if [ -n "$CUSTOM_SKILLS_DIRS" ]; then
   printf '%s' "$CUSTOM_SKILLS_DIRS" | while IFS= read -r skill_target; do

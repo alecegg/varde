@@ -12,15 +12,22 @@ do not claim the rule was corrected.
 
 ## Workflow
 
-1. **Run the scan** without `"apply":true`, with every finding:
+Unless a caller's gate covers this work, initialize the
+`references/review-gates.md` subject and pass its `start` checkpoint before
+the first fix or suppression edit (step 5); after step 6, finish its final
+review and `complete` checkpoint before reporting.
+
+1. **Run the scan** without `--apply`, with every finding:
    ```bash
    varde-code scan --json '{"repoRoot":"<repo>","severityThreshold":"error","fullFindings":true}'
    ```
-   Check `ok`, `data.analysis.status`, and
-   `data.gate.status` independently. Resolve incomplete-analysis diagnostics
-   before certifying a result: suppressions never clear them, so exclude
-   intentionally malformed fixtures with repository `.ignore` entries and
-   document the scope.
+   On `index_missing` or `index_stale`, a coordinator applies the varde-code
+   skill's Index readiness and Fallback, then retries; a worker, or a
+   coordinator whose `watch --ensure` fails, reports the scan as unavailable.
+   Check `ok`, `data.analysis.status`, and `data.gate.status` independently.
+   Resolve incomplete-analysis diagnostics before certifying a result:
+   suppressions never clear them, so exclude intentionally malformed fixtures
+   with repository `.ignore` entries and document the scope.
 2. **Group findings by `rule_id`** (`data.findings_summary.by_rule` has the
    counts); the first decision usually settles its group.
 3. **Triage from the real code** at `location.file`:`location.span`;
@@ -34,12 +41,12 @@ do not claim the rule was corrected.
    reason.
 5. **Fix** real findings by hand in the file's style, guided by
    `data.rules.<rule_id>.remediation`, and suppress not-real ones with a
-   reason (Suppressions). Use the JSON field `"apply":true` only to apply every
+   reason (Suppressions). Use the `--apply` flag only to apply every
    remaining real rewrite finding after recording a verdict for each: it rewrites every
    unsuppressed match of every rewrite rule in the run, regardless of
    `severityThreshold`. It skips modified, staged, or untracked files
    (suppression edits count) as `skipped-dirty`; tell the user which, and use
-   the JSON field `"force":true` only with approval.
+   the `--force` flag only with approval.
 6. **Verify.** Re-run the scan (addressed findings gone, nothing new) and the
    project's test or build command.
 7. **Persist** each real or undecided finding left for the user, per
@@ -55,7 +62,8 @@ to SCAN.md with the next unused `SCAN-NNN` ID.
 - **Repeat scans:** match an existing finding by the scan finding's `id`
   (kept in its Summary), else by rule id, full location span, and resolved
   message; update its evidence instead of appending a duplicate.
-- **Fields:** severity error→high, warning→medium, info→info;
+- **Fields:** severity error→high only for findings confirmed real (code-confirmed),
+  undecided errors cap at medium, warning→medium, info→info;
   `Label: triage`; `Disposition: blank`; `Location` from `location.file` plus
   `location.span.start_line` when present.
 - **Summary:** the scan finding `id`, rule id, message

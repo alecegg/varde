@@ -1,12 +1,14 @@
 # Automated fix pass
 
-Process findings in category and file order. Check eligibility before doing
+Process findings in category and file order, and return each non-applied
+finding that needs a decision to the parent by identifier, with the reason
+and any `Escalated:` note. Check eligibility before doing
 any per-finding work (loading the block, validating its location, the plan
 gate, or backups):
 
 | Route | Eligible for automated application | Other dispositions |
 |---|---|---|
-| Standalone (`mode=standalone`) | `Label: auto-fix` with `Disposition: blank` or `fix` | Skip `dismiss`, `action-item`, and `escalated`; return other non-eligible findings that need a decision to the parent. |
+| Standalone (`mode=standalone`) | Only supplied `finding_ids` with `Disposition: fix` and decision evidence | Skip `dismiss`, `action-item`, and `escalated`; return other non-eligible findings that need a decision to the parent. |
 | Plan build (`mode=build`) | Any label with `Disposition: fix` | Send blank findings to parent triage without applying them; skip `dismiss`, `action-item`, and `escalated`. |
 
 For a selected bounded fix, process only the supplied `finding_ids`; other
@@ -26,9 +28,12 @@ For each eligible finding:
    substituting another. Otherwise pick the most reliable listed solution
    (mirrors a nearby pattern, touches the fewest files); if none is reliable,
    treat it as rejected in step 3.
-3. In build mode, run the gate below. On rejection, relabel `triage`, add
-   `**Escalated:**` after `Location` (values: report-format), leave
-   `Disposition:` blank, and move on.
+3. In build mode, run the gate below. On rejection, relabel `triage` and
+   leave `Disposition:` blank. Add one `**Escalated:**` value after
+   `Location`, then move on:
+   - `spec-conflict — <reason>`
+   - `scope-creep — <reason>`
+   - `human-only — <category>`
 4. Run `scripts/snapshot.sh save <backup-dir>/<finding-id> <file>...` under a
    per-run `$TMPDIR` directory for every file the fix will touch or create.
    Avoid `git stash`/`git checkout`, which would discard earlier fixes.
@@ -55,6 +60,14 @@ For each eligible finding:
    2's `assert:` lines); one passing before and after proves nothing. With
    none, re-read the path against `Summary` and record "confirmed by
    inspection".
+
+## Commit
+
+- In build mode, commit the round's applied fixes once at round end, staging
+  only their paths; leave unrelated edits unstaged.
+- For a PR source, commit only the verified fixes' paths on the local PR
+  branch. Pushing, replying to, or resolving threads each need the user's
+  explicit choice; the Executor never does them.
 
 ## When to defer to the user (under a build)
 

@@ -66,4 +66,12 @@ jq -e '.results[0].verdict == "PASS"' "$TEST_ROOT/skill-valid.json" >/dev/null \
   || fail "release verifier rejects an artifact at the sandbox-relative path"
 check_declared_assertion 3 "$TEST_ROOT/skill-valid.json"
 
+# Frontmatter validator unit tests need PyYAML; skip only when uv cannot supply it offline.
+if UV_PYTHON_PREFERENCE=only-system uv run --offline --no-project --with 'pyyaml>=6,<7' python -c 'import yaml' >/dev/null 2>&1; then
+  (cd "$SKILL_DIR" && UV_PYTHON_PREFERENCE=only-system uv run --offline evals/test-frontmatter-validator.py) \
+    || fail "frontmatter validator unit tests failed"
+else
+  echo "SKIP: frontmatter validator unit tests (PyYAML unavailable offline)"
+fi
+
 echo "PASS: agent doc authoring eval fixtures and artifact verifiers"

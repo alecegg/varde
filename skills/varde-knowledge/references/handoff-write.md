@@ -25,7 +25,8 @@
    explicit relevant file links inside and outside the repository; for a large
    target, link the relevant files and never imply full-directory coverage.
    Resolve each target independently of the handoff's location, store absolute
-   paths, and drop and report any missing one.
+   paths, and drop and report any missing one before running the snapshot
+   script.
 4. **Save it** to `<working>/handoffs/<YYYY-MM-DD>-<slug>/handoff.md` (UTC
    date, kebab-case slug) with this frontmatter, then report the handoff ID
    (the folder name) and path:
@@ -59,7 +60,7 @@
 
 ## Suggested next skill
 
-<the exact next invocation, e.g. "varde-change build, resuming the <plan-id> plan">
+<the exact next invocation, e.g. "`varde-change`, resuming plan <plan-id>">
 ```
 
 The body does not restate frontmatter.

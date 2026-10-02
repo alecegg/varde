@@ -12,13 +12,10 @@ Change status through `transition`, never by editing `status` directly:
 
 ```bash
 varde-workflow readiness <plan.md> --json
-varde-workflow graph <any-sibling>/plan.md --json
 varde-workflow transition <artifact.md> <state> --json
 varde-workflow validate <artifact.md> --json
 ```
 
-- Run `graph` on a sibling, not the parent. A group `plan.md` returns one node
-  and no edges.
 - A rejected transition (`workflow_blocked`) lists legal states and changes no
   bytes.
 - `recover --root <project-root>` finishes an interrupted accepted transition.

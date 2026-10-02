@@ -42,7 +42,7 @@ fn dispatch_command(command: Command) {
             json,
             format,
             with_project_knowledge,
-        } => return run_nav_map(&json, &format, with_project_knowledge),
+        } => run_nav_map(&json, &format, with_project_knowledge),
         Command::Extract { path } => run_extract(&path),
         Command::Build {
             repo_root,
@@ -712,11 +712,12 @@ fn run_nav_map(json: &str, format: &str, with_project_knowledge: bool) {
         let value = serde_json::from_str(&envelope).ok();
         let data = value.as_ref().and_then(successful_nav_map_data);
         let map = render_nav_map_text_with_toz_data(json, &envelope, data);
-        if with_project_knowledge && data.is_some() {
-            if let Some(knowledge) = render_project_knowledge(json) {
-                println!("{knowledge}\n\n{map}");
-                return;
-            }
+        if with_project_knowledge
+            && data.is_some()
+            && let Some(knowledge) = render_project_knowledge(json)
+        {
+            println!("{knowledge}\n\n{map}");
+            return;
         }
         println!("{map}");
     } else {
@@ -903,7 +904,9 @@ fn render_nav_map_orientation_data(data: &serde_json::Value) -> String {
 
     out.push_str("## Investigate further\n");
     out.push_str(
-        "- Expanded map (section caps still apply): `varde-code nav_map --json '{\"repoRoot\":\"<repo-root>\",\"maxTokensEstimate\":18446744073709551615}'`\n\
+        "- Find a declaration by name: `varde-code get_symbol --json '{\"repoRoot\":\"<repo-root>\",\"name\":\"<name>\"}'`\n\
+         - Find call sites (no index needed): `varde-code find_pattern --json '{\"repoRoot\":\"<repo-root>\",\"language\":\"<lang>\",\"pattern\":\"<name>($$$ARGS)\"}'`; methods use `$RECV.<name>($$$ARGS)`; qualified calls need the full path\n\
+         - Expanded map (section caps still apply): `varde-code nav_map --json '{\"repoRoot\":\"<repo-root>\",\"maxTokensEstimate\":18446744073709551615}'`\n\
          - Find relevant files and symbols: `varde-code context_pack --json '{\"repoRoot\":\"<repo-root>\",\"query\":\"<term>\"}'`\n\
          - Explore file dependencies from a file or symbol: `varde-code explore --json '{\"repoRoot\":\"<repo-root>\",\"query\":{\"params\":{\"input\":\"<file-or-symbol>\",\"direction\":\"outgoing\"}}}'`\n\
          - Inspect risk hotspots: `varde-code hotspots --json '{\"repoRoot\":\"<repo-root>\"}'`\n",
@@ -1829,6 +1832,16 @@ mod nav_map_text_tests {
         let result = render_nav_map_text_with_toz("{}", budgeted);
 
         assert_eq!(result, render_nav_map_orientation(budgeted));
+    }
+
+    #[test]
+    fn orientation_routes_declarations_and_call_sites() {
+        let (repo, _json, envelope) = nav_map_fixture("call-sites");
+        let orientation = render_nav_map_orientation(&envelope);
+        assert!(orientation.contains("varde-code get_symbol"));
+        assert!(orientation.contains("varde-code find_pattern"));
+        assert!(orientation.contains("$RECV.<name>($$$ARGS)"));
+        let _ = std::fs::remove_dir_all(repo);
     }
 
     /// No `toz` on `PATH` at all: the compact orientation is returned.

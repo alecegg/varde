@@ -156,6 +156,40 @@ test("nested bash and powershell prefer a string structured output", async (t) =
   }
 });
 
+test("nested shell captures persisted full output before the display precheck", async (t) => {
+  const full = "start\n" + "middle-line\n".repeat(180_000) + "tail-sentinel\n";
+  for (const toolName of ["bash", "powershell"]) {
+    await t.test(toolName, async () => {
+      await resetCalls(); setMode("success");
+      const fullPath = join(testRoot, `${toolName}-full.txt`);
+      await writeFile(fullPath, full);
+      const structuredContent = Object.freeze({ output: "tiny display", full_output_path: fullPath });
+      const input = Object.freeze({ command: `${toolName} original command` });
+      const content = Object.freeze([Object.freeze({ type: "text", text: "tiny display" })]);
+      const event = frozenEvent({ toolName, parentToolCallId: "codemode-1", structuredContent, input, content });
+      assert.equal(await toolResult(event, context()), undefined);
+      const call = (await calls()).find((entry) => entry.kind === "capture-start");
+      assert.ok(call, "full file must be captured despite tiny visible output");
+      assert.equal(call.payload.tool_response, full);
+      assert.equal(call.payload.tool_input.command, input.command);
+      assert.equal(call.payload.session_id, "session-1");
+      assert.strictEqual(event.structuredContent, structuredContent);
+      assert.strictEqual(event.content, content);
+      assert.strictEqual(event.input, input);
+    });
+  }
+});
+
+test("missing persisted output fails open with a diagnostic instead of capturing clipped text", async () => {
+  await resetCalls(); setMode("success");
+  const structuredContent = Object.freeze({ output: "clipped ".repeat(500), full_output_path: join(testRoot, "missing-full.txt") });
+  const event = frozenEvent({ parentToolCallId: "codemode-1", structuredContent });
+  assert.equal(await toolResult(event, context()), undefined);
+  assert.strictEqual(event.structuredContent, structuredContent);
+  assert.equal((await calls()).filter((call) => call.kind === "capture-start").length, 0);
+  await waitFor(async () => (await calls()).some((call) => call.kind === "event" && call.args.includes("full-output-unavailable")), "missing full output must be reported");
+});
+
 test("nested shell results serialize structured content without a string output", async (t) => {
   for (const [toolName, structuredContent] of [
     ["bash", Object.freeze({ output: 42, details: "structured detail ".repeat(120) })],
@@ -246,8 +280,11 @@ test("small and error results do not spawn capture processes", async () => {
 test("parallel nested captures return immediately and run concurrently", async () => {
   await resetCalls();
   await setMode("delayed");
-  const first = frozenEvent({ parentToolCallId: "codemode-1" });
-  const second = frozenEvent({ parentToolCallId: "codemode-1", input: Object.freeze({ command: "second" }) });
+  const fullPath = join(testRoot, "parallel-full.txt");
+  await writeFile(fullPath, "parallel retained output\n".repeat(100));
+  const structuredContent = Object.freeze({ output: "tiny", full_output_path: fullPath });
+  const first = frozenEvent({ parentToolCallId: "codemode-1", structuredContent });
+  const second = frozenEvent({ toolName: "powershell", parentToolCallId: "codemode-1", structuredContent, input: Object.freeze({ command: "second" }) });
 
   const firstResult = toolResult(first, context());
   const secondResult = toolResult(second, context());

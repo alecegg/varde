@@ -88,18 +88,33 @@ fn temp_db(tag: &str) -> PathBuf {
 
 static REPO_ROOTS: OnceLock<Mutex<std::collections::HashMap<String, PathBuf>>> = OnceLock::new();
 
-fn persist_fixture(db: &std::path::Path, mut output: ExtractOutput, graph: &resolve::ResolvedGraph, root: &std::path::Path) {
-    output.file_meta = output.files.iter().map(|file| {
-        let path = root.join(file);
-        let state = varde_code::scan::list_source_files(path.to_str().unwrap()).expect("source metadata").remove(0);
-        FileMeta {
-            mtime: state.mtime,
-            size: state.size,
-            content_hash: state.content_hash.unwrap_or_default(),
-        }
-    }).collect();
+fn persist_fixture(
+    db: &std::path::Path,
+    mut output: ExtractOutput,
+    graph: &resolve::ResolvedGraph,
+    root: &std::path::Path,
+) {
+    output.file_meta = output
+        .files
+        .iter()
+        .map(|file| {
+            let path = root.join(file);
+            let state = varde_code::scan::list_source_files(path.to_str().unwrap())
+                .expect("source metadata")
+                .remove(0);
+            FileMeta {
+                mtime: state.mtime,
+                size: state.size,
+                content_hash: state.content_hash.unwrap_or_default(),
+            }
+        })
+        .collect();
     persist::persist(db, &[output], graph, root).expect("persist succeeds");
-    REPO_ROOTS.get_or_init(Default::default).lock().unwrap().insert(db.display().to_string(), root.to_path_buf());
+    REPO_ROOTS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .insert(db.display().to_string(), root.to_path_buf());
 }
 
 fn persist_project(
@@ -109,25 +124,35 @@ fn persist_project(
     mut files: Vec<String>,
 ) -> PathBuf {
     let db_path = temp_db(tag);
-    let synthetic_paths = files.iter().any(|file| ["/z/", "/a/", "/root/"].iter().any(|prefix| file.starts_with(prefix)));
+    let synthetic_paths = files.iter().any(|file| {
+        ["/z/", "/a/", "/root/"]
+            .iter()
+            .any(|prefix| file.starts_with(prefix))
+    });
     let root = if synthetic_paths {
         let root = db_path.parent().unwrap().parent().unwrap().to_path_buf();
         for file in &mut files {
             let original = std::path::Path::new(file);
-            let relative = if file.starts_with("/z/") || file.starts_with("/a/") || file.starts_with("/root/") {
-                original.strip_prefix("/").unwrap().to_path_buf()
-            } else {
-                PathBuf::from(original.file_name().unwrap())
-            };
+            let relative =
+                if file.starts_with("/z/") || file.starts_with("/a/") || file.starts_with("/root/")
+                {
+                    original.strip_prefix("/").unwrap().to_path_buf()
+                } else {
+                    PathBuf::from(original.file_name().unwrap())
+                };
             let target = root.join(relative);
             std::fs::create_dir_all(target.parent().unwrap()).expect("fixture dir");
-            let source = std::fs::read_to_string(original).unwrap_or_else(|_| "fn fixture() {}\n".to_string());
+            let source = std::fs::read_to_string(original)
+                .unwrap_or_else(|_| "fn fixture() {}\n".to_string());
             std::fs::write(&target, source).expect("fixture file");
             *file = target.to_string_lossy().into_owned();
         }
         root
     } else {
-        std::path::Path::new(&files[0]).parent().unwrap().to_path_buf()
+        std::path::Path::new(&files[0])
+            .parent()
+            .unwrap()
+            .to_path_buf()
     };
     let graph = resolve::resolve(&entities, &symbols, &files).expect("resolve succeeds");
     let output = ExtractOutput {
@@ -151,8 +176,18 @@ fn persist_project(
 /// Run a query mode against a db path with extra input fields; returns the
 /// full envelope.
 fn envelope(mode: &str, db_path: &std::path::Path, extra: &str) -> serde_json::Value {
-    let root = REPO_ROOTS.get_or_init(Default::default).lock().unwrap().get(&db_path.display().to_string()).cloned().unwrap_or_else(|| db_path.parent().unwrap().parent().unwrap().to_path_buf());
-    let input = format!(r#"{{"repoRoot":"{root}","dbPath":"{db}",{extra}}}"#, root = root.display(), db = db_path.display());
+    let root = REPO_ROOTS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .get(&db_path.display().to_string())
+        .cloned()
+        .unwrap_or_else(|| db_path.parent().unwrap().parent().unwrap().to_path_buf());
+    let input = format!(
+        r#"{{"repoRoot":"{root}","dbPath":"{db}",{extra}}}"#,
+        root = root.display(),
+        db = db_path.display()
+    );
     let stdout = query::run_mode(mode, &input);
     serde_json::from_str(&stdout).expect("envelope is JSON")
 }

@@ -1,3 +1,4 @@
+<!-- kind: reference -->
 # Skill file requirements
 
 ## Frontmatter

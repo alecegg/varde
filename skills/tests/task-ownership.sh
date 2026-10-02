@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT="$ROOT_DIR/varde-change/scripts/check-task-ownership.py"
+WORKFLOW="${VARDE_WORKFLOW_BIN:-$(command -v varde-workflow)}"
 WORK="${TMPDIR:-/tmp}/task-ownership.$$"
 mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
@@ -40,7 +39,7 @@ commit_all() {
 # run <task> <sha> -> sets OUT and CODE
 run() {
   CODE=0
-  OUT="$(python3 "$SCRIPT" --task "$REPO/tasks/$1.md" --commit "$2" --repo-root "$REPO" 2>&1)" || CODE=$?
+  OUT="$("$WORKFLOW" check-task-ownership --json --task "$REPO/tasks/$1.md" --commit "$2" --repo-root "$REPO" 2>&1 | jq .data)" || CODE=$?
 }
 
 expect() {
@@ -109,7 +108,9 @@ write_task t7 "status: in_progress" "modifies:" "- src/mod.txt"
 echo u >"$REPO/src/café.txt"
 sha="$(commit_all non-ascii)"
 run t7 "$sha"
-expect "non-ascii" 2 'src/caf\\u00e9.txt'
+expect "non-ascii" 2 '"status": "stray"'
+jq -e '.stray | index("src/café.txt") != null' <<<"$OUT" >/dev/null ||
+  fail "non-ascii: exact path missing: $OUT"
 
 # 8. root commit reports its files
 ROOT_REPO="$WORK/root"
@@ -123,7 +124,7 @@ git -C "$ROOT_REPO" add -A
 git -C "$ROOT_REPO" commit -qm root
 { echo "---"; echo "modifies:"; echo "- other.txt"; echo "---"; } >"$WORK/root-task.md"
 CODE=0
-OUT="$(python3 "$SCRIPT" --task "$WORK/root-task.md" --commit "$(git -C "$ROOT_REPO" rev-parse HEAD)" --repo-root "$ROOT_REPO" 2>&1)" || CODE=$?
+OUT="$("$WORKFLOW" check-task-ownership --json --task "$WORK/root-task.md" --commit "$(git -C "$ROOT_REPO" rev-parse HEAD)" --repo-root "$ROOT_REPO" 2>&1 | jq .data)" || CODE=$?
 expect "root commit" 2 '"only.txt"'
 
 echo "task-ownership: ok"

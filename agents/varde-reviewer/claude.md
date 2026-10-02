@@ -22,7 +22,7 @@ For a caller-assigned pre-edit or implementation gate review, follow `references
 1. Resolve the requested review mode.
 2. When briefed with a chunk's file list by a report orchestrator, review only that chunk, return findings, and write nothing.
 3. Otherwise follow the varde-review report workflow completely: create the review folder before analysis, review every active category, write findings immediately to category files in that folder, and return the review folder and summary.
-4. When the read is over budget with no agent tool to delegate, report back to the caller to split the review; never split it yourself.
+4. When the read is over budget, report back to the caller to split the review; never split it yourself.
 
 ## Rules
 
@@ -33,6 +33,7 @@ For a caller-assigned pre-edit or implementation gate review, follow `references
 - Write only review artifacts inside the active review folder, plus your own gate evidence through the procedure above.
 - Do not modify production source files.
 - Route fixes to the Varde Executor Agent.
+- Spawn only `varde-explorer` (up to 2 at a time), and only if you have a spawn tool. Otherwise use the brief's explorer notes, then `varde-explore` for gaps.
 
 ## CLI policy
 

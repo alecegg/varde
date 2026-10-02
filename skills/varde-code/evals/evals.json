@@ -13,15 +13,17 @@
     },
     {
       "id": 2,
-      "prompt": "Give me a compact, ordered set of source files to read for the auth refresh path. Keep the `context_pack` output estimate near 1,500 tokens.",
-      "expected_output": "Use `context_pack` with the topic and `maxTokensEstimate:1500`, then use its `readingOrder` to read source files. Explain that matching is structural and the token figure is an estimate, not an actual tokenizer or global context cap; note the default is 4000 and `includeReadingOrder:false` omits the duplicated list when appropriate.",
+      "prompt": "The parent prepared the auth/refresh fixture in `./project` and confirmed coverage and index readiness for that repoRoot. Query only; do not build an index or start a watcher. Give me a compact, ordered set of source files to read for the auth refresh path, with useful declaration line spans. Keep the `context_pack` output estimate near 1,500 tokens.",
+      "expected_output": "Use `context_pack` with the topic and `maxTokensEstimate:1500`, then use its `readingOrder` and declaration spans to read source files. Treat its `tests` as import-reachability hints, and do not claim it searches documentation or semantic content.",
       "assertions": [
         "Routes a topic-based code reading set to `context_pack`",
         "Uses `readingOrder` to guide source reads",
-        "Treats `maxTokensEstimate` as a bytes/4 estimate, not an actual tokenizer or global context cap",
-        "Knows the default estimate is 4000 and `includeReadingOrder:false` omits the duplicated order",
+        "Uses default declaration rows and persisted 1-based span lines",
+        "Sets `maxTokensEstimate:1500` on the `context_pack` call",
+        "Describes tests as import-reachability hints rather than measured coverage",
         "Does not claim `context_pack` searches documentation or semantic content"
-      ]
+      ],
+      "setup_script": "evals/setup-context-pack.sh"
     },
     {
       "id": 3,
@@ -38,7 +40,7 @@
     {
       "id": 4,
       "prompt": "I am a subagent and `varde-code context_pack` returns `index_stale`. What should I do to find the relevant source files?",
-      "expected_output": "Use `Read`, `Grep`, `Glob`, or `rg` for this query and report degraded index access. Do not start a watcher or build an index; the parent owns watcher setup and must confirm coverage for this checkout.",
+      "expected_output": "Use `Read`, `Grep`, `Glob`, or `rg` for this query and report degraded index access. Do not start a watcher or build an index; the parent owns watcher setup.",
       "assertions": [
         "Falls back to source tools after `index_stale`",
         "Reports degraded index access",
@@ -47,13 +49,25 @@
     },
     {
       "id": 5,
-      "prompt": "A `context_pack` result is truncated, and its envelope has a `meta.toz.handle`. Get the missing files after offset 20, but keep the query's result limits in mind.",
-      "expected_output": "Inspect the captured output first with `varde-toz query --handle <H>`. If it lacks the needed section, request `resultsOffset:20` with `fullResults:true`; full results bypass result caps while still honoring the offset. Do not describe the output estimate as a model-token or global context guarantee.",
+      "prompt": "The parent prepared the auth/refresh fixture in `./project` and confirmed coverage and index readiness for that repoRoot. Query only; do not build an index or start a watcher. Read the sandbox-root `context-result.json`, recover matching source files after offset 20, then include matching occurrence/control rows for the auth refresh query.",
+      "expected_output": "Read `context-result.json` for its truncated envelope and `meta.toz.handle`, then inspect the capture with `varde-toz query --handle <H>` and read the rows after offset 20. Query `context_pack` with `includeOccurrences:true` to add matching occurrence/control rows. Do not describe the estimate as a model-token or global context guarantee.",
       "assertions": [
-        "Uses varde-toz capture first when a handle is present",
-        "Uses paging or fullResults only when capture lacks needed sections",
-        "States fullResults honors resultsOffset while bypassing result caps",
+        "Reads context-result.json and inspects the Toz capture handle before paging",
+        "Uses capture rows after offset 20 to recover matching files",
+        "Sets includeOccurrences:true to request matching occurrence/control entities",
         "Does not claim a global budget or actual tokenizer guarantee"
+      ],
+      "setup_script": "evals/setup-context-pack.sh"
+    },
+    {
+      "id": 6,
+      "prompt": "I am the main agent working in `/work/app`. My first `varde-code get_symbol` call for `TokenBucket` returned `index_stale`. What do I do next?",
+      "expected_output": "Run `varde-code watch --ensure --repo /work/app` once, then retry the same `get_symbol` query. Do not run `watch --list` as a readiness check first. If the sandbox denies `watch --ensure`, retry it once with escalation; if it still fails, use `find_pattern` or source tools and report degraded index access.",
+      "assertions": [
+        "Runs `watch --ensure` once for the repo after `index_stale`",
+        "Retries the original `get_symbol` query after ensure succeeds",
+        "Does not run `watch --list` as a readiness gate",
+        "On sandbox denial of `watch --ensure`, retries once with escalation; if it still fails, falls back and reports degraded index access"
       ]
     }
   ]

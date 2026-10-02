@@ -101,16 +101,16 @@ For every posture, stop after two failed attempts at one approach and report the
    fix real issues; skip false positives and rules flagging correct code.
 2. Verify every `#### Verification` check: each `assert:` command must match
    its stated expectation, and each `retrieve:` command's output must be read.
-3. In serial or inline execution, move the task to `done` from `in_progress`
-   (via `in_progress` if still `todo`; `varde-workflow transition <task.md>
-   done --json` when on PATH) and end `#### Progress` with evidence naming
-   the checks actually run.
+3. In serial or inline execution, end `#### Progress` with a completion entry
+   naming the checks actually run and leave the task `in_progress`; the
+   orchestrator moves it to `done` after its ownership check. In a parallel
+   worker or isolated worktree, edit no task file: report that evidence and
+   the parent transitions the task.
 4. For a spike, commit no source changes: record question/approach/answer and
    restore your own exploratory source edits before reporting. Otherwise,
-   commit task source paths with a message referencing the task ID in serial,
-   inline or worktree execution; include its tracked task file only in the
-   owning checkout; in a shared-checkout wave, do not commit. Undo a completed
-   implementation task with `git revert`.
+   commit only task source paths with a message referencing the task ID in
+   serial, inline or worktree execution; in a shared-checkout wave, do not
+   commit. Undo a completed implementation task with `git revert`.
 5. Report the result and any obstacle, and paste raw output from:
    ```sh
    git log --oneline -1

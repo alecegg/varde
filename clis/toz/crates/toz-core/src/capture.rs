@@ -349,6 +349,9 @@ pub fn run(
     if binary {
         return Ok(Outcome::Skipped { rule: "binary" });
     }
+    if matched_profile(&input, profiles).is_some() && total > MAX_PROFILED_CAPTURE_BYTES {
+        anyhow::bail!("profile-matched capture exceeds the {}-byte limit; reduce input or adjust the matching profile", MAX_PROFILED_CAPTURE_BYTES);
+    }
     capture_accepted(cfg, store, input, profiles, total, label, sk)
 }
 
@@ -357,7 +360,8 @@ pub fn matched_profile<'a>(
     input: &CaptureInput<'_>,
     profiles: &'a [Profile],
 ) -> Option<&'a Profile> {
-    let is_command = input.kind == "run" || input.kind.starts_with("hook:");
+    let is_command =
+        matches!(input.kind, "run" | "exec" | "script") || input.kind.starts_with("hook:");
     profile::find_match(profiles, input.source, is_command)
 }
 
@@ -382,8 +386,7 @@ fn capture_accepted(
     label: String,
     sk: String,
 ) -> Result<Outcome> {
-    // A hook or wrapped-command origin is a literal command line; index/fetch/script origins
-    // are paths or URLs, so only `match.source` (never `match.command`) applies to them.
+    // Hook, exec, run, and script origins are commands; index/fetch origins are paths or URLs.
     let matched = matched_profile(&input, profiles);
     let redactor = Redactor::from_config(&cfg.redact)?;
     let (all_chunks, redactions, stdout_text, stderr_text) =

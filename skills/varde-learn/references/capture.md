@@ -19,16 +19,13 @@ predicted risk or a general lesson without an observed obstacle.
    ```
 
    Otherwise create an item with a concise title and the skill or tool that
-   exposed the obstacle:
+   exposed the obstacle. New items are scoped to the current repository; add
+   `--global` only for friction in a cross-project skill or tool:
 
    ```sh
    printf '%s\n' 'The check failed because ...' | \
      varde-learn friction add --source varde-change --title "Missing path check" --target skills/example/SKILL.md --json
    ```
-
-3. New items are scoped to the current repository by default. Add `--global`
-   for friction in a cross-project skill or tool; leave repository-specific
-   events local.
 
 Keep the evidence specific: what command or action failed, what happened, and
 the immediate cost. The store records repository and Git context when

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-RESOLVER="$SKILLS_DIR/varde-change/scripts/resolve-execution-wave.py"
+WORKFLOW="${VARDE_WORKFLOW_BIN:-$(command -v varde-workflow)}"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/wave.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
@@ -12,7 +12,7 @@ fail() {
   exit 1
 }
 
-test -x "$RESOLVER" || fail "execution-wave resolver is missing or not executable"
+test -x "$WORKFLOW" || fail "varde-workflow is missing or not executable"
 
 # Fake varde-code: blast radius comes from $TEST_ROOT/radius/<path with / as _>.
 fake_bin="$TEST_ROOT/bin"
@@ -54,7 +54,7 @@ posture: ${10:-}
 ---
 EOF
 }
-run() { PATH="$fake_bin:$PATH" "$RESOLVER" --repo-root "$1" "${@:2}" "$1/plan"; }
+run() { PATH="$fake_bin:$PATH" "$WORKFLOW" execution-wave --json --repo-root "$1" "${@:2}" "$1/plan" | jq -c .data; }
 
 # A symlink ancestor aliases a not-yet-created destination.
 root="$(plan create-alias)"
@@ -69,13 +69,8 @@ root="$(plan dangling-alias)"
 ln -s src/future "$root/alias"
 task "$root" alpha todo "" "" "src/future/new.rs"
 task "$root" beta todo "" "" "alias/new.rs"
-if python3 -c 'import os; raise SystemExit(not hasattr(os.path, "ALLOW_MISSING"))'; then
-  run "$root" | jq -e '.next_wave == ["alpha"] and .conflicts[0].files == ["src/future/new.rs"]' >/dev/null ||
-    fail "dangling symlink target identity was lost"
-else
-  run "$root" | jq -e '.next_wave == ["alpha"] and (.reasons | any(contains("ownership path identity is uncertain")))' >/dev/null ||
-    fail "older Python did not serialize the unresolved symlink"
-fi
+run "$root" | jq -e '.next_wave == ["alpha"] and .conflicts[0].files == ["src/future/new.rs"]' >/dev/null ||
+  fail "dangling symlink target identity was lost"
 
 # Symlink/.. follows the target's parent, not the link's lexical parent.
 root="$(plan symlink-parent)"
@@ -155,38 +150,6 @@ task "$root" alpha todo "" "" "./src/../src/new-a.rs"
 task "$root" beta todo "" "" "src/new-b.rs"
 run "$TEST_ROOT/repo-alias" | jq -e '.next_wave == ["alpha","beta"] and .conflicts == []' >/dev/null ||
   fail "canonical repository aliases serialized independent destinations"
-
-# Simulate older Python without modifying the interpreter's shared os.path.
-root="$(plan older-python)"
-ln -s src "$root/alias"
-ln -s src/future "$root/dangling"
-RESOLVER="$RESOLVER" FIXTURE_ROOT="$root" python3 -B - <<'PY'
-import importlib.util
-import os
-from pathlib import Path
-from types import SimpleNamespace
-
-spec = importlib.util.spec_from_file_location("wave", os.environ["RESOLVER"])
-wave = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(wave)
-wave.os = SimpleNamespace(path=SimpleNamespace())
-root = Path(os.environ["FIXTURE_ROOT"]).resolve()
-assert wave.canonical_path(root, "alias/nested/new.rs") == "src/nested/new.rs"
-assert wave.canonical_path(root, "alias/../new.rs") == "new.rs"
-for uncertain in ["dangling/new.rs", "missing/../src/new.rs"]:
-    try:
-        wave.canonical_path(root, uncertain)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError(f"older Python accepted uncertain path: {uncertain}")
-tasks = {
-    task: {"status": "todo", "depends_on": [], "writes": [owned], "graph_sources": [],
-           "missing_ownership": [], "verification_resources": []}
-    for task, owned in [("alpha", "dangling/new.rs"), ("beta", "src/a.rs"), ("gamma", "src/b.rs")]
-}
-assert wave.resolve(tasks, root, 3)["next_wave"] == ["alpha"]
-PY
 
 # Independent ready tasks run as one wave; a dependent task waits.
 root="$(plan independent)"
@@ -393,8 +356,8 @@ task "$root" alpha todo "" "src/alpha"
 task "$root" beta todo "" "src/beta"
 no_cli_path="$TEST_ROOT/nocli"
 mkdir -p "$no_cli_path"
-for tool in python3 git env; do ln -sf "$(command -v "$tool")" "$no_cli_path/$tool"; done
-[ "$(PATH="$no_cli_path" "$RESOLVER" --repo-root "$root" "$root/plan" | jq '.next_wave | length')" -le 1 ] ||
+for tool in git; do ln -sf "$(command -v "$tool")" "$no_cli_path/$tool"; done
+[ "$(PATH="$no_cli_path" "$WORKFLOW" execution-wave --json --repo-root "$root" "$root/plan" | jq -c .data | jq '.next_wave | length')" -le 1 ] ||
   fail "missing varde-code did not fall back to serial"
 
 # Block-style YAML lists parse like inline lists.

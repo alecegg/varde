@@ -96,13 +96,19 @@ varde-code symbols_in_file --json '{"repoRoot": ".", "filePath": "src/main.rs"}'
 varde-code context_pack --json '{"repoRoot": ".", "query": "authentication"}'
 ```
 
-If watcher setup or readiness fails, search source directly until coverage is
-restored. Indexed queries require `repoRoot`; `dbPath` is an optional override
-paired with it. `find_pattern` parses live source, while `detect_changes` and
-`slice_state` remain diagnostic exceptions.
+Query directly: an indexed query reports `index_missing` or `index_stale`
+itself, so no separate readiness check is needed. On either error, run
+`watch --ensure` and retry; `find_pattern` needs no index. If `watch --ensure`
+fails, use source search until coverage is restored. Indexed queries require
+`repoRoot`; `dbPath` is an optional override paired with it. `find_pattern`
+parses live source, while `detect_changes` and `slice_state` remain diagnostic
+exceptions.
 
 In `watch --list` and `watch --ensure`, `alive: null` means lock ownership
-could not be confirmed, not that the watcher stopped. `ready` requires
+could not be confirmed, not that the watcher stopped. `registration_error`
+means the host service definition could not be inspected (for example, a
+sandbox denies the service directory); `registered` then reads false, and
+`watch --ensure` never replaces a live watcher with that error. `ready` requires
 confirmed live coverage and completed reconciliation; `index_ready` reports a
 readable fresh index independently. If ownership or supervisor inspection is
 denied, `watch --ensure` leaves host state unchanged. Agents can use a fresh
@@ -120,8 +126,10 @@ stored at `~/.config/varde-code/repos/<name>-<hash>/index.db`.
 serialized success envelope, including metadata, as JSON bytes divided by four.
 When the budget trims files, symbols, or tests, pagination metadata reports
 shown and total counts. `includeReadingOrder` defaults to `true`; setting it to
-`false` leaves `readingOrder` empty. `fullResults: true` returns all results
-from `resultsOffset` onward, bypassing the budget and per-file symbol cap.
+`false` leaves `readingOrder` empty. `includeTests` defaults to `true`; setting
+it to `false` returns an empty `tests` array and skips import-based test-hint
+calculation. `fullResults: true` returns all results from `resultsOffset`
+onward, bypassing the budget and per-file symbol cap.
 
 ## Docs
 

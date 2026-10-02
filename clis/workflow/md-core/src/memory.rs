@@ -171,6 +171,167 @@ pub struct Config {
     pub project: BTreeMap<String, Entry>,
     #[serde(default, skip_serializing_if = "Settings::is_empty")]
     pub settings: Settings,
+    #[serde(default, skip_serializing_if = "Hooks::is_empty")]
+    pub hooks: Hooks,
+    #[serde(
+        default,
+        deserialize_with = "lenient_orchestration",
+        skip_serializing_if = "Orchestration::is_empty"
+    )]
+    pub orchestration: Orchestration,
+    #[serde(
+        default,
+        deserialize_with = "lenient_instructions",
+        skip_serializing_if = "Instructions::is_empty"
+    )]
+    pub instructions: Instructions,
+    /// Preserve unrelated top-level tables.
+    #[serde(flatten)]
+    pub unknown: BTreeMap<String, toml::Value>,
+}
+
+/// Direct subagents in flight when `[orchestration] max_agents` is absent or invalid.
+pub const DEFAULT_MAX_AGENTS: u32 = 4;
+
+/// The `[orchestration]` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Orchestration {
+    /// Kept untyped so an invalid value never makes the whole config unreadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_agents: Option<toml::Value>,
+    /// Unknown keys under `[orchestration]`, kept on rewrite.
+    #[serde(flatten)]
+    pub unknown: BTreeMap<String, toml::Value>,
+    /// Set when `orchestration` was not a table; the value is dropped on rewrite.
+    #[serde(skip)]
+    not_a_table: bool,
+}
+
+/// Read `orchestration` without failing the whole config when it is not a table.
+fn lenient_orchestration<'de, D>(deserializer: D) -> Result<Orchestration, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(match value {
+        toml::Value::Table(table) => {
+            Orchestration::deserialize(table).map_err(serde::de::Error::custom)?
+        }
+        _ => Orchestration {
+            not_a_table: true,
+            ..Orchestration::default()
+        },
+    })
+}
+
+impl Orchestration {
+    pub fn is_empty(&self) -> bool {
+        self.max_agents.is_none() && self.unknown.is_empty()
+    }
+
+    /// The configured cap, or `DEFAULT_MAX_AGENTS` plus a reason when the
+    /// value is not a positive integer.
+    pub fn max_agents(&self) -> (u32, Option<String>) {
+        if self.not_a_table {
+            return (
+                DEFAULT_MAX_AGENTS,
+                Some("`orchestration` is not a table".to_string()),
+            );
+        }
+        match &self.max_agents {
+            None => (DEFAULT_MAX_AGENTS, None),
+            Some(toml::Value::Integer(n)) if *n > 0 => match u32::try_from(*n) {
+                Ok(n) => (n, None),
+                Err(_) => (DEFAULT_MAX_AGENTS, Some(format!("{n} is too large"))),
+            },
+            Some(value) => (
+                DEFAULT_MAX_AGENTS,
+                Some(format!("{value} is not a positive integer")),
+            ),
+        }
+    }
+
+    /// Set the configured cap while retaining unknown keys in the table.
+    pub fn set_max_agents(&mut self, max_agents: u32) {
+        self.max_agents = Some(toml::Value::Integer(i64::from(max_agents)));
+        self.not_a_table = false;
+    }
+}
+
+/// The `[instructions]` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Instructions {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<String>,
+    /// Unknown keys under `[instructions]`, kept on rewrite.
+    #[serde(flatten)]
+    pub unknown: BTreeMap<String, toml::Value>,
+}
+
+impl Instructions {
+    pub fn is_empty(&self) -> bool {
+        self.targets.is_empty() && self.unknown.is_empty()
+    }
+}
+
+/// Read `instructions` without failing the whole config when it is not a table.
+fn lenient_instructions<'de, D>(deserializer: D) -> Result<Instructions, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(match value {
+        toml::Value::Table(table) => {
+            Instructions::deserialize(table).map_err(serde::de::Error::custom)?
+        }
+        _ => Instructions::default(),
+    })
+}
+
+/// Session-start providers used when `[hooks.session_start]` omits them.
+pub const DEFAULT_SESSION_START_PROVIDERS: [&str; 1] = ["nav_map"];
+
+/// The `[hooks]` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Hooks {
+    #[serde(default, skip_serializing_if = "SessionStart::is_empty")]
+    pub session_start: SessionStart,
+    /// Unknown keys under `[hooks]`, kept so a config rewrite never drops them.
+    #[serde(flatten)]
+    pub unknown: BTreeMap<String, toml::Value>,
+}
+
+impl Hooks {
+    pub fn is_empty(&self) -> bool {
+        self.session_start.is_empty() && self.unknown.is_empty()
+    }
+}
+
+/// The `[hooks.session_start]` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SessionStart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub providers: Option<Vec<String>>,
+    /// Unknown keys under `[hooks.session_start]`, kept on rewrite.
+    #[serde(flatten)]
+    pub unknown: BTreeMap<String, toml::Value>,
+}
+
+impl SessionStart {
+    pub fn is_empty(&self) -> bool {
+        self.providers.is_none() && self.unknown.is_empty()
+    }
+}
+
+impl Config {
+    /// Configured session-start providers, or the built-in default list.
+    pub fn session_start_providers(&self) -> Vec<String> {
+        self.hooks
+            .session_start
+            .providers
+            .clone()
+            .unwrap_or_else(|| DEFAULT_SESSION_START_PROVIDERS.map(String::from).to_vec())
+    }
 }
 
 impl Config {
@@ -428,7 +589,13 @@ fn save_config_at(
     legacy: &Path,
     publish: impl FnOnce(&Path, &Path) -> io::Result<()>,
 ) -> Result<PathBuf, MemoryError> {
-    if config.default.is_empty() && config.project.is_empty() && config.settings.is_empty() {
+    if config.default.is_empty()
+        && config.project.is_empty()
+        && config.settings.is_empty()
+        && config.hooks.is_empty()
+        && config.instructions.is_empty()
+        && config.unknown.is_empty()
+    {
         remove_if_present(path)?;
         remove_if_present(legacy)?;
         return Ok(path.to_path_buf());
@@ -785,6 +952,65 @@ working = "/fast/app-working"
         assert!(text.contains("[project.\"/srv/app\"]"), "{text}");
         assert!(!text.contains("/srv/other"), "{text}");
         assert_eq!(config(&text), cfg);
+    }
+
+    #[test]
+    fn hooks_and_unknown_tables_round_trip() {
+        let text = "[hooks.session_start]\nproviders = [\"nav_map\"]\ntimeout = 10\n\n[hooks.post_tool_use]\nx = 1\n\n[orchestration]\nmode = \"x\"\n";
+        let cfg = config(text);
+        assert_eq!(cfg.session_start_providers(), vec!["nav_map".to_string()]);
+        let out = toml::to_string_pretty(&cfg).unwrap();
+        let again = config(&out);
+        assert_eq!(again, cfg);
+        assert!(out.contains("[orchestration]"), "{out}");
+        assert!(out.contains("providers"), "{out}");
+        assert!(out.contains("timeout = 10"), "{out}");
+        assert!(out.contains("[hooks.post_tool_use]"), "{out}");
+    }
+
+    #[test]
+    fn orchestration_table_round_trips_with_unknown_keys() {
+        let cfg = config("[orchestration]\nmax_agents = 2\nmode = \"x\"\n");
+        assert_eq!(cfg.orchestration.max_agents(), (2, None));
+        let again = config(&toml::to_string_pretty(&cfg).unwrap());
+        assert_eq!(again, cfg);
+        assert!(again.orchestration.unknown.contains_key("mode"));
+    }
+
+    #[test]
+    fn instructions_table_round_trips_with_unknown_keys() {
+        let cfg =
+            config("[instructions]\ntargets = [\"/home/user/AGENTS.md\"]\nmode = \"shared\"\n");
+        let again = config(&toml::to_string_pretty(&cfg).unwrap());
+        assert_eq!(again, cfg);
+        assert_eq!(again.instructions.targets, vec!["/home/user/AGENTS.md"]);
+        assert!(again.instructions.unknown.contains_key("mode"));
+    }
+
+    #[test]
+    fn non_table_orchestration_falls_back_with_a_reason() {
+        for bad in ["3", "\"x\"", "[1]"] {
+            let cfg = config(&format!("orchestration = {bad}\n"));
+            let (n, reason) = cfg.orchestration.max_agents();
+            assert_eq!(n, 4, "{bad}");
+            assert!(reason.is_some(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn invalid_max_agents_falls_back_with_a_reason() {
+        for bad in ["0", "-3", "\"many\"", "2.5"] {
+            let cfg = config(&format!("[orchestration]\nmax_agents = {bad}\n"));
+            let (n, reason) = cfg.orchestration.max_agents();
+            assert_eq!(n, 4, "{bad}");
+            assert!(reason.is_some(), "{bad}");
+        }
+        assert_eq!(Config::default().orchestration.max_agents(), (4, None));
+    }
+
+    #[test]
+    fn session_start_providers_default_when_absent() {
+        assert_eq!(Config::default().session_start_providers(), vec!["nav_map"]);
     }
 
     #[test]

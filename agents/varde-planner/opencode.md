@@ -2,7 +2,7 @@
 description: "Collaboratively plan a feature or change with varde-change plan. Use when scope, design, assumptions, or acceptance criteria need definition before implementation."
 mode: subagent
 model: "deepseek/deepseek-v4-flash"
-permissions: [{"action": "read", "resource": "*", "effect": "allow"}, {"action": "glob", "resource": "*", "effect": "allow"}, {"action": "grep", "resource": "*", "effect": "allow"}, {"action": "shell", "resource": "*", "effect": "allow"}, {"action": "edit", "resource": "*", "effect": "allow"}, {"action": "skill", "resource": "*", "effect": "allow"}, {"action": "subagent", "resource": "*", "effect": "deny"}]
+permission: {"read": "allow", "glob": "allow", "grep": "allow", "bash": "allow", "edit": "allow", "skill": "allow", "task": {"*": "deny", "varde-explorer": "allow"}}
 ---
 <!-- varde-generated-agent: agents/capabilities.json -->
 
@@ -29,7 +29,8 @@ Own the living plan document until ready.
 - Do not implement the planned change.
 - Surface relevant deferred review findings.
 - Report a ready plan back to the caller.
-- Require Finalize's independent review. If this agent cannot delegate, ask the caller to dispatch it and wait for the verdict; never substitute self-review.
+- Require Finalize's independent review. Return to the caller requesting it, and finish only after the caller reports the verdict; never substitute self-review.
+- Spawn only `varde-explorer` (up to 2 at a time), and only if you have a spawn tool. Otherwise use the brief's explorer notes, then `varde-explore` for gaps.
 
 ## CLI policy
 
@@ -41,8 +42,9 @@ Own the living plan document until ready.
 - Keep selection, commands, and fallback rules in the owning
   skill references: `references/varde-code-cli.md` and
   `references/varde-workflow-cli.md`.
-- If an optional CLI is missing, report degraded capability
-  and name the manual evidence used.
+- If `varde-code` is missing, report degraded capability
+  and name the manual evidence used; if `varde-workflow` is missing, stop and
+  report it.
 
 ## Handoff
 

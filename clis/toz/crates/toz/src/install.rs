@@ -145,21 +145,14 @@ const OPENCODE: Bundle = Bundle {
 const CODEX: Bundle = Bundle {
     harness: "codex",
     default_dir: || Ok(home()?.join(".codex")),
-    files: &[
-        (
-            "hooks.json",
-            include_str!("../assets/codex/hooks.json"),
-            Mode::MergeHooks,
-        ),
-        (
-            "AGENTS.md",
-            include_str!("../assets/codex/AGENTS.md"),
-            Mode::MergeBlock,
-        ),
-    ],
+    files: &[(
+        "hooks.json",
+        include_str!("../assets/codex/hooks.json"),
+        Mode::MergeHooks,
+    )],
     after: "Codex captures completed unified execution through PostToolUse; use `varde-toz run --script -` for batches with complete command output. \
-The AGENTS.md block explains both paths. Codex needs `hooks = true` in ~/.codex/config.toml and will ask you to trust \
-the SessionStart and PostToolUse hooks. The adapter uses the primary Toz store by default.",
+Run `varde-workflow instructions install` to add the shared Varde instruction block. Codex needs `hooks = true` in ~/.codex/config.toml and will ask you to trust \
+the PostToolUse hook. The adapter uses the primary Toz store by default.",
     binary: "codex",
     min_version: (0, 140, 0),
     why_min: "PostToolUse for completed unified execution",
@@ -253,6 +246,22 @@ pub fn usage_note() -> String {
     NOTE.to_string()
 }
 
+/// Render the Codex note block for inclusion in Varde's shared instruction block.
+pub fn instruction_block() -> String {
+    let template = include_str!("../assets/codex/AGENTS.md");
+    let start = template
+        .find(BLOCK_START)
+        .expect("Codex note block start marker")
+        + BLOCK_START.len();
+    let end = start
+        + template[start..]
+            .find(BLOCK_END)
+            .expect("Codex note block end marker");
+    template[start..end]
+        .trim_matches('\n')
+        .replace("{{TOZ_SHARED_NOTE}}", NOTE)
+}
+
 pub fn render_at(template: &str, dir: &Path) -> Result<String> {
     let exe = std::env::current_exe().context("locating toz binary")?;
     let exe = exe.canonicalize().unwrap_or(exe);
@@ -316,6 +325,17 @@ pub fn install(b: &Bundle, dir: &Path, force: bool) -> Result<Vec<(PathBuf, bool
         std::fs::remove_file(&path).with_context(|| format!("retiring {}", path.display()))?;
     }
     let (out, written) = write_prepared_files(prepared)?;
+    if b.harness == "codex" {
+        // Use the uninstall path so an old block is removed through an AGENTS.md symlink too.
+        let _ = uninstall_file(
+            b,
+            dir,
+            &manifest,
+            "AGENTS.md",
+            include_str!("../assets/codex/AGENTS.md"),
+            Mode::MergeBlock,
+        )?;
+    }
     write_manifest(dir, &written)?;
     let _ = std::fs::remove_file(dir.join(".toz-install.json"));
     Ok(out)
@@ -556,6 +576,16 @@ pub fn uninstall(b: &Bundle, dir: &Path) -> Result<Vec<(PathBuf, &'static str)>>
     for (rel, template, mode) in b.files {
         out.push(uninstall_file(b, dir, &manifest, rel, template, *mode)?);
     }
+    if b.harness == "codex" {
+        out.push(uninstall_file(
+            b,
+            dir,
+            &manifest,
+            "AGENTS.md",
+            include_str!("../assets/codex/AGENTS.md"),
+            Mode::MergeBlock,
+        )?);
+    }
     // Drop the manifest last, so the dir can then prune as empty.
     let _ = std::fs::remove_file(dir.join(MANIFEST));
     let _ = std::fs::remove_file(dir.join(".toz-install.json"));
@@ -599,7 +629,11 @@ fn uninstall_file(
         }
         Mode::MergeBlock => {
             let stripped = strip_block(&current);
-            (!stripped.trim().is_empty()).then_some(stripped)
+            if stripped == current {
+                Some(stripped)
+            } else {
+                (!stripped.trim().is_empty()).then_some(stripped)
+            }
         }
     };
     match remaining {
@@ -609,6 +643,15 @@ fn uninstall_file(
             Ok((path, "toz entries removed"))
         }
         None => {
+            if mode == Mode::MergeBlock
+                && std::fs::symlink_metadata(&path)
+                    .map(|metadata| metadata.file_type().is_symlink())
+                    .unwrap_or(false)
+            {
+                std::fs::write(&path, "")
+                    .with_context(|| format!("clearing {} through symlink", path.display()))?;
+                return Ok((path, "toz entries removed"));
+            }
             std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
             prune_empty_dirs(path.parent(), dir);
             Ok((path, "removed"))
@@ -670,27 +713,43 @@ fn strip_hooks(current: &str) -> Result<String> {
     Ok(serde_json::to_string_pretty(&doc)? + "\n")
 }
 
-/// Remove the toz block (and the blank line before it) from a markdown file.
+/// Remove the toz block from a markdown file while preserving the surrounding text.
 fn strip_block(current: &str) -> String {
-    let current = current
-        .replace("<!-- toz:start -->", BLOCK_START)
-        .replace("<!-- toz:end -->", BLOCK_END);
-    match (current.find(BLOCK_START), current.find(BLOCK_END)) {
-        (Some(a), Some(b)) if b > a => {
-            let end = b + BLOCK_END.len();
-            let head = current[..a].trim_end();
-            let tail = current[end..].trim_start_matches('\n');
-            let mut s = head.to_string();
-            if !s.is_empty() {
-                s.push('\n');
-                if !tail.is_empty() {
-                    s.push('\n');
-                }
-            }
-            s.push_str(tail);
-            s
-        }
-        _ => current.to_string(),
+    const LEGACY_START: &str = "<!-- toz:start -->";
+    const LEGACY_END: &str = "<!-- toz:end -->";
+
+    let start = [BLOCK_START, LEGACY_START]
+        .into_iter()
+        .filter_map(|marker| current.find(marker).map(|start| (start, marker.len())))
+        .min_by_key(|(start, _)| *start);
+    let Some((start, start_len)) = start else {
+        return current.to_string();
+    };
+
+    let after_start = start + start_len;
+    let end = [BLOCK_END, LEGACY_END]
+        .into_iter()
+        .filter_map(|marker| {
+            current[after_start..]
+                .find(marker)
+                .map(|relative| (after_start + relative, marker.len()))
+        })
+        .min_by_key(|(end, _)| *end);
+    let Some((end, end_len)) = end else {
+        return current.to_string();
+    };
+
+    let prefix = &current[..start];
+    let suffix = &current[end + end_len..];
+    // Remove separator newlines while preserving all other surrounding bytes.
+    let head = prefix.trim_end_matches('\n');
+    let tail = suffix.trim_start_matches('\n');
+    if head.is_empty() {
+        tail.to_string()
+    } else if tail.is_empty() {
+        format!("{head}\n")
+    } else {
+        format!("{head}\n\n{tail}")
     }
 }
 
@@ -707,6 +766,21 @@ fn merge_hooks(current: &str, ours: &str) -> Result<String> {
         doc["hooks"] = json!({});
     }
     let events = doc["hooks"].as_object_mut().unwrap();
+    // Drop toz commands from every event, including ones no longer in our asset
+    // (for example a legacy SessionStart note hook), then remove emptied events.
+    let mut emptied = Vec::new();
+    for (event, list) in events.iter_mut() {
+        if let Some(arr) = list.as_array_mut() {
+            let before = arr.len();
+            arr.retain_mut(|entry| strip_owned_hooks(entry).0);
+            if before > 0 && arr.is_empty() {
+                emptied.push(event.clone());
+            }
+        }
+    }
+    for event in emptied {
+        events.remove(&event);
+    }
     for (event, entries) in ours["hooks"].as_object().unwrap() {
         let list = events.entry(event.clone()).or_insert_with(|| json!([]));
         if !list.is_array() {
@@ -720,6 +794,9 @@ fn merge_hooks(current: &str, ours: &str) -> Result<String> {
 }
 
 fn strip_owned_hooks(entry: &mut Value) -> (bool, bool) {
+    if !entry.is_object() {
+        return (true, false);
+    }
     let Some(hooks) = entry["hooks"].as_array_mut() else {
         return (true, false);
     };
@@ -846,11 +923,9 @@ fn merge_block(current: &str, block: &str) -> String {
 
 /// The usage note injected at session start. Deliberately short.
 pub const NOTE: &str = "\
-varde-toz (tool-output-zone) is active. Large text results from supported harness tools are captured by handle. \
-Use `varde-toz query --handle <H>` to read a capture or add `\"term\"` to search. \
-Batch commands with `varde-toz run --script -` and `vardeToz.exec({argv: [...]})`. \
-Call other agent tools through the harness, then query any returned handle. \
-Read the varde-toz skill for troubleshooting.";
+varde-toz (tool-output-zone) is active. Large supported tool results are captured by handle. \
+When a result shows a toz handle or output is too large to read directly, read the varde-toz skill; \
+recover missing details with `varde-toz query --handle <H>`.";
 
 #[cfg(test)]
 mod tests {
@@ -1044,9 +1119,9 @@ mod tests {
         assert_eq!(once, twice);
         let v: Value = serde_json::from_str(&once).unwrap();
         assert_eq!(v["hooks"]["PostToolUse"].as_array().unwrap().len(), 2);
-        assert_eq!(v["hooks"]["SessionStart"].as_array().unwrap().len(), 1);
+        assert!(v["hooks"].get("SessionStart").is_none());
         assert_eq!(v["hooks"]["Stop"][0]["hooks"][0]["command"], "echo bye");
-        assert!(once.contains("note --harness codex"));
+        assert!(!once.contains("note --harness codex"));
         assert!(once.contains("capture --hook --harness codex"));
     }
 
@@ -1068,6 +1143,21 @@ mod tests {
             stripped["hooks"]["PostToolUse"][0]["hooks"][0]["command"],
             "echo foreign"
         );
+    }
+
+    #[test]
+    fn reinstall_removes_legacy_session_start_note_hook() {
+        let legacy = r#"{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"toz note --harness codex"}]},{"hooks":[{"type":"command","command":"echo keep"}]}],"Stop":[{"hooks":[{"type":"command","command":"toz note --harness claude-code"}]}]}}"#;
+        let ours = render(include_str!("../assets/codex/hooks.json")).unwrap();
+        let merged = merge_hooks(legacy, &ours).unwrap();
+        assert!(!merged.contains("note --harness"));
+        let v: Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(v["hooks"]["SessionStart"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            v["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+            "echo keep"
+        );
+        assert!(v["hooks"].get("Stop").is_none());
     }
 
     #[test]
@@ -1223,6 +1313,15 @@ mod tests {
             serde_json::from_str::<Value>(&stripped).unwrap(),
             serde_json::from_str::<Value>(foreign).unwrap()
         );
+    }
+
+    #[test]
+    fn merge_hooks_keeps_malformed_and_empty_foreign_events() {
+        let foreign = r#"{"hooks":{"Stop":["oops"],"Notification":[]}}"#;
+        let ours = render(include_str!("../assets/codex/hooks.json")).unwrap();
+        let merged: Value = serde_json::from_str(&merge_hooks(foreign, &ours).unwrap()).unwrap();
+        assert_eq!(merged["hooks"]["Stop"], json!(["oops"]));
+        assert_eq!(merged["hooks"]["Notification"], json!([]));
     }
 
     #[test]

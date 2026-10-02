@@ -121,6 +121,9 @@ pub struct NoteArgs {
     /// Emit in the hook JSON format for this harness (claude-code); plain text otherwise
     #[arg(long)]
     pub harness: Option<String>,
+    /// Emit the static instruction block for varde-workflow to include
+    #[arg(long)]
+    pub block: bool,
 }
 
 #[derive(Args, Debug)]

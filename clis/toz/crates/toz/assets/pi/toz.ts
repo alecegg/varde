@@ -7,6 +7,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 const TOZ = "{{TOZ_BIN}}";
 const NOTE = "{{TOZ_NOTE_JSON}}";
@@ -129,7 +130,7 @@ export default function toz(pi: ExtensionAPI) {
     systemPrompt: `${event.systemPrompt}\n\n${usageNote(process.cwd())}`,
   }));
 
-  pi.on("tool_result", (event, ctx) => {
+  pi.on("tool_result", async (event, ctx) => {
     if (event.isError) return;
 
     const fields = event as typeof event & NewerToolResultFields;
@@ -148,7 +149,17 @@ export default function toz(pi: ExtensionAPI) {
         const output = isShell && structured !== null && typeof structured === "object" && "output" in structured
           ? (structured as { output?: unknown }).output
           : undefined;
-        if (typeof output === "string") {
+        const fullOutputPath = isShell && structured !== null && typeof structured === "object" && "full_output_path" in structured
+          ? (structured as { full_output_path?: unknown }).full_output_path
+          : undefined;
+        if (typeof fullOutputPath === "string" && fullOutputPath.length > 0) {
+          try {
+            response = await readFile(fullOutputPath, "utf8");
+          } catch {
+            reportFailure("full-output-unavailable", event.toolName, Buffer.byteLength(text, "utf8"), ctx.cwd);
+            return;
+          }
+        } else if (typeof output === "string") {
           response = output;
         } else {
           try {

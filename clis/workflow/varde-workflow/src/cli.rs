@@ -15,6 +15,16 @@ fn positive_usize(value: &str) -> Result<usize, String> {
     Ok(parsed)
 }
 
+fn positive_u32(value: &str) -> Result<u32, String> {
+    let parsed = value
+        .parse::<u32>()
+        .map_err(|_| "value must be a positive integer".to_string())?;
+    if parsed == 0 {
+        return Err("value must be greater than zero".to_string());
+    }
+    Ok(parsed)
+}
+
 #[derive(Debug, Args)]
 pub struct OutputPageArgs {
     /// Maximum records returned per collection
@@ -52,12 +62,18 @@ pub enum Command {
     Recover(RecoverArgs),
     /// Resolve one artifact dependency graph
     Graph(GraphArgs),
+    /// Audit one source commit against its task ownership
+    CheckTaskOwnership(CheckTaskOwnershipArgs),
+    /// Select the next advisory execution wave without mutation
+    ExecutionWave(ExecutionWaveArgs),
     /// Report blockers and available workflow actions
     Readiness(ReadinessArgs),
     /// Enforce one workflow state transition
     Transition(TransitionArgs),
     /// Commit contracts, promotions, and conclusion state
     Conclude(ConcludeArgs),
+    /// Copy escalated findings to the standing deferred review
+    EscalateDeferred(EscalateDeferredArgs),
     /// Manage independent review subjects and evidence
     Review(ReviewArgs),
     /// Show retryable post-conclusion action state
@@ -77,6 +93,121 @@ pub enum Command {
     Paths(PathsArgs),
     /// Inspect specification source inventory and its verified cache
     Spec(SpecArgs),
+    /// Harness hook entry points
+    Hook(HookArgs),
+    /// Install or remove Varde's managed instruction block
+    Instructions(InstructionsArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct InstructionsArgs {
+    #[command(subcommand)]
+    pub command: InstructionsCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum InstructionsCommand {
+    /// Install or update the managed instruction block
+    Install(InstructionsInstallArgs),
+    /// Remove the managed instruction block from configured targets
+    Remove(InstructionsRemoveArgs),
+    /// Print the configured instruction targets
+    Targets,
+}
+
+#[derive(Debug, Args)]
+pub struct InstructionsInstallArgs {
+    /// Instruction file to update (may be repeated)
+    #[arg(long = "target")]
+    pub targets: Vec<PathBuf>,
+    /// Maximum number of subagents in flight
+    #[arg(long, value_parser = positive_u32)]
+    pub max_agents: Option<u32>,
+    /// Print the planned file changes without writing
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct InstructionsRemoveArgs {
+    /// Print the planned file changes without writing
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct CheckTaskOwnershipArgs {
+    #[arg(long)]
+    pub task: PathBuf,
+    #[arg(long)]
+    pub commit: String,
+    #[arg(long, default_value = ".")]
+    pub repo_root: PathBuf,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ExecutionWaveArgs {
+    pub plan_dir: PathBuf,
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
+    /// Maximum parallel tasks (1..3)
+    #[arg(long, default_value_t = 3)]
+    pub max_workers: usize,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct EscalateDeferredArgs {
+    /// Absolute plan directory under configured working/plans
+    #[arg(long)]
+    pub plan_dir: PathBuf,
+    /// Absolute, disjoint deferred review directory under working memory
+    #[arg(long)]
+    pub deferred_dir: PathBuf,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct HookArgs {
+    #[command(subcommand)]
+    pub command: HookCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum HookCommand {
+    /// Print session-start context from the configured providers
+    SessionStart(SessionStartArgs),
+    /// Add the unified SessionStart hook for a harness
+    Install(HookInstallArgs),
+    /// Remove the unified SessionStart hook for a harness
+    Remove(HookInstallArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct HookInstallArgs {
+    #[arg(long, value_enum)]
+    pub harness: Harness,
+    /// Print planned changes without writing
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum Harness {
+    Claude,
+    Codex,
+    Opencode,
+    Pi,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionStartArgs {
+    #[arg(long, value_enum)]
+    pub harness: Harness,
 }
 
 #[derive(Debug, Args)]

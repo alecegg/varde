@@ -2,10 +2,11 @@
 
 ## Sandbox
 
-- **No `[sandbox]` section:** `run` inherits the launching shell's
+- **No `[sandbox]` section in the toz config root's `config.toml`**
+  (`varde-toz doctor --json` shows the root): `run` inherits the launching shell's
   permissions, so `vardeToz.exec()` can launch arbitrary commands; a harness
   sandbox still covers them.
-- **`[sandbox]` present** (unless `enabled = false`): Seatbelt (macOS) or
+- **`[sandbox]` present in that file** (unless `enabled = false`): Seatbelt (macOS) or
   Bubblewrap (Linux) with workspace read/write and no network by default; `run`
   fails if the backend cannot start. Use `run` only for commands within its
   grants, and the harness tool otherwise.

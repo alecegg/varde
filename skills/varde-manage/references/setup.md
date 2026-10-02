@@ -19,20 +19,33 @@ for its location; never assume `varde` is on PATH or guess a download URL.
 1. Read `./varde --help` and pick target flags (`--agents`, `--skills-dir`, or
    `--no-cli` when only wiring is requested).
 2. Preview with `./varde sync --dry-run` plus those flags.
+3. After approval, install with `./varde sync --yes` plus the same flags;
+   without `--yes`, a non-TTY run can exit without installing.
 
 ## 3. Apply the authorized setup
 
 | Scope | Action |
 |---|---|
-| Default or harness setup | Run the reviewed `./varde sync` invocation. |
-| Skill subset | Read `skills/install.sh -h`; `-s <list> -m` refreshes a managed subset; `-l <dir>` links from a canonical directory. Resolve preserved unowned entries instead of forcing them. |
+| Default or harness setup | Run the reviewed `./varde sync --yes` invocation. |
+| Skill subset | Read `skills/install.sh -h`; prefer `-m` to `-f`, and give `-l` an absolute directory. Resolve preserved unowned entries instead of forcing them. |
 | Toz adapters | `varde-toz install --help`; adapters do not install the skill. |
+
+After `varde sync` installs agents for any harness, review their models. The
+installer prints one line per file ("Installed varde-executor -> <path>").
+
+1. List each installed agent with its effective model: the `model:` line
+   (Claude, OpenCode, Pi), or `model =` and `model_reasoning_effort =` (Codex
+   TOML), or "inherits the main session's model" when absent.
+2. Ask the user to keep or change each one.
+3. Apply changes by editing the installed agent file. Later `varde sync` runs
+   keep `model` and Codex `model_reasoning_effort`; any other edit to an
+   installed agent file is replaced.
 
 ## 4. Configure only the requested setting
 
 | Setting | Where |
 |---|---|
-| Memory/store paths (working, knowledge, learn) | `varde-workflow paths set`; project scope for project settings, `--default` only for an authorized shared default. New setups follow Recommended working-memory setup. |
+| Memory/store paths (working, knowledge, learn) | `varde-workflow paths set`; project scope for project settings, `--default` only for an authorized shared default; `--learn` always writes `[default]`. New setups follow Recommended working-memory setup. |
 | Toz main config | `config.toml` in the config root (override with `VARDE_TOZ_CONFIG_DIR`). |
 | Toz capture store | `varde-workflow paths set --toz`. |
 | Capture privacy | Capture settings below. |

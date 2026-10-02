@@ -14,6 +14,7 @@ use varde_workflow_core::memory::MemoryPaths;
 
 const JOURNAL_NAME: &str = ".varde-workflow-journal.json";
 const CONCLUSION_JOURNAL_NAME: &str = ".varde-workflow-conclusion.json";
+const ESCALATION_JOURNAL_NAME: &str = ".varde-workflow-escalation.json";
 
 #[derive(Debug)]
 pub struct JournalConflict(pub String);
@@ -533,6 +534,13 @@ fn commit_staged(target: &Path, content: &[u8], source: &[u8]) -> Result<()> {
 pub fn recover(root: &Path) -> Result<bool> {
     let root = root.canonicalize()?;
     let _lock = ProjectLock::acquire(&root)?;
+    let memory = MemoryPaths::resolve(&root)?;
+    let escalation_path = memory.working.path.join(ESCALATION_JOURNAL_NAME);
+    if escalation_path.exists() {
+        let _store = ProjectLock::acquire_escalation_store(&memory.working.path)?;
+        recover_escalation(&memory, &escalation_path)?;
+        return Ok(true);
+    }
     let conclusion_path = root.join(CONCLUSION_JOURNAL_NAME);
     if conclusion_path.exists() {
         recover_many_guarded(&root, &conclusion_path)?;
@@ -700,31 +708,61 @@ pub fn commit_many_guarded(
     let journal_path = root.join(CONCLUSION_JOURNAL_NAME);
     validate_sources(sources, None)?;
     validate_review(Some(review), &[], &[])?;
-    let resolved = resolve_writes(&root, &write_roots, writes)?;
+    let journal = stage_many(
+        &root,
+        &write_roots,
+        &journal_path,
+        writes,
+        sources,
+        json!({
+            "kind": "conclusion", "repository_root": root,
+            "subject_id": review.prerequisites.subject_id, "review_checkpoint": review,
+        }),
+    )?;
+    if std::env::var_os("VARDE_WORKFLOW_FAIL_AFTER_CONCLUSION_STAGE").is_some() {
+        bail!("injected interruption after conclusion staging");
+    }
+    validate_sources(sources, None)?;
+    let created_directories = journal_directories(&journal, "created_directories")?;
+    validate_review(Some(review), &[], &created_directories)?;
+    commit_journal_entries(&write_roots, &journal)?;
+    fs::remove_file(journal_path)?;
+    Ok(())
+}
+
+fn stage_many(
+    root: &Path,
+    write_roots: &[PathBuf],
+    journal_path: &Path,
+    writes: &[PendingWrite],
+    sources: &[ExpectedSource],
+    mut journal: Value,
+) -> Result<Value> {
+    let resolved = resolve_writes(root, write_roots, writes)?;
     let directory_plan =
-        plan_target_directories(&write_roots, resolved.iter().map(|(_, target)| target))?;
-    let created_directories = create_transaction_directories(&write_roots, &directory_plan)?;
-    let entries = match stage_writes_expected(&write_roots, resolved, sources) {
+        plan_target_directories(write_roots, resolved.iter().map(|(_, target)| target))?;
+    let created_directories = create_transaction_directories(write_roots, &directory_plan)?;
+    let entries = match stage_writes_expected(write_roots, resolved, sources) {
         Ok(entries) => entries,
         Err(error) => {
             cleanup_created_directories(&created_directories);
             return Err(error);
         }
     };
-    let journal = json!({
+    let mechanics = json!({
         "version": 2,
-        "kind": "conclusion",
         "phase": "staged",
-        "repository_root": root,
-        "subject_id": review.prerequisites.subject_id,
         "write_roots": write_roots,
         "entries": entries,
         "sources": sources,
-        "review_checkpoint": review,
         "created_directories": created_directories,
         "existing_directories": directory_plan.existing,
         "recovery_action": "commit",
     });
+    journal
+        .as_object_mut()
+        .context("invalid transaction metadata")?
+        .extend(mechanics.as_object().unwrap().clone());
     let journal_bytes = match serde_json::to_vec_pretty(&journal) {
         Ok(bytes) => bytes,
         Err(error) => {
@@ -734,20 +772,273 @@ pub fn commit_many_guarded(
         }
     };
     let mut journal_persisted = false;
-    if let Err(error) = write_new_journal(&journal_path, &journal_bytes, &mut journal_persisted) {
+    if let Err(error) = write_new_journal(journal_path, &journal_bytes, &mut journal_persisted) {
         if !journal_persisted {
             cleanup_staged_entries(&entries);
             cleanup_created_directories(&created_directories);
         }
         return Err(error);
     }
-    if std::env::var_os("VARDE_WORKFLOW_FAIL_AFTER_CONCLUSION_STAGE").is_some() {
-        bail!("injected interruption after conclusion staging");
+    Ok(journal)
+}
+
+pub fn commit_escalation_guarded(
+    memory: &MemoryPaths,
+    writes: &[PendingWrite],
+    lock: &ProjectLock,
+    store: &ProjectLock,
+    sources: &[ExpectedSource],
+    snapshot: &crate::escalation::Snapshot,
+) -> Result<()> {
+    let root = memory.root.canonicalize()?;
+    if store.root() != varde_workflow_core::memory::canonical_or_lexical(&memory.working.path)
+        || MemoryPaths::resolve(lock.root())?.root != memory.root
+    {
+        bail!("escalation lock domain does not match configured working memory");
+    }
+    reject_pending_project_journals(&root)?;
+    let path = memory.working.path.join(ESCALATION_JOURNAL_NAME);
+    if path.exists() {
+        return Err(conflict(
+            "deferred escalation recovery journal already exists; recover it before writing",
+        ));
+    }
+    validate_escalation_proof(memory, snapshot, sources, writes)?;
+    validate_sources(sources, None)?;
+    crate::escalation::validate_inventory(snapshot, &[])
+        .map_err(|error| conflict(error.to_string()))?;
+    if writes.is_empty() {
+        return Ok(());
+    }
+    let write_roots = vec![varde_workflow_core::memory::canonical_or_lexical(
+        &memory.working.path,
+    )];
+    let journal = stage_many(
+        &root,
+        &write_roots,
+        &path,
+        writes,
+        sources,
+        json!({
+            "kind": "deferred-escalation", "repository_root": root, "escalation_snapshot": snapshot,
+        }),
+    )?;
+    if std::env::var_os("VARDE_WORKFLOW_FAIL_AFTER_ESCALATION_STAGE").is_some() {
+        bail!("injected interruption after escalation staging");
     }
     validate_sources(sources, None)?;
-    validate_review(Some(review), &[], &created_directories)?;
+    crate::escalation::validate_inventory(snapshot, &[])
+        .map_err(|error| conflict(error.to_string()))?;
     commit_journal_entries(&write_roots, &journal)?;
-    fs::remove_file(journal_path)?;
+    fs::remove_file(path)?;
+    Ok(())
+}
+
+fn validate_escalation_proof(
+    memory: &MemoryPaths,
+    snapshot: &crate::escalation::Snapshot,
+    sources: &[ExpectedSource],
+    writes: &[PendingWrite],
+) -> Result<()> {
+    crate::escalation::validate_dirs(
+        &memory.working.path,
+        &snapshot.plan_dir,
+        &snapshot.deferred_dir,
+    )?;
+    let mut permitted = BTreeSet::from([
+        snapshot.plan_dir.join("plan.md"),
+        snapshot.deferred_dir.join("review.md"),
+    ]);
+    for (folder, names) in &snapshot.inventories {
+        let is_plan = folder == &snapshot.plan_dir;
+        if !is_plan
+            && folder != &snapshot.deferred_dir
+            && folder.parent() != Some(snapshot.plan_dir.as_path())
+        {
+            return Err(conflict("invalid escalation snapshot inventory directory"));
+        }
+        for name in names {
+            if !Path::new(name)
+                .components()
+                .all(|component| matches!(component, std::path::Component::Normal(_)))
+                || name.contains('/')
+                || name.contains('\\')
+            {
+                return Err(conflict("unsafe escalation snapshot inventory name"));
+            }
+            if is_plan {
+                permitted.insert(folder.join(name).join("review.md"));
+            } else if crate::escalation::is_category(name) {
+                permitted.insert(folder.join(name));
+            } else {
+                return Err(conflict("invalid escalation snapshot category"));
+            }
+        }
+    }
+    let prepared = crate::escalation::prepare(snapshot)?;
+    for write in &prepared.writes {
+        permitted.insert(write.target.clone());
+    }
+    if snapshot.files.keys().cloned().collect::<BTreeSet<_>>() != permitted {
+        return Err(conflict(
+            "escalation snapshot contains unexpected or missing input files",
+        ));
+    }
+    if sources.len() != snapshot.files.len() {
+        return Err(conflict(
+            "escalation snapshot source preconditions are incomplete",
+        ));
+    }
+    for (path, text) in &snapshot.files {
+        let matching = sources
+            .iter()
+            .filter(|source| source.path == *path)
+            .collect::<Vec<_>>();
+        if matching.len() != 1
+            || matching[0].inventory.is_some()
+            || matching[0].revision
+                != text
+                    .as_ref()
+                    .map(|s| varde_workflow_core::occ::version(s.as_bytes()))
+        {
+            return Err(conflict(
+                "escalation snapshot differs from captured source revisions",
+            ));
+        }
+    }
+    if prepared.writes.len() != writes.len()
+        || prepared
+            .writes
+            .iter()
+            .zip(writes)
+            .any(|(expected, actual)| {
+                expected.target != actual.target || expected.content != actual.content
+            })
+    {
+        return Err(conflict(
+            "escalation transaction contains unauthorized bookkeeping writes",
+        ));
+    }
+    Ok(())
+}
+
+fn recover_escalation(memory: &MemoryPaths, path: &Path) -> Result<()> {
+    let journal: Value = serde_json::from_slice(&fs::read(path)?)?;
+    if supported_journal_version(&journal)? != 2
+        || journal["kind"] != "deferred-escalation"
+        || journal.get("review_checkpoint").is_some()
+    {
+        return Err(conflict("invalid deferred escalation journal kind"));
+    }
+    let root = memory.root.canonicalize()?;
+    if path_field(&journal, "repository_root")? != root {
+        return Err(conflict(
+            "escalation journal belongs to another configured repository",
+        ));
+    }
+    let write_roots = vec![varde_workflow_core::memory::canonical_or_lexical(
+        &memory.working.path,
+    )];
+    if serde_json::from_value::<Vec<PathBuf>>(journal["write_roots"].clone())? != write_roots {
+        return Err(conflict("escalation journal working memory changed"));
+    }
+    let snapshot: crate::escalation::Snapshot =
+        serde_json::from_value(journal["escalation_snapshot"].clone())?;
+    let sources: Vec<ExpectedSource> = serde_json::from_value(journal["sources"].clone())?;
+    let prepared = crate::escalation::prepare(&snapshot)?;
+    validate_escalation_proof(memory, &snapshot, &sources, &prepared.writes)?;
+    let entries = journal["entries"]
+        .as_array()
+        .context("missing escalation entries")?;
+    if entries.len() != prepared.writes.len() {
+        return Err(conflict("escalation journal contains unexpected writes"));
+    }
+    for (entry, write) in entries.iter().zip(&prepared.writes) {
+        let source = sources
+            .iter()
+            .find(|source| source.path == write.target)
+            .context("missing escalation target precondition")?;
+        let source_hash: Option<String> = serde_json::from_value(entry["source_hash"].clone())?;
+        if path_field(entry, "target")? != write.target
+            || string_field(entry, "target_hash")?
+                != varde_workflow_core::occ::version(&write.content)
+            || source_hash != source.revision
+            || serde_json::from_value::<Option<FileIdentity>>(entry["source_identity"].clone())?
+                != source.identity
+        {
+            return Err(conflict(
+                "escalation journal does not match its bookkeeping proof",
+            ));
+        }
+        let stage = path_field(entry, "staging")?;
+        let prefix = write.target.with_extension("md.varde-stage-");
+        if stage.parent() != write.target.parent()
+            || !stage
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.strip_prefix(prefix.file_name().unwrap().to_str().unwrap()))
+                .is_some_and(|suffix| {
+                    !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit())
+                })
+        {
+            return Err(conflict("invalid escalation staging path"));
+        }
+        validate_staged_entry(entry)?;
+    }
+    let targets = prepared
+        .writes
+        .iter()
+        .map(|write| write.target.clone())
+        .collect::<Vec<_>>();
+    validate_sources_except(&sources, &targets)?;
+    crate::escalation::validate_inventory(&snapshot, &targets)
+        .map_err(|error| conflict(error.to_string()))?;
+    commit_journal_entries(&write_roots, &journal)?;
+    fs::remove_file(path)?;
+    Ok(())
+}
+
+fn validate_staged_entry(entry: &Value) -> Result<()> {
+    let target = path_field(entry, "target")?;
+    let stage = path_field(entry, "staging")?;
+    let target_hash = string_field(entry, "target_hash")?;
+    let source_hash = entry["source_hash"].as_str();
+    let source_identity: Option<FileIdentity> =
+        serde_json::from_value(entry["source_identity"].clone())?;
+    let target_identity: Option<FileIdentity> =
+        serde_json::from_value(entry["target_identity"].clone())?;
+    let current_hash = target
+        .exists()
+        .then(|| fs::read(&target).map(|bytes| varde_workflow_core::occ::version(&bytes)))
+        .transpose()?;
+    if current_hash.as_deref() == Some(target_hash.as_str())
+        && identity_matches(&target, target_identity.as_ref())?
+    {
+        if file_identity(&stage)?.is_some()
+            && (!identity_matches(&stage, target_identity.as_ref())?
+                || varde_workflow_core::occ::version(&fs::read(&stage)?) != target_hash)
+        {
+            return Err(conflict(
+                "applied escalation staging changed outside its recorded transaction",
+            ));
+        }
+        return Ok(());
+    }
+    if current_hash.as_deref() != source_hash
+        || !identity_matches(&target, source_identity.as_ref())?
+    {
+        return Err(conflict(
+            "escalation target changed outside its recorded transaction",
+        ));
+    }
+    if !stage.exists()
+        || varde_workflow_core::occ::version(&fs::read(&stage)?) != target_hash
+        || !identity_matches(&stage, target_identity.as_ref())?
+    {
+        return Err(conflict(
+            "escalation staging changed outside its recorded transaction",
+        ));
+    }
     Ok(())
 }
 
@@ -769,6 +1060,15 @@ fn resolve_writes<'a>(
 }
 
 fn reject_pending_project_journals(root: &Path) -> Result<()> {
+    let escalation = MemoryPaths::resolve(root)?
+        .working
+        .path
+        .join(ESCALATION_JOURNAL_NAME);
+    if escalation.exists() {
+        return Err(conflict(
+            "deferred escalation recovery journal already exists; recover it before writing",
+        ));
+    }
     for name in [JOURNAL_NAME, CONCLUSION_JOURNAL_NAME] {
         match fs::symlink_metadata(root.join(name)) {
             Ok(_) => {
@@ -1084,6 +1384,9 @@ fn recover_conclusion_checkpointed(
     journal_path: &Path,
     journal: &Value,
 ) -> Result<()> {
+    if journal["kind"] != "conclusion" {
+        return Err(conflict("invalid conclusion journal kind"));
+    }
     let repository = PathBuf::from(
         journal["repository_root"]
             .as_str()
@@ -1163,7 +1466,12 @@ fn commit_journal_entries(write_roots: &[PathBuf], journal: &Value) -> Result<()
     let entries = journal["entries"]
         .as_array()
         .context("conclusion journal entries are missing")?;
-    let fail_after = std::env::var("VARDE_WORKFLOW_FAIL_CONCLUSION_AFTER_RENAMES")
+    let fail_flag = if journal["kind"] == "deferred-escalation" {
+        "VARDE_WORKFLOW_FAIL_ESCALATION_AFTER_RENAMES"
+    } else {
+        "VARDE_WORKFLOW_FAIL_CONCLUSION_AFTER_RENAMES"
+    };
+    let fail_after = std::env::var(fail_flag)
         .ok()
         .and_then(|value| value.parse::<usize>().ok());
     let mut renamed = 0;

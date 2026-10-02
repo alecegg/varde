@@ -34,12 +34,11 @@
     {
       "id": 4,
       "prompt": "Regenerate the domain spec for src/billing/ under memory-bank/knowledge/specs/billing.md. The existing document has a hand-edited '## Notes' tail with our own migration caveats, and its generated-block sentinels are reversed (the end sentinel appears before the start sentinel).",
-      "expected_output": "The reversed sentinel pair is generated-boundary drift: the document is left unchanged and the drift is reported rather than silently regenerated. The hand-authored '## Notes' tail is never touched by generation and would stay byte-identical, whitespace and trailing newlines included, if the document were regenerated. `source_hash` is recomputed from the current sources regardless.",
+      "expected_output": "The reversed sentinel pair is generated-boundary drift: the document is left unchanged and the drift is reported rather than silently regenerated. The hand-authored '## Notes' tail is never touched by generation and would stay byte-identical, whitespace and trailing newlines included, if the document were regenerated.",
       "assertions": [
         "The reversed sentinel pair is detected as generated-boundary drift and reported, not silently fixed or regenerated",
         "The document with drifted sentinels is left unchanged rather than partially rewritten",
-        "The hand-authored '## Notes' tail is treated as byte-identical, preserved content, never rewritten by generation",
-        "source_hash is recomputed from the current source files rather than reused from the stale document"
+        "The hand-authored '## Notes' tail is treated as byte-identical, preserved content, never rewritten by generation"
       ]
     },
     {
@@ -51,7 +50,13 @@
         "Resolves working and knowledge paths from the Git root, independent of documentation scope"
       ],
       "setup_script": "evals/setup-docs-eval.sh",
-      "verification_script": "evals/verify-docs-eval.sh"
+      "verification_script": "evals/verify-docs-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 6,
@@ -63,7 +68,13 @@
         "Unchanged architecture is not rewritten and that decision is reported"
       ],
       "setup_script": "evals/setup-docs-eval.sh",
-      "verification_script": "evals/verify-docs-eval.sh"
+      "verification_script": "evals/verify-docs-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 7,
@@ -75,7 +86,13 @@
         "The overlapping source file is reported without silently assigning it to one domain"
       ],
       "setup_script": "evals/setup-docs-eval.sh",
-      "verification_script": "evals/verify-docs-eval.sh"
+      "verification_script": "evals/verify-docs-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 8,
@@ -86,7 +103,13 @@
         "The proposal-only request leaves the document unchanged"
       ],
       "setup_script": "evals/setup-docs-eval.sh",
-      "verification_script": "evals/verify-docs-eval.sh"
+      "verification_script": "evals/verify-docs-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 9,
@@ -97,17 +120,23 @@
         "The edited document is verified against the schema without an approval pause"
       ],
       "setup_script": "evals/setup-docs-eval.sh",
-      "verification_script": "evals/verify-docs-eval.sh"
+      "verification_script": "evals/verify-docs-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/memory-bank/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/memory-bank/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
     },
     {
       "id": 10,
       "prompt": "Check whether the billing spec needs regeneration. A verified inventory cache says billing is up to date, another domain is unchanged, and the rendered specs index is byte-identical. Report the result.",
-      "expected_output": "Use the current verified inventory verdict, including unclassified/overlapping paths and architecture candidates. Skip reading and rehashing unrelated domains, do not regenerate billing without a forced request, and leave the byte-identical index untouched. Report the skipped domain and cache decision; if the cache is stale or unavailable, recompute instead of trusting it.",
+      "expected_output": "Use the current verified inventory verdict, including unclassified/overlapping paths and architecture candidates. Skip reading and rehashing unrelated domains, do not regenerate billing without a forced request, and leave the byte-identical index untouched. Report the skipped domain and cache decision. Trust the cache verdict `varde-workflow spec inventory` returns (the CLI revalidates a stale cache itself); if the command is unavailable or fails, stop spec mode and report it instead of recomputing by hand.",
       "assertions": [
         "Uses only a verified current cache result to skip unchanged domain recomputation",
         "Still inspects architecture candidates and unclassified/overlapping paths",
         "Does not rewrite byte-identical specs/index.md",
-        "Falls back to current-source verification when cache cannot be trusted"
+        "Stops spec mode and reports it if `varde-workflow spec inventory` is unavailable or fails, rather than recomputing by hand"
       ]
     }
   ]

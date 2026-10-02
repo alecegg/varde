@@ -2,7 +2,7 @@
 description: {{description_yaml}}
 mode: subagent
 model: {{opencode_model}}
-permissions: {{opencode_permissions}}
+permission: {{opencode_permission}}
 ---
 <!-- varde-generated-agent: agents/capabilities.json -->
 

@@ -132,9 +132,15 @@ impl Env {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-        let handle = result["handle"].as_str().unwrap();
-        query_text(&self.config, &self.project, handle)
+        if let Ok(result) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+            if let Some(handle) = result["handle"]
+                .as_str()
+                .filter(|_| result["preview"].is_string())
+            {
+                return query_text(&self.config, &self.project, handle);
+            }
+        }
+        String::from_utf8(output.stdout).unwrap()
     }
 }
 
@@ -295,4 +301,459 @@ fn script_command_preview_cap_forces_capture_with_high_threshold() {
     assert_eq!(result["truncated"], true);
     let handle = result["capture"]["handle"].as_str().unwrap();
     assert!(query_text(&e.config, &e.project, handle).len() >= 69_000);
+}
+
+#[test]
+fn run_tiny_final_output_passes_through_without_readback() {
+    let e = Env::new();
+    for flags in [vec![], vec!["--json"], vec!["--quiet"]] {
+        let output = e
+            .command()
+            .args(flags)
+            .args(["run", "--code", "print('tiny result')"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"tiny result\n");
+    }
+}
+
+fn configured_profiles(e: &Env, text: &str) -> PathBuf {
+    let root = e.config.join("varde");
+    std::fs::create_dir_all(root.join("toz")).unwrap();
+    std::fs::write(root.join("toz/profiles.toml"), text).unwrap();
+    root
+}
+
+#[test]
+fn run_final_output_matches_command_profile() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "threshold = 10\n").unwrap();
+    let profiles = configured_profiles(&e, "[[profile]]\nid='final'\nmatch={command='varde-toz run *'}\nscript=\"print('FINAL PROFILE')\"\n");
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", profiles)
+        .args(["--json", "run", "--code", "print('overflow content')"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        value["preview"]
+            .as_str()
+            .is_some_and(|preview| preview.contains("FINAL PROFILE")),
+        "{value}"
+    );
+}
+
+#[test]
+fn run_child_output_matches_actual_command_profile() {
+    let e = Env::new();
+    let profiles = configured_profiles(&e,"[[profile]]\nid='child'\nmatch={command='printf child-profile'}\nscript=\"print('CHILD PROFILE')\"\n");
+    let output=e.command().env("VARDE_CONFIG_DIR", profiles).args(["run","--code","const r=toz.exec({shell:'printf child-profile',capture:true}); print(r.capture.preview)"]).output().unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("CHILD PROFILE"));
+}
+
+#[test]
+fn run_overflow_uses_normal_plain_json_and_quiet_previews() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "threshold = 100\n").unwrap();
+    for flags in [vec![], vec!["--json"], vec!["--quiet"]] {
+        let output = e
+            .command()
+            .args(&flags)
+            .args(["run", "--code", "print('overflow-marker '.repeat(500))"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let text = String::from_utf8(output.stdout).unwrap();
+        let handle = if flags == ["--json"] {
+            let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert!(value["preview"].as_str().unwrap().contains("handle "));
+            value["handle"].as_str().unwrap().to_owned()
+        } else {
+            text.split("handle ")
+                .nth(1)
+                .unwrap()
+                .split_whitespace()
+                .next()
+                .unwrap()
+                .to_owned()
+        };
+        assert!(text.len() < 4000);
+        assert_eq!(
+            query_text(&e.config, &e.project, &handle),
+            format!("{}\n", "overflow-marker ".repeat(500))
+        );
+    }
+}
+
+#[test]
+fn run_excluded_and_binary_final_results_pass_through() {
+    let e = Env::new();
+    std::fs::write(
+        e.config.join("config.toml"),
+        "threshold = 5\n[capture]\nnever = ['varde-toz run*']\n",
+    )
+    .unwrap();
+    let output = e
+        .command()
+        .args(["run", "--code", "print('excluded result')"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"excluded result\n");
+    std::fs::write(e.config.join("config.toml"), "threshold = 5\n").unwrap();
+    let output = e
+        .command()
+        .args(["run", "--code", "print('binary\\0result')"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"binary\0result\n");
+}
+
+#[test]
+fn run_final_scripted_profile_records_and_failure_fallback_are_normal() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "threshold = 5\n").unwrap();
+    let profiles=configured_profiles(&e,"[[profile]]\nid='final-records'\nmatch={command='varde-toz run *'}\nscript=\"toz.eachLine(line=>toz.record('line',{line})); print('PROFILE RECORDS')\"\n");
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["--json", "run", "--code", "print('first'); print('second')"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(value["preview"]
+        .as_str()
+        .unwrap()
+        .contains("PROFILE RECORDS"));
+    let records = e
+        .command()
+        .args([
+            "query",
+            "--handle",
+            value["handle"].as_str().unwrap(),
+            "--records",
+            "line",
+        ])
+        .output()
+        .unwrap();
+    assert!(records.status.success());
+    let rows: Vec<serde_json::Value> = String::from_utf8(records.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        rows,
+        serde_json::json!([{"line":"first"},{"line":"second"}])
+            .as_array()
+            .unwrap()
+            .clone()
+    );
+    configured_profiles(&e,"[[profile]]\nid='boom'\nmatch={command='varde-toz run *'}\nscript=\"throw new Error('profile exploded')\"\n");
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["--json", "run", "--code", "print('fallback input')"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(value["preview"].as_str().unwrap().contains("── sections"));
+    let doctor = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["--json", "doctor"])
+        .output()
+        .unwrap();
+    let doctor: serde_json::Value = serde_json::from_slice(&doctor.stdout).unwrap();
+    assert!(doctor["profile_diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|row| row["profile_id"] == "boom"));
+}
+
+#[test]
+fn run_final_declarative_profile_matches_without_changing_stored_kind() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "threshold = 5\n").unwrap();
+    let profiles=configured_profiles(&e,"[[profile]]\nid='toc'\nmatch={command='varde-toz run *'}\nmerge_small=false\nsections={heading='^## (.+)$'}\npreview={kind='toc',items_per_section=1}\n");
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", profiles)
+        .args([
+            "--json",
+            "run",
+            "--code",
+            "print('## First\\nalpha\\n## Second\\nbeta')",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let preview = value["preview"].as_str().unwrap();
+    assert!(
+        preview.contains("First (2 items) L1-L2") && preview.contains("Second (2 items) L3-L4")
+    );
+    assert_eq!(value["toc"].as_array().unwrap().len(), 2);
+    assert_eq!(value["toc"][0]["lines"].as_array().unwrap().len(), 1);
+    let list = e
+        .command()
+        .args(["--json", "query", "--list"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap();
+    assert_eq!(rows[0]["kind"], "script");
+}
+
+#[test]
+fn run_child_profiles_buffer_complete_input_with_limit_and_exclusion_precedence() {
+    let e = Env::new();
+    let profiles=configured_profiles(&e,"[[profile]]\nid='large-child'\nmatch={command='yes *'}\nscript=\"let seen=false; toz.eachLine(line=>{if(line.endsWith('tail-sentinel'))seen=true}); print('COMPLETE '+seen)\"\n");
+    let shell = format!(
+        "yes {} | head -c 1100000; printf tail-sentinel",
+        "x".repeat(255)
+    );
+    let code = format!("const r=toz.exec({{shell:{}}}); print(r.capture.preview.includes('COMPLETE true'),r.stdout.length,r.truncated)", serde_json::to_string(&shell).unwrap());
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["run", "--code", &code])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"true 65536 true\n");
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args([
+            "run",
+            "--code",
+            "toz.exec({shell:'yes x | head -c 8400000'})",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("8388608-byte limit"));
+    std::fs::write(
+        e.config.join("config.toml"),
+        "[capture]\nnever = ['yes *']\n",
+    )
+    .unwrap();
+    let output=e.command().env("VARDE_CONFIG_DIR",&profiles).args(["run","--code","const r=toz.exec({shell:'yes x | head -c 8400000',capture:true}); print(r.capture.state)"]).output().unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"excluded\n");
+}
+
+#[test]
+fn run_child_declarative_preview_and_profile_records_use_actual_source() {
+    let e = Env::new();
+    let profiles=configured_profiles(&e,"[[profile]]\nid='child-sections'\nmatch={command='printf *'}\nsections={heading='^## (.+)$'}\npreview={kind='toc',items_per_section=1,item='^body$'}\n");
+    let code = format!("const r=toz.exec({{shell:{},capture:true}}); print(JSON.stringify({{preview:r.capture.preview,state:r.capture.state}}))", serde_json::to_string("printf '%s\\n' '## Child' body").unwrap());
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["run", "--code", &code])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let preview = value["preview"].as_str().unwrap();
+    assert!(preview.contains("Child (1 items)"), "{preview}");
+    assert_eq!(value["state"], "captured");
+    configured_profiles(&e,"[[profile]]\nid='child-records'\nmatch={command='printf *'}\nscript=\"toz.eachLine(line=>toz.record('line',{line})); print('CHILD RECORDS')\"\n");
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args([
+            "run",
+            "--code",
+            "const r=toz.exec({shell:'printf child',capture:true}); print(r.capture.handle)",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let handle = String::from_utf8(output.stdout).unwrap();
+    let records = e
+        .command()
+        .args(["query", "--handle", handle.trim(), "--records", "line"])
+        .output()
+        .unwrap();
+    assert!(records.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&records.stdout).unwrap(),
+        serde_json::json!({"line":"child"})
+    );
+}
+
+#[test]
+fn run_final_profile_input_cap_honors_exclusions_and_unprofiled_output() {
+    let e = Env::new();
+    let config = "threshold = 10\n[script]\nmax_output_bytes = 10485760\n";
+    std::fs::write(e.config.join("config.toml"), config).unwrap();
+    let profiles=configured_profiles(&e,"[[profile]]\nid='bounded-final'\nmatch={command='varde-toz run *'}\nscript=\"print('PROFILE RAN')\"\n");
+    let large = "print('x'.repeat(9*1024*1024))";
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["run", "--code", large])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("8388608-byte limit"));
+    std::fs::write(
+        e.config.join("config.toml"),
+        format!("{config}[capture]\nnever=['varde-toz run *']\n"),
+    )
+    .unwrap();
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["run", "--code", large])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout.len(), 9 * 1024 * 1024 + 1);
+    std::fs::write(e.config.join("config.toml"), config).unwrap();
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["run", "--code", "print('\\0'+'x'.repeat(9*1024*1024))"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout[0], 0);
+    std::fs::remove_file(profiles.join("toz/profiles.toml")).unwrap();
+    let output = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["--json", "run", "--code", large])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(value["handle"].is_string());
+    assert!(value["preview"].is_string());
+}
+
+#[test]
+fn run_child_scripted_profile_failure_falls_back_and_records_diagnostic() {
+    let e = Env::new();
+    let profiles=configured_profiles(&e,"[[profile]]\nid='child-boom'\nmatch={command='printf *'}\nscript=\"throw new Error('child exploded')\"\n");
+    let output=e.command().env("VARDE_CONFIG_DIR",&profiles).args(["run","--code","const r=toz.exec({shell:'printf child',capture:true}); print(r.capture.preview.includes('── sections'),r.stdout)"]).output().unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"true child\n");
+    let doctor = e
+        .command()
+        .env("VARDE_CONFIG_DIR", &profiles)
+        .args(["--json", "doctor"])
+        .output()
+        .unwrap();
+    let doctor: serde_json::Value = serde_json::from_slice(&doctor.stdout).unwrap();
+    assert!(doctor["profile_diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|row| row["profile_id"] == "child-boom"));
+}
+
+#[test]
+fn captured_analysis_supersedes_itself_but_external_runs_keep_fresh_handles() {
+    let e = Env::new();
+    std::fs::write(e.config.join("config.toml"), "threshold = 5\n").unwrap();
+    let capture = e
+        .command()
+        .args(["--json", "capture", "--source", "analysis-input", "--force"])
+        .write_stdin("input lines\n")
+        .output()
+        .unwrap();
+    assert!(capture.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&capture.stdout).unwrap();
+    let handle = value["handle"].as_str().unwrap();
+    let code = "print('stable aggregate')";
+    for _ in 0..2 {
+        assert!(e
+            .command()
+            .args(["run", "--handle", handle, "--code", code])
+            .output()
+            .unwrap()
+            .status
+            .success());
+    }
+    let list = e
+        .command()
+        .args(["--json", "query", "--list"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap();
+    assert_eq!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["kind"] == "script")
+            .count(),
+        1
+    );
+    for _ in 0..2 {
+        assert!(e
+            .command()
+            .args([
+                "run",
+                "--code",
+                "const r=toz.exec({shell:'printf short'}); print('fresh aggregate')"
+            ])
+            .output()
+            .unwrap()
+            .status
+            .success());
+    }
+    let list = e
+        .command()
+        .args(["--json", "query", "--list"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap();
+    assert_eq!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["kind"] == "script")
+            .count(),
+        3
+    );
+    for _ in 0..2 {
+        assert!(e
+            .command()
+            .args([
+                "run",
+                "--label",
+                "explicit",
+                "--code",
+                "toz.exec({shell:'printf short'}); print('explicit aggregate')"
+            ])
+            .output()
+            .unwrap()
+            .status
+            .success());
+    }
+    let list = e
+        .command()
+        .args(["--json", "query", "--list"])
+        .output()
+        .unwrap();
+    let rows: serde_json::Value = serde_json::from_slice(&list.stdout).unwrap();
+    assert_eq!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["label"] == "explicit")
+            .count(),
+        1
+    );
 }

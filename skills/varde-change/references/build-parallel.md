@@ -2,7 +2,7 @@
 
 Load `references/build-worktree.md` for worktree binding authorization and release.
 
-## Shared-checkout wave
+## Shared-checkout wave (`wave_mode: shared`)
 
 1. The orchestrator waits for every executor, then confirms each changed path
    belongs to exactly one task and each reported hash still matches.
@@ -12,7 +12,7 @@ Load `references/build-worktree.md` for worktree binding authorization and relea
 3. Once all checks pass, commit each task's owned paths in its own commit,
    then commit bookkeeping separately.
 
-## Worktree wave
+## Worktree wave (`wave_mode: worktree`)
 
 A failed worker, merge, or combined verification leaves the target SHA
 unchanged; keep every worker and integration ref until the failure is
@@ -44,7 +44,7 @@ diagnosed.
 ## 3. Collect results
 
 1. Collect every result before integrating.
-2. Run `scripts/check-task-ownership.py` per `build.md` on each task commit as
+2. Run `varde-workflow check-task-ownership` per `build.md` on each task commit as
    an early check; release already rejects committed scope escapes. A stray
    path fails that worker; its path list goes with the one corrective retry.
 3. If any worker fails or blocks, merge none of that wave. Diagnose first, then
@@ -53,7 +53,8 @@ diagnosed.
 ## 4. Integrate and verify
 
 1. Create an integration worktree at the recorded SHA:
-   `scripts/worktree-create.sh <wave-id>-integration <target-sha>`.
+   `scripts/worktree-create.sh <wave-id>-integration <target-sha>`, where
+   `<wave-id>` is unique to this wave, such as `<plan-slug>-wave-<n>`.
 2. From it, merge each worker in task-id order with
    `scripts/worktree-merge.sh <task-id>`.
 3. Run the combined wave verification there.

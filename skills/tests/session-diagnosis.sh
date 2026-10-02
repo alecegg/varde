@@ -21,6 +21,7 @@ def contains(relative, *needles):
     content = text(relative)
     if relative == "skills/varde-learn/references/diagnose.md":
         content += text("skills/varde-learn/references/diagnose-capture.md")
+        content += text("skills/varde-learn/references/diagnose-current.md")
     content = " ".join(content.split()).lower()
     missing = [needle for needle in needles if needle.lower() not in content]
     if missing:
@@ -76,7 +77,7 @@ contains("skills/varde-learn/references/diagnose.md",
     "Do not include the coordinator's hypotheses, conclusions, or preferred fix in the handoff",
     "delegation is unavailable, stop and report that blocker",
     "Do not replace the analyst with self-analysis",
-    "An individual event can still be eligible for capture only when its source identity and historical context are revalidated",
+    "When overlap is `current` or `unknown`, an event is eligible for capture only when its source identity and historical context are revalidated",
 )
 
 contains("skills/varde-learn/references/diagnose.md",

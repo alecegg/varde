@@ -8,6 +8,8 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_THRESHOLD: usize = 4096;
+/// Floor for file-read tool output, which agents rarely want summarized.
+pub const READ_THRESHOLD: usize = 16384;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -197,9 +199,17 @@ impl Default for CaptureRules {
 }
 
 impl Config {
-    /// Threshold for a hook capture from `tool`. User-listed tools override; then default.
-    pub fn threshold_for(&self, tool: &str) -> usize {
-        self.thresholds.get(tool).copied().unwrap_or(self.threshold)
+    /// Threshold for a hook capture from `tool`. Order: exact tool key, then (file reads only)
+    /// the `read` key, then `max(READ_THRESHOLD, threshold)`; otherwise the global threshold.
+    pub fn threshold_for(&self, tool: &str, is_file_read: bool) -> usize {
+        if let Some(&limit) = self.thresholds.get(tool) {
+            return limit;
+        }
+        if !is_file_read {
+            return self.threshold;
+        }
+        let read_default = READ_THRESHOLD.max(self.threshold);
+        self.thresholds.get("read").copied().unwrap_or(read_default)
     }
 }
 

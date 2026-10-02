@@ -41,7 +41,11 @@ impl Repo {
                 .env("HOME", self.home())
                 .output()
                 .unwrap();
-            assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stdout));
+            assert!(
+                built.status.success(),
+                "{}",
+                String::from_utf8_lossy(&built.stdout)
+            );
         }
         let output = Command::new(env!("CARGO_BIN_EXE_varde-code"))
             .args([command, "--json", &input.to_string()])
@@ -207,10 +211,7 @@ fn unconfigured_boundaries_cannot_silently_pass_explicit_gates() {
     );
     assert!(!ok);
     assert_eq!(payload["data"]["error"]["code"], "invalid_input");
-    assert!(
-        !repo.home().exists(),
-        "validation precedes index writes"
-    );
+    assert!(!repo.home().exists(), "validation precedes index writes");
     repo.boundary("src/core", "");
     let (ok, payload) = repo.command("scan", serde_json::json!({}));
     assert!(!ok);

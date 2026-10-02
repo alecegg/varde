@@ -5,8 +5,8 @@ use crate::chunk::{self, Chunk};
 use crate::metadata;
 use crate::redact::{NeverCapture, Redactor};
 use crate::store::NewCapture;
-use crate::{Config, Store};
-use anyhow::{Context, Result, ensure};
+use crate::{profile::Profile, Config, Store};
+use anyhow::{ensure, Context, Result};
 use std::io::{BufRead, BufReader, Read, Seek, Write};
 
 /// Smaller captures keep content-aware chunking and whole-document redaction.
@@ -26,10 +26,24 @@ pub fn spool(input: &mut impl Read) -> Result<(std::fs::File, usize)> {
 pub fn run(
     cfg: &Config,
     store: &mut Store,
+    input: CaptureInput<'_>,
+    stdout: &mut (impl Read + Seek),
+    stderr: &mut (impl Read + Seek),
+    bytes: usize,
+) -> Result<Outcome> {
+    run_with_profiles(cfg, store, input, stdout, stderr, bytes, &[])
+}
+
+/// Profile scripts require full text; unprofiled output stays on the bounded streaming path.
+#[allow(clippy::too_many_arguments)]
+pub fn run_with_profiles(
+    cfg: &Config,
+    store: &mut Store,
     mut input: CaptureInput<'_>,
     stdout: &mut (impl Read + Seek),
     stderr: &mut (impl Read + Seek),
     bytes: usize,
+    profiles: &[Profile],
 ) -> Result<Outcome> {
     if !input.force && bytes <= input.threshold.unwrap_or(cfg.threshold) {
         return Ok(Outcome::PassThrough);
@@ -45,8 +59,12 @@ pub fn run(
     if has_binary_sample(stdout, stderr)? {
         return Ok(Outcome::Skipped { rule: "binary" });
     }
-    if bytes <= STREAM_THRESHOLD {
-        return run_small(cfg, store, &mut input, stdout, stderr);
+    let profiled = capture::matched_profile(&input, profiles).is_some();
+    if profiled && bytes > capture::MAX_PROFILED_CAPTURE_BYTES {
+        anyhow::bail!("profile-matched capture exceeds the {}-byte limit; reduce input or adjust the matching profile", capture::MAX_PROFILED_CAPTURE_BYTES);
+    }
+    if profiled || bytes <= STREAM_THRESHOLD {
+        return run_small(cfg, store, &mut input, stdout, stderr, profiles);
     }
     run_large(cfg, store, &input, stdout, stderr, bytes, &key, sk)
 }
@@ -76,6 +94,7 @@ fn run_small(
     input: &mut CaptureInput<'_>,
     stdout: &mut impl ReadSeek,
     stderr: &mut impl ReadSeek,
+    profiles: &[Profile],
 ) -> Result<Outcome> {
     let mut out = Vec::new();
     let mut err = Vec::new();
@@ -99,9 +118,7 @@ fn run_small(
             file_mtime: input.file_mtime,
             file_hash: input.file_hash.take(),
         },
-        // Profile matching for streamed input is out of scope; this caller has no
-        // profiles loaded.
-        &[],
+        profiles,
     )
 }
 

@@ -11,7 +11,7 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~618 tok; routes: -)
+- SKILL.md (~851 tok; routes: -)
 
 ```mermaid
 flowchart TD

@@ -1,6 +1,10 @@
 mod artifact;
 mod cli;
 mod conclusion;
+mod escalation;
+mod execution_wave;
+mod execution_wave_paths;
+mod execution_wave_tools;
 mod journal;
 mod output;
 mod review_checkpoints;
@@ -9,9 +13,11 @@ mod review_coverage;
 mod review_gates;
 mod review_lock;
 mod review_worktrees;
+mod task_ownership;
 mod workflow_graph;
 mod workflow_schema;
 mod commands {
+    pub mod check_task_ownership;
     pub mod common;
     pub mod conclude;
     pub mod conclusion_action;
@@ -20,8 +26,13 @@ mod commands {
     pub mod create;
     pub mod delete;
     pub mod error;
+    pub mod escalate_deferred;
+    pub mod execution_wave;
     pub mod graph;
+    pub mod hook;
+    pub mod hook_install;
     pub mod input;
+    pub mod instructions;
     pub mod lint;
     pub mod list;
     pub mod maps;
@@ -47,10 +58,13 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Validate(args) => commands::validate::run(args)?,
         Command::Recover(args) => commands::recover::run(args)?,
+        Command::CheckTaskOwnership(args) => commands::check_task_ownership::run(args)?,
+        Command::ExecutionWave(args) => commands::execution_wave::run(args)?,
         Command::Graph(args) => commands::graph::run(args)?,
         Command::Readiness(args) => commands::readiness::run(args)?,
         Command::Transition(args) => commands::transition::run(args)?,
         Command::Conclude(args) => commands::conclude::run(args)?,
+        Command::EscalateDeferred(args) => commands::escalate_deferred::run(args)?,
         Command::Review(args) => commands::review::run(args)?,
         Command::ConclusionStatus(args) => commands::conclusion_status::run(args)?,
         Command::ConclusionRetry(args) => commands::conclusion_retry::run(args)?,
@@ -58,6 +72,8 @@ fn main() -> Result<()> {
         Command::Concept { command } => run_concept(command)?,
         Command::Lint(args) => commands::lint::run(args)?,
         Command::Paths(args) => commands::paths::run(args)?,
+        Command::Hook(args) => commands::hook::run(args)?,
+        Command::Instructions(args) => commands::instructions::run(args)?,
         Command::Spec(args) => match args.command {
             SpecCommand::Inventory(inventory) => commands::spec_inventory::run(inventory)?,
         },

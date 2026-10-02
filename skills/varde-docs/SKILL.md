@@ -5,14 +5,15 @@ description: "Refresh README.md, docs/*.md, and changelogs or release notes agai
 
 # Maintain project documentation
 
-Before implementation edits, apply `references/review-gates.md`.
+Before editing any file, apply `references/review-gates.md` unless a caller's
+approved gate already covers the edits, and carry its verdict to completion.
 
 ## Choose the reference
 
 | Document type | Read |
 |---|---|
-| User-facing: README.md, `docs/*.md`, CHANGELOGs, release notes, or another document a reader opens directly | `references/refresh.md` |
-| A generated domain specification under `<knowledge>/specs/` | `references/spec.md` |
+| User-facing: README.md, `docs/*.md`, CHANGELOGs, release notes, or another document a reader opens directly (`refresh`) | `references/refresh.md` |
+| A generated domain specification under `<knowledge>/specs/` (`spec`) | `references/spec.md` |
 
 ## Gotchas
 

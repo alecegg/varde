@@ -11,9 +11,9 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~468 tok; routes: Shape, prototype, or refine a frontend page, layout, or c..., "Does this state model, logic, or data shape feel right?"...)
+- SKILL.md (~474 tok; routes: Shape, prototype, or refine a frontend page, layout, or c..., "Does this state model, logic, or data shape feel right?"...)
   - references/logic-track.md (~402 tok; routes: "Does this state model, logic, or data shape feel right?"...)
-  - references/visual-track.md (~654 tok; routes: Shape, prototype, or refine a frontend page, layout, or c...)
+  - references/visual-track.md (~638 tok; routes: Shape, prototype, or refine a frontend page, layout, or c...)
 
 ```mermaid
 flowchart TD
@@ -32,15 +32,15 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  n0["references/visual-track.md (~654 tok)"]
+  n0["references/visual-track.md (~638 tok)"]
 ```
 
 ## Routes
 
 | Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |
 |---|---|---|---|---|---|---|---|
-| Shape, prototype, or refine a frontend page, layout, or c... | ~1122 | ~1122 | ~1122 | ~1122 | - | 0 | references/visual-track.md |
-| "Does this state model, logic, or data shape feel right?"... | ~870 | ~870 | ~870 | ~870 | - | 0 | references/logic-track.md |
+| Shape, prototype, or refine a frontend page, layout, or c... | ~1112 | ~1112 | ~1112 | ~1112 | - | 0 | references/visual-track.md |
+| "Does this state model, logic, or data shape feel right?"... | ~876 | ~876 | ~876 | ~876 | - | 0 | references/logic-track.md |
 
 ## Structure
 

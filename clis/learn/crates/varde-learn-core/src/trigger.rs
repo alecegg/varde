@@ -436,7 +436,7 @@ fn validate_claude_types(events: &[Value]) -> Result<(), ()> {
     for event in events {
         let obj = event.as_object().ok_or(())?;
         let ty = obj.get("type").and_then(Value::as_str).ok_or(())?;
-        if !["system", "assistant", "user", "result"].contains(&ty) {
+        if !["system", "assistant", "user", "result", "rate_limit_event"].contains(&ty) {
             return Err(());
         }
     }
@@ -679,8 +679,13 @@ mod tests {
         let missing_skill = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{}}]}}"#;
         let skill = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"target"}}]}}"#;
         let result = r#"{"type":"result","subtype":"success","is_error":false}"#;
+        let rate_limit = r#"{"type":"rate_limit_event","rate_limit_info":{}}"#;
         let trace = |events: &[&str]| events.join("\n");
 
+        assert_eq!(
+            parse_claude(trace(&[skill, rate_limit, result]).as_bytes(), "target"),
+            Ok(true)
+        );
         assert_eq!(
             parse_claude(trace(&[ignored, result]).as_bytes(), "target"),
             Ok(false)

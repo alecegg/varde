@@ -5,8 +5,9 @@ description: "Write or review a document an agent reads — SKILL.md, AGENTS.md,
 
 # Agent document authoring
 
-Before editing any file, apply `references/review-gates.md` and carry its
-verdict to completion.
+Before editing any file other than the fix list, apply
+`references/review-gates.md` as its coordinator and carry its verdict to
+completion. Skip this when a caller's approved gate already covers the edits.
 
 ## Choose the task
 
@@ -14,7 +15,7 @@ verdict to completion.
 |---|---|
 | Author or revise a skill or agent document | `references/author.md` |
 | Review a skill or agent document | `references/review.md` |
-| Improve triggering | `references/specification.md` and sibling skills' SKILL.md descriptions |
+| Improve triggering | `references/specification.md` and sibling skills' SKILL.md descriptions (installed skills directory, or `skills/` in this repo); run trigger evals with `varde-learn` |
 
 ## Gotchas
 

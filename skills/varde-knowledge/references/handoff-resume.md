@@ -4,7 +4,7 @@
 
 1. List `status: open` handoffs under `<working>/handoffs/*/handoff.md`,
    reading frontmatter only, newest first, preferring a matching `cwd`, then
-   `branch`, then `keywords`. If none, say so and stop.
+   `branch`, then `keywords`. If none, say so and suggest `varde-change` plans in flight.
 2. With one candidate, resume it. With more than one, ask which to resume as
    an inline numbered menu with a recommendation.
 3. Read it and label each link per **Label links**. Report a current branch or
@@ -25,10 +25,10 @@ block:
 - Missing target: `missing`.
 - `integrity: none`: `unknown`; re-read it before acting.
 - `content_hashes`: recompute the complete path-to-hash list with
-  `python3 <skill-dir>/scripts/handoff-snapshot.py` per
+  `python3 scripts/handoff-snapshot.py` per
   `references/handoff-snapshot.md`, wherever the handoff is stored. A changed
   list is `modified`; an identical one is `unchanged`; a hash kind
   (`git-blob`/`sha256`) differing from the recorded one is `unknown`.
-- A link without `integrity`, a missing or unresolvable baseline, another
-  repository, an external target, a legacy directory target, or a failed
-  comparison: `unknown`.
+- A link with neither `integrity` nor `content_hashes` (legacy), a missing or
+  unresolvable baseline, another repository, an external target, a directory
+  link without `content_hashes` (legacy), or a failed comparison: `unknown`.

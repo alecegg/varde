@@ -11,10 +11,11 @@ def text(relative):
     return re.sub(r'\s+', ' ', (root / relative).read_text())
 
 dispatch = text('varde-change/references/build.md')
+recovery = text('varde-change/references/build-recovery.md')
 assert '| `parallel` | `execution=auto` (the default)' in dispatch
 assert 'Skip the source commit/ownership audit only for spikes' in dispatch
 assert 'Before accepting a completed implementation task, compare' in dispatch
-assert 'Every `done` implementation task needs a matching source commit' in dispatch
+assert 'Every `done` implementation task needs a matching source commit' in recovery
 assert 'Before accepting a completed spike, confirm its question/approach/answer' in dispatch
 execution = text('varde-change/references/build-execution.md')
 assert 'For a spike, commit no source changes' in execution

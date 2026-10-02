@@ -666,6 +666,52 @@ mod tests {
     }
 
     #[test]
+    fn repo_root_scopes_search_without_an_index() {
+        let dir = std::env::temp_dir().join(format!("fp-root-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sub")).expect("temp dir creates");
+        std::fs::write(dir.join("sub/a.ts"), "foo(1);\n").expect("fixture writes");
+        std::fs::write(dir.join("b.ts"), "foo(2);\n").expect("fixture writes");
+        let root = dir.display().to_string();
+        let run = |extra: serde_json::Value| {
+            let mut input = serde_json::json!({ "pattern": "foo($A)", "language": "typescript" });
+            input
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            match_rows(&find_pattern(&input).expect("pattern runs")).len()
+        };
+
+        assert_eq!(
+            run(serde_json::json!({ "repoRoot": root })),
+            2,
+            "repoRoot alone"
+        );
+        assert_eq!(
+            run(serde_json::json!({ "repoRoot": root, "path": "sub" })),
+            1,
+            "relative path resolves against repoRoot"
+        );
+        assert_eq!(
+            run(serde_json::json!({ "repoRoot": root, "filePath": "b.ts" })),
+            1,
+            "relative filePath resolves against repoRoot"
+        );
+        assert_eq!(
+            run(serde_json::json!({ "path": dir.join("sub").display().to_string() })),
+            1,
+            "absolute path is unchanged"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_target_and_repo_root_is_invalid_input() {
+        let input = serde_json::json!({ "pattern": "foo($A)", "language": "typescript" });
+        assert_eq!(find_pattern(&input).unwrap_err().code, "invalid_input");
+    }
+
+    #[test]
     fn prefilter_changes_timing_not_results() {
         // Three files: one real match; one that contains both atoms
         // (`console`, `log`) but does not structurally match (prefilter lets it
@@ -1670,6 +1716,7 @@ fn find_pattern_with_compaction(
     };
     let pattern_text = req_str(input, "pattern")?;
     let target_path = pattern_target(input)?;
+    let target_path = target_path.as_path();
     let is_dir = target_path.is_dir();
     let lang = resolve_lang(input, (!is_dir).then_some(target_path))?;
     let (stripped, constraints) = split_kind_constraints(pattern_text);
@@ -1706,19 +1753,24 @@ fn find_pattern_with_compaction(
     finish_directory_search(search, target_path, output)
 }
 
-fn pattern_target(input: &serde_json::Value) -> Result<&std::path::Path, ApiError> {
+/// The file or directory to search. A relative `filePath`/`path` resolves
+/// against `repoRoot`; `repoRoot` alone searches the whole repository.
+fn pattern_target(input: &serde_json::Value) -> Result<std::path::PathBuf, ApiError> {
     let target = input
         .get("filePath")
         .and_then(|value| value.as_str())
         .or_else(|| input.get("file").and_then(|value| value.as_str()))
-        .or_else(|| input.get("path").and_then(|value| value.as_str()))
-        .ok_or_else(|| {
-            ApiError::new(
-                "invalid_input",
-                "missing filePath (or path for a directory search)",
-            )
-        })?;
-    Ok(std::path::Path::new(target))
+        .or_else(|| input.get("path").and_then(|value| value.as_str()));
+    let root = input.get("repoRoot").and_then(|value| value.as_str());
+    match (target, root) {
+        (Some(target), Some(root)) => Ok(std::path::Path::new(root).join(target)),
+        (Some(target), None) => Ok(target.into()),
+        (None, Some(root)) => Ok(root.into()),
+        (None, None) => Err(ApiError::new(
+            "invalid_input",
+            "missing filePath, path, or repoRoot",
+        )),
+    }
 }
 
 fn pattern_relations(input: &serde_json::Value) -> Result<Relations, ApiError> {

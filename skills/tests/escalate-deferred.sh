@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ESCALATE="$SCRIPT_DIR/../varde-change/scripts/escalate-deferred.py"
+WORKFLOW="${VARDE_WORKFLOW_BIN:-$(command -v varde-workflow)}"
+escalate() { "$WORKFLOW" escalate-deferred "$@"; }
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/escalate-deferred.XXXXXX")"
 trap 'chmod -R u+w "$TEST_ROOT"; rm -rf "$TEST_ROOT"' EXIT
 
@@ -11,7 +11,13 @@ fail() {
   exit 1
 }
 
-test -x "$ESCALATE" || fail "escalate-deferred.py is missing or not executable"
+test -x "$WORKFLOW" || fail "varde-workflow is missing or not executable"
+export VARDE_CONFIG_DIR="$TEST_ROOT/config"
+export VARDE_WORKING_DIR="$TEST_ROOT/working"
+export VARDE_KNOWLEDGE_DIR="$TEST_ROOT/knowledge"
+mkdir -p "$TEST_ROOT/repo"
+git init -q "$TEST_ROOT/repo"
+cd "$TEST_ROOT/repo"
 
 working="$TEST_ROOT/working"
 deferred="$working/reviews/deferred"
@@ -45,13 +51,13 @@ disposition() { # disposition <file> <id>
 
 # 1. Usage errors exit 2.
 set +e
-"$ESCALATE" --plan-dir relative --deferred-dir "$deferred" >/dev/null 2>&1; code=$?
+escalate --plan-dir relative --deferred-dir "$deferred" >/dev/null 2>&1; code=$?
 set -e
 [ "$code" = 2 ] || fail "relative --plan-dir exited $code, want 2"
 
 # 2. The source is marked only after the copy is written: a failed copy leaves it blank.
 chmod 555 "$deferred"
-if "$ESCALATE" --plan-dir "$plan" --deferred-dir "$deferred" >/dev/null 2>&1; then
+if escalate --plan-dir "$plan" --deferred-dir "$deferred" >/dev/null 2>&1; then
   chmod 755 "$deferred"; fail "run with an unwritable deferred review succeeded"
 fi
 chmod 755 "$deferred"
@@ -59,7 +65,7 @@ chmod 755 "$deferred"
 [ ! -e "$deferred/CODE.md" ] || fail "failed run created CODE.md"
 
 # 3. First copy: next ID after existing IDs, a new category file, review.md update.
-out="$("$ESCALATE" --plan-dir "$plan" --deferred-dir "$deferred")"
+out="$(escalate --plan-dir "$plan" --deferred-dir "$deferred")"
 grep -Fxq 'escalated p1/review-2026-09-01 CODE-001 -> deferred CODE-001' <<< "$out" || fail "missing CODE-001 line: $out"
 grep -Fxq 'escalated p1/review-2026-09-01 CORRECTNESS-001 -> deferred CORRECTNESS-005' <<< "$out" || fail "missing CORRECTNESS line: $out"
 grep -Fxq 'summary: 2 escalated, 0 skipped' <<< "$out" || fail "bad summary: $out"
@@ -87,15 +93,15 @@ PY
 
 # 4. A rerun changes nothing.
 before="$(snapshot)"
-out="$("$ESCALATE" --plan-dir "$plan" --deferred-dir "$deferred")"
+out="$(escalate --plan-dir "$plan" --deferred-dir "$deferred")"
 [ "$out" = 'summary: 0 escalated, 0 skipped' ] || fail "rerun output: $out"
 [ "$before" = "$(snapshot)" ] || fail "rerun changed files"
 
 # 5. An interrupted run (copy written, source still blank) skips the copy and marks the source.
 sed -i.bak 's/^\*\*Disposition:\*\* escalated$/**Disposition:** blank/' "$review/CODE.md" && rm "$review/CODE.md.bak"
 before_code="$(shasum "$deferred/CODE.md")"
-out="$("$ESCALATE" --plan-dir "$plan" --deferred-dir "$deferred" --json)"
-jq -e '.ok and .summary == {"escalated":0,"skipped":1} and .findings[0].action == "skipped" and .findings[0].deferred_id == "CODE-001"' <<< "$out" >/dev/null ||
+out="$(escalate --plan-dir "$plan" --deferred-dir "$deferred" --json)"
+jq -e '.ok and .data.summary == {"escalated":0,"skipped":1} and .data.findings[0].action == "skipped" and .data.findings[0].deferred_id == "CODE-001"' <<< "$out" >/dev/null ||
   fail "interrupted rerun JSON: $out"
 [ "$before_code" = "$(shasum "$deferred/CODE.md")" ] || fail "skip duplicated the copy"
 [ "$(disposition "$review/CODE.md" CODE-001)" = escalated ] || fail "skip did not mark the source"
@@ -109,7 +115,7 @@ printf -- '---\ntype: review\nbranch: main\n---\n' > "$bad/review-2026-09-02/rev
   sed 's/^\*\*Severity:\*\* medium$/**Severity:** urgent/'; } > "$bad/review-2026-09-02/STYLE.md"
 before="$(snapshot)"
 set +e
-err="$("$ESCALATE" --plan-dir "$bad" --deferred-dir "$deferred" 2>&1)"; code=$?
+err="$(escalate --plan-dir "$bad" --deferred-dir "$deferred" 2>&1)"; code=$?
 set -e
 [ "$code" = 1 ] || fail "malformed finding exited $code, want 1"
 grep -q 'STYLE-002 Severity' <<< "$err" || fail "malformed report does not name the finding: $err"

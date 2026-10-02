@@ -424,17 +424,17 @@ case "$EVAL_ID" in
 
     done_status="FAIL"
     if [[ -f "$task_file" ]] &&
-       grep -Eq '^status:[[:space:]]*done[[:space:]]*$' "$task_file" &&
+       grep -Eq '^status:[[:space:]]*in_progress[[:space:]]*$' "$task_file" &&
        grep -Eq '^- evidence:' "$task_file"; then
       done_status="PASS"
     fi
-    done_status_evidence="the task is not done or has no evidence line"
-    [[ "$done_status" == PASS ]] && done_status_evidence="the task is done with an evidence line"
+    done_status_evidence="the task is not in_progress or has no evidence line"
+    [[ "$done_status" == PASS ]] && done_status_evidence="the task is in_progress with an evidence line"
 
     emit_results \
       "$(emit "Creates no additional task files" "$no_new_tasks" "$no_new_tasks_evidence")" \
       "$(emit "Implements flush() in src/logger.ts's close() method" "$implemented" "$implemented_evidence")" \
-      "$(emit "Marks the task done with evidence in its Progress" "$done_status" "$done_status_evidence")"
+      "$(emit "Ends Progress with an evidence entry and leaves the task in_progress" "$done_status" "$done_status_evidence")"
     ;;
   15)
     old_dir="memory-bank/working/plans/2026-09-10-widget-exporter-draft"

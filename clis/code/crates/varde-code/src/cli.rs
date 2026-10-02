@@ -94,7 +94,7 @@ pub enum Command {
         #[arg(long)]
         json: String,
     },
-    /// Query: files that import or otherwise depend on a file.
+    /// Query: files the given file depends on (imports by default); use direction: incoming to reverse it.
     /// (see `dependencies` help for inputs)
     #[command(name = "dependencies")]
     Dependencies {
@@ -222,7 +222,7 @@ pub enum Command {
     /// (see `find_pattern` help for inputs)
     #[command(name = "find_pattern")]
     FindPattern {
-        /// JSON object: { path? (or repoRoot/filePath), pattern, language?, matchesLimit?, matchesOffset?, fullMatches? }
+        /// JSON object: { repoRoot?, path? (or filePath), pattern, language?, matchesLimit?, matchesOffset?, fullMatches? }. Relative path/filePath resolves against repoRoot; repoRoot alone searches the repo. Directories need language. Needs no index.
         #[arg(long)]
         json: String,
     },
@@ -234,10 +234,14 @@ pub enum Command {
     #[command(name = "context_pack")]
     ContextPack {
         /// JSON object: { repoRoot, dbPath?, query, resultsLimit?, resultsOffset?,
-        /// maxTokensEstimate? (default 4000), includeReadingOrder? (default true), fullResults? }
+        /// maxTokensEstimate? (default 4000), includeReadingOrder? (default true),
+        /// includeOccurrences? (default false), includeTests? (default true), fullResults? }
         /// maxTokensEstimate estimates the complete success envelope as serialized JSON bytes / 4,
         /// including metadata. includeReadingOrder=false leaves readingOrder empty.
-        /// fullResults bypasses the token budget and symbol cap; resultsOffset still applies.
+        /// includeTests=false leaves tests empty and skips test-hint computation.
+        /// Symbols default to declaration kinds; includeOccurrences=true adds matching occurrence/control entities.
+        /// Each symbol span contains persisted 1-based start_line and end_line values.
+        /// fullResults bypasses token and result caps without changing symbol filtering; resultsOffset still applies.
         #[arg(long)]
         json: String,
     },
@@ -261,7 +265,7 @@ pub enum Command {
         with_project_knowledge: bool,
     },
     /// Scan built-in, user, and repository rules against a fresh read-only index.
-    /// Ensure watcher coverage with `watch --ensure` before calling scan.
+    /// On index_missing or index_stale, run `watch --ensure` and retry.
     /// Exit nonzero for incomplete analysis or policy-blocking findings.
     /// Inspect data.analysis.status and data.gate.status independently.
     #[command(name = "scan")]

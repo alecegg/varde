@@ -6,5 +6,10 @@
   {"query":"Explain how the auth refresh path works, with evidence from the source files.","should_trigger":false},
   {"query":"Plan and implement a longer auth refresh timeout.","should_trigger":false},
   {"query":"Review this auth refresh diff for bugs and risky behavior.","should_trigger":false},
-  {"query":"Install or upgrade the varde-code CLI on this machine.","should_trigger":false}
+  {"query":"Install or upgrade the varde-code CLI on this machine.","should_trigger":false},
+  {"query":"Find every occurrence of the string `session.ttl` in the docs.","should_trigger":false},
+  {"query":"Search the captured test output for 'FAILED'.","should_trigger":false},
+  {"query":"Find every call site of `refresh_token` in this repository.","should_trigger":true},
+  {"query":"Where is `TokenBucket::acquire` used? List its callers.","should_trigger":true},
+  {"query":"Search the docs and comments for every mention of \"rate limit\".","should_trigger":false}
 ]

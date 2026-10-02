@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Write a knowledge note capturing our decision to use OCC (optimistic concurrency) for all bundle writes instead of file locks. We chose it because multiple agents edit the same checkout concurrently. Store it in the project knowledge folder.",
-      "expected_output": "A new decision note is created with Write at <knowledge>/decision/<slug>.md (type-first path, not nested under a domain). Frontmatter carries type: decision, a one-sentence description, and generated: { by: <producer>/<version>, at: <ISO 8601> }. The body follows the decision shape with ## What, ## Why, and ## Constraints headings. Content is compact and factual with no session narrative.",
+      "expected_output": "A new decision note is created with Write at <knowledge>/decision/<slug>.md (type-first path, not nested under a domain). Frontmatter carries type: decision, a one-sentence description, and generated: { by: <harness>/<model-id>, at: <ISO 8601> }. The body follows the decision shape with ## What, ## Why, and ## Constraints headings. Content is compact and factual with no session narrative.",
       "assertions": [
         "The note is written to memory-bank/knowledge/decision/<slug>.md, with type as a top-level folder",
         "Frontmatter includes a non-empty type field, a description, and a generated entry with by and at",

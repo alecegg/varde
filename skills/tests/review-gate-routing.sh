@@ -40,7 +40,7 @@ contains(gate_path,
 branches = {
     "review-gate-record.md": [
         "data.record_template",
-        "data.version", "data.subject.subject_id", "schema_version",
+        "data.version", "schema_version",
         "review inspect --subject <subject-id> --phase <pre-edit|implementation> --json",
         "review record --subject <subject-id>",
         "failing test before implementation",
@@ -111,8 +111,8 @@ contains("skills/shared/references/review-gate-plan.md",
 )
 contains("skills/shared/references/varde-workflow-cli.md",
     "Never replace approval with prose",
-    "fallback below applies only to reads and planning/bookkeeping",
-    "gated implementation/completion operations; if unavailable, stop those operations",
+    "Not on `PATH`: stop every operation, reads included",
+    "Every other command, including `review inspect`, stops and reports the failure",
 )
 contains("skills/varde-review/references/report.md",
     "Review-gate evidence",

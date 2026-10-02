@@ -49,9 +49,11 @@ deployed project.
 
 - `id`, plus exactly one selector: `match = { command = "<glob>" }` or
   `{ source = "<glob>" }`.
-- Sections (optional): one of `heading` (regex), `start` (regex), or
-  `jsonl_key` (field); `merge_small` defaults to true.
-- Preview: `kind = "toc" | "head"`, `items_per_section`, `item` (regex).
+- Sections (optional): `sections = { heading = "<regex>" }`; use `start`
+  (regex) or `jsonl_key` (field) instead of `heading`, exactly one.
+- Top-level `merge_small` (bool, default true).
+- Preview (optional): `preview = { kind = "toc" | "head", items_per_section = <n>,
+  item = "<regex>" }`; only `kind` is required.
 
 ```toml
 [[profile]]

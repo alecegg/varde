@@ -2,9 +2,11 @@
 
 ## Capture eligible incidents
 
-- An individual event can still be eligible for capture only when its source
-  identity and historical context are revalidated and it precedes a verified
-  pre-orchestration cutoff; otherwise leave it report-only.
+- When overlap is `current` or `unknown`, an event is eligible for capture only
+  when its source identity and historical context are revalidated and it
+  precedes the verified pre-orchestration cutoff; otherwise leave it
+  report-only. Other overlaps keep the eligibility rules in `references/diagnose.md`
+  (Save the report).
 
 For each distinct eligible incident:
 

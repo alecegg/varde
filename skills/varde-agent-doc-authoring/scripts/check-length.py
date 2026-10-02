@@ -3,7 +3,7 @@
 # requires-python = ">=3.9"
 # dependencies = []
 # ///
-"""Flag long text in agent documents (criteria.md, Length limits).
+"""Flag long text in agent documents (criteria.md, Scripts and length checks).
 
 Usage: check-length.py <skill-dir-or-file>...
 

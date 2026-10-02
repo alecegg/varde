@@ -1,18 +1,17 @@
 # Reviewer evidence record
 
-Reuse the same reviewer agent for a subject's pre-edit and implementation
-phases, continuing its own context rather than starting a fresh one.
+Reuse the pre-edit reviewer when still reachable in this session; otherwise
+use a fresh clean-context reviewer.
 
-1. Take the id from initialization at `data.subject.subject_id`.
-2. Resolve code-answerable questions yourself.
-3. Inspect the subject at the current phase; copy `data.version` and
+1. Resolve code-answerable questions yourself.
+2. Inspect the subject at the current phase; copy `data.version` and
    `data.record_template`:
 
    ```sh
    varde-workflow review inspect --subject <subject-id> --phase <pre-edit|implementation> --json
    ```
 
-4. `data.record_template` is `EvidenceRecord`'s exact shape, with
+3. `data.record_template` is `EvidenceRecord`'s exact shape, with
    `schema_version`, for this phase. Fill every remaining placeholder from your
    own assessment (`implementation_review_required` and `tier_confirmed` are
    JSON booleans); never default approval or the final-review decision. Write
@@ -21,7 +20,7 @@ phases, continuing its own context rather than starting a fresh one.
    `subject.json` — a report or coordinator-written approval is insufficient.
    An implementation record requires `coverage: "entire-subject-change"`, a
    non-empty `change_fingerprint`, and `tier_confirmed`.
-5. Submit it (a pre-edit verdict before any implementation edit):
+4. Submit it (a pre-edit verdict before any implementation edit):
 
    ```sh
    varde-workflow review record --subject <subject-id> --expected-version <data.version> --file <reviewer-record.json> --json

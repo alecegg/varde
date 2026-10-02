@@ -420,4 +420,13 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "Dry run. No skills installed to: $TARGET"
 else
   echo "Done. Installed to: $TARGET"
+  # Skills require the varde CLIs; sync reports missing ones itself.
+  if [ -z "$LINK_SOURCE" ] && [ -z "${VARDE_SKILLS_SKIP_CLI_CHECK:-}" ]; then
+    missing_clis=""
+    for cli in varde-workflow varde-code varde-toz varde-learn; do
+      command -v "$cli" >/dev/null 2>&1 || missing_clis="$missing_clis $cli"
+    done
+    [ -z "$missing_clis" ] ||
+      echo "Warning: varde CLIs missing from PATH:$missing_clis. Install them with: $(cd "$SCRIPT_DIR/.." && pwd)/varde sync" >&2
+  fi
 fi

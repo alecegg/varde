@@ -59,6 +59,15 @@ fn context_pack_help_documents_budget_controls_and_defaults() {
         "4000",
         "includeReadingOrder",
         "true",
+        "includeOccurrences",
+        "false",
+        "includeTests",
+        "default true",
+        "includeTests=false",
+        "occurrence/control",
+        "persisted 1-based",
+        "start_line",
+        "end_line",
         "fullResults",
     ] {
         assert!(

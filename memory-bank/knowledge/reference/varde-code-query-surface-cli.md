@@ -3,6 +3,7 @@ type: reference
 status: active
 title: "varde-code query surface CLI"
 related: ["2026-08-12-varde-code-rust-port/query-surface"]
+reconciled: { at: 2026-10-02T05:30:44Z, sha: 3661ec713d1b9eae0ef1fa2155d37c03a69a4d44 }
 ---
 
 # varde-code query surface CLI reference
@@ -42,11 +43,13 @@ Example input for an indexed query:
 ```
 
 Missing indexes return `index_missing`. Stale required slices return
-`index_stale`; wait for a ready watcher or search source directly. Queries
-never repair the index themselves. `detect_changes` deliberately skips the
-freshness gate so it can compare the stored snapshot with current source.
+`index_stale`; on either code, run `watch --ensure` and retry (`find_pattern`
+needs no index). Queries never repair the index themselves. `detect_changes`
+deliberately skips the freshness gate so it can compare the stored snapshot
+with current source.
 
-Exceptions: `find_pattern` needs a live file/directory target, not an index;
+Exceptions: `find_pattern` parses live source, not an index: `repoRoot` alone
+searches the repository, and a relative `path`/`filePath` resolves against it;
 `slice_state` is a read-only diagnostic and can inspect an explicit `dbPath`
 without `repoRoot`. In `batch`, indexed children need their own or inherited
 `repoRoot`; inspect each child's result as well as the outer envelope.

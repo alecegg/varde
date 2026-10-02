@@ -66,7 +66,7 @@ Billing service deployment.
 
 ## Notes
 SPEC
-    printf 'source_commit: none\n' > memory-bank/knowledge/specs/index.md
+    printf '%s\n' '---' 'source_commit: none' '---' > memory-bank/knowledge/specs/index.md
     if [[ "$EVAL_ID" == 7 ]]; then
       printf 'billing = "new-billing-service"\n' > deployment.toml
       printf 'pub fn tax() {}\n' > src/shared/tax.rs

@@ -4,6 +4,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"
+export VARDE_AGENTS_OPENCODE_VERSION="${VARDE_AGENTS_OPENCODE_VERSION:-1.4.0}"
 OLD="$HOME/.config/opencode/agent"
 NEW="$HOME/.config/opencode/agents"
 mkdir -p "$OLD" "$NEW"
@@ -62,4 +63,25 @@ ln -s "$TMP/legacy-external" "$OLD"
 ! grep -Fq "Would remove legacy managed" "$TMP/symlink-preview"
 "$ROOT/install.sh" -t opencode -m -a varde-planner >/dev/null
 [ -L "$OLD" ] && [ -f "$TMP/legacy-external/plan.md" ]
+# Adapter selection: the override wins; otherwise `opencode --version` decides,
+# and a missing or unparseable opencode selects the V1 adapter.
+selected_format() {
+  local target="$TMP/select-$1"
+  rm -rf "$target"
+  env -u VARDE_AGENTS_OPENCODE_VERSION PATH="$TMP/select-bin:/usr/bin:/bin" \
+    "$ROOT/install.sh" -t opencode -f -a varde-planner -d "$target" >/dev/null
+  if grep -q '^permissions: ' "$target/varde-planner.md"; then echo v2; else echo v1; fi
+}
+mkdir -p "$TMP/select-bin"
+! PATH="$TMP/select-bin:/usr/bin:/bin" command -v opencode >/dev/null
+[ "$(selected_format missing)" = v1 ]
+printf '#!/bin/sh\necho 1.4.2\n' > "$TMP/select-bin/opencode"
+chmod +x "$TMP/select-bin/opencode"
+[ "$(selected_format one)" = v1 ]
+printf '#!/bin/sh\necho 2.0.1\n' > "$TMP/select-bin/opencode"
+[ "$(selected_format two)" = v2 ]
+printf '#!/bin/sh\necho garbage\n' > "$TMP/select-bin/opencode"
+[ "$(selected_format garbage)" = v1 ]
+[ "$(VARDE_AGENTS_OPENCODE_VERSION=2 "$ROOT/install.sh" -t opencode -f -a varde-planner -d "$TMP/select-bare" >/dev/null; grep -c '^permissions: ' "$TMP/select-bare/varde-planner.md")" = 1 ]
+[ "$(VARDE_AGENTS_OPENCODE_VERSION=2.0.0 "$ROOT/install.sh" -t opencode -f -a varde-planner -d "$TMP/select-env" >/dev/null; grep -c '^permissions: ' "$TMP/select-env/varde-planner.md")" = 1 ]
 echo 'OpenCode install migration checks passed'

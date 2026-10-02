@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 #[test]
-fn production_sources_never_launch_varde_subprocesses() {
+fn production_sources_only_launch_the_scheduler_code_provider() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files = Vec::new();
     collect_rust_files(&root, &mut files);
@@ -15,7 +15,15 @@ fn production_sources_never_launch_varde_subprocesses() {
         ".arg('varde-",
     ];
     for path in files {
-        let source = fs::read_to_string(&path).unwrap();
+        let mut source = fs::read_to_string(&path).unwrap();
+        if path == root.join("execution_wave_tools.rs") {
+            // The scheduler queries the installed code provider; every other
+            // Varde subprocess remains forbidden, including in this module.
+            let provider =
+                r#"Command::new("varde-code").args(["blast_radius", "--json", &payload])"#;
+            assert_eq!(source.matches(provider).count(), 1);
+            source = source.replacen(provider, "approved_code_provider()", 1);
+        }
         for pattern in forbidden {
             assert!(
                 !source.contains(pattern),

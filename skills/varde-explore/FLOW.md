@@ -11,9 +11,9 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~284 tok; routes: A direct ask to explain a diff or code area, or compare o...)
-  - references/explain.md (~506 tok; routes: A direct ask to explain a diff or code area, or compare o...)
-  - references/varde-code-cli.md (~46 tok; routes: A direct ask to explain a diff or code area, or compare o...)
+- SKILL.md (~306 tok; routes: An explicit ask to explain a diff or code area, or compar...)
+  - references/explain.md (~506 tok; routes: An explicit ask to explain a diff or code area, or compar...)
+  - references/varde-code-cli.md (~46 tok; routes: An explicit ask to explain a diff or code area, or compar...)
 
 ```mermaid
 flowchart TD
@@ -31,7 +31,7 @@ flowchart TD
 
 | Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |
 |---|---|---|---|---|---|---|---|
-| A direct ask to explain a diff or code area, or compare o... | ~836 | ~836 | ~836 | ~836 | - | 0 | references/explain.md, references/varde-code-cli.md |
+| An explicit ask to explain a diff or code area, or compar... | ~858 | ~858 | ~858 | ~858 | - | 0 | references/explain.md, references/varde-code-cli.md |
 
 ## Structure
 
@@ -44,8 +44,8 @@ flowchart TD
 | Diagram edges | 3 | <= 60 | ok |
 | Max route cyclomatic | 1 | <= 10 | ok |
 | Max route cognitive | 0 | <= 10 warn, <= 15 error | ok |
-| Most files reached by one route | 2 (A direct ask to explain a diff or code area, or compare o...) | <= 15 | ok |
+| Most files reached by one route | 2 (An explicit ask to explain a diff or code area, or compar...) | <= 15 | ok |
 
 ## Findings
 
-- single caller: references/explain.md <- SKILL.md: A direct ask to explain a diff or code area, or compare o...
+- single caller: references/explain.md <- SKILL.md: An explicit ask to explain a diff or code area, or compar...

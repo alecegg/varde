@@ -2,8 +2,8 @@ use crate::cli::*;
 use crate::diagnostics;
 use crate::sandbox;
 use crate::worker;
-use anyhow::{Context, Result, bail};
-use serde_json::{Value, json};
+use anyhow::{bail, Context, Result};
+use serde_json::{json, Value};
 use std::io::{Read, Seek, Write};
 use std::path::Path;
 use toz_core::capture::{self, CaptureInput, Outcome};
@@ -43,6 +43,7 @@ pub fn dispatch(cli: Cli) -> Result<i32> {
     if let Command::Note(a) = &cli.cmd {
         return cmd_note(NoteArgs {
             harness: a.harness.clone(),
+            block: a.block,
         });
     }
     let command = cli.cmd;
@@ -609,23 +610,21 @@ where
             let queue = queue.clone();
             let urls = urls.clone();
             let sender = sender.clone();
-            std::thread::spawn(move || {
-                loop {
-                    let next = {
-                        let mut index = queue.lock().unwrap();
-                        if *index >= urls.len() {
-                            None
-                        } else {
-                            let current = *index;
-                            *index += 1;
-                            Some((current, urls[current].clone()))
-                        }
-                    };
-                    let Some((i, url)) = next else { break };
-                    let r = fetch::fetch(&url, opts).map_err(|e| format!("{e:#}"));
-                    if sender.send((i, r)).is_err() {
-                        break;
+            std::thread::spawn(move || loop {
+                let next = {
+                    let mut index = queue.lock().unwrap();
+                    if *index >= urls.len() {
+                        None
+                    } else {
+                        let current = *index;
+                        *index += 1;
+                        Some((current, urls[current].clone()))
                     }
+                };
+                let Some((i, url)) = next else { break };
+                let r = fetch::fetch(&url, opts).map_err(|e| format!("{e:#}"));
+                if sender.send((i, r)).is_err() {
+                    break;
                 }
             })
         })
@@ -1843,36 +1842,18 @@ fn cmd_capture(cfg: &Config, project: &Project, g: &GlobalOpts, a: CaptureArgs) 
     input.force = a.force;
     input.defer_index = a.defer_index;
     input.threshold = a.threshold;
-    let profile_matched = capture::matched_profile(&input, &profiles).is_some();
-    if profile_matched && total > capture::MAX_PROFILED_CAPTURE_BYTES {
-        bail!(
-            "profile-matched capture exceeds the {}-byte limit; reduce stdin or adjust the matching profile",
-            capture::MAX_PROFILED_CAPTURE_BYTES
-        );
-    }
-
     let mut store = open_store(cfg, project)?;
     let sess = session();
     input.session = sess.as_deref();
-    let outcome = if profile_matched {
-        // Profile scripts and custom preview rules consume the complete text; keep their existing
-        // behavior behind a strict size limit instead of buffering arbitrary input.
-        spool.rewind()?;
-        let mut raw = Vec::with_capacity(total);
-        spool.read_to_end(&mut raw)?;
-        if a.stderr {
-            input.stderr = &raw;
-        } else {
-            input.stdout = &raw;
-        }
-        capture::run(cfg, &mut store, input, &profiles)?
+    let mut empty = std::io::Cursor::new(&[][..]);
+    let outcome = if a.stderr {
+        streaming::run_with_profiles(
+            cfg, &mut store, input, &mut empty, &mut spool, total, &profiles,
+        )?
     } else {
-        let mut empty = std::io::Cursor::new(&[][..]);
-        if a.stderr {
-            streaming::run(cfg, &mut store, input, &mut empty, &mut spool, total)?
-        } else {
-            streaming::run(cfg, &mut store, input, &mut spool, &mut empty, total)?
-        }
+        streaming::run_with_profiles(
+            cfg, &mut store, input, &mut spool, &mut empty, total, &profiles,
+        )?
     };
     match outcome {
         Outcome::PassThrough | Outcome::Skipped { .. } => {
@@ -1882,6 +1863,218 @@ fn cmd_capture(cfg: &Config, project: &Project, g: &GlobalOpts, a: CaptureArgs) 
         Outcome::Captured(p) => emit_preview(g, &p)?,
     }
     Ok(0)
+}
+
+struct ShellWord {
+    value: String,
+    quoted_assignment_name: bool,
+}
+
+fn flush_shell_word(
+    words: &mut Vec<ShellWord>,
+    value: &mut String,
+    started: &mut bool,
+    quoted_assignment_name: &mut bool,
+) {
+    if *started {
+        words.push(ShellWord {
+            value: std::mem::take(value),
+            quoted_assignment_name: *quoted_assignment_name,
+        });
+        *started = false;
+        *quoted_assignment_name = false;
+    }
+}
+
+/// Split only ordinary shell lists. Expansions, escaping, pipes and redirects stay ambiguous.
+fn shell_commands(source: &str) -> Option<Vec<Vec<ShellWord>>> {
+    let mut commands = Vec::new();
+    let mut words = Vec::new();
+    let mut value = String::new();
+    let mut started = false;
+    let mut quoted_assignment_name = false;
+    let mut quote = None;
+    let mut and_or_pending = false;
+    let mut chars = source.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match quote {
+            Some('\'') if ch == '\'' => quote = None,
+            Some('"') if ch == '"' => quote = None,
+            Some('"') if matches!(ch, '$' | '`' | '\\') => return None,
+            Some(_) => {
+                value.push(ch);
+                started = true;
+            }
+            None if ch == '\'' || ch == '"' => {
+                if !value.contains('=') {
+                    quoted_assignment_name = true;
+                }
+                quote = Some(ch);
+                started = true;
+            }
+            None if matches!(
+                ch,
+                '\\' | '$' | '`' | '#' | '(' | ')' | '<' | '>' | '*' | '?' | '[' | '{' | '}'
+            ) =>
+            {
+                return None;
+            }
+            None if ch == '&' || ch == '|' => {
+                if chars.next()? != ch {
+                    return None;
+                }
+                flush_shell_word(
+                    &mut words,
+                    &mut value,
+                    &mut started,
+                    &mut quoted_assignment_name,
+                );
+                if words.is_empty() {
+                    return None;
+                }
+                commands.push(std::mem::take(&mut words));
+                and_or_pending = true;
+            }
+            None if ch == ';' || ch == '\n' => {
+                flush_shell_word(
+                    &mut words,
+                    &mut value,
+                    &mut started,
+                    &mut quoted_assignment_name,
+                );
+                if words.is_empty() {
+                    if ch == ';' {
+                        return None;
+                    }
+                } else {
+                    commands.push(std::mem::take(&mut words));
+                    and_or_pending = false;
+                }
+            }
+            None if ch == ' ' || ch == '\t' => flush_shell_word(
+                &mut words,
+                &mut value,
+                &mut started,
+                &mut quoted_assignment_name,
+            ),
+            None => {
+                value.push(ch);
+                started = true;
+            }
+        }
+    }
+
+    if quote.is_some() {
+        return None;
+    }
+    flush_shell_word(
+        &mut words,
+        &mut value,
+        &mut started,
+        &mut quoted_assignment_name,
+    );
+    if words.is_empty() && and_or_pending {
+        return None;
+    }
+    if !words.is_empty() {
+        commands.push(words);
+    }
+    (!commands.is_empty()).then_some(commands)
+}
+
+fn assignment_name(word: &ShellWord) -> Option<&str> {
+    let (name, _) = word.value.split_once('=')?;
+    let mut chars = name.chars();
+    let first = chars.next()?;
+    if !(first == '_' || first.is_ascii_alphabetic())
+        || !chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    Some(name)
+}
+
+fn is_toz_executable(word: &ShellWord) -> bool {
+    matches!(word.value.rsplit('/').next(), Some("toz" | "varde-toz"))
+}
+
+/// `Some(true)` is a Toz command; `Some(false)` is a silent directory/assignment setup.
+fn classify_shell_command(words: &[ShellWord]) -> Option<bool> {
+    let mut index = 0;
+    while let Some(word) = words.get(index) {
+        if assignment_name(word).is_none() {
+            break;
+        }
+        if word.quoted_assignment_name {
+            return None;
+        }
+        index += 1;
+    }
+    if index == words.len() {
+        return (index > 0).then_some(false);
+    }
+
+    match words[index].value.as_str() {
+        "cd" => {
+            (words.len() == index + 2 && words[index + 1].value.starts_with('/')).then_some(false)
+        }
+        "env" => {
+            index += 1;
+            while let Some(word) = words.get(index) {
+                if assignment_name(word).is_none() {
+                    break;
+                }
+                if word.quoted_assignment_name {
+                    return None;
+                }
+                index += 1;
+            }
+            words
+                .get(index)
+                .filter(|word| !word.value.starts_with('-'))
+                .map(is_toz_executable)
+                .filter(|is_toz| *is_toz)
+        }
+        "command" => {
+            index += 1;
+            if words.get(index).is_some_and(|word| word.value == "-p") {
+                index += 1;
+            }
+            words
+                .get(index)
+                .filter(|word| !word.value.starts_with('-'))
+                .map(is_toz_executable)
+                .filter(|is_toz| *is_toz)
+        }
+        "exec" => {
+            index += 1;
+            words
+                .get(index)
+                .filter(|word| !word.value.starts_with('-'))
+                .map(is_toz_executable)
+                .filter(|is_toz| *is_toz)
+        }
+        _ => Some(is_toz_executable(&words[index])).filter(|is_toz| *is_toz),
+    }
+}
+
+fn toz_only_shell_source(source: &str) -> bool {
+    let Some(commands) = shell_commands(source) else {
+        return false;
+    };
+    let mut has_toz = false;
+    commands
+        .iter()
+        .all(|words| match classify_shell_command(words) {
+            Some(true) => {
+                has_toz = true;
+                true
+            }
+            Some(false) => true,
+            None => false,
+        })
+        && has_toz
 }
 
 /// Claude Code PostToolUse payload → `updatedToolOutput` JSON on overflow, nothing otherwise.
@@ -1911,14 +2104,14 @@ fn hook_capture(cfg: &Config, project: &Project, raw: &[u8], harness: &str) -> R
     }
 
     let total = shape.stdout.len() + shape.stderr.len();
-    let threshold = cfg.threshold_for(tool);
+    let threshold = cfg.threshold_for(tool, is_file_read(tool, input));
     if total <= threshold {
         return Ok(0);
     }
-    if ["toz ", "varde-toz "]
+    let shell_source = ["command", "cmd"]
         .iter()
-        .any(|name| shape.source.trim_start().starts_with(name))
-    {
+        .find_map(|key| input[key].as_str().filter(|source| !source.is_empty()));
+    if shell_source.is_some_and(toz_only_shell_source) {
         return Ok(0); // don't capture our own previews
     }
 
@@ -2144,6 +2337,29 @@ struct Extracted {
     source: String,
     exit_code: Option<i32>,
     completed: bool,
+}
+
+/// A file-read tool, or a single simple `cat`/`head`/`tail`/`nl`/`sed -n` shell command.
+fn is_file_read(tool: &str, input: &Value) -> bool {
+    if tool.eq_ignore_ascii_case("read") {
+        return true;
+    }
+    let Some(command) = ["command", "cmd"]
+        .iter()
+        .find_map(|key| input[key].as_str())
+    else {
+        return false;
+    };
+    let compound = ["|", ">", "<", ";", "&", "||", "$(", "`", "\n"];
+    if compound.iter().any(|token| command.contains(token)) {
+        return false;
+    }
+    let mut words = command.split_whitespace();
+    match words.next() {
+        Some("cat" | "head" | "tail" | "nl") => true,
+        Some("sed") => words.any(|word| word == "-n"),
+        _ => false,
+    }
 }
 
 fn source_of(tool: &str, input: &Value) -> String {
@@ -2504,6 +2720,11 @@ fn cmd_uninstall(g: &GlobalOpts, a: UninstallArgs) -> Result<i32> {
 }
 
 fn cmd_note(a: NoteArgs) -> Result<i32> {
+    if a.block {
+        println!("{}", crate::install::instruction_block());
+        return Ok(0);
+    }
+
     let mut note = crate::install::usage_note();
     match diagnostics::recent() {
         Ok(summary) if summary.failed > 0 || summary.unreadable_lines > 0 || summary.unavailable_sources > 0 => note.push_str(&format!(
@@ -3072,13 +3293,11 @@ pub(crate) fn script_policy(
         WorkspaceAccess::ReadWrite => write_roots.push(project.root.clone()),
     }
     let store = open_store(cfg, project)?;
-    let mut protected_roots = vec![
-        store
-            .path()
-            .parent()
-            .context("store has no parent")?
-            .to_path_buf(),
-    ];
+    let mut protected_roots = vec![store
+        .path()
+        .parent()
+        .context("store has no parent")?
+        .to_path_buf()];
     if let Ok(config_root) = toz_core::config::config_dir() {
         if config_root.is_dir() {
             protected_roots.push(config_root);
@@ -3129,7 +3348,7 @@ fn emit_script_result(
     external_calls_used: bool,
 ) -> Result<i32> {
     let mut origin = format!(
-        "toz run {} #{}",
+        "varde-toz run {} #{}",
         a.handle.as_deref().unwrap_or("no-capture"),
         toz_core::script::source_fingerprint(source)
     );
@@ -3139,28 +3358,21 @@ fn emit_script_result(
             .as_nanos();
         origin.push_str(&format!(" invocation-{}-{nonce}", std::process::id()));
     }
+    if text.len() <= cfg.threshold {
+        std::io::stdout().lock().write_all(text.as_bytes())?;
+        return Ok(0);
+    }
+    let (profiles, _) = profile::load_profiles(project);
     let mut store = open_store(cfg, project).context("run could not save its script result")?;
     let sess = session();
     let mut input = CaptureInput::new(text.as_bytes(), &origin, "script");
     input.label = a.label.as_deref();
     input.exit_code = Some(0);
     input.session = sess.as_deref();
-    input.force = true;
-    // The origin here is an internal marker (`varde-toz run <handle> #<fingerprint>`), not a
-    // command or path a profile would target.
-    match capture::run(cfg, &mut store, input, &[])? {
-        Outcome::Captured(p) => {
-            if g.json {
-                println!(
-                    "{}",
-                    json!({"state":"captured","handle":p.handle,"bytes":p.bytes})
-                );
-            } else {
-                println!("varde-toz: script result saved → handle {}", p.handle);
-            }
-        }
+    match capture::run(cfg, &mut store, input, &profiles)? {
+        Outcome::Captured(preview) => emit_preview(g, &preview)?,
         Outcome::PassThrough | Outcome::Skipped { .. } => {
-            bail!("run script result was excluded from capture");
+            std::io::stdout().lock().write_all(text.as_bytes())?;
         }
     }
     Ok(0)

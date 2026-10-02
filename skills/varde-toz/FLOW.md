@@ -11,8 +11,8 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~683 tok; routes: Run a batch script)
-  - references/troubleshooting.md (~357 tok; routes: Run a batch script)
+- SKILL.md (~842 tok; routes: Run a batch script)
+  - references/troubleshooting.md (~381 tok; routes: Run a batch script)
 
 ```mermaid
 flowchart TD
@@ -23,14 +23,14 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  n0["references/troubleshooting.md (~357 tok)"]
+  n0["references/troubleshooting.md (~381 tok)"]
 ```
 
 ## Routes
 
 | Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |
 |---|---|---|---|---|---|---|---|
-| Run a batch script | ~683 | ~1040 | ~683 | ~1040 | - | 0 | references/troubleshooting.md |
+| Run a batch script | ~842 | ~1223 | ~842 | ~1223 | - | 0 | references/troubleshooting.md |
 
 ## Structure
 

@@ -2,13 +2,19 @@
 
 Audit every item in scope adversarially.
 
+**Gate review:** when dispatched as a review-gate reviewer, write no fixes and
+record evidence per `references/review-gate-record.md`, not a saved Markdown
+list.
+
 ## 1. Check the scope
 
 1. Read `references/criteria.md`. For a skill, also read
-   `references/specification.md` and run `scripts/validate-frontmatter.py`.
+   `references/specification.md` and run
+   `uv run scripts/validate-frontmatter.py <skill-dir>` (in a sandbox, prefix
+   `UV_PYTHON_PREFERENCE=only-system`).
 2. Inventory the scope; run `scripts/check-length.py` and, for a whole skill,
-   `scripts/skill-flow.py` on it (criteria: Length limits; Loading and
-   references).
+   `scripts/skill-flow.py` on it (criteria: Scripts and length checks;
+   Loading and references).
 3. Check every item (including references, scripts, templates, and evals)
    against the criteria, answering Optimize each item's questions in order.
 4. Separate correctness
@@ -17,7 +23,7 @@ Audit every item in scope adversarially.
 
 ## 2. Create the fix list
 
-Order findings from most in need of a fix to least. For each finding, give:
+Number findings from most in need of a fix to least. For each finding, give:
 
 - location
 - evidence
@@ -42,7 +48,8 @@ Skip this step when:
 Never apply an execution-cost optimization. Otherwise, for each finding whose
 fix clearly preserves intended functionality and accuracy:
 
-1. Apply the fix.
+1. Apply the fix, then refresh FLOW.md with
+   `scripts/skill-flow.py --write <skill-dir>`.
 2. Verify it and mark it **Fixed** in the list, naming the applied option.
 
 ## 4. Deliver the list

@@ -10,17 +10,20 @@ sys.dont_write_bytecode = True
 root = Path(__file__).resolve().parents[1]
 expected_edit = {"varde-planner": "allow", "varde-executor": "allow", "varde-reviewer": "allow", "varde-explorer": "deny"}
 for name, edit in expected_edit.items():
-    header = (root / name / "opencode.md").read_text().split("---", 2)[1]
+    header = (root / name / "opencode-v2.md").read_text().split("---", 2)[1]
     assert "\ntools:" not in header and "\npermission:" not in header, name
     line = next(line for line in header.splitlines() if line.startswith("permissions: "))
     rules = json.loads(line.removeprefix("permissions: "))
     assert all(set(rule) == {"action", "resource", "effect"} for rule in rules), name
-    assert len({rule["action"] for rule in rules}) == len(rules), name
-    assert {rule["action"]: rule["effect"] for rule in rules} == {
+    subagent = [(rule["resource"], rule["effect"]) for rule in rules if rule["action"] == "subagent"]
+    assert subagent == ([("*", "deny"), ("varde-explorer", "allow")] if name != "varde-explorer" else [("*", "deny")]), name
+    others = [rule for rule in rules if rule["action"] != "subagent"]
+    assert len({rule["action"] for rule in others}) == len(others), name
+    assert {rule["action"]: rule["effect"] for rule in others} == {
         "read": "allow", "glob": "allow", "grep": "allow", "shell": "allow",
-        "edit": edit, "skill": "allow", "subagent": "deny",
+        "edit": edit, "skill": "allow",
     }, name
-    assert all(rule["resource"] == "*" for rule in rules), name
+    assert all(rule["resource"] == "*" for rule in others), name
     assert "mode: subagent" in header, name
 
 spec = importlib.util.spec_from_file_location("generate", root / "generate.py")
