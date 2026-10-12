@@ -118,6 +118,267 @@ pub fn set_trace_hook(hook: Option<fn(&str)>) {
     *TRACE_HOOK.lock().expect("trace hook lock") = hook;
 }
 
+thread_local! {
+    /// The base index a query read, when its repo root is a linked worktree
+    /// with no index of its own (see [`crate::db::path::base_index_for`]).
+    ///
+    /// [`open_db_impl`] records it; [`dispatch_mode_with_meta`] consumes it
+    /// into the envelope's `base_index` note. Every dispatch and every
+    /// freshness check clears it first, so a note always describes the call
+    /// that just ran rather than a previous one (notably a batch sibling).
+    static BASE_INDEX: std::cell::RefCell<Option<crate::db::path::BaseIndex>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Consume the recorded base index, if any.
+fn take_base_index() -> Option<crate::db::path::BaseIndex> {
+    BASE_INDEX.with(|slot| slot.borrow_mut().take())
+}
+
+/// The base index a query may read: `Some` only when the query names a
+/// `repoRoot` with no index of its own (and no explicit `dbPath`) and the
+/// main checkout that root belongs to has an index. Read-only; nothing is
+/// built or written.
+fn base_index_for_input(input: &serde_json::Value) -> Option<crate::db::path::BaseIndex> {
+    if input.get("dbPath").is_some() {
+        return None;
+    }
+    let root = std::path::Path::new(opt_str(input, "repoRoot")?);
+    if crate::db::path::repo_db_path(root).is_file() {
+        return None;
+    }
+    crate::db::path::base_index_for(root)
+}
+
+/// The envelope note for a query answered by the main checkout's index.
+fn base_index_note(base: crate::db::path::BaseIndex) -> Value {
+    serde_json::json!({
+        "main_checkout_hash": base.main_checkout_hash,
+        "note": "answers come from the main checkout's index and may not reflect files this worktree changed",
+    })
+}
+
+/// Rewrite base-index answer paths from the main checkout root onto the
+/// querying worktree's root, so a worker in a task worktree never reads or
+/// edits main-checkout files. Every string under the main root is rewritten;
+/// see `output::rewrite_repo_paths`.
+fn rewrite_base_paths(data: &mut Value, base: &crate::db::path::BaseIndex, input: &Value) {
+    let Some(worktree) = opt_str(input, "repoRoot") else {
+        return;
+    };
+    crate::query::output::rewrite_repo_paths(
+        data,
+        &base.main_checkout_root,
+        std::path::Path::new(worktree.trim_end_matches(std::path::MAIN_SEPARATOR)),
+    );
+}
+
+/// Map a query's absolute paths under the querying worktree onto the main
+/// checkout's rows before lookup, mirroring [`rewrite_base_paths`]. A linked
+/// worktree with no index of its own is answered from the main checkout's
+/// index, whose rows name main-checkout paths; an absolute `<worktree>/...`
+/// input would otherwise fail every lookup. `None` when the mode never reads
+/// that index or no base index applies.
+fn map_base_input(mode: &str, input: &Value) -> Option<Value> {
+    if !mode_reads_base_index(mode) {
+        return None;
+    }
+    // Only when the main checkout's base index would answer this query.
+    let base = base_index_for_input(input)?;
+    let worktree = opt_str(input, "repoRoot")?;
+    let worktree_given = std::path::Path::new(worktree.trim_end_matches(std::path::MAIN_SEPARATOR));
+    let worktree_canonical =
+        std::fs::canonicalize(worktree_given).unwrap_or_else(|_| worktree_given.to_path_buf());
+    // Rows keep the spelling the build used, which can differ from the
+    // canonical main root (macOS `/var` vs `/private/var`), so an exact-row
+    // lookup must try the caller's spelling beside the canonical one, plus
+    // the build-time spelling recovered from an indexed row.
+    let mut main_roots = vec![
+        base.main_checkout_root.clone(),
+        given_main_root(
+            worktree_given,
+            &worktree_canonical,
+            &base.main_checkout_root,
+        ),
+    ];
+    // A read-only connection resolves each mapped path against an indexed row
+    // exactly. If it cannot be opened, paths stay unmapped, which is the
+    // pre-existing behaviour.
+    let conn = crate::db::open_read_only(&base.db_path).ok()?;
+    if let Some(root) = build_time_main_root(&conn, &base.main_checkout_root) {
+        main_roots.push(root);
+    }
+    let mut mapped = input.clone();
+    rewrite_input_paths(
+        &mut mapped,
+        worktree_given,
+        &worktree_canonical,
+        &main_roots,
+        &conn,
+    );
+    Some(mapped)
+}
+
+/// The main checkout root in the same spelling the caller gave for the
+/// worktree, for indexes whose rows kept the build-time spelling.
+///
+/// The given worktree path carries the caller's spelling, so the canonical
+/// worktree-to-main relationship is re-spelled onto it: a sibling
+/// (`<parent>/main` beside `<parent>/worktree`) keeps the given parent, and a
+/// worktree nested under the main root keeps the given prefix. Any other
+/// layout falls back to the canonical root.
+fn given_main_root(
+    worktree_given: &std::path::Path,
+    worktree_canonical: &std::path::Path,
+    main_canonical: &std::path::Path,
+) -> std::path::PathBuf {
+    if let Ok(rel) = worktree_canonical.strip_prefix(main_canonical) {
+        let given = worktree_given.to_string_lossy();
+        let rel = rel.to_string_lossy();
+        if let Some(root) = given.strip_suffix(rel.as_ref())
+            && (root.is_empty() || root.ends_with(std::path::MAIN_SEPARATOR))
+        {
+            return std::path::PathBuf::from(root);
+        }
+    }
+    if worktree_canonical.parent() == main_canonical.parent()
+        && let (Some(parent), Some(name)) = (worktree_given.parent(), main_canonical.file_name())
+    {
+        return parent.join(name);
+    }
+    main_canonical.to_path_buf()
+}
+
+/// Whether `mode` reads the persisted index and so can be answered from the
+/// main checkout's base index. `find_pattern` parses live and never is.
+fn mode_reads_base_index(mode: &str) -> bool {
+    FRESHNESS
+        .iter()
+        .any(|(name, slices, _)| *name == mode && !slices.is_empty())
+}
+
+/// Replace every string that names a path under `worktree_root` with the
+/// main-checkout row path it denotes, in place. The base index stores each
+/// file as `<main root>{sep}{relative}`, so an absolute form that matches a
+/// row exactly resolves the file even when a nested file shares its basename
+/// (`main.py` vs `a/main.py`); the bare relative form is kept only when
+/// neither main-root spelling has the row. `repoRoot` and `dbPath` are left
+/// alone: they must keep naming the querying worktree.
+fn rewrite_input_paths(
+    input: &mut Value,
+    worktree_root: &std::path::Path,
+    worktree_canonical: &std::path::Path,
+    main_roots: &[std::path::PathBuf],
+    conn: &Connection,
+) {
+    let prefix = format!("{}{}", worktree_root.display(), std::path::MAIN_SEPARATOR);
+    rewrite_input_value(input, &prefix, worktree_canonical, main_roots, conn);
+}
+
+fn rewrite_input_value(
+    v: &mut Value,
+    worktree_prefix: &str,
+    worktree_root: &std::path::Path,
+    main_roots: &[std::path::PathBuf],
+    conn: &Connection,
+) {
+    match v {
+        Value::Array(items) => items.iter_mut().for_each(|item| {
+            rewrite_input_value(item, worktree_prefix, worktree_root, main_roots, conn)
+        }),
+        Value::Object(map) => {
+            for (key, value) in map.iter_mut() {
+                if key == "repoRoot" || key == "dbPath" {
+                    continue;
+                }
+                rewrite_input_value(value, worktree_prefix, worktree_root, main_roots, conn);
+            }
+        }
+        Value::String(path) => {
+            if let Some(rest) = worktree_relative(path, worktree_prefix, worktree_root) {
+                *path = main_row_path(conn, &rest, main_roots).unwrap_or(rest);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The part of a path under the worktree, or `None` when it names no path
+/// there. The given prefix is tried first; as in `output::rewrite_value`, the
+/// worktree may be spelled differently from the caller's `repoRoot` (`/var`
+/// vs `/private/var`), so a canonicalization-based match is the fallback for
+/// absolute strings.
+fn worktree_relative(
+    path: &str,
+    worktree_prefix: &str,
+    worktree_root: &std::path::Path,
+) -> Option<String> {
+    if let Some(rest) = path.strip_prefix(worktree_prefix) {
+        return Some(rest.to_string());
+    }
+    if std::path::Path::new(path).is_absolute()
+        && let Ok(canonical) = std::fs::canonicalize(path)
+        && let Ok(rest) = canonical.strip_prefix(worktree_root)
+    {
+        return Some(rest.display().to_string());
+    }
+    None
+}
+
+/// The indexed row path for `rest`, under whichever main-root spelling the
+/// base index stored. `None` keeps `rest` itself, preserving the suffix match
+/// a relative `filePath` already used.
+fn main_row_path(
+    conn: &Connection,
+    rest: &str,
+    main_roots: &[std::path::PathBuf],
+) -> Option<String> {
+    main_roots.iter().find_map(|main_root| {
+        let candidate = main_root.join(rest);
+        let candidate = candidate.to_str()?;
+        indexed_path_exists(conn, candidate).then(|| candidate.to_string())
+    })
+}
+
+/// The main-root spelling the index's rows were built with, recovered from one
+/// indexed row.
+///
+/// Rows store `<build-time main root>{sep}<relative>`, and neither the
+/// canonical root nor the caller's spelling always matches it (an index built
+/// through `/tmp` beside a canonical `/private/tmp` root). Canonicalizing a
+/// row resolves the real path, whose part relative to the canonical root is
+/// the row's suffix; stripping that suffix from the raw row path leaves the
+/// build-time root. Rows whose own path traverses a symlink inside the repo
+/// yield no such root, so a later row is tried.
+fn build_time_main_root(
+    conn: &Connection,
+    main_canonical: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let mut stmt = conn
+        .prepare("SELECT path FROM files ORDER BY path LIMIT 16")
+        .ok()?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0)).ok()?;
+    for row in rows.flatten() {
+        let Ok(canonical) = std::fs::canonicalize(&row) else {
+            continue;
+        };
+        let Ok(rel) = canonical.strip_prefix(main_canonical) else {
+            continue;
+        };
+        let suffix = format!("{}{}", std::path::MAIN_SEPARATOR, rel.display());
+        if let Some(root) = row.strip_suffix(&suffix) {
+            return Some(std::path::PathBuf::from(root));
+        }
+    }
+    None
+}
+
+/// Whether the base index has a file row whose path is exactly `path`.
+fn indexed_path_exists(conn: &Connection, path: &str) -> bool {
+    conn.query_row("SELECT 1 FROM files WHERE path = ?1", [path], |_| Ok(()))
+        .is_ok()
+}
+
 /// Open an existing index read-only. Indexed modes require a source root even
 /// when the caller overrides the database location.
 pub fn open_db(input: &serde_json::Value) -> std::result::Result<Connection, ApiError> {
@@ -141,15 +402,28 @@ fn open_db_impl(
     }
     let path = match input.get("dbPath").and_then(|v| v.as_str()) {
         Some(p) => std::path::PathBuf::from(p),
-        None => crate::db::path::repo_db_path(std::path::Path::new(
-            root.ok_or_else(|| ApiError::new("invalid_input", "missing repoRoot or dbPath"))?,
-        )),
+        None => {
+            let root = std::path::Path::new(
+                root.ok_or_else(|| ApiError::new("invalid_input", "missing repoRoot or dbPath"))?,
+            );
+            let own = crate::db::path::repo_db_path(root);
+            match base_index_for_input(input) {
+                Some(base) => {
+                    // A linked worktree with no index of its own reads the
+                    // main checkout's index read-only; nothing is built or
+                    // written for the worktree.
+                    BASE_INDEX.with(|slot| *slot.borrow_mut() = Some(base.clone()));
+                    base.db_path
+                }
+                None => own,
+            }
+        }
     };
     if !path.is_file() {
         return Err(ApiError::new(
             "index_missing",
             format!(
-                "index missing at {}; the coordinator can build it with `varde-code watch --ensure --repo <repo-root>`; find_pattern needs no index",
+                "index missing at {}; the coordinator can build it with `varde setup watch --ensure --repo <repo-root>`; find_pattern needs no index",
                 path.display()
             ),
         ));
@@ -157,6 +431,7 @@ fn open_db_impl(
     let mut conn =
         crate::db::open_read_only(&path).map_err(|e| ApiError::new("db_error", format!("{e}")))?;
     if let Some(hook) = *TRACE_HOOK.lock().expect("trace hook lock") {
+        #[allow(deprecated)] // rusqlite 0.40: trace_v2 changes the hook signature
         conn.trace(Some(hook));
     }
     Ok(conn)
@@ -479,7 +754,16 @@ pub fn freshen_for_mode(
     #[cfg(test)]
     FRESHEN_RUN_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
+    // Clear any earlier record so the check below describes this call only;
+    // `open_db` re-records the base index when it serves one.
+    let _ = take_base_index();
     let conn = open_db(input)?;
+    if BASE_INDEX.with(|slot| slot.borrow().is_some()) {
+        // The answer comes from the main checkout's index, which cannot be
+        // validated against this worktree's files; the envelope's
+        // `base_index` note warns the caller (changed-file overlay deferred).
+        return Ok(());
+    }
     if opt_str(input, "dbPath").is_some()
         && crate::persist::slice_meta_value(&conn, "source_root")
             .ok()
@@ -498,7 +782,7 @@ pub fn freshen_for_mode(
     if !fresh {
         return Err(ApiError::new(
             "index_stale",
-            "index is stale for this source root; the coordinator can refresh it with `varde-code watch --ensure --repo <repo-root>`; find_pattern needs no index",
+            "index is stale for this source root; the coordinator can refresh it with `varde setup watch --ensure --repo <repo-root>`; find_pattern needs no index",
         ));
     }
 
@@ -542,7 +826,19 @@ fn dispatch_mode_with_meta(
     value: &serde_json::Value,
     mode_tag: Option<&str>,
 ) -> Result<(serde_json::Value, crate::query::output::OutputMeta), ApiError> {
-    dispatch_mode_inner(mode, value).and_then(|mut data| {
+    // A base-index record describes what THIS dispatch read, never a previous
+    // call's or a batch sibling's.
+    let _ = take_base_index();
+    // An absolute path under the querying worktree must be mapped onto the
+    // main checkout root before the handler looks it up in the base index;
+    // the answer is mapped back the other way below.
+    let mapped = map_base_input(mode, value);
+    let input = mapped.as_ref().unwrap_or(value);
+    dispatch_mode_inner(mode, input).and_then(|mut data| {
+        let base = take_base_index();
+        if let Some(base) = &base {
+            rewrite_base_paths(&mut data, base, value);
+        }
         let pagination =
             crate::query::output::paginate_query_with_mode_tag(mode, value, &mut data, mode_tag)?;
         // Single output boundary for every mode (and, via `batch`, each of its
@@ -550,7 +846,8 @@ fn dispatch_mode_with_meta(
         // transforms are idempotent, so a `batch` payload seeing this twice —
         // once per sub-call with that call's own `repoRoot`, once for the
         // aggregate — is harmless.
-        let meta = crate::query::output::assemble_metadata(&mut data, value, pagination);
+        let mut meta = crate::query::output::assemble_metadata(&mut data, value, pagination);
+        meta.base_index = base.map(base_index_note);
         Ok((data, meta))
     })
 }

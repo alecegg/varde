@@ -450,6 +450,7 @@ impl PipedReaders {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn drain_pipes(
     child: &mut Child,
     pgid: libc::pid_t,
@@ -505,7 +506,28 @@ fn drain_pipes(
             progress.receive(event, pgid, on_output)?;
         }
         if !received && (progress.status.is_none() || progress.ended != [true, true]) {
-            thread::sleep(Duration::from_millis(20));
+            let mut fds = [
+                libc::pollfd {
+                    fd: readers.stdout.as_ref().map_or(-1, AsRawFd::as_raw_fd),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: readers.stderr.as_ref().map_or(-1, AsRawFd::as_raw_fd),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            // SAFETY: live pipes own the nonnegative fds; poll ignores negative
+            // entries. Keep reads nonblocking and recheck process state every 20 ms.
+            if unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 20) } == -1 {
+                let error = io::Error::last_os_error();
+                if error.kind() != io::ErrorKind::Interrupted {
+                    return Err(Failure::Infrastructure(format!(
+                        "polling output pipes: {error}"
+                    )));
+                }
+            }
         }
     }
     Ok(progress)

@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Check the generated Pi (@tintinweb/pi-subagents) agent definitions."""
 import json
-import os
 import pathlib
-import subprocess
 import sys
-import tempfile
 
 AGENTS = pathlib.Path(__file__).resolve().parent.parent
-PROFILES = ("varde-executor", "varde-explorer", "varde-planner", "varde-reviewer")
+PROFILES = ("varde-builder", "varde-explorer", "varde-planner", "varde-reviewer")
 BUILTIN_TOOLS = {"read", "bash", "edit", "write", "grep", "find", "ls"}
-SPAWNERS = {"varde-executor", "varde-planner", "varde-reviewer"}
+SPAWNERS = {"varde-builder", "varde-planner", "varde-reviewer"}
 AGENTS_LINE = "Read the repository's AGENTS.md, if present, before working."
 
 
@@ -53,33 +50,9 @@ def main():
     tools = {profile: check_profile(profile) for profile in PROFILES}
     assert tools["varde-explorer"] == ["read", "bash", "grep", "find", "ls"], tools["varde-explorer"]
     assert not {"edit", "write"} & set(tools["varde-explorer"])
-    assert "write" in tools["varde-executor"] and "edit" in tools["varde-executor"]
+    assert "write" in tools["varde-builder"] and "edit" in tools["varde-builder"]
     assert "edit" not in tools["varde-reviewer"], "the reviewer never edits source"
 
-    # Installer: PI_CODING_AGENT_DIR wins, files are <name>.md, models are preserved.
-    with tempfile.TemporaryDirectory() as temporary:
-        env = {**os.environ, "PI_CODING_AGENT_DIR": temporary, "HOME": temporary + "/home"}
-        run = lambda *args: subprocess.run(
-            [str(AGENTS / "install.sh"), "-t", "pi", *args],
-            env=env, check=True, capture_output=True, text=True,
-        ).stdout
-        run("-f")
-        for profile in PROFILES:
-            assert (pathlib.Path(temporary) / "agents" / f"{profile}.md").is_file(), profile
-        installed = pathlib.Path(temporary) / "agents" / "varde-planner.md"
-        assert "model:" not in installed.read_text()
-        installed.write_text(installed.read_text().replace(
-            "tools:", 'model: "anthropic/claude-sonnet-4-5"\ntools:', 1))
-        out = run("-m")
-        assert "Preserved user model setting model" in out, out
-        assert 'model: "anthropic/claude-sonnet-4-5"' in installed.read_text()
-        default_env = {**env}
-        del default_env["PI_CODING_AGENT_DIR"]
-        out = subprocess.run(
-            [str(AGENTS / "install.sh"), "-t", "pi", "-n"],
-            env=default_env, check=True, capture_output=True, text=True,
-        ).stdout
-        assert f"{temporary}/home/.pi/agent/agents" in out, out
     print("Pi agent assertions passed.")
 
 

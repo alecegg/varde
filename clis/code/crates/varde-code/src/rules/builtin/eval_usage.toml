@@ -10,3 +10,59 @@ message = "bare eval() call violates the dynamic-evaluation syntax policy"
 remediation = "use an explicit parser or dispatch table, or document a reviewed intentional call"
 pattern = "eval($$$ARGS)"
 languages = ["javascript", "typescript", "tsx", "python"]
+
+# Additional language-specific dynamic evaluation syntax policies.
+[[rule]]
+id = "eval-usage-ruby"
+kind = "pattern"
+severity = "warning"
+name = "eval() usage"
+description = "A bare eval call uses Ruby's dynamic-evaluation syntax."
+message = "bare eval() call uses dynamic-evaluation syntax"
+remediation = "use an explicit parser or dispatch table, or document a reviewed intentional call"
+pattern = "eval($$$ARGS)"
+languages = ["ruby"]
+
+[[rule]]
+id = "eval-usage-php"
+kind = "pattern"
+severity = "warning"
+name = "eval() usage"
+description = "An eval call uses PHP's dynamic-evaluation syntax."
+message = "eval() call uses dynamic-evaluation syntax"
+remediation = "use an explicit parser or dispatch table, or document a reviewed intentional call"
+pattern = "eval($$$ARGS)"
+languages = ["php"]
+
+[[rule]]
+id = "eval-usage-lua"
+kind = "pattern"
+severity = "warning"
+name = "load() usage"
+description = "A load call uses Lua's dynamic-evaluation syntax."
+message = "load() call uses dynamic-evaluation syntax"
+remediation = "use an explicit parser or dispatch table, or document a reviewed intentional call"
+pattern = "load($$$ARGS)"
+languages = ["lua"]
+
+[[rule]]
+id = "eval-usage-bash"
+kind = "pattern"
+severity = "warning"
+name = "eval usage"
+description = "An eval call uses Bash's dynamic-evaluation syntax."
+message = "eval call uses dynamic-evaluation syntax"
+remediation = "use an explicit parser or dispatch table, or document a reviewed intentional call"
+pattern = "eval $$$ARGS"
+languages = ["bash"]
+
+[[rule]]
+id = "eval-usage-elixir"
+kind = "pattern"
+severity = "warning"
+name = "Code.eval_string() usage"
+description = "A Code.eval_string call uses Elixir's dynamic-evaluation syntax."
+message = "Code.eval_string() call uses dynamic-evaluation syntax"
+remediation = "use an explicit parser or dispatch table, or document a reviewed intentional call"
+pattern = "Code.eval_string($$$ARGS)"
+languages = ["elixir"]

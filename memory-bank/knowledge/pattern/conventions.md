@@ -1,3 +1,10 @@
+---
+type: pattern
+status: active
+title: Patterns
+description: Repository conventions for code layout, implementation, testing, and data integrity.
+---
+
 # Patterns
 
 ## File Naming Conventions

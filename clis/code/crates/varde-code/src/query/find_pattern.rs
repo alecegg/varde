@@ -10,6 +10,13 @@
 //! - `$$$VAR` — variadic capture: matches zero or more sibling nodes.
 //! - `$$$VAR:kind` — variadic capture where every captured node must have
 //!   the given kind.
+//! - `$$$MOD <declaration>` — a leading `$$$MOD…` marker makes the declaration
+//!   match with any modifiers (`private static`, `pub`, `mut`, `open`, …):
+//!   modifier nodes are ignored on both sides at the pattern root. It also
+//!   selects the member context (class or contract body) in languages whose
+//!   statement wrapper cannot hold a field, so `$$$MOD $TYPE $KEY = $VAL`
+//!   matches Java fields. It is removed before parsing, since `$$$MOD let` is
+//!   not valid syntax. See [`split_modifier_marker`].
 //!
 //! Relational operators — top-level `inside`/`has`/`precedes`/`follows`
 //! input fields, each `{"kind": "..."}` — filter matches by ancestor,
@@ -103,7 +110,13 @@ enum MetaKind {
     Variadic(String),
 }
 
-type PatternMeta = HashMap<usize, MetaKind>;
+/// The parsed pattern's markers, plus the root node that ignores declaration
+/// modifiers when the pattern starts with a `$$$MOD` marker (see
+/// [`split_modifier_marker`]).
+struct PatternMeta {
+    markers: HashMap<usize, MetaKind>,
+    modifier_root: Option<usize>,
+}
 
 /// Rewrite `$VAR` / `$$$VAR` tokens in a pattern into parseable marker
 /// identifiers.
@@ -345,14 +358,60 @@ fn parse_meta(node: &PNode<'_>) -> Option<MetaKind> {
     None
 }
 
-fn compile_pattern_meta(root: &PNode<'_>) -> PatternMeta {
-    root.dfs()
-        .filter_map(|node| parse_meta(&node).map(|meta| (node.node_id(), meta)))
-        .collect()
+fn compile_pattern_meta(root: &PNode<'_>, optional_modifiers: bool) -> PatternMeta {
+    PatternMeta {
+        markers: root
+            .dfs()
+            .filter_map(|node| parse_meta(&node).map(|meta| (node.node_id(), meta)))
+            .collect(),
+        modifier_root: optional_modifiers.then(|| root.node_id()),
+    }
 }
 
 fn meta_of<'a>(meta: &'a PatternMeta, node: &PNode<'_>) -> Option<&'a MetaKind> {
-    meta.get(&node.node_id())
+    meta.markers.get(&node.node_id())
+}
+
+/// Split a leading `$$$MOD…` marker off a declaration pattern. The marker makes
+/// the pattern's root declaration match with any modifiers: [`modifier_free`]
+/// children are ignored on both sides, so `$$$MOD let $KEY = $VAL` matches
+/// `let`, `private let` and `private static let`. It cannot be parsed in place
+/// (`$$$MOD let` is not valid syntax), so it is removed before parsing. Keep
+/// modifier words out of the rest of the pattern: they are ignored when
+/// matching but still feed the file prefilter.
+fn split_modifier_marker(pattern: &str) -> (&str, bool) {
+    let Some(rest) = pattern.trim_start().strip_prefix("$$$MOD") else {
+        return (pattern, false);
+    };
+    let rest = rest.trim_start_matches(|c: char| c.is_ascii_alphanumeric() || c == '_');
+    if rest.starts_with(char::is_whitespace) {
+        (rest.trim_start(), true)
+    } else {
+        (pattern, false)
+    }
+}
+
+/// Named children that only modify a declaration. Keyword tokens such as
+/// Dart's `static`/`final` are unnamed, so [`strip_trivia`] already drops them.
+fn is_declaration_modifier(node: &PNode<'_>) -> bool {
+    node.is_named()
+        && matches!(
+            node.kind().as_ref(),
+            "modifiers"
+                | "modifier"
+                | "visibility_modifier"
+                | "mutable_specifier"
+                | "storage_class_specifier"
+                | "visibility"
+                | "immutable"
+        )
+}
+
+fn modifier_free<'a>(children: Vec<PNode<'a>>) -> Vec<PNode<'a>> {
+    children
+        .into_iter()
+        .filter(|child| !is_declaration_modifier(child))
+        .collect()
 }
 
 #[cfg(test)]
@@ -393,6 +452,48 @@ mod tests {
         let out = find_pattern(&input).expect("pattern runs");
         let _ = std::fs::remove_dir_all(&dir);
         out
+    }
+
+    fn declaration_matches(language: &str, pattern: &str, source: &str) -> usize {
+        let out = run_pattern_ex(pattern, source, serde_json::json!({ "language": language }));
+        match_rows(&out).len()
+    }
+
+    #[test]
+    fn modifier_marker_ignores_declaration_modifiers() {
+        let source = "let a = 1\nprivate let b = 2\npublic static let c = 3\nvar d = 4\n";
+        assert_eq!(declaration_matches("swift", "let $KEY = $VAL", source), 1);
+        assert_eq!(
+            declaration_matches("swift", "$$$MOD let $KEY = $VAL", source),
+            3,
+            "`let` with no, one and several modifiers; `var` stays out"
+        );
+        assert_eq!(
+            declaration_matches(
+                "rust",
+                "$$$MOD let $KEY = $VAL;",
+                "fn f() { let mut a = 1; let b = 2; }"
+            ),
+            2
+        );
+    }
+
+    #[test]
+    fn modifier_marker_reaches_member_declarations() {
+        let source = "class C {\n  private static final String A = \"x\";\n  String B = \"y\";\n  void m() { String c = \"z\"; }\n}\n";
+        assert_eq!(
+            declaration_matches("java", "$$$MOD $TYPE $KEY = $VAL", source),
+            2,
+            "fields only: the member wrapper is preferred"
+        );
+        assert_eq!(declaration_matches("java", "$TYPE $KEY = $VAL", source), 1);
+    }
+
+    #[test]
+    fn marker_without_declaration_text_is_not_a_modifier_marker() {
+        assert_eq!(split_modifier_marker("$$$MOD"), ("$$$MOD", false));
+        assert_eq!(split_modifier_marker("$$$ARGS foo"), ("$$$ARGS foo", false));
+        assert_eq!(split_modifier_marker("  $$$MODS let $K"), ("let $K", true));
     }
 
     #[test]
@@ -463,6 +564,55 @@ mod tests {
             "ordinary catcher call matches: {matches:?}"
         );
         assert_eq!(matches[0]["kind"], "invocation_expression");
+    }
+
+    /// Run a pattern over a Solidity source fixture (`sample.sol`), exercising
+    /// the catch-clause wrapper (`catch` only parses after a try statement).
+    fn run_pattern_sol(pattern: &str, source: &str) -> Vec<serde_json::Value> {
+        let dir = std::env::temp_dir().join(format!(
+            "fp-sol-test-{}-{}",
+            std::process::id(),
+            pattern.len()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir creates");
+        let file = dir.join("sample.sol");
+        std::fs::write(&file, source).expect("fixture writes");
+        let out = find_pattern(&serde_json::json!({
+            "filePath": file.display().to_string(),
+            "pattern": pattern,
+            "language": "solidity",
+        }))
+        .expect("pattern runs");
+        let _ = std::fs::remove_dir_all(&dir);
+        match_rows(&out).to_vec()
+    }
+
+    #[test]
+    fn solidity_catch_fragment_wrapper_locates_catch_clause() {
+        // Regression: a Solidity catch clause only parses after a try
+        // statement, and the grammar allows an optional `returns (...)` clause
+        // between the attempt and the body. The wrapper supplies a throwaway
+        // attempt so both try forms match and the root is the catch clause.
+        let rewritten = preprocess("catch Error(string memory $MSG) { }");
+        let wrapped = wrap_for_lang(&ast_grep_language::SupportLang::Solidity, &rewritten);
+        assert!(wrapped.contains("try __varde_target__()"), "{wrapped}");
+        let raw = crate::parse::parse_source(&ast_grep_language::SupportLang::Solidity, &rewritten);
+        let wrapped_parsed =
+            crate::parse::parse_source(&ast_grep_language::SupportLang::Solidity, &wrapped);
+        assert!(
+            !wrapped_parsed.has_error(),
+            "wrapped catch parses: {wrapped}"
+        );
+        let root =
+            locate_pattern_root(&raw, &wrapped_parsed, &rewritten).expect("catch root resolves");
+        assert_eq!(root.kind().as_ref(), "catch_clause");
+        let matches = run_pattern_sol(
+            "catch Error(string memory $MSG) { }",
+            "contract C { function f() public { try this.g() returns (uint x) { x; } catch Error(string memory reason) { } } }",
+        );
+        assert_eq!(matches.len(), 1, "returns-form try matches: {matches:?}");
+        assert_eq!(matches[0]["kind"], "catch_clause");
     }
 
     /// Run a pattern over a C# source fixture (`sample.cs`), returning the match
@@ -927,7 +1077,13 @@ fn match_node_capture<'p>(
         }
         return Some(serde_json::Map::new());
     }
-    let schildren: Vec<PNode<'_>> = strip_trivia(source.children().collect());
+    let mut schildren: Vec<PNode<'_>> = strip_trivia(source.children().collect());
+    let pchildren = if context.meta.modifier_root == Some(pattern.node_id()) {
+        schildren = modifier_free(schildren);
+        modifier_free(pchildren)
+    } else {
+        pchildren
+    };
     // Lift per-element wrappers that bury a variadic marker (e.g. C#'s
     // `argument` node) up to this sequence level, but only when the wrapper's
     // kind is a *per-element* wrapper here — i.e. the source has some number
@@ -1266,7 +1422,7 @@ fn find_text_node<'a>(node: &PNode<'a>, target: &str) -> Option<PNode<'a>> {
 /// `ast-grep-language` links), not just the extraction-supported subset:
 /// structural search needs only a grammar to parse against. Explicit names
 /// accept `ast-grep`'s own aliases (e.g. `ts`, `py`, `c++`).
-fn resolve_lang(
+pub(crate) fn resolve_lang(
     input: &serde_json::Value,
     file_hint: Option<&std::path::Path>,
 ) -> Result<ast_grep_language::SupportLang, ApiError> {
@@ -1322,7 +1478,7 @@ fn wrap_for_lang(lang: &ast_grep_language::SupportLang, rewritten: &str) -> Stri
         }
         // A bare C# catch clause is only valid after a try statement. Keep
         // the fragment exact so locate_pattern_root selects `catch_clause`.
-        SupportLang::CSharp if is_csharp_catch_fragment(rewritten) => {
+        SupportLang::CSharp if is_catch_fragment(rewritten) => {
             format!(
                 "class __VardeWrapper__ {{ void __varde_wrapper__() {{ try {{}} {rewritten} }} }}"
             )
@@ -1336,6 +1492,13 @@ fn wrap_for_lang(lang: &ast_grep_language::SupportLang, rewritten: &str) -> Stri
         SupportLang::Scala => {
             format!("object __VardeWrapper__ {{ def __varde_wrapper__() = {{ {rewritten} }} }}")
         }
+        // A bare Solidity catch clause is only valid after a try statement.
+        // Keep the fragment exact so locate_pattern_root selects
+        // `catch_clause`, and use a throwaway external call as the attempt so
+        // both `try ... { }` and `try ... returns (...) { }` forms match.
+        SupportLang::Solidity if is_catch_fragment(rewritten) => format!(
+            "contract __VardeWrapper__ {{ function __varde_wrapper__() public {{ try __varde_target__() {{ }} {rewritten} }} }}"
+        ),
         SupportLang::Solidity => format!(
             "contract __VardeWrapper__ {{ function __varde_wrapper__() public {{ {rewritten}; }} }}"
         ),
@@ -1349,7 +1512,38 @@ fn wrap_for_lang(lang: &ast_grep_language::SupportLang, rewritten: &str) -> Stri
     }
 }
 
-fn is_csharp_catch_fragment(rewritten: &str) -> bool {
+/// Wrap a declaration pattern in the type or contract body that holds member
+/// declarations, for languages whose statement wrapper cannot hold one (a Java
+/// field, a Dart class field, a C# property, a Solidity state variable).
+/// `None` leaves the pattern to [`wrap_for_lang`]. The `;` completes a
+/// declaration written without one, as [`locate_pattern_root`] expects.
+fn wrap_member_for_lang(lang: &ast_grep_language::SupportLang, rewritten: &str) -> Option<String> {
+    use ast_grep_language::SupportLang;
+    match lang {
+        SupportLang::Java | SupportLang::Dart | SupportLang::CSharp => {
+            Some(format!("class __VardeWrapper__ {{ {rewritten}; }}"))
+        }
+        SupportLang::Solidity => Some(format!("contract __VardeWrapper__ {{ {rewritten}; }}")),
+        _ => None,
+    }
+}
+
+/// The wrapper source for a pattern. A declaration pattern
+/// (`optional_modifiers`) uses the member context where the language has one;
+/// a complete top-level declaration such as Dart's `final $KEY = $VAL;` still
+/// parses bare, and [`locate_pattern_root`] prefers that.
+fn wrap_pattern(
+    lang: &ast_grep_language::SupportLang,
+    rewritten: &str,
+    optional_modifiers: bool,
+) -> String {
+    optional_modifiers
+        .then(|| wrap_member_for_lang(lang, rewritten))
+        .flatten()
+        .unwrap_or_else(|| wrap_for_lang(lang, rewritten))
+}
+
+fn is_catch_fragment(rewritten: &str) -> bool {
     let trimmed = rewritten.trim_start();
     let Some(rest) = trimmed.strip_prefix("catch") else {
         return false;
@@ -1427,8 +1621,16 @@ fn mandatory_atoms(pattern: &str) -> Vec<String> {
     }
     atoms.sort();
     atoms.dedup();
+    if split_modifier_marker(pattern).1 {
+        atoms.retain(|atom| !IGNORED_KEYWORDS.contains(&atom.as_str()));
+    }
     atoms
 }
+
+/// Keywords the matcher ignores (unnamed tokens) that grammars use as
+/// interchangeable modifiers: Dart's `final` and `const` declare the same tree.
+/// A marker pattern may spell one of them without requiring it in the source.
+const IGNORED_KEYWORDS: [&str; 5] = ["static", "final", "const", "late", "constant"];
 
 fn metavariable_end(bytes: &[u8], start: usize) -> usize {
     let mut end = start;
@@ -1498,6 +1700,65 @@ fn match_source(
     )
 }
 
+/// A compiled structural pattern whose borrowed root stays valid while the
+/// caller runs its matching pass. The callback shape keeps the parsed
+/// pattern trees alive without making the matcher self-referential.
+pub(crate) struct CompiledPattern<'a> {
+    pattern_root: PNode<'a>,
+    pattern_meta: PatternMeta,
+    constraints: HashMap<String, String>,
+    relations: Relations,
+    language: ast_grep_language::SupportLang,
+}
+
+impl CompiledPattern<'_> {
+    /// Match caller-supplied source through the existing matcher with an
+    /// unbounded result set and no tool-output collection.
+    pub(crate) fn matches_source(&self, source: &str) -> Result<Vec<serde_json::Value>, ApiError> {
+        match_source(
+            &self.pattern_root,
+            &self.pattern_meta,
+            &self.language,
+            source,
+            &self.constraints,
+            &self.relations,
+            MatchCollection {
+                limit: None,
+                toz: false,
+            },
+        )
+        .map(|output| output.matches)
+    }
+}
+
+/// Compile a rule using the same preprocessing, fragment wrapping, capture
+/// constraints, and relation parsing as `find_pattern`, then run a caller's
+/// matching pass while the compiled trees are alive.
+pub(crate) fn with_compiled_pattern<T>(
+    lang: &ast_grep_language::SupportLang,
+    pattern_text: &str,
+    relation_input: &serde_json::Value,
+    use_pattern: impl FnOnce(&CompiledPattern<'_>) -> Result<T, ApiError>,
+) -> Result<T, ApiError> {
+    let (declaration, optional_modifiers) = split_modifier_marker(pattern_text);
+    let (stripped, constraints) = split_kind_constraints(declaration);
+    let rewritten = preprocess(&stripped);
+    let relations = pattern_relations(relation_input)?;
+    let raw_parsed = crate::parse::parse_source(lang, &rewritten);
+    let wrapped = wrap_pattern(lang, &rewritten, optional_modifiers);
+    let wrapped_parsed = crate::parse::parse_source(lang, &wrapped);
+    let pattern_root = locate_pattern_root(&raw_parsed, &wrapped_parsed, &rewritten)?;
+    let pattern_meta = compile_pattern_meta(&pattern_root, optional_modifiers);
+    let pattern = CompiledPattern {
+        pattern_root,
+        pattern_meta,
+        constraints,
+        relations,
+        language: *lang,
+    };
+    use_pattern(&pattern)
+}
+
 fn match_parsed_source(
     pattern_root: &PNode<'_>,
     meta: &PatternMeta,
@@ -1563,29 +1824,38 @@ pub(crate) fn find_patterns_unbounded(
     let parsed: Vec<_> = patterns
         .iter()
         .map(|pattern| {
-            let (stripped, constraints) = split_kind_constraints(pattern);
+            let (declaration, optional_modifiers) = split_modifier_marker(pattern);
+            let (stripped, constraints) = split_kind_constraints(declaration);
             let rewritten = preprocess(&stripped);
-            let wrapped = wrap_for_lang(lang, &rewritten);
+            let wrapped = wrap_pattern(lang, &rewritten, optional_modifiers);
             let raw = crate::parse::parse_source(lang, &rewritten);
             let wrapped_parsed = crate::parse::parse_source(lang, &wrapped);
-            (rewritten, constraints, raw, wrapped_parsed)
+            (
+                rewritten,
+                constraints,
+                raw,
+                wrapped_parsed,
+                optional_modifiers,
+            )
         })
         .collect();
     let slots: Vec<_> = parsed
         .iter()
         .zip(patterns)
-        .map(|((rewritten, constraints, raw, wrapped), pattern)| {
-            match locate_pattern_root(raw, wrapped, rewritten) {
-                Ok(root) => BatchSlot::Ready(BatchPattern {
-                    meta: compile_pattern_meta(&root),
-                    root,
-                    constraints: constraints.clone(),
-                    atoms: mandatory_atoms(pattern),
-                    matches: std::sync::Mutex::new(Vec::new()),
-                }),
-                Err(error) => BatchSlot::Failed(error),
-            }
-        })
+        .map(
+            |((rewritten, constraints, raw, wrapped, optional_modifiers), pattern)| {
+                match locate_pattern_root(raw, wrapped, rewritten) {
+                    Ok(root) => BatchSlot::Ready(BatchPattern {
+                        meta: compile_pattern_meta(&root, *optional_modifiers),
+                        root,
+                        constraints: constraints.clone(),
+                        atoms: mandatory_atoms(pattern),
+                        matches: std::sync::Mutex::new(Vec::new()),
+                    }),
+                    Err(error) => BatchSlot::Failed(error),
+                }
+            },
+        )
         .collect();
     if !slots.iter().any(|slot| matches!(slot, BatchSlot::Ready(_))) {
         return slots
@@ -1719,38 +1989,30 @@ fn find_pattern_with_compaction(
     let target_path = target_path.as_path();
     let is_dir = target_path.is_dir();
     let lang = resolve_lang(input, (!is_dir).then_some(target_path))?;
-    let (stripped, constraints) = split_kind_constraints(pattern_text);
-    let rewritten = preprocess(&stripped);
-    let relations = pattern_relations(input)?;
-    let raw_parsed = crate::parse::parse_source(&lang, &rewritten);
-    let wrapped = wrap_for_lang(&lang, &rewritten);
-    let wrapped_parsed = crate::parse::parse_source(&lang, &wrapped);
-    let pattern_root = locate_pattern_root(&raw_parsed, &wrapped_parsed, &rewritten)?;
-    let pattern_root = &pattern_root;
-    let pattern_meta = compile_pattern_meta(pattern_root);
-
-    let atoms = mandatory_atoms(pattern_text);
-    if !is_dir {
-        return match_single_file(
-            target_path,
-            pattern_root,
-            &pattern_meta,
+    with_compiled_pattern(&lang, pattern_text, input, |compiled| {
+        let atoms = mandatory_atoms(pattern_text);
+        if !is_dir {
+            return match_single_file(
+                target_path,
+                &compiled.pattern_root,
+                &compiled.pattern_meta,
+                &lang,
+                &compiled.constraints,
+                &compiled.relations,
+                output,
+            );
+        }
+        let search = DirectoryPatternSearch::new(
+            &compiled.pattern_root,
+            &compiled.pattern_meta,
             &lang,
-            &constraints,
-            &relations,
+            &compiled.constraints,
+            &compiled.relations,
+            &atoms,
             output,
         );
-    }
-    let search = DirectoryPatternSearch::new(
-        pattern_root,
-        &pattern_meta,
-        &lang,
-        &constraints,
-        &relations,
-        &atoms,
-        output,
-    );
-    finish_directory_search(search, target_path, output)
+        finish_directory_search(search, target_path, output)
+    })
 }
 
 /// The file or directory to search. A relative `filePath`/`path` resolves

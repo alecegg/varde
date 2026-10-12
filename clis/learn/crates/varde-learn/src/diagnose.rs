@@ -4,10 +4,56 @@ use std::path::PathBuf;
 use serde_json::Value;
 use varde_learn_core::diagnose::{
     CaptureFlags, ClaudeHookContext, CurrentOverlap, DiagnosticHarness, InspectRequest, Intake,
-    capture, capture_from_flags, inspect,
+    ListHarness as CoreListHarness, ListRequest, capture, capture_from_flags, inspect,
+    list_sessions,
 };
 
-use crate::cli::{DiagnoseCaptureArgs, DiagnoseHarness, DiagnoseInspectArgs};
+use crate::cli::{
+    DiagnoseCaptureArgs, DiagnoseHarness, DiagnoseInspectArgs, DiagnoseListArgs,
+    DiagnoseListHarness,
+};
+
+pub(super) fn run_list_command(args: DiagnoseListArgs) -> anyhow::Result<()> {
+    if !args.json {
+        return Err(invalid("diagnose list requires --json"));
+    }
+    let harness = match args.harness {
+        DiagnoseListHarness::Codex => CoreListHarness::Codex,
+        DiagnoseListHarness::Claude => CoreListHarness::Claude,
+        DiagnoseListHarness::Opencode => CoreListHarness::Opencode,
+        DiagnoseListHarness::All => CoreListHarness::All,
+    };
+    let scans_codex = matches!(harness, CoreListHarness::Codex | CoreListHarness::All);
+    let scans_claude = matches!(harness, CoreListHarness::Claude | CoreListHarness::All);
+    let scans_opencode = matches!(harness, CoreListHarness::Opencode | CoreListHarness::All);
+    let request = ListRequest {
+        harness,
+        repo: args.repository,
+        codex_home: if scans_codex {
+            codex_home()?
+        } else {
+            PathBuf::new()
+        },
+        claude_projects_root: if scans_claude {
+            claude_projects_root()?
+        } else {
+            PathBuf::new()
+        },
+        opencode_data_root: if scans_opencode {
+            opencode_data_root()?
+        } else {
+            PathBuf::new()
+        },
+        paseo_home: std::env::var_os("PASEO_HOME").map(PathBuf::from),
+        limit: args.limit as usize,
+        run: args.run,
+    };
+    let output = list_sessions(&request)?;
+    let warnings = output.warnings.clone();
+    let meta = serde_json::json!({ "truncated": !warnings.is_empty(), "warnings": warnings });
+    crate::print_success_envelope(serde_json::to_value(output)?, meta);
+    Ok(())
+}
 
 pub(super) fn run_capture_command(args: DiagnoseCaptureArgs) -> anyhow::Result<()> {
     if !args.json {

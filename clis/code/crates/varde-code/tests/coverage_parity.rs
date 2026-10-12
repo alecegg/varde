@@ -135,13 +135,20 @@ fn parse_include(args: &[String]) -> Option<Vec<String>> {
         .map(|v| v.split(',').map(|s| s.to_string()).collect())
 }
 
-/// All fixture subdirectories (language names) present under tests/fixtures/.
+/// Fixture subdirectories that contain supported source files.
 fn fixture_languages() -> Vec<String> {
     let root = common::fixture_path("");
     let mut langs: Vec<String> = std::fs::read_dir(&root)
         .expect("fixtures dir exists")
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
+        .filter(|entry| {
+            std::fs::read_dir(entry.path()).is_ok_and(|children| {
+                children.filter_map(|child| child.ok()).any(|child| {
+                    child.path().is_file() && language_for_path(&child.path()).is_some()
+                })
+            })
+        })
         .filter_map(|e| e.file_name().into_string().ok())
         .collect();
     langs.sort();
@@ -342,6 +349,25 @@ fn build_query_fixture_db() -> std::path::PathBuf {
         std::fs::copy(original, &target).expect("copy fixture source");
         copied.push(target.to_string_lossy().into_owned());
     }
+    // Non-code naming fixture (B-gate-4 path-reference fallback): a reference
+    // doc that nothing imports, named by a shell-style test under a `tests/`
+    // dir. Added after parsing because neither is a source language; resolve
+    // and persist only need their paths.
+    let naming_doc = dir.join("skills/demo/references/README.md");
+    std::fs::create_dir_all(naming_doc.parent().unwrap()).expect("naming doc dir");
+    std::fs::write(&naming_doc, "# Demo reference\n").expect("naming doc");
+    let naming_test = dir.join("skills/demo/tests/readme_names_test.rs");
+    std::fs::create_dir_all(naming_test.parent().unwrap()).expect("naming test dir");
+    std::fs::write(
+        &naming_test,
+        "// names references/README.md\nfn naming_check() {}\n",
+    )
+    .expect("naming test");
+    for added in [&naming_doc, &naming_test] {
+        let path = added.to_string_lossy().into_owned();
+        files.push(path.clone());
+        copied.push(path);
+    }
     let metadata =
         varde_code::scan::list_source_files(dir.to_str().unwrap()).expect("scan fixture source");
     let file_meta = copied
@@ -539,7 +565,29 @@ fn check_q_tests_for_file(db: &std::path::Path) -> Result<(), String> {
         return assert_ok(&env, "tests_for_file");
     }
     let env = qrun("tests_for_file", db, r#""filePath":"lib.rs""#);
-    assert_ok(&env, "tests_for_file")
+    assert_ok(&env, "tests_for_file")?;
+
+    // Non-code path-reference fallback (B-gate-4): README.md is generic, so
+    // the test naming `<parent>/<name>` is returned even though nothing
+    // imports the doc.
+    let named = qrun(
+        "tests_for_file",
+        db,
+        r#""filePath":"skills/demo/references/README.md""#,
+    );
+    assert_ok(&named, "tests_for_file")?;
+    let tests = named["data"]
+        .as_array()
+        .ok_or_else(|| format!("tests_for_file: data not array: {named}"))?;
+    if !tests.iter().any(|t| {
+        t.as_str()
+            .is_some_and(|p| p.ends_with("readme_names_test.rs"))
+    }) {
+        return Err(format!(
+            "tests_for_file: naming test not returned for non-code file: {named}"
+        ));
+    }
+    Ok(())
 }
 
 fn check_q_find_imports(db: &std::path::Path) -> Result<(), String> {

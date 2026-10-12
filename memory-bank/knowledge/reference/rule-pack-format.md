@@ -17,8 +17,8 @@ duplicate rules never fail the load — each is skipped and reported as a
 `Diagnostic` (`rule_id` when determinable, `file`, `reason`).
 These diagnostics make the resulting scan gate incomplete.
 
-The embedded built-ins currently contain 34 rules: 28 errors and 6 infos.
-Their pattern declarations cover 35 rule/language pairs.
+The embedded built-ins contain 127 rules: 102 errors, 19 warnings, and 6 infos.
+Their pattern declarations cover 127 rule/language pairs.
 
 ## Rule schema
 
@@ -51,7 +51,9 @@ requires both `strings.source_prefix` and `strings.target_prefix`, each a
 normalized relative directory or `.`. Both blank leaves the policy inactive;
 one blank is invalid. Boundary matching uses only explicitly configured,
 recognized source and target prefixes. It does not infer a blanket unresolved
-dependency prohibition.
+dependency prohibition. The rule defaults to `error`: a configured boundary is
+an explicit architecture decision, so a certified violation blocks the default
+gate.
 
 Each constraint retains unanchored regex matching.
 Anchor whole-capture checks with `^` and `$`.
@@ -140,3 +142,38 @@ Overrides replace whole definitions, not individual fields:
 
 Downstream consumers filter the merged `Vec<Rule>` by `kind` themselves;
 `load_rules` returns both the merged rules and the accumulated diagnostics.
+
+## Severity overrides
+
+Severity-only overrides live in `overrides.toml`:
+
+- Repo scope: `<repo_root>/.varde-code/overrides.toml`
+- User scope: `<varde config root>/code/overrides.toml` (default
+  `~/.config/varde/code/overrides.toml`; `VARDE_CODE_USER_OVERRIDES_FILE` or
+  `VARDE_USER_OVERRIDES_FILE` can select another file)
+
+Each file uses a `[rules]` table. A rule entry must set `severity` to
+`error`, `warning`, `info`, or `off`:
+
+```toml
+[rules.no-console]
+severity = "off"
+```
+
+Overrides change only severity; user and repo rule packs still replace whole
+definitions. The winner order is repo override, user override, repo rule,
+user rule, then built-in. `varde scan rules list` reports the winner in each
+rule's `severitySource` and reports unknown override IDs in the top-level
+`orphanedOverrides` array. Orphans do not fail a scan.
+
+`off` removes a rule from the active scan and policy set. The rule remains in
+`rules list` with `severity: "off"`, `disabled: true`, and its override source.
+Naming an off rule in `gateRules` returns `invalid_input`. Invalid severity
+values are reported as diagnostics that name the file and rule ID.
+
+Seeded packs are snapshots of the built-ins. `rules list` marks a seeded rule
+`drifted` when its TOML table differs from the current built-in. Inspect that
+pack with `varde scan rules diff <rule-id>`. Refresh only its pack file with
+`varde scan rules seed --json '{"repoRoot":"."}' --force --rule-id <rule-id>`;
+the command leaves other pack files untouched. The diff output's `seedScope`
+identifies the defining pack; add `--user` when it is `user`.

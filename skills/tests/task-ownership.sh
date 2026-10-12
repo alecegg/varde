@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKFLOW="${VARDE_WORKFLOW_BIN:-$(command -v varde-workflow)}"
+VARDE="${VARDE_BIN:-$(command -v varde)}"
+workflow() { "$VARDE" plan "$@"; }
 WORK="${TMPDIR:-/tmp}/task-ownership.$$"
 mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
@@ -36,16 +37,17 @@ commit_all() {
   git -C "$REPO" rev-parse HEAD
 }
 
-# run <task> <sha> -> sets OUT and CODE
+# run <task> <sha> -> sets OUT, ERR and CODE
 run() {
   CODE=0
-  OUT="$("$WORKFLOW" check-task-ownership --json --task "$REPO/tasks/$1.md" --commit "$2" --repo-root "$REPO" 2>&1 | jq .data)" || CODE=$?
+  OUT="$(workflow check-task-ownership --json --task "$REPO/tasks/$1.md" --commit "$2" --repo-root "$REPO" 2>"$WORK/stderr" | jq .data)" || CODE=$?
+  ERR="$(cat "$WORK/stderr")"
 }
 
 expect() {
   local label="$1" want_code="$2" want_text="$3"
   [ "$CODE" -eq "$want_code" ] || fail "$label: exit $CODE, want $want_code: $OUT"
-  grep -q -- "$want_text" <<<"$OUT" || fail "$label: output lacks $want_text: $OUT"
+  grep -q -- "$want_text" <<<"$OUT$ERR" || fail "$label: output lacks $want_text: $OUT$ERR"
 }
 
 # 1. modifies + creates + rename, all in scope -> ok
@@ -64,7 +66,7 @@ echo stray >"$REPO/src/extra.txt"
 sha="$(commit_all stray)"
 run t2 "$sha"
 expect "stray" 2 '"status": "stray"'
-grep -q '"src/extra.txt"' <<<"$OUT" || fail "stray: exact path missing: $OUT"
+grep -q '"src/extra.txt"' <<<"$OUT" || fail "stray: exact path missing: $OUT$ERR"
 
 # 3. commit touching only the task file -> ok
 write_task t3 "status: in_progress" "modifies:" "- src/mod.txt"
@@ -87,7 +89,7 @@ sha="$(commit_all spike)"
 run t5 "$sha"
 expect "spike" 0 '"status": "skipped"'
 
-# 6. merge commit -> merge_commit error, exit 1
+# 6. merge commit with no merge-only changes -> ok
 base="$(git -C "$REPO" rev-parse HEAD)"
 git -C "$REPO" checkout -q -b side
 echo s >"$REPO/src/side.txt"
@@ -101,7 +103,7 @@ git -C "$REPO" merge -q --no-ff side -m merge
 sha="$(git -C "$REPO" rev-parse HEAD)"
 write_task t6 "status: in_progress" "modifies:" "- src/mod.txt"
 run t6 "$sha"
-expect "merge" 1 'merge_commit'
+expect "merge" 0 '"status": "ok"'
 
 # 7. non-ASCII path is reported unquoted
 write_task t7 "status: in_progress" "modifies:" "- src/mod.txt"
@@ -109,7 +111,7 @@ echo u >"$REPO/src/café.txt"
 sha="$(commit_all non-ascii)"
 run t7 "$sha"
 expect "non-ascii" 2 '"status": "stray"'
-jq -e '.stray | index("src/café.txt") != null' <<<"$OUT" >/dev/null ||
+jq -e '.error.details.stray | index("src/café.txt") != null' <<<"$OUT" >/dev/null ||
   fail "non-ascii: exact path missing: $OUT"
 
 # 8. root commit reports its files
@@ -124,7 +126,8 @@ git -C "$ROOT_REPO" add -A
 git -C "$ROOT_REPO" commit -qm root
 { echo "---"; echo "modifies:"; echo "- other.txt"; echo "---"; } >"$WORK/root-task.md"
 CODE=0
-OUT="$("$WORKFLOW" check-task-ownership --json --task "$WORK/root-task.md" --commit "$(git -C "$ROOT_REPO" rev-parse HEAD)" --repo-root "$ROOT_REPO" 2>&1 | jq .data)" || CODE=$?
+OUT="$(workflow check-task-ownership --json --task "$WORK/root-task.md" --commit "$(git -C "$ROOT_REPO" rev-parse HEAD)" --repo-root "$ROOT_REPO" 2>"$WORK/stderr" | jq .data)" || CODE=$?
+ERR="$(cat "$WORK/stderr")"
 expect "root commit" 2 '"only.txt"'
 
 echo "task-ownership: ok"

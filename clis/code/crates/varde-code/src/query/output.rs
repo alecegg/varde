@@ -30,6 +30,7 @@
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 /// Machine-output metadata supplied with every envelope.
 #[derive(Clone, Debug, Default, Serialize)]
@@ -43,6 +44,11 @@ pub struct OutputMeta {
     pub pagination: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub toz: Option<serde_json::Value>,
+    /// Index provenance when a linked worktree without a local index answered
+    /// from the main checkout's index; `None` for every other query. Carries
+    /// the main checkout's identity hash, never its absolute path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_index: Option<serde_json::Value>,
 }
 
 /// Render a result with the output policy derived from its input.
@@ -148,6 +154,7 @@ fn metadata_for(input: &Value, data: &Value) -> OutputMeta {
         truncated: is_truncated(data),
         pagination: None,
         toz: data.pointer("/guide/toz").cloned(),
+        base_index: None,
     }
 }
 
@@ -836,6 +843,74 @@ fn relativize_path(v: &mut Value, prefix: &str) {
     }
 }
 
+/// Rewrite every string that names a path under `main_root` (the main
+/// checkout of a linked worktree) onto `worktree_root`, in place.
+///
+/// A linked worktree reading the main checkout's index gets rows whose paths
+/// name the main checkout; rewriting them onto the worktree root, before the
+/// normal output policy runs, keeps a worker from reading or editing files
+/// outside its worktree. The whole answer is walked, not only named fields,
+/// so modes whose `data` is a bare string array (`dependents`,
+/// `tests_for_file`, `blast_radius`), that use other keys
+/// (`symbol_blast_radius`'s `declaring_file`), or that key their result object
+/// by a path (`symbols_in_files`) are covered too. A string is
+/// rewritten only when it resolves to a path under the main root, so
+/// unrelated text keeps its value.
+pub(crate) fn rewrite_repo_paths(v: &mut Value, main_root: &Path, worktree_root: &Path) {
+    let main_prefix = format!("{}{}", main_root.display(), std::path::MAIN_SEPARATOR);
+    rewrite_value(v, main_root, &main_prefix, worktree_root);
+}
+
+fn rewrite_value(v: &mut Value, main_root: &Path, main_prefix: &str, worktree_root: &Path) {
+    match v {
+        Value::Array(items) => items
+            .iter_mut()
+            .for_each(|item| rewrite_value(item, main_root, main_prefix, worktree_root)),
+        // Object keys are paths too: `symbols_in_files` keys its result object
+        // by the requested input path, which the base-index input mapping can
+        // turn into a main-checkout absolute path. Rebuild the map so each key
+        // gets the same rewrite as a value.
+        Value::Object(map) => {
+            let rewritten: Vec<(String, Value)> = std::mem::take(map)
+                .into_iter()
+                .map(|(mut key, mut value)| {
+                    rewrite_path_string(&mut key, main_root, main_prefix, worktree_root);
+                    rewrite_value(&mut value, main_root, main_prefix, worktree_root);
+                    (key, value)
+                })
+                .collect();
+            map.extend(rewritten);
+        }
+        Value::String(path) => rewrite_path_string(path, main_root, main_prefix, worktree_root),
+        _ => {}
+    }
+}
+
+/// Rewrite one string that names a path under `main_root` onto
+/// `worktree_root`, or leave it unchanged.
+fn rewrite_path_string(
+    path: &mut String,
+    main_root: &Path,
+    main_prefix: &str,
+    worktree_root: &Path,
+) {
+    if let Some(rest) = path.strip_prefix(main_prefix) {
+        *path = worktree_root.join(rest).display().to_string();
+        return;
+    }
+    // Stored paths keep whatever spelling the build used, which may
+    // differ from `main_root`'s canonical form (e.g. macOS `/var` vs
+    // `/private/var`), so a canonicalization-based match is the
+    // fallback. Only absolute strings can name a path under the main
+    // root, which keeps free text out of the filesystem check.
+    if std::path::Path::new(path.as_str()).is_absolute()
+        && let Ok(canonical) = std::fs::canonicalize(path.as_str())
+        && let Ok(rest) = canonical.strip_prefix(main_root)
+    {
+        *path = worktree_root.join(rest).display().to_string();
+    }
+}
+
 /// Remove the byte/column fields from every `span` object, keeping the line
 /// pair. Recurses through the whole tree so nested spans (e.g. a finding's
 /// `location.span`, a symbol row's `span`) are all trimmed.
@@ -1021,7 +1096,7 @@ mod tests {
 
     #[test]
     fn query_arrays_are_bounded_by_default() {
-        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let _without_toz = crate::test_support::CaptureOverride::none();
         let input = json!({});
         let mut data = Value::Array((0..105).map(Value::from).collect());
         let pagination = paginate_query("hotspots", &input, &mut data)
@@ -1035,13 +1110,9 @@ mod tests {
 
     #[test]
     fn captured_query_uses_short_page_and_honors_explicit_limit() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("varde-query-toz-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let bin = dir.join("toz");
-        std::fs::write(&bin, "#!/bin/sh\ncat >/dev/null\necho '{\"handle\":\"test-handle\",\"preview\":\"src/a.rs: 110 items\"}'\n").unwrap();
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let _path = crate::test_support::PathOverride::new(&dir);
+        let _path = crate::test_support::CaptureOverride::with(|_, _, _| {
+            Some(json!({"handle":"test-handle","preview":"src/a.rs: 110 items"}).to_string())
+        });
         let rows: Vec<Value> = (0..110)
             .map(|i| json!({"file":"src/a.rs","id":i}))
             .collect();
@@ -1072,7 +1143,7 @@ mod tests {
         assert!(final_page["results"].get("toz_read").is_none());
         assert_eq!(
             final_page["results"]["toz_search"],
-            "toz query --handle test-handle \"<term>\""
+            "varde run query --handle test-handle \"<term>\""
         );
 
         let mut context = json!({"files":[{"path":"a.rs"},{"path":"b.rs"},{"path":"c.rs"}],"symbols":[],"tests":[]});
@@ -1082,7 +1153,7 @@ mod tests {
         assert_eq!(context["files"].as_array().unwrap().len(), 1);
         assert_eq!(
             context_page["files"]["toz_read"],
-            "toz query --handle test-handle --lines 2:2"
+            "varde run query --handle test-handle --lines 2:2"
         );
     }
 
@@ -1118,7 +1189,7 @@ mod tests {
 
     #[test]
     fn context_pack_budget_trims_file_window() {
-        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let _without_toz = crate::test_support::CaptureOverride::none();
         let budget = 150;
         let input = json!({ "maxTokensEstimate": budget });
         let mut data = context_pack_data(3);
@@ -1138,7 +1209,7 @@ mod tests {
 
     #[test]
     fn context_pack_budget_covers_standalone_and_batch_child_envelopes() {
-        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let _without_toz = crate::test_support::CaptureOverride::none();
         let budget = 250;
         for mode in [None, Some("context_pack")] {
             let input = json!({ "maxTokensEstimate": budget });
@@ -1159,14 +1230,6 @@ mod tests {
 
     #[test]
     fn context_pack_toz_preview_is_trimmed_and_recovery_is_preserved() {
-        use std::os::unix::fs::PermissionsExt;
-
-        let dir =
-            std::env::temp_dir().join(format!("varde-context-budget-toz-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("stub directory creates");
-        let count_path = dir.join("capture-count");
-        let input_path = dir.join("capture-input");
         let marker = format!("varde_context_budget_toz_probe_{}.rs", std::process::id());
         let preview = "x".repeat(6_000);
         let response = json!({
@@ -1174,34 +1237,19 @@ mod tests {
             "preview": preview
         })
         .to_string();
-        let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
-        let real_toz = std::env::var_os("PATH").and_then(|path| {
-            std::env::split_paths(&path)
-                .map(|directory| directory.join("toz"))
-                .find(|candidate| candidate.is_file())
+        let captures = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = std::sync::Arc::clone(&captures);
+        let probe = marker.clone();
+        let _capture = crate::test_support::CaptureOverride::with(move |input, _, _| {
+            let varde_contracts::CaptureInput::Items(lines) = input else {
+                return None;
+            };
+            if !lines.iter().any(|line| line.contains(&probe)) {
+                return None;
+            }
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Some(response.clone())
         });
-        let fallback = real_toz
-            .as_deref()
-            .map(|path| {
-                format!(
-                    "{} \"$@\" < \"$input_path\"\nexit $?",
-                    quote(path.to_str().unwrap())
-                )
-            })
-            .unwrap_or_else(|| "exit 1".to_string());
-        let script = format!(
-            "#!/bin/sh\ninput_path={}.$$\ntrap 'rm -f \"$input_path\"' 0\ncat > \"$input_path\"\nif grep -F -- {} \"$input_path\" >/dev/null 2>&1; then\n  printf 'capture\\n' >> {}\n  printf '%s\\n' {}\n  exit 0\nfi\n{}\n",
-            quote(input_path.to_str().unwrap()),
-            quote(&marker),
-            quote(count_path.to_str().unwrap()),
-            quote(&response),
-            fallback
-        );
-        let bin = dir.join("toz");
-        std::fs::write(&bin, script).expect("stub writes");
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755))
-            .expect("stub becomes executable");
-        let _path = crate::test_support::PathOverride::new(&dir);
         unsafe { std::env::set_var("VARDE_CODE_TOZ", "1") };
 
         let budget = 240;
@@ -1228,21 +1276,14 @@ mod tests {
         assert_eq!(envelope["meta"]["toz"]["toc"], "");
         assert_eq!(
             envelope["meta"]["pagination"]["files"]["toz_search"],
-            "toz query --handle context-pack-handle \"<term>\""
+            "varde run query --handle context-pack-handle \"<term>\""
         );
         assert!(
             envelope["meta"]["pagination"]["files"]["toz_read"]
                 .as_str()
                 .is_some()
         );
-        assert_eq!(
-            std::fs::read_to_string(&count_path)
-                .expect("capture count exists")
-                .lines()
-                .count(),
-            1
-        );
-        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(captures.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -1255,7 +1296,7 @@ mod tests {
 
     #[test]
     fn context_pack_reports_tests_omitted_from_the_selected_file_window() {
-        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let _without_toz = crate::test_support::CaptureOverride::none();
         let tests: Vec<Value> = (0..4)
             .map(|index| {
                 json!({
@@ -1290,7 +1331,7 @@ mod tests {
 
     #[test]
     fn context_pack_rejects_a_file_when_its_success_envelope_cannot_fit() {
-        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let _without_toz = crate::test_support::CaptureOverride::none();
         let input = json!({
             "maxTokensEstimate": 20,
             "includeReadingOrder": false
@@ -1310,7 +1351,7 @@ mod tests {
 
     #[test]
     fn context_pack_full_results_bypasses_budget_and_symbol_caps_after_offset() {
-        let _without_toz = crate::test_support::PathOverride::without_toz();
+        let _without_toz = crate::test_support::CaptureOverride::none();
         let mut data = json!({
             "files": [
                 {"path":"a.rs", "relevance":"seed"},

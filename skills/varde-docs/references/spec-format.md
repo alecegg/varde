@@ -31,7 +31,7 @@ sources:
 ### Computing `source_hash`
 
 Run this from the repository root, passing the document's `sources` paths;
-`varde-workflow` validates specs with this exact aggregate:
+`varde plan conclude` checks this aggregate:
 
 ```bash
 python3 <skill-dir>/scripts/source-hash.py -- <source-path>...
@@ -72,7 +72,8 @@ Skeleton: `## Summary` / `## Overview` / `## Scope Boundary`
 ## Acceptance criteria
 
 - Form: `Given <condition>, When <event>, Then <observable result>.`
-- With `varde-code`, run `tests_for_file` on the domain's sources and note
+- With `varde` available, run `varde map tests_for_file` on the domain's
+  sources and note
   covering tests beside the list ("Verified by: `tests/foo.test.ts`"); omit
   the note when none exist.
 

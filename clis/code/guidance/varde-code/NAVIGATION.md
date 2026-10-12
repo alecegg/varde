@@ -6,8 +6,8 @@ Use ordinary reads after identifying relevant source targets.
 Start unfamiliar repository exploration with these commands:
 
 ```bash
-varde-code nav_map --json '{"repoRoot":"<repo>"}' --format text
-varde-code context_pack --json '{"repoRoot":"<repo>","query":"<concept>"}'
+varde map nav_map --json '{"repoRoot":"<repo>"}' --format text
+varde map context_pack --json '{"repoRoot":"<repo>","query":"<concept>"}'
 ```
 
 Choose commands from the question being answered:
@@ -27,7 +27,7 @@ Pass `includeReferences` only when usages are necessary.
 Batch known lookups sharing one repository root:
 
 ```bash
-varde-code batch --json '{"repoRoot":"<repo>","calls":[{"mode":"symbols_in_file","filePath":"src/server.rs"},{"mode":"dependents","filePath":"src/server.rs"}]}'
+varde map batch --json '{"repoRoot":"<repo>","calls":[{"mode":"symbols_in_file","filePath":"src/server.rs"},{"mode":"dependents","filePath":"src/server.rs"}]}'
 ```
 
 Every response uses an `ok` and `data` envelope.

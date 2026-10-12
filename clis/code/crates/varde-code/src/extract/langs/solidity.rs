@@ -58,9 +58,10 @@
 //! - `catch_clause` (`try ... catch { ... }`, `catch Error(string m) { ... }`)
 //!   -> Catch, named after the bound exception parameter if present, else "".
 //! - ControlFlow: `if_statement`, `for_statement`, `while_statement`,
-//!   `try_statement`, `return_statement`. (Solidity has no `switch`; `break`/
-//!   `continue` exist but aren't in the fixture's REQUIRED set — the mapped set
-//!   is honest about what fixtures produce.)
+//!   `do_while_statement`, `try_statement`, `return_statement`, Boolean
+//!   operators, ternary expressions, and the legacy `inline_yul` marker.
+//!   Solidity has no high-level `switch`, but inline Yul has `if`, `for`, and
+//!   `switch`; those decisions emit complexity-only cognitive events.
 //! - Export: carved out — Solidity has no `export` keyword; every file-scope
 //!   declaration is importable by path, so there is no export statement to map.
 //! - Route/Response: carved out — Solidity is a smart-contract language with no
@@ -76,15 +77,15 @@ use crate::model::EntityKind;
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
 
-/// Node kinds that introduce a named function scope. `function_definition` and
-/// `modifier_definition` carry the `name` field; `constructor_definition` and
-/// `fallback_receive_definition` are unnamed special members but still open a
-/// scope for the control-flow/error entities in their bodies.
+/// Node kinds that introduce a function scope. Yul functions are nested
+/// callables inside assembly blocks; constructor and fallback/receive nodes
+/// are unnamed special members but still open scopes for their bodies.
 pub const FUNCTION_SCOPES: &[&str] = &[
     "function_definition",
     "modifier_definition",
     "constructor_definition",
     "fallback_receive_definition",
+    "yul_function_definition",
 ];
 
 /// Node kinds that introduce a named contract/library/interface type scope (for
@@ -159,6 +160,11 @@ fn visit_part_1(
             // `receive() ...` / `fallback() ...`: no name field; the leading
             // keyword is the first identifier-like token of the node text.
             ctx.push(EntityKind::Function, special_member_name(node), node);
+        }
+        "yul_function_definition" => {
+            if let Some(name) = yul_function_name(node) {
+                ctx.push(EntityKind::Function, name, node);
+            }
         }
         _ => return false,
     }
@@ -258,12 +264,32 @@ fn visit_part_4(
         }
         // ---- control flow ----
         "if_statement" => {
-            let name = if is_else_if(node) {
+            let is_else_if = is_else_if(node);
+            let name = if is_else_if {
                 "elseif_statement"
             } else {
                 "if_statement"
             };
-            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            if is_else_if {
+                if let Some(if_token) = node.children().find(|child| child.kind() == "if") {
+                    // Keep the hybrid marker outside its body so it does not
+                    // add another nesting level to nested decisions there.
+                    ctx.push(EntityKind::ControlFlow, name.to_string(), &if_token);
+                } else {
+                    ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+                }
+            } else {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+            if has_plain_else_branch(node)
+                && let Some(else_token) = node.field("else")
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &else_token,
+                );
+            }
         }
         _ => return false,
     }
@@ -285,8 +311,18 @@ fn visit_part_5(
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
         }
+        "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+        }
         "assembly_statement" => {
             ctx.push(EntityKind::ControlFlow, "inline_yul".to_string(), node);
+        }
+        "yul_if_statement" | "yul_for_statement" | "yul_switch_statement" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "cognitive_decision".to_string(),
+                node,
+            );
         }
         _ => return false,
     }
@@ -312,6 +348,14 @@ fn boolean_operator_name(
     }
 }
 
+/// A logical negation between like-operator sequences starts a new sequence.
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!')
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
+}
+
 /// True for an `if_statement` occurring after Solidity's `else` token.
 fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
     let Some(wrapper) = node.parent().filter(|parent| parent.kind() == "statement") else {
@@ -329,6 +373,21 @@ fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
             after_else = true;
         } else if after_else && child.range() == wrapper.range() {
             return true;
+        }
+    }
+    false
+}
+
+/// True when an if has an else body that is not itself an else-if.
+fn has_plain_else_branch(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let mut after_else = false;
+    for child in node.children() {
+        if child.kind() == "else" {
+            after_else = true;
+        } else if after_else && child.kind() == "statement" {
+            return !child
+                .children()
+                .any(|nested| nested.kind() == "if_statement");
         }
     }
     false
@@ -615,17 +674,20 @@ mod tests {
     }
 
     #[test]
-    fn complexity_events_cover_solidity_decisions_and_unknown_yul() {
+    fn complexity_events_cover_solidity_decisions_and_yul() {
         let es = entities(&with_preamble(
             r#"
                 contract C {
                   function f(bool a, bool b, uint value) public {
-                    if (a && b || a) {} else if (b) {}
+                    if (a && b || a) {} else if (b) {} else {}
                     do { value++; } while (value < 2);
                     uint choice = a ? 1 : 0;
                     try this.f(a, b, value) {}
                     catch Error(string memory error) {}
                     assembly { switch value case 0 {} default {} }
+                  }
+                  function negated(bool a, bool b, bool c) public pure returns (bool) {
+                    return a && !(b && c);
                   }
                 }
             "#,
@@ -638,7 +700,9 @@ mod tests {
 
         assert!(flow_names.contains(&"logical_and"), "entities: {es:?}");
         assert!(flow_names.contains(&"logical_or"), "entities: {es:?}");
+        assert!(flow_names.contains(&"negation_break"), "entities: {es:?}");
         assert!(flow_names.contains(&"elseif_statement"), "entities: {es:?}");
+        assert!(flow_names.contains(&"else_branch"), "entities: {es:?}");
         assert!(
             flow_names.contains(&"do_while_statement"),
             "entities: {es:?}"
@@ -648,10 +712,18 @@ mod tests {
             "entities: {es:?}"
         );
         assert!(flow_names.contains(&"inline_yul"), "entities: {es:?}");
+        assert_eq!(
+            flow_names
+                .iter()
+                .filter(|name| **name == "cognitive_decision")
+                .count(),
+            1,
+            "Yul switch is one cognitive decision: {es:?}"
+        );
         assert!(find(&es, EntityKind::Catch, "error").is_some(), "{es:?}");
         assert_eq!(
             crate::complexity::control_flow_role("inline_yul"),
-            crate::complexity::FlowRole::Unknown
+            crate::complexity::FlowRole::Ignored
         );
 
         let metrics = crate::complexity::function_complexities(&es);
@@ -660,9 +732,133 @@ mod tests {
             .find(|metric| metric.name == "f")
             .expect("f metric");
         assert_eq!(function.cyclomatic, 8, "metric: {function:?}");
+        assert_eq!(function.cognitive, 10, "metric: {function:?}");
         assert_eq!(
             function.confidence,
-            crate::complexity::ComplexityConfidence::Low
+            crate::complexity::ComplexityConfidence::High
         );
     }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] =
+    &[("inline_yul", crate::complexity::FlowRole::Ignored)];
+
+/// Collect Solidity callables and same-file call references for recursion.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root.dfs().filter(is_function_scope).collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name = function_scope_name(node)?;
+            let parameters: Vec<_> = node
+                .children()
+                .filter(|child| child.kind() == "parameter")
+                .collect();
+            let total_args = u16::try_from(parameters.len()).unwrap_or(u16::MAX);
+            let owner_type = enclosing_type_name(node);
+            let name_span = node
+                .field("name")
+                .as_ref()
+                .map(crate::extract::span_of)
+                .unwrap_or_else(|| crate::extract::span_of(node));
+            Some(Callable {
+                owner: owner_type.clone(),
+                owner_type,
+                unqualified_callable: false,
+                name,
+                required_args: total_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span,
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call.ancestors().find(is_function_scope) else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let function = unwrap_expression(function);
+        let (name, qualifier, qualifier_name) = match function.kind().as_ref() {
+            "identifier" => (function.text().into_owned(), Qualifier::None, None),
+            "member_expression" => {
+                let Some(property) = function.field("property") else {
+                    continue;
+                };
+                let Some(object) = function.field("object") else {
+                    continue;
+                };
+                let receiver = unwrap_expression(object).text().into_owned();
+                let owner = callables[caller].owner.as_deref();
+                let (qualifier, qualifier_name) = if receiver == "this" {
+                    (Qualifier::SelfLike, None)
+                } else if owner == Some(receiver.as_str()) {
+                    (Qualifier::NamedType, Some(receiver))
+                } else {
+                    (Qualifier::Other, None)
+                };
+                (property.text().into_owned(), qualifier, qualifier_name)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .children()
+            .filter(|child| {
+                child.kind() == "call_argument" || child.kind() == "call_struct_argument"
+            })
+            .count();
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
+}
+
+fn is_function_scope(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    FUNCTION_SCOPES.contains(&node.kind().as_ref())
+}
+
+fn function_scope_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    match node.kind().as_ref() {
+        "function_definition" | "modifier_definition" => field_name(node),
+        "constructor_definition" => Some("constructor".to_string()),
+        "fallback_receive_definition" => Some(special_member_name(node)),
+        "yul_function_definition" => yul_function_name(node),
+        _ => None,
+    }
+}
+
+fn yul_function_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.children()
+        .find(|child| child.kind() == "yul_identifier")?
+        .children()
+        .find(|child| child.kind() == "identifier")
+        .map(|identifier| identifier.text().into_owned())
+}
+
+fn enclosing_type_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+        .and_then(|ancestor| field_name(&ancestor))
 }

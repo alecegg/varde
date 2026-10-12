@@ -1919,8 +1919,10 @@ mod semantic_entrypoint_tests {
         f: impl FnOnce(&Connection) -> Result<Vec<Entrypoint>, ApiError>,
     ) -> usize {
         PROFILED_STATEMENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+        #[allow(deprecated)] // rusqlite 0.40: profile kept to preserve statement counting
         conn.profile(Some(count_statement));
         f(conn).expect("detection succeeds");
+        #[allow(deprecated)]
         conn.profile(None);
         PROFILED_STATEMENTS.load(std::sync::atomic::Ordering::Relaxed)
     }

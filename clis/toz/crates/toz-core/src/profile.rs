@@ -186,21 +186,8 @@ pub fn summarize(profiles: &[Profile]) -> Vec<ProfileSummary> {
     profiles.iter().map(ProfileSummary::from).collect()
 }
 
-/// Root directory for varde-wide config: `$VARDE_CONFIG_DIR`, else `$XDG_CONFIG_HOME/varde`,
-/// else `~/.config/varde`. Mirrors `md-core`'s user-config lookup; this crate cannot depend on
-/// `md-core` (separate Cargo workspace), so the same rule is reimplemented here.
-pub(crate) fn varde_config_dir() -> PathBuf {
-    if let Some(dir) = std::env::var_os("VARDE_CONFIG_DIR").filter(|v| !v.is_empty()) {
-        return PathBuf::from(dir);
-    }
-    if let Some(dir) = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
-        return PathBuf::from(dir).join("varde");
-    }
-    dirs::home_dir()
-        .map(|home| home.join(".config"))
-        .unwrap_or_else(|| PathBuf::from(".config"))
-        .join("varde")
-}
+/// Root directory for varde-wide config (see `varde_core::paths::varde_config_dir`).
+pub(crate) use varde_core::paths::varde_config_dir;
 
 /// User-scope profiles file: `<varde config dir>/toz/profiles.toml`.
 pub fn user_profiles_path() -> PathBuf {

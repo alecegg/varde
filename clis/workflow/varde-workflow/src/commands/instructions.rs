@@ -1,6 +1,5 @@
 //! Manage the marker-delimited Varde instruction block in user-selected files.
 
-use super::hook::{SPAWN_ERROR_PREFIX, capture};
 use crate::cli::{InstructionsArgs, InstructionsCommand, InstructionsInstallArgs};
 use anyhow::{Context, Result};
 use std::collections::HashSet;
@@ -8,14 +7,16 @@ use std::fs;
 use std::io;
 use std::ops::Range;
 use std::path::{Component, Path, PathBuf};
-use varde_workflow_core::memory::{load_config, save_config};
+use varde_workflow_core::memory::{Orchestration, RoleCaps, load_config, save_config};
 
 const START_MARKER: &[u8] = b"<!-- varde:start -->";
 const END_MARKER: &[u8] = b"<!-- varde:end -->";
+/// Template for the embedded Toz section (an app-crate test pins its output).
+const TOZ_TEMPLATE: &str = "<!-- varde-toz:start -->\n## varde-toz (tool-output-zone)\n\n{{TOZ_SHARED_NOTE}}\n<!-- varde-toz:end -->\n";
 const LEGACY_TOZ_MARKER: &[u8] = b"<!-- varde-toz:start -->";
 
 /// Shared warning for commands that need an instruction target before Varde can work as designed.
-pub const SETUP_WARNING: &str = "Varde will not work as designed until its instruction block is installed: agents will not delegate as designed or use toz captures. Install it with `varde-workflow instructions install --target <file>`. Use one canonical `AGENTS.md` symlinked into each harness.";
+pub const SETUP_WARNING: &str = "Varde will not work as designed until its instruction block is installed: agents will not delegate as designed or use captured command output. Install it with `varde setup instructions install --target <file>`. Use one canonical `AGENTS.md` symlinked into each harness.";
 
 pub fn run(args: InstructionsArgs) -> Result<()> {
     match args.command {
@@ -28,8 +29,8 @@ pub fn run(args: InstructionsArgs) -> Result<()> {
 fn install(args: InstructionsInstallArgs) -> Result<()> {
     let mut config = load_config().context("could not load Varde config")?;
     let supplied_targets = !args.targets.is_empty();
-    if let Some(max_agents) = args.max_agents {
-        config.orchestration.set_max_agents(max_agents);
+    if let Some(builders) = args.builders {
+        config.orchestration.set_builders(builders);
     }
 
     let target_paths = if supplied_targets {
@@ -54,7 +55,7 @@ fn install(args: InstructionsInstallArgs) -> Result<()> {
         )?
     };
 
-    if !args.dry_run && (supplied_targets || args.max_agents.is_some()) {
+    if !args.dry_run && (supplied_targets || args.builders.is_some()) {
         save_config(&config).context("could not save Varde config")?;
     }
 
@@ -63,22 +64,48 @@ fn install(args: InstructionsInstallArgs) -> Result<()> {
         return Ok(());
     }
 
-    let max_agents = if let Some(max_agents) = args.max_agents {
-        max_agents
+    let caps = resolved_caps(&config.orchestration);
+    let mut sections = if args.sections.is_empty() {
+        Vec::new()
     } else {
-        let (max_agents, invalid) = config.orchestration.max_agents();
-        if let Some(reason) = invalid {
-            eprintln!(
-                "varde-workflow instructions: orchestration max_agents ignored ({reason}); using {max_agents}"
-            );
-        }
-        max_agents
+        args.sections
+            .split(',')
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
     };
-    let block = render_block(max_agents);
+    if let Some(section) = sections
+        .iter()
+        .find(|section| !["orchestration", "toz", "learn"].contains(&section.as_str()))
+    {
+        anyhow::bail!("unknown instruction section: {section}");
+    }
+    if args.learn && !sections.iter().any(|section| section == "learn") {
+        sections.push("learn".to_owned());
+    }
+    let block = render_block(caps, &sections);
     for path in target_paths {
         install_target(&path, &block, args.dry_run);
     }
     Ok(())
+}
+
+/// Resolve the per-role caps, warning once per invalid key.
+fn resolved_caps(orchestration: &Orchestration) -> RoleCaps {
+    let warn = |key: &str, (value, reason): (u32, Option<String>)| {
+        if let Some(reason) = reason {
+            eprintln!(
+                "varde-workflow instructions: orchestration {key} ignored ({reason}); using {value}"
+            );
+        }
+        value
+    };
+    RoleCaps {
+        orchestrators: warn("orchestrators", orchestration.orchestrators()),
+        builders: warn("builders", orchestration.builders()),
+        planners: warn("planners", orchestration.planners()),
+        reviewers: warn("reviewers", orchestration.reviewers()),
+        explorers: warn("explorers", orchestration.explorers()),
+    }
 }
 
 fn targets() -> Result<()> {
@@ -181,12 +208,21 @@ fn real_path_key(path: &Path) -> PathBuf {
     }
 }
 
-fn render_block(max_agents: u32) -> String {
-    let mut body = orchestration_brief(max_agents);
-    if let Some(note) = toz_note() {
-        body.push_str("\n\n");
-        body.push_str(&note);
+fn render_block(caps: RoleCaps, sections: &[String]) -> String {
+    let mut body = Vec::new();
+    if sections.iter().any(|section| section == "orchestration") {
+        body.push(orchestration_brief(caps));
     }
+    if sections.iter().any(|section| section == "toz") {
+        body.push(toz_note());
+    }
+    if sections.iter().any(|section| section == "learn") {
+        body.push(format!(
+            "<!-- varde-learn:start -->\n## varde-learn\n\n{}\n<!-- varde-learn:end -->",
+            varde_core::LEARN_NOTE
+        ));
+    }
+    let body = body.join("\n\n");
     format!(
         "{}\n{}\n{}",
         String::from_utf8_lossy(START_MARKER),
@@ -195,17 +231,10 @@ fn render_block(max_agents: u32) -> String {
     )
 }
 
-fn toz_note() -> Option<String> {
-    let argv = ["note", "--block"].map(String::from);
-    match capture("varde-toz", &argv, Path::new(".")) {
-        Ok(note) => (!note.is_empty()).then_some(note),
-        // `cannot run` means varde-toz is not installed; omit its section.
-        Err(reason) if reason.starts_with(SPAWN_ERROR_PREFIX) => None,
-        Err(reason) => {
-            eprintln!("varde-workflow instructions: `varde-toz note --block` failed: {reason}");
-            None
-        }
-    }
+/// The Toz section, rendered in process from the shared Varde template.
+fn toz_note() -> String {
+    let note = varde_core::toz_instruction_block(TOZ_TEMPLATE);
+    note.trim().to_string()
 }
 
 fn install_target(path: &Path, block: &str, dry_run: bool) {
@@ -222,7 +251,7 @@ fn install_target(path: &Path, block: &str, dry_run: bool) {
         .is_some_and(|content| find_bytes(content, LEGACY_TOZ_MARKER, 0).is_some())
     {
         eprintln!(
-            "varde-workflow instructions: {} contains a legacy varde-toz block; run `varde-toz install codex` to remove it",
+            "varde-workflow instructions: {} contains a legacy varde-toz block; run `varde setup sync` to remove it",
             path.display()
         );
     }
@@ -309,6 +338,12 @@ fn remove_blocks(existing: &[u8]) -> Vec<u8> {
     updated
 }
 
+/// Whether the file at `path` holds a paired Varde start/end marker block.
+/// An unreadable or missing file holds none.
+pub fn has_managed_block(path: &Path) -> bool {
+    fs::read(path).is_ok_and(|content| !block_ranges(&content).is_empty())
+}
+
 fn block_ranges(content: &[u8]) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
     let mut cursor = 0;
@@ -333,15 +368,45 @@ fn find_bytes(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
 }
 
 /// The orchestration brief; every instruction file pays for it, so keep it short.
-pub(super) fn orchestration_brief(max_agents: u32) -> String {
+pub(super) fn orchestration_brief(caps: RoleCaps) -> String {
     format!(
-        "Orchestration: you are the main agent. Stay available to the user and delegate bounded tasks to background `varde-*` agents.\n\
-         Keep responding to the user while commands and agents run; say when you become busy and when you are free again.\n\
-         Run at most {max_agents} subagents at once; `varde-explorer` runs are not counted.\n\
-         Subagents spawn nothing, except OpenCode and Pi planners, executors, and reviewers, which may run up to 2 `varde-explorer`. On other harnesses, first run up to 2 `varde-explorer` over the task's areas and put their notes in the brief.\n\
-         Review each result before integrating it.\n\
-         If you were launched with a bounded task, follow that brief instead.\n\
-         This standing user request to delegate overrides any built-in default to spawn subagents only on request.\n\
-         Details: varde-change `references/orchestration.md`."
+        "Orchestration: you are the main agent, the session manager: talk to the user, launch one orchestrator per plan, relay decisions and approvals, keep session notes; do not explore or implement. Orchestrators run their plan's workers, reviewers, merges, sync, memory commits and `varde plan conclude`.\n\
+         Route every change through `varde-change`.\n\
+         Role caps per orchestrator: {builders} builders, {planners} planners, {reviewers} reviewers, {explorers} explorers; at most {orchestrators} orchestrators, one per plan.\n\
+         Orchestrators and workers report milestones with `varde msg send` to `main`; their final reply is one line. Main agent status format: details: varde-change `references/status.md`. On a wake-up or without the per-prompt hook, the main agent runs `varde msg read`.\n\
+         Update the hand-written session notes section when a rule is set or a decision opens or closes; tidy it at the nudge, before compaction, or on request, and never edit the generated block.\n\
+         Run `varde plan watch --stale 20m --notes <session notes path>` under your harness's monitor while orchestrators run; the session notes block shows plan state.\n\
+         If you were launched with a bounded task, follow that brief instead.",
+        builders = caps.builders,
+        planners = caps.planners,
+        reviewers = caps.reviewers,
+        explorers = caps.explorers,
+        orchestrators = caps.orchestrators,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn toz_note_is_always_included() {
+        let block = render_block(RoleCaps::default(), &["orchestration".into(), "toz".into()]);
+        assert!(block.contains("## varde-toz (tool-output-zone)"), "{block}");
+    }
+
+    #[test]
+    fn role_caps_line_is_rendered_from_config() {
+        let caps = RoleCaps {
+            orchestrators: 3,
+            builders: 5,
+            planners: 1,
+            reviewers: 1,
+            explorers: 2,
+        };
+        let block = render_block(caps, &["orchestration".into(), "toz".into()]);
+        assert!(block.contains(
+            "Role caps per orchestrator: 5 builders, 1 planners, 1 reviewers, 2 explorers; at most 3 orchestrators, one per plan."
+        ), "{block}");
+    }
 }

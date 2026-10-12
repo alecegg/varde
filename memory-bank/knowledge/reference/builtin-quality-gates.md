@@ -11,16 +11,17 @@ paths:
 
 # Built-in quality gates
 
-The built-in pack contains 35 rules: 28 `error` rules, one `warning` rule,
+The built-in pack contains 127 rules: 102 `error` rules, 19 `warning` rules,
 and six `info` rules.
 `schema_version` is `1`. Top-level `outcome` classifies the caller-visible
 result. `ok` describes execution, not whether findings block completion.
 `data.analysis.status` and `data.gate.status` report independent states.
 
-The default threshold is `error`. A complete scan passes without unresolved
-findings at or above that threshold. `warning` includes warnings. `info`
-includes all severities. `gateRules` selects unique active IDs directly and is
-mutually exclusive with `severityThreshold`.
+The default threshold is `error`. Certified budget rules are warning-level,
+so they do not block that default threshold. A complete scan
+passes without unresolved findings at or above the threshold. `warning`
+includes warnings. `info` includes all severities. `gateRules` selects unique
+active IDs directly and is mutually exclusive with `severityThreshold`.
 
 `data.gate.status` is `pass`, `fail`, or `unknown`. A gated finding produces
 top-level `outcome: "code-quality-error"`. Blocking diagnostics produce
@@ -42,35 +43,43 @@ for every finding, or use `findingsLimit` and `findingsOffset` for pages.
 Truncated results set `meta.truncated` and provide
 `data.guide.truncated.findings` recovery fields.
 
-## Certified budgets
+## Warning-level budgets and policies
 
-High-confidence function complexity gates at cognitive > 15 or cyclomatic > 20.
-A function over 60 lines with both complexity metrics within those limits
-produces a warning instead. Certified file complexity gates above total 50 and
-average 7.
-Direct type methods have a maximum of 15. Classes have a maximum of 3 resolved
-same-file interfaces. Inheritance depth above 3 is reported as a lower bound.
+High-confidence function complexity findings warn above cognitive 15 or
+cyclomatic 20. A function over 60 lines with both complexity metrics within
+those limits also warns. A **certified function-complexity language** is one
+whose conformance suite passes in CI; this definition applies only to function
+complexity. Certified file complexity findings warn above total 50 and average
+7.
+More than 15 direct type methods, more than 3 resolved same-file interfaces,
+and inheritance depth above 3 also produce warning-level findings. Inheritance
+depth is reported as a lower bound.
 
-Exact clone findings require at least 3 members, at least 20 syntax tokens,
+Exact clone warnings require at least 3 members, at least 20 syntax tokens,
 and more than 8 lines per member. Clone verification compares source AST leaf
 kind and structure. Comments and layout are ignored; literals, operators, and
 case remain significant. Bodies are compared when available, otherwise the
-whole function is used. Dependency breadth gates at fan-out >= 15 and fan-in
+whole function is used. Dependency breadth warns at fan-out >= 15 and fan-in
 <= 2.
 
-Certified dependency units use relative source paths for JavaScript, TypeScript,
-TSX, Dart, and Solidity. Go uses module-aware package-directory units. Missing
-facts require explicit recognized source filenames. Extensionless missing
-imports, JavaScript aliases, ambiguous targets, and unindexed targets are not
-certified. The facts exclude tests, tooling, type-only imports, unsupported
-resolver shapes, and non-source assets. Reciprocal cycle checks report direct
-mutual pairs only.
+Certified dependency units use file units for JavaScript, TypeScript, TSX,
+Dart, Solidity, Rust, Python, C, C++, Ruby, PHP, Lua, Bash, Elixir and
+Haskell; directory units for Go and Java/Kotlin/Scala; the nearest `.csproj`
+for C#, and a `Sources/<Target>` directory or an Xcode `PBXNativeTarget` for
+Swift. Missing facts require explicit recognized source filenames.
+Extensionless missing imports, JavaScript aliases, ambiguous targets, and
+unindexed targets are not certified. C and C++ certify `missing` only for `./`
+and `../` specifiers; C# and Swift emit no `missing` facts, and Rust facts are
+certified only across Cargo packages. The facts exclude tests, tooling,
+type-only imports, unsupported resolver shapes, and non-source assets.
+Reciprocal cycle checks report direct mutual pairs only.
 
-`dependency-boundary` uses literal complete directory segments. Both prefixes
-must be nonempty for an active policy. Both shipped prefixes are empty, which
-leaves ordinary scans inactive. Exactly one blank or malformed prefix produces
-an incomplete scan. Explicit selection of an unconfigured boundary is rejected
-before index writes.
+`dependency-boundary` uses literal complete directory segments. It defaults to
+`error` because a configured boundary represents an explicit architecture
+decision. Both prefixes must be nonempty for an active policy. Both shipped
+prefixes are empty, which leaves ordinary scans inactive. Exactly one blank or
+malformed prefix produces an incomplete scan. Explicit selection of an
+unconfigured boundary is rejected before index writes.
 
 ## Advisory boundaries
 
@@ -82,7 +91,7 @@ not establish compiler-level LSP or ISP contracts.
 
 ## Syntax coverage
 
-The syntax pack has 35 declared rule-language pairs. Every pair has positive
+The syntax pack has 127 declared rule-language pairs. Every pair has positive
 and negative CLI fixture coverage. Rule listings expose active definitions,
 thresholds, languages, exclusions, and provenance. Overrides replace complete
 rules by identifier. Suppressions affect findings, never diagnostics.

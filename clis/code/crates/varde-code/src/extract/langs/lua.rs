@@ -174,6 +174,9 @@ fn visit_part_2(
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
         }
+        "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+        }
         _ => return false,
     }
     true
@@ -185,9 +188,27 @@ fn visit_part_3(
     ctx: &mut ExtractCtx,
 ) -> bool {
     match kind {
-        "if_statement" | "elseif_statement" | "else_statement" | "for_statement"
-        | "while_statement" | "repeat_statement" | "do_statement" | "return_statement"
-        | "break_statement" | "goto_statement" | "label_statement" => {
+        "if_statement" => {
+            ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "elseif_statement" | "else_statement" => {
+            ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+            // These hybrid branch markers add a point but do not add nesting
+            // to their bodies. Their AST spans include the body, so end each
+            // event where its consequence/body starts. The enclosing root if
+            // keeps its full span and remains the one structural parent.
+            let body_start = node
+                .field("consequence")
+                .or_else(|| node.field("body"))
+                .map(|body| crate::extract::span_of(&body));
+            if let (Some(body), Some(event)) = (body_start, ctx.out.last_mut()) {
+                event.span.end_byte = body.start_byte;
+                event.span.end_line = body.start_line;
+                event.span.end_col = body.start_col;
+            }
+        }
+        "for_statement" | "while_statement" | "repeat_statement" | "do_statement"
+        | "return_statement" | "break_statement" | "goto_statement" | "label_statement" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
         _ => return false,
@@ -205,6 +226,182 @@ fn boolean_operator_name(
             "or" => Some("logical_or"),
             _ => None,
         })
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.field("operator")
+        .is_some_and(|operator| operator.text() == "not")
+        && node.field("operand").is_some_and(|operand| {
+            operand
+                .dfs()
+                .any(|child| boolean_operator_name(&child).is_some())
+        })
+}
+
+/// Collect same-file calls for Lua's free functions and module-table methods.
+/// Anonymous function literals do not own recursion references; their calls
+/// are attributed to the nearest enclosing named function declaration.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| node.kind() == "function_declaration")
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let (owner, name, unqualified_callable) = declaration_lookup(node, &name_node);
+            let (required_args, total_args) = parameter_counts(node);
+            Some(Callable {
+                owner,
+                owner_type: None,
+                unqualified_callable,
+                name,
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "function_call") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| ancestor.kind() == "function_declaration")
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(name_node) = call.field("name") else {
+            continue;
+        };
+        let (name, qualifier, qualifier_name) = match name_node.kind().as_ref() {
+            "identifier" => (name_node.text().into_owned(), Qualifier::None, None),
+            "dot_index_expression" => {
+                let (Some(field), Some(table)) =
+                    (name_node.field("field"), name_node.field("table"))
+                else {
+                    continue;
+                };
+                let current_owner =
+                    declaration_lookup(&caller_node, &caller_node.field("name").unwrap()).0;
+                let qualifier = if current_owner.as_deref() == Some(table.text().as_ref()) {
+                    Qualifier::NamedType
+                } else {
+                    Qualifier::Other
+                };
+                (
+                    field.text().into_owned(),
+                    qualifier,
+                    Some(table.text().into_owned()),
+                )
+            }
+            "method_index_expression" => {
+                let (Some(method), Some(table)) =
+                    (name_node.field("method"), name_node.field("table"))
+                else {
+                    continue;
+                };
+                let qualifier = if table.text() == "self" {
+                    Qualifier::SelfLike
+                } else {
+                    let current_owner =
+                        declaration_lookup(&caller_node, &caller_node.field("name").unwrap()).0;
+                    if current_owner.as_deref() == Some(table.text().as_ref()) {
+                        Qualifier::NamedType
+                    } else {
+                        Qualifier::Other
+                    }
+                };
+                let qualifier_name =
+                    (qualifier == Qualifier::NamedType).then(|| table.text().into_owned());
+                (method.text().into_owned(), qualifier, qualifier_name)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named())
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
+}
+
+fn declaration_lookup(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    name_node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> (Option<String>, String, bool) {
+    match name_node.kind().as_ref() {
+        "dot_index_expression" => (
+            name_node
+                .field("table")
+                .map(|table| table.text().into_owned()),
+            name_node
+                .field("field")
+                .map(|field| field.text().into_owned())
+                .unwrap_or_default(),
+            false,
+        ),
+        "method_index_expression" => (
+            name_node
+                .field("table")
+                .map(|table| table.text().into_owned()),
+            name_node
+                .field("method")
+                .map(|method| method.text().into_owned())
+                .unwrap_or_default(),
+            false,
+        ),
+        _ => (
+            node.ancestors()
+                .find(|ancestor| ancestor.kind() == "function_declaration")
+                .and_then(|parent| parent.field("name"))
+                .map(|parent_name| parent_name.text().into_owned()),
+            name_node.text().into_owned(),
+            true,
+        ),
+    }
+}
+
+fn parameter_counts(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> (u16, u16) {
+    let Some(parameters) = node.field("parameters") else {
+        return (0, 0);
+    };
+    let children: Vec<_> = parameters.children().collect();
+    let required = children
+        .iter()
+        .filter(|child| child.kind() == "identifier")
+        .count();
+    let variadic = children
+        .iter()
+        .any(|child| child.kind() == "vararg_expression");
+    let required = u16::try_from(required).unwrap_or(u16::MAX);
+    (required, if variadic { u16::MAX } else { required })
 }
 
 /// Handle imports, throws, member access, and plain calls.
@@ -513,4 +710,81 @@ mod tests {
             "entities: {es:?}"
         );
     }
+
+    #[test]
+    fn cognitive_roles_cover_else_goto_and_negation_break() {
+        let es = entities(
+            "function f(a, b, c) if a and not (b and c) then goto done else return false end ::done:: end\n",
+        );
+        let names: Vec<_> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+        assert!(names.contains(&"else_statement"), "entities: {es:?}");
+        assert!(names.contains(&"goto_statement"), "entities: {es:?}");
+        assert!(names.contains(&"negation_break"), "entities: {es:?}");
+        assert_eq!(
+            crate::complexity::control_flow_role("else_statement"),
+            crate::complexity::FlowRole::Else
+        );
+        assert_eq!(
+            crate::complexity::control_flow_role("goto_statement"),
+            crate::complexity::FlowRole::Jump
+        );
+        let metric = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .unwrap();
+        assert_eq!(metric.cognitive, 5);
+        assert_eq!(metric.cyclomatic, 4);
+    }
+
+    #[test]
+    fn recursion_matches_free_and_module_table_functions() {
+        let es = entities(
+            "local function direct(n) if n > 0 then return direct(n - 1) end end\nM = {}\nfunction M.dot(n) if n > 0 then return M.dot(n - 1) end end\nfunction M:method(n) if n > 0 then return self:method(n - 1) end end\nfunction other_receiver(n) if n > 0 then return other_receiver_peer(n - 1) end end\n",
+        );
+        let metrics = crate::complexity::function_complexities(&es);
+        for name in ["direct", "M.dot", "M:method"] {
+            let metric = metrics.iter().find(|metric| metric.name == name).unwrap();
+            assert_eq!(metric.cognitive, 2, "{metric:?}");
+        }
+        let other = metrics
+            .iter()
+            .find(|metric| metric.name == "other_receiver")
+            .unwrap();
+        assert_eq!(other.cognitive, 1, "{other:?}");
+    }
+
+    #[test]
+    fn variadic_recursion_arity_accepts_extra_arguments() {
+        let parsed = crate::parse::parse_source(
+            &SupportLang::Lua,
+            "local function recurse(n, ...) recurse(n - 1) end\n",
+        );
+        let root = parsed.root.root();
+        let (callables, _) = match_callees(&root);
+        let recursive = callables
+            .iter()
+            .find(|callable| callable.name == "recurse")
+            .unwrap();
+        assert_eq!(recursive.required_args, 1);
+        assert_eq!(recursive.total_args, u16::MAX);
+    }
+
+    #[test]
+    fn hybrid_branch_spans_preserve_structural_max_nesting() {
+        let es = entities(
+            "function after_elseif(a, b, c) if a then return 1 elseif b then if c then return 2 end end end\nfunction after_else(a, b) if a then return 1 else if b then return 2 end end end\n",
+        );
+        let metrics = crate::complexity::function_complexities(&es);
+        for name in ["after_elseif", "after_else"] {
+            let metric = metrics.iter().find(|metric| metric.name == name).unwrap();
+            assert_eq!(metric.max_nesting, 1, "{metric:?}");
+        }
+    }
 }
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];

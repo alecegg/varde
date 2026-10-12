@@ -1,13 +1,13 @@
 # Standalone verification
 
-Read-only: never fix, change status, or tick criteria.
+Read-only: never fix, tick criteria, or change status.
 
 ## Resolve the target
 
 | Request | Target |
 |---|---|
 | Plan identifier or slug | Matching `<working>/plans/<plan-id>/plan.md` |
-| Feature or group | Group plan and every nested child plan |
+| Feature or plan set | The plan, or every plan in its folder |
 | No target | Most recent completed date-prefixed plan; none: report that and stop |
 
 List ambiguous slug matches and ask once.
@@ -15,12 +15,10 @@ State the resolved identifier and current status.
 
 ## Verify
 
-1. Read `## Acceptance criteria`. Stop if missing, except for a group parent
-   without it: verify each child plan, then report the aggregate.
+1. Read `## Acceptance criteria`. Stop if missing.
 2. Ignore checkbox state; a check is a claim, not evidence, and an unchecked
    one is not an automatic failure.
 3. Read each adjacent `tasks/*.md` status and Progress evidence.
-   Do not re-grade task Verification blocks.
 4. Run every criterion's `assert:` command or structural check, exactly as
    written — never silently substitute a different assertion, and run broad
    project checks only when a criterion asks for one.
@@ -36,9 +34,7 @@ State the resolved identifier and current status.
 7. Report each criterion with its evidence.
    Finish with outcome counts and plan status.
 
-A UI check needs a browser tool from your own tool list; harness tools do not
-appear on `PATH`. Without one, the check is `unavailable`, never passed; never
-infer rendering from an HTTP fetch or source. Log in only with
-credentials the user supplied, and submit no form that changes real data.
-
-Recommend `varde-change build` when fixes are needed.
+A UI check needs a browser tool from your own tool list (harness tools do not
+appear on `PATH`); without one it is
+`unavailable`, never passed. Never infer rendering from source or HTTP. Use
+only user-supplied credentials and submit no form that changes real data.

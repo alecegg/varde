@@ -1,0 +1,86 @@
+[package]
+name = "varde"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Varde unified command-line interface"
+autobins = false
+autotests = false
+
+[dependencies]
+varde-contracts.workspace = true
+varde-core.workspace = true
+serde_json = "1"
+serde = "1"
+fs4 = { version = "1.1.0", features = ["sync"] }
+sha2 = "0.10.9"
+clap = "4.6.7"
+varde-code = { path = "../code/crates/varde-code" }
+varde-workflow = { path = "../workflow/varde-workflow" }
+varde-toz = { path = "../toz/crates/toz" }
+varde-learn = { path = "../learn/crates/varde-learn" }
+varde-doc = { path = "../doc/crates/varde-doc" }
+toz-core = { package = "varde-toz-core", path = "../toz/crates/toz-core", version = "2.0.0" }
+varde-learn-core = { path = "../learn/crates/varde-learn-core" }
+varde-workflow-core = { path = "../workflow/md-core" }
+toml = "0.8"
+toml_edit = "0.22"
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+ast-grep-language = "0.45.1"
+libc = "0.2"
+predicates = "3.1.4"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+sha1 = "0.10"
+tempfile = "3.27.0"
+varde-core = { workspace = true, features = ["write-meter"] }
+
+[[bin]]
+name = "varde"
+path = "src/bin/varde.rs"
+
+[[test]]
+name = "code_suite"
+path = "tests/code_suite/main.rs"
+
+[[test]]
+name = "extract_shell"
+path = "tests/code/extract_shell.rs"
+
+[[test]]
+name = "workflow_suite"
+path = "tests/workflow_suite/main.rs"
+
+[[test]]
+name = "toz_suite"
+path = "tests/toz_suite/main.rs"
+
+[[test]]
+name = "learn_suite"
+path = "tests/learn_suite/main.rs"
+
+[[test]]
+name = "dependency_rules"
+path = "tests/dependency_rules.rs"
+
+[[test]]
+name = "no_named_spawn"
+path = "tests/no_named_spawn.rs"
+
+[[test]]
+name = "sync_suite"
+path = "tests/sync_suite.rs"
+
+[[test]]
+name = "setup_suite"
+path = "tests/setup_suite.rs"
+
+[[test]]
+name = "misc_suite"
+path = "tests/misc_suite.rs"
+
+[[test]]
+name = "write_budget"
+path = "tests/write_budget.rs"

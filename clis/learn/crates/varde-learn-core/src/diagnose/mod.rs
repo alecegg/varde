@@ -2,7 +2,12 @@
 
 mod claude;
 mod codex;
+mod context_usage;
+mod list;
 mod opencode;
+
+pub use context_usage::{ContextUsage, ContextUsageHarness, context_usage};
+pub use list::{ListHarness, ListRequest, ListedSession, ListedWorker, SessionList, list_sessions};
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -89,6 +94,25 @@ pub enum DiagnosticHarness {
     Codex,
     Claude,
     Opencode,
+}
+
+pub(super) const MAX_LIST_DISCOVERY_BYTES: usize = 32 * 1024 * 1024;
+
+#[derive(Debug, Clone)]
+pub(super) struct DiscoveredSession {
+    pub(super) harness: &'static str,
+    pub(super) identity: String,
+    pub(super) session_id: String,
+    pub(super) aliases: Vec<String>,
+    pub(super) parent_identity: Option<String>,
+    pub(super) parent_known: bool,
+    pub(super) started_at: Option<String>,
+    pub(super) cwd: Option<String>,
+    pub(super) retro_analyst: bool,
+}
+
+pub(super) fn is_retro_analyst(text: &str) -> bool {
+    text.starts_with("varde-retro-analyst")
 }
 
 #[derive(Debug, Clone)]
@@ -353,6 +377,10 @@ pub struct Coverage {
     pub record_count: usize,
     pub malformed_records: usize,
     pub omitted_records: usize,
+    #[serde(default)]
+    pub unknown_events: usize,
+    #[serde(default)]
+    pub inherited_events: usize,
     pub warnings: Vec<String>,
 }
 
@@ -374,6 +402,8 @@ pub struct InspectionSnapshot {
     pub records: Vec<EvidenceRecord>,
     pub overlap: CurrentOverlap,
     pub coverage: Coverage,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub redacted: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -386,6 +416,12 @@ pub struct Inspection {
     pub overlap: CurrentOverlap,
     pub coverage: Coverage,
     pub snapshot: SnapshotIdentity,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub redacted: usize,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -629,6 +665,9 @@ pub fn inspect(request: &InspectRequest) -> Result<Inspection, LearnError> {
         refresh_snapshot_digest(&mut frozen)?;
     }
 
+    let redacted = redact_snapshot_text(&mut frozen);
+    frozen.redacted = redacted;
+    refresh_snapshot_digest(&mut frozen)?;
     if let Some(path) = &request.snapshot_out {
         write_snapshot(path, &frozen)?;
     }
@@ -659,6 +698,7 @@ pub fn inspect(request: &InspectRequest) -> Result<Inspection, LearnError> {
         snapshot: SnapshotIdentity {
             digest: frozen.digest.clone(),
         },
+        redacted,
     })
 }
 
@@ -1763,9 +1803,32 @@ pub(crate) fn build_snapshot(
         records,
         overlap,
         coverage,
+        redacted: 0,
     };
     refresh_snapshot_digest(&mut snapshot)?;
     Ok(snapshot)
+}
+
+fn redact_snapshot_text(snapshot: &mut InspectionSnapshot) -> usize {
+    fn redact(value: &mut Value, count: &mut usize) {
+        match value {
+            Value::String(text) => {
+                let result = crate::redact::apply(text);
+                *text = result.text;
+                *count += result.count;
+            }
+            Value::Array(items) => items.iter_mut().for_each(|item| redact(item, count)),
+            Value::Object(fields) => fields.values_mut().for_each(|item| redact(item, count)),
+            _ => {}
+        }
+    }
+    let mut value = serde_json::to_value(&snapshot.records).unwrap_or(Value::Null);
+    let mut count = 0;
+    redact(&mut value, &mut count);
+    if let Ok(records) = serde_json::from_value(value) {
+        snapshot.records = records;
+    }
+    count
 }
 
 fn refresh_snapshot_digest(snapshot: &mut InspectionSnapshot) -> Result<(), LearnError> {
@@ -2354,6 +2417,8 @@ mod timestamp_tests {
                 record_count: 0,
                 malformed_records: 0,
                 omitted_records: 0,
+                unknown_events: 0,
+                inherited_events: 0,
                 warnings: Vec::new(),
             },
         )

@@ -15,8 +15,8 @@ commit, and instrumentation stays outside production source.
 
 ## Evidence contract
 
-Report `debug_evidence` in chat in this field order; when a task file exists,
-also append it under its `#### Progress`:
+Report `debug_evidence` in chat and, when a task file exists, append it under
+`#### Progress` in this order:
 
 - `reproduction`: the deterministic command and observed symptom, or bounded
   trace/source evidence with its origin, version or time, and reproduction
@@ -33,10 +33,9 @@ Required fields:
 
 ## When progress stops
 
-Standalone: no numeric budget. When progress is blocked or another fix
-attempt would repeat a failed approach, apply
-`references/build-retry-reassessment.md` before another fix and report it alongside
-`debug_evidence`.
+Standalone: no numeric budget. If blocked or another fix attempt would repeat
+a failed approach, state what evidence, approach, or access must change before
+trying again, alongside `debug_evidence`.
 
 ## Phase 1 — Build a feedback loop
 
@@ -59,18 +58,16 @@ bisection, hypothesis testing, and instrumentation.
 
 ## Phase 3 — Hypothesize
 
-1. State a falsifiable hypothesis before testing it.
-2. Add distinct alternatives when evidence does not isolate the cause or the
-   first test fails; rank them by supporting evidence.
-3. An untested hypothesis is not evidence for a fix.
+1. State a falsifiable hypothesis before testing it; an untested hypothesis
+   does not support a fix.
+2. If evidence does not isolate the cause or the first test fails, add and
+   rank distinct alternatives by supporting evidence.
 
 ## Phase 4 — Instrument
 
-For `fix`, initialize the review gate after Phase 3 and before the first
-production edit (Phase 4 instrumentation in production source, or Phase 5);
-`diagnose` needs no gate.
+`diagnose` needs no review; `fix` gets the independent review.
 
-- Tag every debug log with a unique prefix (e.g. `[DEBUG-a4f2]`).
+Tag every debug log with a unique prefix (e.g. `[DEBUG-a4f2]`).
 
 ## Phase 5 — Fix and regression test
 
@@ -94,7 +91,6 @@ Before declaring done:
 - [ ] Throwaway prototypes deleted.
 - [ ] When committing, state the proven hypothesis in the commit message.
 
-With a task file, complete through `references/build-execution.md`
-Completion. A standalone `fix` finishes with the implementation review and
-complete checkpoint per `references/review-gates.md` §5; commit only when
-asked.
+With a task file, follow `references/build-execution.md`. A standalone `fix`
+commits verified paths before the independent review in
+`references/review-gates.md`; merge only when asked.

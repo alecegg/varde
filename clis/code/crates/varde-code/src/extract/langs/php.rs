@@ -321,6 +321,44 @@ fn visit_part_5(
                 "elseif_statement".to_string(),
                 node,
             );
+            if let Some(condition) = node.field("condition")
+                && let Some(event) = ctx.out.last_mut()
+            {
+                let span = crate::extract::span_of(&condition);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
+        }
+        "if_statement" => {
+            let name = if is_else_if(node) {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            if name == "elseif_statement"
+                && let Some(condition) = node.field("condition")
+                && let Some(event) = ctx.out.last_mut()
+            {
+                let span = crate::extract::span_of(&condition);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
+        }
+        "goto_statement" => {
+            ctx.push(EntityKind::ControlFlow, "goto_jump".to_string(), node);
+        }
+        "break_statement" | "continue_statement" => {
+            if numbered_jump(node) {
+                ctx.push(EntityKind::ControlFlow, "labeled_jump".to_string(), node);
+            } else {
+                ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+            }
+        }
+        "unary_expression" | "unary_op_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
         }
         _ => return false,
     }
@@ -336,19 +374,27 @@ fn visit_part_6(
         "match_conditional_expression" | "match_default_expression" => {
             ctx.push(EntityKind::ControlFlow, "match_arm".to_string(), node);
         }
-        "if_statement"
-        | "else_clause"
-        | "switch_statement"
-        | "case_statement"
-        | "for_statement"
-        | "foreach_statement"
-        | "while_statement"
-        | "try_statement"
-        | "return_statement"
-        | "break_statement"
-        | "continue_statement"
-        | "match_expression"
-        | "conditional_expression" => {
+        "else_clause" => {
+            if !node.children().any(|child| child.kind() == "if_statement") {
+                ctx.push(EntityKind::ControlFlow, "else_branch".to_string(), node);
+                if let Some(event) = ctx.out.last_mut() {
+                    event.span.end_byte = event.span.start_byte + 4;
+                    event.span.end_col = event.span.start_col + 4;
+                }
+            }
+        }
+        "switch_statement" | "case_statement" | "for_statement" | "foreach_statement"
+        | "while_statement" | "try_statement" | "return_statement" | "match_expression" => {
+            ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "conditional_expression" if is_short_ternary(node) => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "short_ternary_expression".to_string(),
+                node,
+            );
+        }
+        "conditional_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
         "do_statement" => {
@@ -380,6 +426,32 @@ fn visit_part_6(
         _ => return false,
     }
     true
+}
+
+fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.ancestors().any(|ancestor| {
+        ancestor.kind() == "else_clause"
+            && ancestor
+                .children()
+                .any(|child| child.kind() == "if_statement" && child.range() == node.range())
+    })
+}
+
+fn numbered_jump(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().split_whitespace().nth(1).is_some_and(|value| {
+        value
+            .trim_end_matches(';')
+            .chars()
+            .all(|ch| ch.is_ascii_digit())
+    })
+}
+
+fn is_short_ternary(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.field("body").is_none()
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!') && node.text().contains("&&")
 }
 
 fn boolean_operator_name(
@@ -618,6 +690,12 @@ fn normalize_ns(spec: &str) -> String {
     spec.trim_start_matches('\\').replace('\\', "/")
 }
 
+fn enclosing_type_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+        .and_then(|ancestor| field_name(&ancestor))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -792,4 +870,190 @@ mod tests {
         );
         assert!(!flows.contains(&"default_statement"), "entities: {es:?}");
     }
+
+    #[test]
+    fn complexity_events_cover_php_else_jumps_negation_and_match() {
+        let es = entities(
+            "<?php function f($a, $b, $c) { if ($a) {} else if ($b) {} else {} if ($c && !($a && $b)) {} goto done; done: return match ($a) { 1 => 1, default => 0 }; }",
+        );
+        let flows: Vec<&str> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+        assert!(flows.contains(&"elseif_statement"), "entities: {es:?}");
+        assert!(flows.contains(&"else_branch"), "entities: {es:?}");
+        assert!(flows.contains(&"goto_jump"), "entities: {es:?}");
+        assert!(flows.contains(&"negation_break"), "entities: {es:?}");
+        assert_eq!(flows.iter().filter(|name| **name == "match_arm").count(), 2);
+    }
+
+    #[test]
+    fn numbered_break_and_continue_emit_labeled_jump() {
+        let es = entities(
+            "<?php function f($items) { foreach ($items as $item) { while ($item) { break 2; } } foreach ($items as $item) { while ($item) { continue 2; } } }",
+        );
+        assert_eq!(
+            es.iter()
+                .filter(|entity| entity.kind == EntityKind::ControlFlow
+                    && entity.name == "labeled_jump")
+                .count(),
+            2,
+            "entities: {es:?}"
+        );
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    (
+        "switch_statement",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+    (
+        "match_expression",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+    (
+        "short_ternary_expression",
+        crate::complexity::FlowRole::LegacyOnly,
+    ),
+];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| FUNCTION_SCOPES.contains(&node.kind().as_ref()))
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name = field_name(node)?;
+            let parameters = node
+                .field("parameters")
+                .map(|list| {
+                    list.children()
+                        .filter(|child| {
+                            matches!(
+                                child.kind().as_ref(),
+                                "simple_parameter" | "variadic_parameter"
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let total_args = u16::try_from(parameters.len()).unwrap_or(u16::MAX);
+            let required_args = u16::try_from(
+                parameters
+                    .iter()
+                    .filter(|parameter| {
+                        parameter.kind() != "variadic_parameter" && !parameter.text().contains('=')
+                    })
+                    .count(),
+            )
+            .unwrap_or(u16::MAX);
+            let owner_type = enclosing_type_name(node);
+            let lexical_parent = node
+                .ancestors()
+                .find(|ancestor| FUNCTION_SCOPES.contains(&ancestor.kind().as_ref()))
+                .and_then(|ancestor| field_name(&ancestor));
+            let owner = owner_type.clone().or(lexical_parent);
+            let name_span = node
+                .field("name")
+                .as_ref()
+                .map(crate::extract::span_of)
+                .unwrap_or_else(|| crate::extract::span_of(node));
+            Some(Callable {
+                owner,
+                owner_type,
+                unqualified_callable: node.kind() == "function_definition",
+                name,
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span,
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| {
+        matches!(
+            node.kind().as_ref(),
+            "function_call_expression" | "member_call_expression" | "scoped_call_expression"
+        )
+    }) {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| FUNCTION_SCOPES.contains(&ancestor.kind().as_ref()))
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let kind = call.kind();
+        let (name, qualifier, qualifier_name) = match kind.as_ref() {
+            "function_call_expression" => {
+                let Some(name) = call.field("function") else {
+                    continue;
+                };
+                (name.text().into_owned(), Qualifier::None, None)
+            }
+            "member_call_expression" => {
+                let Some(name) = call.field("name") else {
+                    continue;
+                };
+                let qualifier = match call.field("object") {
+                    Some(receiver) if receiver.text() == "$this" => Qualifier::SelfLike,
+                    Some(_) => Qualifier::Other,
+                    None => Qualifier::Other,
+                };
+                (name.text().into_owned(), qualifier, None)
+            }
+            "scoped_call_expression" => {
+                let Some(name) = call.field("name") else {
+                    continue;
+                };
+                let scope = call.field("scope").map(|scope| scope.text().into_owned());
+                let (qualifier, qualifier_name) = match scope.as_deref() {
+                    Some("self" | "static") => (Qualifier::SelfLike, None),
+                    Some(scope) if callables[caller].owner_type.as_deref() == Some(scope) => {
+                        (Qualifier::NamedType, Some(scope.to_string()))
+                    }
+                    Some(_) => (Qualifier::Other, None),
+                    None => (Qualifier::Other, None),
+                };
+                (name.text().into_owned(), qualifier, qualifier_name)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named())
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
 }

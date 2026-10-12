@@ -11,14 +11,14 @@ New Concepts need a non-empty `description`. They may include `aliases` as a
 sequence of non-empty strings. Aliases remain searchable with full-text search:
 
 ```sh
-varde-workflow concept search --bundle memory-bank/knowledge \
+varde knowledge concept search --bundle memory-bank/knowledge \
   --text "an alias" --json
 ```
 
 Generate navigation maps from the current Knowledge Bundle:
 
 ```sh
-varde-workflow concept map --bundle memory-bank/knowledge --json
+varde knowledge concept map --bundle memory-bank/knowledge --json
 ```
 
 Generation writes the reserved root `index.md` and one `index.md` inside each

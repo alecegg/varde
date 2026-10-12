@@ -18,7 +18,7 @@ test:
     echo "all suites passed"
 
 test-skills:
-    cd skills && tests/benchmark-foundation.sh
+    cd skills && tests/benchmark-foundation.sh && tests/route-budgets.sh --check
 
 test-agents:
     agents/tests/run-all.sh
@@ -36,13 +36,34 @@ test-root:
     fi
 
 test-cli module:
-    cd clis/{{module}} && cargo test --workspace --locked
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{module}}" in
+      code) packages=(-p varde-code) ;;
+      workflow) packages=(-p varde-workflow-core -p varde-workflow) ;;
+      toz) packages=(-p varde-toz-core -p varde-toz) ;;
+      learn) packages=(-p varde-learn-core -p varde-learn) ;;
+      doc) packages=(-p varde-doc) ;;
+      shared) packages=(-p varde-core -p varde-contracts) ;;
+      *) echo "unknown module: {{module}}" >&2; exit 2 ;;
+    esac
+    cd clis
+    cargo test --locked "${packages[@]}"
+    if [ "{{module}}" = shared ]; then
+      # The app crate's own tests and the boundary tests, run by no module above.
+      cargo test --locked -p varde --lib --test no_named_spawn --test dependency_rules --test sync_suite --test setup_suite --test misc_suite
+      exit
+    fi
+    # Binary-spawning tests live in the app crate, one suite binary per module.
+    if [ "{{module}}" != doc ]; then
+      cargo test --locked -p varde --test "{{module}}_suite"
+    fi
 
 test-clis:
     #!/usr/bin/env bash
     set -uo pipefail
     failed=()
-    for module in code workflow toz learn; do
+    for module in shared code workflow toz learn doc; do
       "{{just_executable()}}" test-cli "$module" || failed+=("$module")
     done
     if [ "${#failed[@]}" -gt 0 ]; then
@@ -51,4 +72,4 @@ test-clis:
     fi
 
 test-pi:
-    node --test clis/toz/harness/pi/tests/varde-toz.test.mjs
+    node --test clis/varde/assets/hooks/tests/varde.test.mjs

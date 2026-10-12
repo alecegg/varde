@@ -66,7 +66,7 @@ first:
 ## Scope of merging
 
 - `--bundle`'s meaning is unchanged: it always names the Project Vault.
-- Merging applies to `concept list`, `concept show`, and `varde-workflow
+- Merging applies to `concept list`, `concept show`, and `varde knowledge
   lint` (see `knowledge/reference/bundle-lint`); `lint --vault`/`--bundle`
   narrow it the same way.
 - `concept create`, `concept update`, and `concept delete` are unaffected

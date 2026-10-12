@@ -1,12 +1,13 @@
 ---
 name: varde-prototype
 description: "Shape and prototype frontend pages, layouts, and interactions, or build a clickable walkthrough of a state model or data shape. Not for production implementation (varde-change) or formal review of a running UI (varde-review)."
+recommends: [varde-change]
 ---
 
 # Shape and prototype a design question
 
-Prototype files under `<storage>` (set in Workflow step 1) need no review gate; production edits go
-through `varde-change`.
+Prototype files under `<storage>` (set in Workflow step 1) need no review gate; for production edits,
+load `varde-change`: use your skill tool, or read `../varde-change/SKILL.md`.
 
 ## Pick the track
 
@@ -35,8 +36,10 @@ Ambiguous: pages/components → Visual; states/data → Logic; say which.
 2. **Run the track's rounds**, per its reference.
 3. **Close when the user is done:** report the final file path and key
    decisions (Logic: name the module to lift). If the user asked to plan or
-   build, start `varde-change` in the same turn; otherwise offer it and wait.
+   build, load `varde-change`: use your skill tool, or read
+   `../varde-change/SKILL.md`, and start it in the same turn; otherwise offer
+   it and wait.
 
 ## Gotchas
 
-- Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
+- Resolve `<working>` and `<knowledge>` once with `varde setup paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.

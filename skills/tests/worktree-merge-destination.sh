@@ -11,6 +11,146 @@ fail() {
   exit 1
 }
 
+# Plan bootstrap names a committed base while preserving staged, unstaged and
+# untracked origin work. Task allocation still requires a clean plan caller.
+test_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/wt-plan-bootstrap.XXXXXX")" && pwd -P)"
+trap 'rm -rf "$test_root"' EXIT
+git -C "$test_root" init -q -b main
+git -C "$test_root" config user.email test@example.com
+git -C "$test_root" config user.name Test
+printf 'base\n' > "$test_root/state.txt"
+git -C "$test_root" add state.txt
+git -C "$test_root" commit -qm base
+known_base="$(git -C "$test_root" rev-parse HEAD)"
+printf 'origin\n' >> "$test_root/state.txt"
+git -C "$test_root" commit -qam origin
+origin_head="$(git -C "$test_root" rev-parse HEAD)"
+printf 'staged\n' >> "$test_root/state.txt"
+git -C "$test_root" add state.txt
+printf 'unstaged\n' >> "$test_root/state.txt"
+printf 'untracked\0bytes\n' > "$test_root/notes.bin"
+origin_diff="$(git -C "$test_root" diff --binary HEAD)"
+origin_index="$(git -C "$test_root" diff --cached --binary)"
+origin_bytes="$(git -C "$test_root" hash-object state.txt notes.bin)"
+origin_status="$(git -C "$test_root" status --porcelain)"
+bootstrap="$(cd "$test_root" && "$CREATE_SCRIPT" --plan bootstrap "$known_base")" || fail "plan bootstrap rejected dirty origin"
+plan_tree="$test_root/.varde/worktrees/bootstrap"
+[[ "$bootstrap" == *"path=$plan_tree"* && "$bootstrap" == *'created=true'* ]] || fail "plan bootstrap did not return owned sibling"
+[[ "$(git -C "$plan_tree" rev-parse HEAD)" == "$known_base" && -z "$(git -C "$plan_tree" status --porcelain)" ]] || fail "plan bootstrap is not clean at explicit base"
+[[ "$(git -C "$test_root" rev-parse HEAD)" == "$origin_head" && "$(git -C "$test_root" symbolic-ref --short HEAD)" == main ]] || fail "plan bootstrap moved origin branch"
+[[ "$(git -C "$test_root" diff --binary HEAD)" == "$origin_diff" && "$(git -C "$test_root" diff --cached --binary)" == "$origin_index" && "$(git -C "$test_root" hash-object state.txt notes.bin)" == "$origin_bytes" && "$(git -C "$test_root" status --porcelain)" == "$origin_status" ]] || fail "plan bootstrap changed origin work"
+result=0
+(cd "$test_root" && "$CREATE_SCRIPT" --plan missing >/dev/null 2>&1) || result=$?
+[[ "$result" == 1 ]] || fail "plan bootstrap accepted missing explicit base"
+result=0
+(cd "$test_root" && "$CREATE_SCRIPT" --plan empty '' >/dev/null 2>&1) || result=$?
+[[ "$result" == 1 ]] || fail "plan bootstrap accepted empty explicit base"
+for first_flag in --plan --fresh; do
+  second_flag=--plan
+  [[ "$first_flag" == --plan ]] && second_flag=--fresh
+  result=0
+  (cd "$test_root" && "$CREATE_SCRIPT" "$first_flag" "$second_flag" incompatible "$known_base" >/dev/null 2>&1) || result=$?
+  [[ "$result" == 1 ]] || fail "plan bootstrap accepted incompatible flags"
+done
+for second_flag in --plan --fresh; do
+  result=0
+  (cd "$test_root" && "$CREATE_SCRIPT" --plan incompatible "$second_flag" >/dev/null 2>&1) || result=$?
+  [[ "$result" == 1 ]] || fail "plan bootstrap accepted mode flag as base"
+done
+printf 'dirty\n' > "$plan_tree/dirty.txt"
+result=0
+(cd "$plan_tree" && "$CREATE_SCRIPT" --fresh task "$known_base" >/dev/null 2>&1) || result=$?
+[[ "$result" == 4 && ! -d "$test_root/.varde/worktrees/task" ]] || fail "task allocation accepted dirty plan"
+linked_bootstrap="$(cd "$plan_tree" && "$CREATE_SCRIPT" --plan second "$known_base")"
+second_plan="$test_root/.varde/worktrees/second"
+[[ "$linked_bootstrap" == *"path=$second_plan"* && "$linked_bootstrap" == *'created=true'* && "$(git -C "$second_plan" rev-parse HEAD)" == "$known_base" && -z "$(git -C "$second_plan" status --porcelain)" ]] || fail "plan bootstrap reused linked caller"
+[[ "$(cat "$plan_tree/dirty.txt")" == dirty && "$(git -C "$plan_tree" rev-parse HEAD)" == "$known_base" ]] || fail "plan bootstrap changed dirty linked origin"
+rm -rf "$test_root"
+trap - EXIT
+
+# Explicit fresh allocation from a linked plan creates a sibling at the known
+# commit, while legacy reuse retains caller ownership and main stays untouched.
+test_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/wt-fresh.XXXXXX")" && pwd -P)"
+trap 'rm -rf "$test_root"' EXIT
+git -C "$test_root" init -q -b main
+git -C "$test_root" config user.email test@example.com
+git -C "$test_root" config user.name Test
+printf 'base\n' > "$test_root/state.txt"
+git -C "$test_root" add state.txt
+git -C "$test_root" commit -qm base
+known_base="$(git -C "$test_root" rev-parse HEAD)"
+git -C "$test_root" worktree add -q -b plan "$test_root/.varde/worktrees/plan"
+printf '/.varde/\n' >> "$test_root/.git/info/exclude"
+printf 'unfinished\n' >> "$test_root/state.txt"
+plan_tree="$test_root/.varde/worktrees/plan"
+reuse="$(cd "$plan_tree" && "$CREATE_SCRIPT" existing)"
+[[ "$reuse" == *"path=$plan_tree"* && "$reuse" == *'created=false'* ]] || fail "linked caller lost ownership on default reuse"
+fresh="$(cd "$plan_tree" && "$CREATE_SCRIPT" --fresh fresh "$known_base")"
+fresh_tree="$test_root/.varde/worktrees/fresh"
+[[ "$fresh" == *"path=$fresh_tree"* && "$fresh" == *'created=true'* ]] || fail "fresh worker was not a sibling"
+[[ "$(git -C "$fresh_tree" rev-parse HEAD)" == "$known_base" ]] || fail "fresh worker has wrong base"
+[[ "$(git -C "$test_root" rev-parse main)" == "$known_base" && "$(cat "$test_root/state.txt")" == $'base\nunfinished' ]] || fail "fresh worker changed original branch or dirty bytes"
+echo dirty > "$plan_tree/dirty.txt"
+result=0
+(cd "$plan_tree" && "$CREATE_SCRIPT" --fresh dirty "$known_base" >/dev/null 2>&1) || result=$?
+[[ "$result" == 4 && ! -d "$test_root/.varde/worktrees/dirty" ]] || fail "fresh allocation accepted a dirty plan"
+rm "$plan_tree/dirty.txt"
+git -C "$plan_tree" checkout -q --detach
+result=0
+(cd "$plan_tree" && "$CREATE_SCRIPT" --fresh detached "$known_base" >/dev/null 2>&1) || result=$?
+[[ "$result" == 4 && ! -d "$test_root/.varde/worktrees/detached" ]] || fail "fresh allocation accepted detached plan"
+rm -rf "$test_root"
+trap - EXIT
+
+# Keep matching registry/conflict producers alive long enough to expose SIGPIPE.
+test_root="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/wt-producer-tail.XXXXXX")" && pwd -P)"
+trap 'rm -rf "$test_root"' EXIT
+git -C "$test_root" init -q -b main
+git -C "$test_root" config user.email test@example.com
+git -C "$test_root" config user.name Test
+printf 'base\n' >"$test_root/state.txt"
+git -C "$test_root" add state.txt
+git -C "$test_root" commit -qm initial
+# Harness files are not caller changes; keep them out of cleanliness checks.
+printf '/git-bin/\n/registry-output\n' >> "$test_root/.git/info/exclude"
+real_git="$(command -v git)"
+git_bin_dir="$test_root/git-bin"
+mkdir -p "$git_bin_dir"
+cat >"$git_bin_dir/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${SIGPIPE_CASE:-}:$*" in
+  registry:'worktree list --porcelain') printf 'worktree %s\n' "$MATCH_PATH" ;;
+  unmerged:'diff --name-only --diff-filter=U') printf 'state.txt\n' ;;
+  *) exec "$REAL_GIT" "$@" ;;
+esac
+sleep .02
+printf '%1048576s\n' tail
+EOF
+chmod +x "$git_bin_dir/git"
+sample_path="$test_root/.varde/worktrees/sample"
+result=0
+(cd "$test_root" && PATH="$git_bin_dir:$PATH" REAL_GIT="$real_git" \
+  SIGPIPE_CASE=registry MATCH_PATH="$sample_path" "$CREATE_SCRIPT" sample \
+  >"$test_root/registry-output" 2>&1) || result=$?
+[ "$result" -eq 3 ] || fail "large registry producer bypassed duplicate detection: exit $result"
+grep -F 'worktree already exists' "$test_root/registry-output" >/dev/null \
+  || fail "duplicate registry entry omitted its reason"
+[ ! -d "$sample_path" ] || fail "duplicate registry entry created a worktree"
+(cd "$test_root" && "$CREATE_SCRIPT" sample >/dev/null)
+printf 'worker\n' >"$sample_path/state.txt"
+git -C "$sample_path" commit -qam worker
+printf 'target\n' >"$test_root/state.txt"
+git -C "$test_root" commit -qam target
+result=0
+(cd "$test_root" && PATH="$git_bin_dir:$PATH" REAL_GIT="$real_git" \
+  SIGPIPE_CASE=unmerged "$MERGE_SCRIPT" sample >"$test_root/conflict-output" 2>&1) || result=$?
+[ "$result" -eq 3 ] || fail "large conflict producer misclassified merge failure: exit $result"
+grep -F 'conflict merging' "$test_root/conflict-output" >/dev/null \
+  || fail "large conflict producer omitted conflict reason"
+rm -rf "$test_root"
+trap - EXIT
+
 for script in \
   "$ROOT_DIR/varde-change/scripts/worktree-merge.sh"; do
   test_root="$(mktemp -d "${TMPDIR:-/tmp}/wt-dest.XXXXXX")"
@@ -275,6 +415,8 @@ git -C "$test_root" commit --allow-empty -qm 'concurrent branch advance'
 race_sha="$(git -C "$test_root" rev-parse HEAD)"
 git_bin_dir="$test_root/git-bin"
 mkdir "$git_bin_dir"
+# Harness files are not caller changes; keep them out of cleanliness checks.
+printf '/git-bin/\n/registry-output\n' >> "$test_root/.git/info/exclude"
 real_git="$(command -v git)"
 cat >"$git_bin_dir/git" <<'EOF'
 #!/usr/bin/env bash
@@ -301,8 +443,7 @@ grep -F 'changed after preflight' "$cleanup_output" >/dev/null ||
   fail "cleanup did not explain that the branch ref changed after preflight"
 rm -rf "$test_root"
 
-# Ignored local data is preserved by normal cleanup and removed only after an
-# explicit discard.
+# Ignored local data of any name is listed and removed by normal cleanup.
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/wt-cleanup-ignored.XXXXXX")"
 git -C "$test_root" init -q
 git -C "$test_root" config user.email test@example.com
@@ -316,33 +457,48 @@ sample_path="$test_root/.varde/worktrees/sample"
 git -C "$test_root" worktree add -q -b worktree/sample "$sample_path" main
 printf 'keep this ignored data\n' >"$sample_path/local-only.txt"
 cleanup_output="$test_root/cleanup-ignored.txt"
-set +e
-(cd "$test_root" && "$CLEANUP_SCRIPT" sample >"$cleanup_output" 2>&1)
-result=$?
-set -e
-ignored_refusal=false
-if [ "$result" -ne 0 ] && [ -d "$sample_path" ] &&
-  [ "$(cat "$sample_path/local-only.txt" 2>/dev/null || true)" = 'keep this ignored data' ] &&
-  grep -F 'ignored files' "$cleanup_output" >/dev/null; then
-  ignored_refusal=true
-fi
-if [ -d "$sample_path" ]; then
-  cleanup_output="$test_root/cleanup-ignored-discard.txt"
-  set +e
-  (cd "$test_root" && "$CLEANUP_SCRIPT" --discard sample >"$cleanup_output" 2>&1)
-  discard_result=$?
-  set -e
-  if [ "$discard_result" -ne 0 ] || [ -e "$sample_path/local-only.txt" ] || [ -e "$sample_path" ]; then
-    ignored_discard=false
-  else
-    ignored_discard=true
-  fi
-else
-  ignored_discard=false
-fi
+(cd "$test_root" && "$CLEANUP_SCRIPT" sample >"$cleanup_output" 2>&1) ||
+  fail "normal cleanup refused a worktree holding only ignored data"
+[ ! -e "$sample_path" ] || fail "normal cleanup left the worktree with ignored data"
+grep -F 'removing ignored files:' "$cleanup_output" >/dev/null ||
+  fail "cleanup did not list the ignored data before removing it"
 rm -rf "$test_root"
-[ "$ignored_refusal" = true ] || fail "normal cleanup did not refuse and preserve ignored data"
-[ "$ignored_discard" = true ] || fail "explicit discard did not remove the ignored data and worktree"
+
+# Ignored build output (target, node_modules, __pycache__, .venv at any depth)
+# and ignored entries of any other name are disposable.
+make_ignored_repo() {
+  test_root="$(mktemp -d "${TMPDIR:-/tmp}/wt-cleanup-build.XXXXXX")"
+  git -C "$test_root" init -q
+  git -C "$test_root" config user.email test@example.com
+  git -C "$test_root" config user.name Test
+  git -C "$test_root" branch -M main
+  printf 'base\n' >"$test_root/state.txt"
+  printf 'target/\nnode_modules/\n.env\n' >"$test_root/.gitignore"
+  git -C "$test_root" add state.txt .gitignore
+  git -C "$test_root" commit -qm initial
+  sample_path="$test_root/.varde/worktrees/sample"
+  git -C "$test_root" worktree add -q -b worktree/sample "$sample_path" main
+}
+
+make_ignored_repo
+mkdir -p "$sample_path/target/debug" "$sample_path/a/node_modules/pkg"
+printf 'x\n' >"$sample_path/target/debug/out"
+printf 'x\n' >"$sample_path/a/node_modules/pkg/index.js"
+cleanup_output="$test_root/cleanup-build.txt"
+(cd "$test_root" && "$CLEANUP_SCRIPT" sample >"$cleanup_output" 2>&1) ||
+  fail "cleanup refused a worktree with only ignored build output"
+[ ! -e "$sample_path" ] || fail "cleanup left the worktree with only ignored build output"
+rm -rf "$test_root"
+
+make_ignored_repo
+mkdir -p "$sample_path/target"
+printf 'x\n' >"$sample_path/target/out"
+printf 'SECRET=1\n' >"$sample_path/.env"
+cleanup_output="$test_root/cleanup-env.txt"
+(cd "$test_root" && "$CLEANUP_SCRIPT" sample >"$cleanup_output" 2>&1) ||
+  fail "cleanup refused ignored .env beside build output"
+[ ! -e "$sample_path" ] || fail "cleanup left the worktree with ignored .env"
+rm -rf "$test_root"
 
 # Dirty work is retained even when its branch has already been merged.
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/wt-cleanup-dirty.XXXXXX")"

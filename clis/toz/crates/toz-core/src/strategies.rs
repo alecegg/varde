@@ -53,7 +53,8 @@ pub fn detect(text: &str) -> Strategy {
     if looks_like_json(text, &lines) {
         return Strategy::Json;
     }
-    let classifiers: [(fn(&[&str]) -> bool, Strategy); 4] = [
+    type Classifier = (fn(&[&str]) -> bool, Strategy);
+    let classifiers: [Classifier; 4] = [
         (looks_like_code, Strategy::Code),
         (looks_like_markdown, Strategy::Markdown),
         (looks_like_test_output, Strategy::Test),

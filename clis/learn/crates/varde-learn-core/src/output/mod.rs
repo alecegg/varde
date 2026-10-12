@@ -6,9 +6,19 @@
 //! LLM judge, and `benchmark.json` aggregation.
 
 mod adapter;
+mod assertions;
+mod blocked;
+mod calibrate;
+mod cost;
 mod grade;
+mod paired;
 mod run;
 
+pub(super) fn redact_text(text: &str) -> crate::redact::Redacted {
+    crate::redact::apply(text)
+}
+
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -101,11 +111,13 @@ pub struct OutputReport {
 /// One eval case from `evals/evals.json`.
 struct EvalCase {
     id: String,
+    skills: Vec<String>,
     prompt: String,
     expected_output: String,
     files: Vec<String>,
     env: Vec<(String, String)>,
     assertions: Vec<String>,
+    case_assertions: Vec<Value>,
     setup_script: Option<String>,
     verification_script: Option<String>,
 }
@@ -134,6 +146,11 @@ pub fn run_output(req: &OutputRequest) -> Result<OutputReport, LearnError> {
         records,
         benchmark,
     })
+}
+
+/// Calibrate mutation sensitivity for a skill's output eval suite.
+pub fn calibrate(skill_dir: &Path, harness: OutputHarness) -> Result<Value, LearnError> {
+    calibrate::calibrate(skill_dir, harness)
 }
 
 fn validate_output_request(req: &OutputRequest) -> Result<(PathBuf, Vec<EvalCase>), LearnError> {
@@ -298,6 +315,9 @@ fn build_benchmark(skill_dir: &Path, iteration: u32, records: &[RunRecord]) -> V
             ),
         }),
     };
+    let mut result = paired::summarize(records);
+    let redacted = records.iter().map(|record| record.redacted).sum::<usize>();
+    result["redacted"] = json!(redacted);
     json!({
         "skill": skill_dir.display().to_string(),
         "iteration": iteration,
@@ -306,6 +326,8 @@ fn build_benchmark(skill_dir: &Path, iteration: u32, records: &[RunRecord]) -> V
             "without_skill": without_skill,
             "delta": delta,
         },
+        "result": result,
+        "redacted": redacted,
     })
 }
 
@@ -491,6 +513,27 @@ fn load_evals(skill_dir: &Path) -> Result<Vec<EvalCase>, LearnError> {
         .map_err(|err| LearnError::Usage(format!("no eval set at {}: {err}", path.display())))?;
     let value: Value = serde_json::from_str(&text)
         .map_err(|_| LearnError::Usage(format!("invalid JSON in {}", path.display())))?;
+    let skills = match value.get("skills") {
+        Some(Value::Array(skills)) => skills
+            .iter()
+            .enumerate()
+            .map(|(index, skill)| {
+                skill.as_str().map(str::to_owned).ok_or_else(|| {
+                    LearnError::Usage(format!(
+                        "suite skills[{index}] in {} must be a string",
+                        path.display()
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        Some(_) => {
+            return Err(LearnError::Usage(format!(
+                "suite skills in {} must be an array of strings",
+                path.display()
+            )));
+        }
+        None => default_suite_skills(skill_dir)?,
+    };
     let evals = value
         .get("evals")
         .and_then(Value::as_array)
@@ -498,11 +541,14 @@ fn load_evals(skill_dir: &Path) -> Result<Vec<EvalCase>, LearnError> {
     if evals.is_empty() {
         return Err(LearnError::Usage(format!("no evals in {}", path.display())));
     }
-    let evals: Vec<EvalCase> = evals
+    let mut evals: Vec<EvalCase> = evals
         .iter()
         .enumerate()
         .map(|(index, item)| parse_eval_case(item, index))
         .collect::<Result<_, _>>()?;
+    for eval in &mut evals {
+        eval.skills = skills.clone();
+    }
     let mut ids = HashSet::new();
     for eval in &evals {
         if !ids.insert(&eval.id) {
@@ -510,6 +556,61 @@ fn load_evals(skill_dir: &Path) -> Result<Vec<EvalCase>, LearnError> {
         }
     }
     Ok(evals)
+}
+
+fn default_suite_skills(skill_dir: &Path) -> Result<Vec<String>, LearnError> {
+    let skill_root = skill_dir.parent().ok_or_else(|| {
+        LearnError::Usage(format!(
+            "skill directory has no parent: {}",
+            skill_dir.display()
+        ))
+    })?;
+    let skill_name = skill_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| LearnError::Usage("skill directory name is not UTF-8".into()))?
+        .to_owned();
+    let cause = RefCell::new(None);
+    let closure = varde_core::skill_relations::closure(&[skill_name], |name| {
+        let path = skill_root.join(name).join("SKILL.md");
+        let text = match fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) => {
+                *cause.borrow_mut() = Some(format!(
+                    "could not read SKILL.md for skill `{name}` under {}: {error}",
+                    skill_root.display()
+                ));
+                return None;
+            }
+        };
+        let Some(frontmatter) = text
+            .strip_prefix("---\n")
+            .and_then(|text| text.split_once("\n---").map(|(frontmatter, _)| frontmatter))
+        else {
+            *cause.borrow_mut() = Some(format!(
+                "invalid frontmatter for skill `{name}` under {}: missing `---` delimiters",
+                skill_root.display()
+            ));
+            return None;
+        };
+        match varde_core::skill_relations::parse(frontmatter) {
+            Ok(relations) => Some(relations.requires),
+            Err(error) => {
+                *cause.borrow_mut() = Some(format!(
+                    "invalid frontmatter for skill `{name}` under {}: {error}",
+                    skill_root.display()
+                ));
+                None
+            }
+        }
+    });
+    closure.map_err(|error| {
+        LearnError::Usage(
+            cause
+                .into_inner()
+                .unwrap_or_else(|| format!("failed to resolve suite skills: {error}")),
+        )
+    })
 }
 
 fn parse_eval_case(item: &Value, index: usize) -> Result<EvalCase, LearnError> {
@@ -547,6 +648,11 @@ fn parse_eval_case(item: &Value, index: usize) -> Result<EvalCase, LearnError> {
                 .collect()
         })
         .unwrap_or_default();
+    let case_assertions = item
+        .get("assert")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let files = item
         .get("files")
         .and_then(Value::as_array)
@@ -571,11 +677,13 @@ fn parse_eval_case(item: &Value, index: usize) -> Result<EvalCase, LearnError> {
         .map(str::to_string);
     Ok(EvalCase {
         id,
+        skills: Vec::new(),
         prompt,
         expected_output,
         files,
         env,
         assertions,
+        case_assertions,
         setup_script,
         verification_script,
     })
@@ -632,4 +740,110 @@ fn is_executable_file(path: &Path) -> bool {
 #[cfg(not(unix))]
 fn is_executable_file(path: &Path) -> bool {
     path.is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_skill(root: &Path, name: &str, frontmatter: &str) -> PathBuf {
+        let skill = root.join(name);
+        fs::create_dir_all(skill.join("evals")).unwrap();
+        fs::write(skill.join("SKILL.md"), frontmatter).unwrap();
+        fs::write(
+            skill.join("evals/evals.json"),
+            r#"{"evals":[{"prompt":"test"}]}"#,
+        )
+        .unwrap();
+        skill
+    }
+
+    #[test]
+    fn suite_skills_default_to_tested_skill_and_requires_closure() {
+        let root = tempfile::tempdir().unwrap();
+        let skills = root.path().join("skills");
+        for (name, requires) in [
+            ("varde-learn", "requires: [varde-code]"),
+            ("varde-code", "requires: [varde-review]"),
+            ("varde-review", ""),
+        ] {
+            write_skill(
+                &skills,
+                name,
+                &format!("---\nname: {name}\n{requires}\n---\n"),
+            );
+        }
+
+        let evals = load_evals(&skills.join("varde-learn")).unwrap();
+
+        assert_eq!(
+            evals[0].skills,
+            ["varde-code", "varde-learn", "varde-review"]
+        );
+    }
+
+    #[test]
+    fn missing_required_skill_error_names_skill_and_root() {
+        let root = tempfile::tempdir().unwrap();
+        let skills = root.path().join("skills");
+        let skill = write_skill(
+            &skills,
+            "varde-learn",
+            "---\nname: varde-learn\nrequires: [varde-missing]\n---\n",
+        );
+
+        let error = load_evals(&skill).err().unwrap().to_string();
+
+        assert!(error.contains("varde-missing"));
+        assert!(error.contains(&skills.display().to_string()));
+        assert!(error.contains("No such file") || error.contains("no such file"));
+    }
+
+    #[test]
+    fn malformed_requires_error_names_skill_and_root() {
+        let root = tempfile::tempdir().unwrap();
+        let skills = root.path().join("skills");
+        let skill = write_skill(
+            &skills,
+            "varde-learn",
+            "---\nname: varde-learn\nrequires: [unfinished\n---\n",
+        );
+
+        let error = default_suite_skills(&skill).err().unwrap().to_string();
+
+        assert!(error.contains("varde-learn"));
+        assert!(error.contains(&skills.display().to_string()));
+        assert!(error.contains("flow list"));
+    }
+
+    #[test]
+    fn suite_skill_list_is_preserved_when_explicit() {
+        let root = tempfile::tempdir().unwrap();
+        let skill = write_skill(root.path(), "varde-learn", "---\nname: varde-learn\n---\n");
+        fs::write(
+            skill.join("evals/evals.json"),
+            r#"{"skills":["varde-toz"],"evals":[{"prompt":"test"}]}"#,
+        )
+        .unwrap();
+
+        let evals = load_evals(&skill).unwrap();
+
+        assert_eq!(evals[0].skills, ["varde-toz"]);
+    }
+
+    #[test]
+    fn explicit_skill_list_rejects_non_string_entries() {
+        let root = tempfile::tempdir().unwrap();
+        let skill = write_skill(root.path(), "varde-learn", "---\nname: varde-learn\n---\n");
+        fs::write(
+            skill.join("evals/evals.json"),
+            r#"{"skills":["varde-toz",7],"evals":[{"prompt":"test"}]}"#,
+        )
+        .unwrap();
+
+        let error = load_evals(&skill).err().unwrap().to_string();
+
+        assert!(error.contains("skills[1]"));
+        assert!(error.contains("must be a string"));
+    }
 }

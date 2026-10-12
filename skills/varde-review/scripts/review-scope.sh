@@ -15,7 +15,8 @@ diff  Changed files. Target: <ref>...HEAD with --ref; otherwise working tree
 
 Output: "# key<TAB>value" header lines (target; base, the commit to read
 deleted paths from with `git show <base>:<path>`; files; bytes; tokens,
-approximately bytes/4 of listed files plus the diff), then one
+approximately bytes/4 of the diff plus untracked files in diff mode,
+or listed files in area mode), then one
 "<status><TAB><repo-relative path>" line per file. Status is a git diff
 letter (A, M, D, ...), "?" for untracked, or "T" for a tracked file in area
 mode.
@@ -82,7 +83,9 @@ bytes=$((diff_bytes))
 while IFS=$'\t' read -r status path; do
   [ -n "$path" ] || continue
   files=$((files + 1))
-  if [ -f "$root/$path" ]; then bytes=$((bytes + $(wc -c < "$root/$path"))); fi
+  if [ "$mode" = area ] || [ "$status" = "?" ]; then
+    if [ -f "$root/$path" ]; then bytes=$((bytes + $(wc -c < "$root/$path"))); fi
+  fi
 done <<< "$list"
 
 printf '# target\t%s\n' "$target"

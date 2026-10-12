@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import shlex
 from pathlib import Path
 
 
@@ -101,6 +102,20 @@ def completed_commands(raw):
     return commands
 
 
+def command_uses_mode(command, mode):
+    """Accept current varde map commands and archived legacy command records."""
+    return re.search(rf"\bvarde\s+map\s+{re.escape(mode)}\b", command) is not None or re.search(
+        rf"\bvarde-code\s+{re.escape(mode)}\b", command
+    ) is not None
+
+
+def command_uses_toz_query(command):
+    """Accept the current varde run query command and archived Toz transcripts."""
+    return re.search(r"\bvarde\s+run\s+query\b", command) is not None or re.search(
+        r"\bvarde-toz\s+query\b", command
+    ) is not None
+
+
 def load_run():
     run_dir = Path(os.environ.get("EVAL_RUN_DIR", ""))
     sandbox = Path(os.environ.get("EVAL_SANDBOX_DIR", ""))
@@ -119,7 +134,7 @@ def load_run():
 def successful_context_outputs(commands):
     outputs = []
     for index, command in enumerate(commands):
-        if "varde-code" not in command["command"] or "context_pack" not in command["command"]:
+        if not command_uses_mode(command["command"], "context_pack"):
             continue
         for value in json_values(command["output"]):
             if isinstance(value, dict) and value.get("ok") is True and isinstance(value.get("data"), dict):
@@ -130,7 +145,7 @@ def successful_context_outputs(commands):
 def successful_symbols_in_files_outputs(commands):
     outputs = []
     for index, command in enumerate(commands):
-        if "varde-code" not in command["command"] or "symbols_in_files" not in command["command"]:
+        if not command_uses_mode(command["command"], "symbols_in_files"):
             continue
         for value in json_values(command["output"]):
             if (
@@ -146,7 +161,7 @@ def successful_symbols_in_files_outputs(commands):
 def successful_get_symbol_outputs(commands):
     outputs = []
     for index, command in enumerate(commands):
-        if "varde-code" not in command["command"] or "get_symbol" not in command["command"]:
+        if not command_uses_mode(command["command"], "get_symbol"):
             continue
         for value in json_values(command["output"]):
             if (
@@ -186,24 +201,69 @@ def source_path_from_output(project, output_path):
 
 
 def direct_cat_rows(project, command):
-    match = re.fullmatch(
-        r"\s*cat\s+(?:--\s+)?(?:'([^']+)'|\"([^\"]+)\"|([^\s]+))\s*",
-        command["command"],
-    )
-    if match is None:
-        return set()
-    output_path = next(value for value in match.groups() if value is not None)
-    file_path = source_path_from_output(project, output_path)
-    lines = source_lines(project, file_path) if file_path is not None else None
-    if lines is None:
-        return set()
+    raw_command = command["command"]
+    segments = []
+    start = 0
+    quote = None
+    escaped = False
+    index = 0
+    while index < len(raw_command):
+        char = raw_command[index]
+        if escaped:
+            escaped = False
+        elif char == "\\" and quote != "'":
+            escaped = True
+        elif quote is not None:
+            if char == quote:
+                quote = None
+        elif char in ("'", '"'):
+            quote = char
+        elif char == ";" or char == "\n" or raw_command.startswith("&&", index):
+            segments.append(raw_command[start:index])
+            if raw_command.startswith("&&", index):
+                index += 1
+            start = index + 1
+        index += 1
+    segments.append(raw_command[start:])
+
+    file_paths = []
     try:
-        expected = (project / file_path).resolve().read_text()
-    except OSError:
+        for segment in segments:
+            args = shlex.split(segment)
+            if not args or args[0] != "cat":
+                return set()
+            paths = args[1:]
+            if paths and paths[0] == "--":
+                paths = paths[1:]
+            if not paths or any(
+                token in {"|", "||", "&", "&&", ">", ">>", "<", "<<"}
+                or any(operator in token for operator in ("|", ">", "<"))
+                or any(char in token for char in ("$", "`", "*", "?", "["))
+                for token in paths
+            ):
+                return set()
+            file_paths.extend(paths)
+    except ValueError:
         return set()
+
+    expected_parts = []
+    rows = set()
+    for output_path in file_paths:
+        file_path = source_path_from_output(project, output_path)
+        if file_path is None:
+            return set()
+        lines = source_lines(project, file_path)
+        if lines is None:
+            return set()
+        rows.update((file_path, number, line) for number, line in enumerate(lines, start=1))
+        try:
+            expected_parts.append((project / file_path).resolve().read_text())
+        except OSError:
+            return set()
+    expected = "".join(expected_parts)
     if command["output"].replace("\r\n", "\n") != expected.replace("\r\n", "\n"):
         return set()
-    return {(file_path, number, line) for number, line in enumerate(lines, start=1)}
+    return rows
 
 
 def source_match_rows(project, commands):
@@ -429,7 +489,7 @@ def capture_rows_after_20(commands, envelopes):
         for index, command in enumerate(commands):
             if index <= envelope_index:
                 continue
-            if "varde-toz query" not in command["command"] or not command_uses_capture_handle(
+            if not command_uses_toz_query(command["command"]) or not command_uses_capture_handle(
                 command["command"], handle
             ):
                 continue
@@ -449,7 +509,7 @@ def capture_rows_after_20(commands, envelopes):
 
 def is_file_paging(command):
     text = command["command"]
-    if "varde-code" not in text or "context_pack" not in text or "resultsOffset" not in text:
+    if not command_uses_mode(text, "context_pack") or "resultsOffset" not in text:
         return False
     return re.search(r"resultsOffset.{0,16}(?:2[0-9]|[3-9][0-9]|[1-9][0-9]{2,})\b", text) is not None
 

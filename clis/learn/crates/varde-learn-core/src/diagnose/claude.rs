@@ -6,10 +6,11 @@ use std::path::{Component, Path, PathBuf};
 use serde_json::{Map, Value};
 
 use super::{
-    ChildSession, ClaudeHookContext, Coverage, CurrentOverlap, EvidenceRecord, InspectionSnapshot,
-    MAX_DISCOVERY_FILES, MAX_FAMILY, MAX_FAMILY_SOURCE_BYTES, MAX_RECORD_BYTES, MAX_RECORDS,
-    MAX_SOURCE_BYTES, MAX_TEXT_EXCERPT, MAX_WARNINGS, NormalizedRecordBudget, RecordAnchor,
-    SessionMetadata, SourceSnapshot, ToolObservation, build_snapshot, digest, error, file_identity,
+    ChildSession, ClaudeHookContext, Coverage, CurrentOverlap, DiscoveredSession, EvidenceRecord,
+    InspectionSnapshot, MAX_DISCOVERY_FILES, MAX_FAMILY, MAX_FAMILY_SOURCE_BYTES,
+    MAX_LIST_DISCOVERY_BYTES, MAX_RECORD_BYTES, MAX_RECORDS, MAX_SOURCE_BYTES, MAX_TEXT_EXCERPT,
+    MAX_WARNINGS, NormalizedRecordBudget, RecordAnchor, SessionMetadata, SourceSnapshot,
+    ToolObservation, build_snapshot, digest, error, file_identity, is_retro_analyst,
 };
 use crate::LearnError;
 
@@ -56,6 +57,12 @@ struct Discovery {
     project_dirs: Vec<PathBuf>,
     uncertain: bool,
     truncated: bool,
+}
+
+pub(super) struct ListDiscovery {
+    pub sessions: Vec<DiscoveredSession>,
+    pub warnings: Vec<String>,
+    pub has_readable_source: bool,
 }
 
 pub(super) fn inspect_id(
@@ -121,6 +128,304 @@ pub(super) fn inspect_path(
     path: &Path,
 ) -> Result<InspectionSnapshot, LearnError> {
     inspect_path_snapshot(projects_root, path)
+}
+
+pub(super) fn list_sessions(
+    projects_root: &Path,
+    repo: &Path,
+) -> Result<ListDiscovery, LearnError> {
+    match fs::symlink_metadata(projects_root) {
+        Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ListDiscovery {
+                sessions: Vec::new(),
+                warnings: Vec::new(),
+                has_readable_source: false,
+            });
+        }
+        Err(cause) => {
+            return Err(error(
+                "diagnose_discovery_failed",
+                format!("cannot inspect Claude projects root: {cause}"),
+            ));
+        }
+        Ok(_) => {}
+    }
+    let root = canonical_projects_root(projects_root)?;
+    let discovery = scan_projects(&root)?;
+    if discovery.uncertain || discovery.truncated {
+        return Err(error(
+            "diagnose_discovery_incomplete",
+            "Claude project discovery was incomplete",
+        ));
+    }
+    let mut bytes_read = 0usize;
+    let mut sessions = Vec::new();
+    let mut skipped_entries = 0usize;
+    let mut has_readable_source = false;
+    for project_dir in discovery.project_dirs {
+        let namespace = project_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+            .to_owned();
+        let entries = match fs::read_dir(&project_dir) {
+            Ok(entries) => entries,
+            Err(_) => {
+                skipped_entries += 1;
+                continue;
+            }
+        };
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    skipped_entries += 1;
+                    continue;
+                }
+            };
+            let path = entry.path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("jsonl") {
+                continue;
+            }
+            let kind = match entry.file_type() {
+                Ok(kind) => kind,
+                Err(_) => {
+                    skipped_entries += 1;
+                    continue;
+                }
+            };
+            if !kind.is_file() || kind.is_symlink() {
+                skipped_entries += 1;
+                continue;
+            }
+            let session_id = match path.file_stem().and_then(|name| name.to_str()) {
+                Some(name) if validate_session_id(name).is_ok() => name.to_owned(),
+                _ => {
+                    skipped_entries += 1;
+                    continue;
+                }
+            };
+            let (header_id, header_bytes) = match read_identity(&path) {
+                Ok(identity) => identity,
+                Err(_) => {
+                    skipped_entries += 1;
+                    continue;
+                }
+            };
+            bytes_read = bytes_read.saturating_add(header_bytes);
+            if header_id != session_id {
+                skipped_entries += 1;
+                continue;
+            }
+            let first_user = match read_first_user(&path) {
+                Ok(first_user) => first_user,
+                Err(_) => {
+                    skipped_entries += 1;
+                    continue;
+                }
+            };
+            bytes_read = bytes_read.saturating_add(first_user.bytes_read);
+            if bytes_read > MAX_LIST_DISCOVERY_BYTES {
+                return Err(error(
+                    "diagnose_discovery_incomplete",
+                    "Claude first-user discovery exceeded its byte bound",
+                ));
+            }
+            has_readable_source = true;
+            if !first_user
+                .cwd
+                .as_deref()
+                .is_some_and(|cwd| super::list::cwd_is_in_repo(cwd, repo))
+            {
+                continue;
+            }
+            let main_identity = format!("claude:{namespace}:{session_id}");
+            let mut aliases = vec![session_id.clone()];
+            sessions.push(DiscoveredSession {
+                harness: "claude",
+                identity: main_identity.clone(),
+                session_id: session_id.clone(),
+                aliases: aliases.clone(),
+                parent_identity: None,
+                parent_known: true,
+                started_at: first_user.timestamp.clone(),
+                cwd: first_user.cwd.clone(),
+                retro_analyst: first_user.retro_analyst,
+            });
+
+            let children_root = project_dir.join(&session_id).join("subagents");
+            let (child_files, uncertain, truncated) = discover_child_files(&children_root)?;
+            if uncertain {
+                skipped_entries += 1;
+            }
+            if truncated {
+                return Err(error(
+                    "diagnose_discovery_incomplete",
+                    "Claude subagent discovery exceeded its bound",
+                ));
+            }
+            for child in child_files {
+                let (child_session_id, child_header_bytes) = match read_identity(&child.path) {
+                    Ok(identity) => identity,
+                    Err(_) => {
+                        skipped_entries += 1;
+                        continue;
+                    }
+                };
+                bytes_read = bytes_read.saturating_add(child_header_bytes);
+                if child_session_id != session_id {
+                    skipped_entries += 1;
+                    continue;
+                }
+                let first_user = match read_first_user(&child.path) {
+                    Ok(first_user) => first_user,
+                    Err(_) => {
+                        skipped_entries += 1;
+                        continue;
+                    }
+                };
+                bytes_read = bytes_read.saturating_add(first_user.bytes_read);
+                if bytes_read > MAX_LIST_DISCOVERY_BYTES {
+                    return Err(error(
+                        "diagnose_discovery_incomplete",
+                        "Claude first-user discovery exceeded its byte bound",
+                    ));
+                }
+                let child_cwd = first_user.cwd.clone().or_else(|| {
+                    sessions
+                        .iter()
+                        .find(|candidate| candidate.identity == main_identity)
+                        .and_then(|candidate| candidate.cwd.clone())
+                });
+                if !child_cwd
+                    .as_deref()
+                    .is_some_and(|cwd| super::list::cwd_is_in_repo(cwd, repo))
+                {
+                    continue;
+                }
+                let identity = format!("claude:{namespace}:{session_id}:agent:{}", child.agent_id);
+                aliases = vec![child.agent_id.clone(), session_id.clone()];
+                let (parent_identity, parent_known) = match &child.sidecar {
+                    Some(sidecar) => (
+                        Some(match sidecar.parent_agent_id.as_deref() {
+                            Some(parent) => {
+                                format!("claude:{namespace}:{session_id}:agent:{parent}")
+                            }
+                            None => main_identity.clone(),
+                        }),
+                        true,
+                    ),
+                    None => (None, false),
+                };
+                sessions.push(DiscoveredSession {
+                    harness: "claude",
+                    identity,
+                    session_id: child.agent_id,
+                    aliases,
+                    parent_identity,
+                    parent_known,
+                    started_at: first_user.timestamp,
+                    cwd: child_cwd,
+                    retro_analyst: first_user.retro_analyst,
+                });
+            }
+        }
+    }
+    let warnings = if skipped_entries == 0 {
+        Vec::new()
+    } else {
+        vec![format!(
+            "Claude discovery skipped {skipped_entries} unreadable or malformed session entries; coverage is partial"
+        )]
+    };
+    Ok(ListDiscovery {
+        sessions,
+        warnings,
+        has_readable_source,
+    })
+}
+
+struct FirstUser {
+    timestamp: Option<String>,
+    cwd: Option<String>,
+    retro_analyst: bool,
+    bytes_read: usize,
+}
+
+fn read_first_user(path: &Path) -> Result<FirstUser, LearnError> {
+    let file = File::open(path).map_err(|cause| {
+        error(
+            "diagnose_source_invalid",
+            format!("cannot read Claude prompt: {cause}"),
+        )
+    })?;
+    let mut reader = BufReader::new(file).take((MAX_LIST_DISCOVERY_BYTES + 1) as u64);
+    let mut bytes_read = 0usize;
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let count = reader.read_until(b'\n', &mut line).map_err(|cause| {
+            error(
+                "diagnose_source_invalid",
+                format!("cannot read Claude prompt: {cause}"),
+            )
+        })?;
+        if count == 0 {
+            return Ok(FirstUser {
+                timestamp: None,
+                cwd: None,
+                retro_analyst: false,
+                bytes_read,
+            });
+        }
+        bytes_read = bytes_read.saturating_add(count);
+        if line.len() > MAX_RECORD_BYTES || bytes_read > MAX_LIST_DISCOVERY_BYTES {
+            return Err(error(
+                "diagnose_discovery_incomplete",
+                "Claude first-user record exceeded its byte bound",
+            ));
+        }
+        if !line.ends_with(b"\n") {
+            return Err(error(
+                "diagnose_discovery_incomplete",
+                "Claude first-user record was incomplete",
+            ));
+        }
+        let value: Value = serde_json::from_slice(&line[..line.len() - 1]).map_err(|cause| {
+            error(
+                "diagnose_discovery_incomplete",
+                format!("cannot parse Claude record before its first user record: {cause}"),
+            )
+        })?;
+        let is_user = value.get("type").and_then(Value::as_str) == Some("user")
+            || value.pointer("/message/role").and_then(Value::as_str) == Some("user");
+        if !is_user {
+            continue;
+        }
+        let message = value.get("message");
+        let text = message
+            .and_then(|message| message.get("content"))
+            .and_then(first_claude_content_text)
+            .unwrap_or_default();
+        return Ok(FirstUser {
+            timestamp: value
+                .get("timestamp")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            cwd: value.get("cwd").and_then(Value::as_str).map(str::to_owned),
+            retro_analyst: is_retro_analyst(text),
+            bytes_read,
+        });
+    }
+}
+
+fn first_claude_content_text(content: &Value) -> Option<&str> {
+    content.as_str().or_else(|| {
+        content
+            .as_array()?
+            .iter()
+            .find_map(|part| part.get("text").and_then(Value::as_str))
+    })
 }
 
 pub(super) fn inspect_current(
@@ -525,6 +830,8 @@ fn inspect_main(
         record_count: records.len(),
         malformed_records,
         omitted_records,
+        unknown_events: 0,
+        inherited_events: 0,
         warnings,
     };
     let session = SessionMetadata {
@@ -1298,6 +1605,18 @@ fn usage_record(usage: Option<&Value>) -> Option<Value> {
         })
         .collect::<Map<_, _>>();
     (!fields.is_empty()).then_some(Value::Object(fields))
+}
+
+pub(super) fn context_occupancy(record: &Value) -> Option<u64> {
+    let usage = usage_record(record.pointer("/message/usage"))?;
+    [
+        "input_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    ]
+    .into_iter()
+    .filter_map(|key| usage.get(key).and_then(Value::as_u64))
+    .try_fold(0u64, u64::checked_add)
 }
 
 fn read_identity(path: &Path) -> Result<(String, usize), LearnError> {

@@ -33,9 +33,16 @@ pub struct RunRecord {
     pub judge_outcome: &'static str,
     pub total_assertions: u32,
     pub passed_assertions: u32,
+    /// Fraction of assertions passed in this run, or `None` when no
+    /// assertions could be evaluated.
+    pub pass_rate: Option<f64>,
     pub duration_ms: u64,
     pub measured_tokens: Option<u64>,
     pub cost_usd: Option<f64>,
+    pub blocked: bool,
+    pub assertions: Vec<String>,
+    pub cost: Value,
+    pub redacted: usize,
 }
 
 pub(super) struct ExecuteRunArgs<'a> {
@@ -125,7 +132,7 @@ pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnEr
             .map_err(|err| LearnError::Usage(format!("failed to seed input file {file}: {err}")))?;
     }
 
-    if let Some(setup_script) = &eval.setup_script {
+    let setup_error = if let Some(setup_script) = &eval.setup_script {
         run_setup_script(&SetupScriptRequest {
             skill_dir,
             script_rel: setup_script,
@@ -137,16 +144,29 @@ pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnEr
             cfg,
             run,
             timeout_seconds,
-        })?;
-    }
+        })
+        .err()
+        .map(|error| error.to_string())
+    } else {
+        None
+    };
 
     let prompt = match &skill_sbox {
         Some(skill_sbox) => format!(
             "Evaluate only the skill snapshot at {sbox}/SKILL.md.\n\
              Read it directly. Resolve every relative path from {sbox}.\n\
              Do not invoke or read an installed skill sharing its name.\n\
+             {suite_skills}\
              Then handle this request:\n\n{prompt}",
             sbox = skill_sbox.display(),
+            suite_skills = if eval.skills.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "Skills available for this suite (names only): {}.\n",
+                    eval.skills.join(", ")
+                )
+            },
             prompt = eval.prompt,
         ),
         None => eval.prompt.clone(),
@@ -166,6 +186,7 @@ pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnEr
         }
     }
 
+    let sandbox_before = super::assertions::snapshot(sbox_path);
     let raw_path = run_dir.join("raw.json");
     let stream_path = if options.harness == OutputHarness::Codex {
         run_dir.join("raw.jsonl")
@@ -188,24 +209,56 @@ pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnEr
         stderr_path: &stderr_path,
         timeout: Duration::from_secs(timeout_seconds),
     };
-    let process_outcome = run_with_timeout(&request)?;
-    let elapsed_ms = start.elapsed().as_millis() as u64;
-
-    let (mut outcome, exit_code) = match process_outcome {
-        ProcessOutcome::Completed(ExitResult::Code(0)) => (EvalOutcome::Completed, 0),
-        ProcessOutcome::Completed(other) => (EvalOutcome::Failed, other.as_shell_code()),
-        ProcessOutcome::TimedOut => (EvalOutcome::TimedOut, TIMED_OUT_EXIT_CODE),
+    let (mut outcome, exit_code, launch_error, elapsed_ms) = if setup_error.is_some() {
+        (EvalOutcome::Failed, 1, None, 0)
+    } else {
+        let process_outcome = run_with_timeout(&request);
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        let (outcome, exit_code, launch_error) = match process_outcome {
+            Ok(ProcessOutcome::Completed(ExitResult::Code(0))) => (EvalOutcome::Completed, 0, None),
+            Ok(ProcessOutcome::Completed(other)) => {
+                (EvalOutcome::Failed, other.as_shell_code(), None)
+            }
+            Ok(ProcessOutcome::TimedOut) => (EvalOutcome::TimedOut, TIMED_OUT_EXIT_CODE, None),
+            Err(error) => (EvalOutcome::Failed, 127, Some(error.to_string())),
+        };
+        (outcome, exit_code, launch_error, elapsed_ms)
     };
 
-    let (raw_value, trace_error) = adapter::read_raw(options.harness, &stream_path, &raw_path)?;
+    let mut redacted = 0;
+    let (raw_value, trace_error) = if let Some(error) = &setup_error {
+        (None, Some(error.clone()))
+    } else {
+        redacted += adapter::redact_file(&stream_path)?;
+        redacted += adapter::redact_file(&stderr_path)?;
+        adapter::read_raw(options.harness, &stream_path, &raw_path)?
+    };
     if trace_error.is_some() && outcome == EvalOutcome::Completed {
         outcome = EvalOutcome::Failed;
     }
+    let run_error = [trace_error.as_deref(), launch_error.as_deref()]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("; ");
+    let process_stderr = fs::read_to_string(&stderr_path).unwrap_or_default();
+    let blocked_reason = (outcome != EvalOutcome::Completed)
+        .then(|| {
+            super::blocked::classify(
+                raw_value.as_ref(),
+                (!run_error.is_empty()).then_some(run_error.as_str()),
+                setup_error.as_deref(),
+                Some(&process_stderr),
+            )
+        })
+        .flatten();
 
     let transcript = raw_value
         .as_ref()
         .map(extract_transcript)
         .unwrap_or_default();
+    let transcript = super::redact_text(&transcript);
+    let transcript = transcript.text;
     fs::write(run_dir.join("outputs").join("transcript.txt"), &transcript)
         .map_err(|err| LearnError::Usage(format!("failed to write transcript: {err}")))?;
     fs::write(run_dir.join("transcript.txt"), &transcript)
@@ -227,8 +280,11 @@ pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnEr
         "duration_ms": duration_ms,
         "tokens": measured_tokens,
         "outcome": outcome.as_str(),
+        "blocked_reason": blocked_reason,
+        "blocked_detail": setup_error,
         "exit_code": exit_code,
         "timeout_seconds": timeout_seconds,
+        "redacted": redacted,
     });
     fs::write(
         run_dir.join("timing.json"),
@@ -250,10 +306,38 @@ pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnEr
         raw_path: &raw_path,
         transcript: &transcript,
         run_outcome: outcome,
+        sandbox_before: &sandbox_before,
         timeout_seconds,
         harness: options.harness,
         model: options.judge_model.as_deref().or(options.model.as_deref()),
     })?;
+    redacted += summary.redacted;
+    let mut timing = timing;
+    timing["redacted"] = json!(redacted);
+    fs::write(
+        run_dir.join("timing.json"),
+        serde_json::to_vec_pretty(&timing)
+            .map_err(|err| LearnError::Usage(format!("failed to encode timing.json: {err}")))?,
+    )
+    .map_err(|err| LearnError::Usage(format!("failed to write timing.json: {err}")))?;
+
+    let blocked = blocked_reason.is_some();
+    let assertions = summary
+        .assertions
+        .iter()
+        .map(|result| {
+            result["evidence"]
+                .as_str()
+                .unwrap_or("assertion failed")
+                .to_string()
+        })
+        .collect();
+    let judge_trace = if options.harness == OutputHarness::Codex {
+        run_dir.join("judge-raw.jsonl")
+    } else {
+        run_dir.join("judge-raw.json")
+    };
+    let cost = super::cost::collect(options.harness, &stream_path, &judge_trace);
 
     Ok(RunRecord {
         eval_id: eval.id.clone(),
@@ -264,9 +348,14 @@ pub(super) fn execute_run(args: ExecuteRunArgs<'_>) -> Result<RunRecord, LearnEr
         judge_outcome: summary.judge_outcome,
         total_assertions: summary.total,
         passed_assertions: summary.passed,
+        pass_rate: (summary.total > 0).then_some(summary.passed as f64 / summary.total as f64),
         duration_ms,
         measured_tokens,
         cost_usd,
+        blocked,
+        assertions,
+        cost,
+        redacted,
     })
 }
 

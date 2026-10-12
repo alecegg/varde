@@ -1,0 +1,269 @@
+[[case]]
+callable = "if_else_if_else"
+matrix = "if-else-if-else"
+cognitive = 3
+cyclomatic = 3
+rule = "if +1, else-if +1, else +1; spec:176-179,493-504"
+
+[[case]]
+callable = "else_if_body_nesting"
+matrix = "else-if-body-nesting"
+cognitive = 4
+cyclomatic = 4
+rule = "if +1, else-if +1, nested if +2; else-if body stays one level under root if; spec:502-518"
+
+[[case]]
+callable = "else_body_nesting"
+matrix = "else-body-nesting"
+cognitive = 4
+cyclomatic = 3
+rule = "if +1, else +1, nested if +2; else body stays one level under root if; spec:176-179,502-518"
+
+[[case]]
+callable = "nested_if_nesting"
+matrix = "nested-if-nesting"
+cognitive = 3
+cyclomatic = 3
+rule = "outer if +1, inner if +2; spec:502-518"
+
+[[case]]
+callable = "loops"
+matrix = "loops"
+cognitive = 6
+cyclomatic = 4
+rule = "for +1, nested while +2, nested do-while +3; spec:493-507,511-517"
+
+[[case]]
+callable = "switch_once"
+matrix = "switch-once"
+cognitive = 1
+cyclomatic = 1
+rule = "Yul switch with three cases is one cognitive decision; spec:196-205,493-505"
+
+[[case]]
+callable = "ternary"
+matrix = "ternary"
+cognitive = 1
+cyclomatic = 2
+rule = "one ternary decision; spec:173-179,493-504"
+
+[[case]]
+callable = "catch_once"
+matrix = "catch-once"
+cognitive = 2
+cyclomatic = 3
+rule = "each of two catch clauses +1; try adds zero; spec:190-195,493-508"
+
+[[case]]
+callable = "early_return_zero"
+matrix = "early-return-zero"
+cognitive = 0
+cyclomatic = 1
+rule = "return is an early exit and adds no point; spec:238-243"
+
+[[case]]
+callable = "logical_run_same"
+matrix = "logical-run-same"
+cognitive = 1
+cyclomatic = 3
+rule = "one same-operator && sequence; spec:207-229,500"
+
+[[case]]
+callable = "logical_run_mixed"
+matrix = "logical-run-mixed"
+cognitive = 2
+cyclomatic = 3
+rule = "&& and || form two operator sequences; spec:207-229,500"
+
+[[case]]
+callable = "logical_negated_run"
+matrix = "logical-negated-run"
+cognitive = 2
+cyclomatic = 3
+rule = "negation separates outer && and inner && runs; spec:207-229,254-256,500"
+
+[[case]]
+callable = "condition_nesting"
+matrix = "condition-nesting"
+cognitive = 3
+cyclomatic = 3
+rule = "if +1; ternary in its condition +2 at nesting 1; spec:502-518; plan interpretation"
+
+[[case]]
+callable = "modifier_callable"
+cognitive = 1
+cyclomatic = 2
+rule = "modifier is a callable; its if contributes +1; spec:493-518"
+
+[[case]]
+callable = "modifier_host"
+cognitive = 0
+cyclomatic = 1
+rule = "modifier application does not add a flow increment; spec:155-168"
+
+[[case]]
+callable = "constructor"
+cognitive = 0
+cyclomatic = 1
+rule = "empty special member has no flow-breaking constructs; spec:155-168"
+
+[[case]]
+callable = "fallback"
+cognitive = 0
+cyclomatic = 1
+rule = "empty special member has no flow-breaking constructs; spec:155-168"
+
+[[case]]
+callable = "receive"
+cognitive = 0
+cyclomatic = 1
+rule = "empty special member has no flow-breaking constructs; spec:155-168"
+
+[[case]]
+callable = "mayFail"
+cognitive = 0
+cyclomatic = 1
+rule = "simple return adds no point; spec:155-168,238-243"
+
+[[case]]
+callable = "yul_if"
+cognitive = 1
+cyclomatic = 1
+rule = "Yul if maps to one conditional by analogy; spec:173-175,493-504"
+
+[[case]]
+callable = "yul_loop"
+cognitive = 1
+cyclomatic = 1
+rule = "Yul for maps to one loop by analogy; spec:174-175,493-507"
+
+[[case]]
+callable = "named_nested_function"
+matrix = "named-nested-function"
+cognitive = 2
+cyclomatic = 1
+rule = "outer method receives the nested Yul function's if at nesting 1; spec:267-291,502-518"
+
+[[case]]
+callable = "inner"
+cognitive = 1
+cyclomatic = 1
+rule = "nested Yul function has its own callable metric; its if is at its root; spec:267-291,493-509"
+
+[[case]]
+callable = "recursion_direct"
+matrix = "recursion-direct"
+cognitive = 1
+cyclomatic = 1
+rule = "one direct self-recursive cycle adds +1 once; spec:230-237,501"
+
+[[case]]
+callable = "recursion_two_calls"
+matrix = "recursion-two-calls"
+cognitive = 1
+cyclomatic = 1
+rule = "two self-calls in one method still add +1 once; spec:230-237,501"
+
+[[case]]
+callable = "recursion_qualified_self"
+matrix = "recursion-qualified-self"
+cognitive = 1
+cyclomatic = 1
+rule = "this.f is a self-like recursive call; spec:230-237,501"
+
+[[case]]
+callable = "recursion_other_receiver"
+matrix = "recursion-other-receiver"
+cognitive = 0
+cyclomatic = 1
+rule = "other.f does not target the current contract method; recursion is per method cycle; spec:230-237,501"
+
+[[case]]
+callable = "recursion_overload_delegate"
+matrix = "recursion-overload-delegate"
+cognitive = 0
+cyclomatic = 1
+rule = "the zero-argument method delegates to a distinct one-argument overload; no method is recursive; spec:230-237,501"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+matrix = "recursion-same-file-cycle"
+cognitive = 1
+cyclomatic = 1
+rule = "first member of a same-file two-method cycle gets +1; spec:230-237,501"
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 1
+cyclomatic = 1
+rule = "second member of a same-file two-method cycle gets +1; spec:230-237,501"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+matrix = "recursion-cross-file-zero"
+cognitive = 0
+cyclomatic = 1
+rule = "missing peer is in another file, so this one-file resolver binds no cycle; spec:230-237,501"
+
+[[case]]
+callable = "spec_example_small"
+matrix = "spec-example-small"
+cognitive = 1
+cyclomatic = 1
+rule = "Yul switch mirrors getWords: one switch increment regardless of arms; spec:196-205,327,493-501"
+
+[["n/a"]]
+matrix_id = "try-finally-zero"
+reason = "Solidity has try/catch but no finally clause; catch-once covers its actual catch syntax."
+
+[["n/a"]]
+matrix_id = "logical-run-across-lambda"
+reason = "Solidity has function types but no lambda or closure literal."
+
+[["n/a"]]
+matrix_id = "null-coalescing-zero"
+reason = "Solidity has no null-coalescing operator; its ?: operator is the ternary covered above."
+
+[["n/a"]]
+matrix_id = "lambda-nesting"
+reason = "Solidity has no lambda or closure literal; function types do not define inline callable bodies."
+
+[["n/a"]]
+matrix_id = "class-in-method"
+reason = "Solidity contract, library, and interface declarations are not allowed inside function bodies."
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "Appendix A's compensating usage is limited to JavaScript and Python decorator forms; Solidity has neither form."
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "The callback negative-shape test requires a nested callable; Solidity has no lambda or closure literal."
+
+[["n/a"]]
+matrix_id = "goto-or-labeled-jump"
+reason = "Solidity has no goto or labeled break/continue syntax."
+
+[["n/a"]]
+matrix_id = "multi-level-break"
+reason = "Solidity break/continue have no labels or numeric levels; they exit only the innermost loop or switch."
+
+[["n/a"]]
+matrix_id = "recursion-in-closure"
+reason = "Solidity has no closure or lambda literal that can contain a recursive call."
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "Solidity uses pragma directives, not preprocessor conditionals."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Solidity has no preprocessor directives or extern-C linkage blocks."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "Solidity has no collection comprehension or query-clause syntax."
+
+[["n/a"]]
+matrix_id = "spec-example-large"
+reason = "The plan reserves the large worked sample for Java, JavaScript, and C#; Solidity has no corresponding language-specific example."

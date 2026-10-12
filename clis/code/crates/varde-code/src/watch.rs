@@ -134,7 +134,8 @@ impl PendingEvents {
     }
 }
 
-/// Watch-list config: `~/.config/varde-code/watch.toml` by convention.
+/// Watch-list config: `<varde config root>/code/watch.toml` by convention
+/// (default `~/.config/varde/code/watch.toml`).
 /// Discovery (`parent_dirs` → `.git` dirs) happens once at watcher startup,
 /// not live — changing the watch list means restarting the process.
 #[derive(Debug, Default, serde::Deserialize)]
@@ -253,12 +254,41 @@ pub fn run(repos: &[PathBuf], debounce: Duration) -> Result<()> {
         // retries an initial failure even on an otherwise quiet repository.
         if last_periodic.elapsed() >= Duration::from_secs(30) {
             for repo in repos {
+                if !repo.join(".git").exists() {
+                    // A gone repo retires a single-repo service; a multi-repo
+                    // or config watcher skips it and keeps serving the rest.
+                    if repos.len() == 1
+                        && repo_is_gone(repo)
+                        && service_path_is_file(repo).unwrap_or(false)
+                    {
+                        // Clear readiness before `bootout` can SIGTERM us.
+                        drop(watchers);
+                        drop(instance_lock);
+                        return retire(repo);
+                    }
+                    continue;
+                }
                 reconcile_and_mark_ready(repo, &HashSet::new(), &instance_lock)?;
             }
             last_periodic = Instant::now();
         }
     }
     Ok(())
+}
+
+/// A watcher started for one explicit, registered `--repo` whose path no
+/// longer holds a git repo should retire its own service instead of failing.
+/// Config-driven and multi-repo watchers keep the normal resolution error.
+pub fn should_retire(explicit: &[String], has_config: bool) -> bool {
+    let [raw] = explicit else { return false };
+    let raw = Path::new(raw);
+    !has_config && repo_is_gone(raw) && service_path_is_file(raw).unwrap_or(false)
+}
+
+/// The repo directory is confirmed absent under an existing parent. An
+/// unreadable path or an unmounted volume is not "gone".
+fn repo_is_gone(repo: &Path) -> bool {
+    matches!(repo.try_exists(), Ok(false)) && repo.parent().is_some_and(Path::is_dir)
 }
 
 fn create_watcher(repo: &Path, pending: Arc<PendingEvents>) -> Result<notify::RecommendedWatcher> {
@@ -589,7 +619,7 @@ fn acquire_instance_lock(repos: &[PathBuf]) -> Result<InstanceLock> {
         let mut file = open_lock_file(&lock_path)?;
         if !try_lock_file(&file)? {
             bail!(
-                "a watcher already owns repository coverage for {} (lock {}); use `varde-code watch --list` and `--stop`",
+                "a watcher already owns repository coverage for {} (lock {}); use `varde setup watch --list` and `--stop`",
                 repo.display(),
                 lock_path.display()
             );
@@ -960,7 +990,7 @@ fn ensure_existing(
 ) -> Result<EnsureDecision> {
     let explain = |reason: String| {
         format!(
-            "{reason}; inspect or manage this watcher on the host with `varde-code watch --list` and `--stop`"
+            "{reason}; inspect or manage this watcher on the host with `varde setup watch --list` and `--stop`"
         )
     };
     let readonly = |alive: Option<bool>, reason: String| -> Result<EnsureDecision> {
@@ -1031,7 +1061,7 @@ fn readonly_status_or_error(
         });
     }
     bail!(
-        "{reason}; the index is stale or unavailable for {}; inspect or manage the watcher on the host with `varde-code watch --list` and `--stop`, then search source directly",
+        "{reason}; the index is stale or unavailable for {}; inspect or manage the watcher on the host with `varde setup watch --list` and `--stop`, then search source directly",
         repo.display()
     )
 }
@@ -1196,7 +1226,7 @@ pub fn ensure(repo: &Path) -> Result<EnsureStatus> {
             cleanup_service_registration(&repo)?;
         }
     }
-    let binary = std::env::current_exe().context("locating varde-code executable")?;
+    let binary = std::env::current_exe().context("locating current executable")?;
     let definition = service_definition(&repo, &binary)?;
     let path = service_path(&repo);
     std::fs::create_dir_all(path.parent().expect("service path parent"))?;
@@ -1410,7 +1440,7 @@ fn service_definition(repo: &Path, binary: &Path) -> Result<String> {
             .replace('"', "&quot;")
     };
     Ok(format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{}</string><key>ProgramArguments</key><array><string>{}</string><string>watch</string><string>--repo</string><string>{}</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/></dict></plist>\n",
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\"><dict><key>Label</key><string>{}</string><key>ProgramArguments</key><array><string>{}</string><string>watch</string><string>--repo</string><string>{}</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict></dict></plist>\n",
         escape(&service_name(repo)),
         escape(&binary.display().to_string()),
         escape(&repo.display().to_string())
@@ -1420,7 +1450,7 @@ fn service_definition(repo: &Path, binary: &Path) -> Result<String> {
 #[cfg(target_os = "linux")]
 fn service_definition(repo: &Path, binary: &Path) -> Result<String> {
     Ok(format!(
-        "[Unit]\nDescription=Varde code watcher\n[Service]\nType=simple\nExecStart={} watch --repo {}\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target\n",
+        "[Unit]\nDescription=Varde code watcher\n[Service]\nType=simple\nExecStart={} watch --repo {}\nRestart=on-failure\nRestartSec=2\n[Install]\nWantedBy=default.target\n",
         systemd_quote(&binary.display().to_string()),
         systemd_quote(&repo.display().to_string())
     ))
@@ -1548,6 +1578,25 @@ pub fn stop(repos: &[PathBuf]) -> Result<StopOutcome> {
     )
 }
 
+/// Stop one repo's watcher and remove its code index.
+///
+/// Index removal is attempted even when stopping fails, so a caller can warn
+/// and continue worktree cleanup while still trying both operations.
+pub fn stop_and_remove_index(repo: &Path) -> Result<(StopOutcome, bool)> {
+    let repos = [repo.to_path_buf()];
+    let stop_result = stop(&repos);
+    let remove_result = crate::db::path::remove_index(repo);
+
+    match (stop_result, remove_result) {
+        (Ok(stopped), Ok(removed)) => Ok((stopped, removed)),
+        (Err(stop_err), Ok(_)) => Err(anyhow::anyhow!("stopping watcher: {stop_err}")),
+        (Ok(_), Err(remove_err)) => Err(anyhow::anyhow!("removing code index: {remove_err}")),
+        (Err(stop_err), Err(remove_err)) => Err(anyhow::anyhow!(
+            "stopping watcher: {stop_err}; removing code index: {remove_err}"
+        )),
+    }
+}
+
 /// Stop every watcher instance with a lock under `watch-locks/`, regardless
 /// of repo set. An individual supervisor failure is recorded in that
 /// instance's outcome and does not prevent later instances from being tried.
@@ -1664,11 +1713,51 @@ fn cleanup_service_registration(repo: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Unregister this watcher's own service and let the caller exit cleanly.
+/// launchd: drop the files first because `bootout` may kill this process.
+/// systemd: `stop --no-block` queues the stop so this process can return.
+#[cfg(target_os = "macos")]
+pub fn retire(repo: &Path) -> Result<()> {
+    cleanup_service_registration(repo)?;
+    report_final_stop_failure(stop_service(repo));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub fn retire(repo: &Path) -> Result<()> {
+    let unit = format!("{}.service", service_name(repo));
+    systemctl_user(&["disable", &unit])?;
+    cleanup_service_registration(repo)?;
+    report_final_stop_failure(systemctl_user(&["stop", "--no-block", &unit]));
+    Ok(())
+}
+
+/// The files are already gone, so a failed final supervisor call must not
+/// fail the exit: a restart could never retire again.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn report_final_stop_failure(result: Result<()>) {
+    if let Err(err) = result {
+        eprintln!("watcher retired but the supervisor could not stop it: {err:#}");
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub fn retire(_repo: &Path) -> Result<()> {
+    bail!("host supervision is unsupported on this platform")
+}
+
 #[cfg(target_os = "linux")]
 fn stop_service(repo: &Path) -> Result<()> {
     let unit = format!("{}.service", service_name(repo));
+    systemctl_user(&["disable", "--now", &unit])
+}
+
+/// Run `systemctl --user <args>`; a job that is already absent is success.
+#[cfg(target_os = "linux")]
+fn systemctl_user(args: &[&str]) -> Result<()> {
     let out = std::process::Command::new("systemctl")
-        .args(["--user", "disable", "--now", &unit])
+        .arg("--user")
+        .args(args)
         .output()?;
     if !out.status.success() {
         let output = format!(
@@ -1679,7 +1768,7 @@ fn stop_service(repo: &Path) -> Result<()> {
         if systemd_job_is_absent(&output) {
             return Ok(());
         }
-        bail!("systemctl --user disable failed: {}", output.trim());
+        bail!("systemctl --user {} failed: {}", args[0], output.trim());
     }
     Ok(())
 }
@@ -1907,6 +1996,20 @@ mod tests {
             );
             let _ = std::fs::remove_dir_all(repo);
         });
+    }
+
+    #[test]
+    fn service_definition_runs_the_current_executable_with_the_watch_arguments() {
+        // Under the `varde` binary the unit reads `varde watch --repo <repo>`;
+        // `watch` is a hidden `varde` alias, so only the executable differs.
+        let definition = service_definition(Path::new("/r"), Path::new("/opt/bin/varde")).unwrap();
+        assert!(definition.contains("/opt/bin/varde"));
+        #[cfg(target_os = "macos")]
+        assert!(
+            definition.contains("<string>watch</string><string>--repo</string><string>/r</string>")
+        );
+        #[cfg(target_os = "linux")]
+        assert!(definition.contains("ExecStart=/opt/bin/varde watch --repo /r\n"));
     }
 
     #[test]
@@ -2605,5 +2708,123 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn service_definition_restarts_only_on_failure() {
+        let definition =
+            service_definition(Path::new("/repo"), Path::new("/bin/varde-code")).unwrap();
+        #[cfg(target_os = "macos")]
+        assert!(
+            definition
+                .contains("<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>")
+        );
+        #[cfg(target_os = "linux")]
+        assert!(definition.contains("Restart=on-failure"));
+    }
+
+    #[test]
+    fn should_retire_only_for_single_registered_repo_without_git() {
+        crate::test_support::with_isolated_home("watch-retire-decision", || {
+            let (repo, _service, _registration) = registered_test_repo("retire-decision");
+            let raw = repo.display().to_string();
+            let explicit = [raw.clone()];
+            std::fs::remove_dir_all(&repo).unwrap();
+            assert!(should_retire(&explicit, false), "gone registered repo");
+            assert!(!should_retire(&explicit, true), "config watcher");
+            assert!(
+                !should_retire(&[raw.clone(), raw.clone()], false),
+                "multi-repo"
+            );
+            assert!(
+                !should_retire(&["/nowhere".to_string()], false),
+                "unregistered"
+            );
+            std::fs::create_dir_all(repo.join(".git")).unwrap();
+            assert!(!should_retire(&explicit, false), "repo still present");
+        });
+    }
+
+    #[test]
+    fn should_retire_requires_missing_repo_under_existing_parent() {
+        crate::test_support::with_isolated_home("watch-retire-gone-decision", || {
+            let (repo, _service, _registration) = registered_test_repo("retire-gone-decision");
+            let explicit = [repo.display().to_string()];
+            assert!(
+                !should_retire(&explicit, false),
+                "repo dir exists without .git"
+            );
+            std::fs::remove_dir_all(&repo).unwrap();
+            assert!(should_retire(&explicit, false), "repo dir deleted");
+
+            let (parent_gone, _service, _registration) = registered_test_repo("retire-parent");
+            let nested = parent_gone.join("missing-parent").join("repo");
+            let service = service_path(&nested);
+            std::fs::create_dir_all(service.parent().unwrap()).unwrap();
+            std::fs::write(&service, "keep service definition").unwrap();
+            assert!(
+                !should_retire(&[nested.display().to_string()], false),
+                "missing parent"
+            );
+        });
+    }
+
+    #[test]
+    fn retire_removes_registration_and_succeeds() {
+        crate::test_support::with_isolated_home("watch-retire", || {
+            let (repo, service, registration) = registered_test_repo("retire-gone");
+            let (bin, log) = supervisor_stub("ok", 0);
+            let _path = crate::test_support::PathOverride::new(&bin);
+
+            retire(&repo).unwrap();
+
+            assert!(!service.exists());
+            assert!(!registration.exists());
+            let logged = std::fs::read_to_string(&log).unwrap();
+            let unit = service_name(&repo);
+            #[cfg(target_os = "macos")]
+            {
+                let uid = String::from_utf8(
+                    std::process::Command::new("id")
+                        .arg("-u")
+                        .output()
+                        .unwrap()
+                        .stdout,
+                )
+                .unwrap();
+                assert_eq!(logged.trim(), format!("bootout gui/{}/{unit}", uid.trim()));
+            }
+            #[cfg(target_os = "linux")]
+            assert_eq!(
+                logged.lines().collect::<Vec<_>>(),
+                [
+                    format!("--user disable {unit}.service"),
+                    format!("--user stop --no-block {unit}.service"),
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn retire_succeeds_when_final_supervisor_call_fails() {
+        crate::test_support::with_isolated_home("watch-retire-stop-fails", || {
+            let (repo, service, registration) = registered_test_repo("retire-stop-fails");
+            let (bin, _log) = supervisor_stub("boom", 1);
+            let _path = crate::test_support::PathOverride::new(&bin);
+
+            // On Linux the first `disable` call fails and returns Err before
+            // cleanup, so only the final-call failure path is asserted on macOS.
+            #[cfg(target_os = "macos")]
+            {
+                retire(&repo).unwrap();
+                assert!(!service.exists());
+                assert!(!registration.exists());
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                assert!(retire(&repo).is_err());
+                assert!(service.exists() && registration.exists());
+            }
+        });
     }
 }

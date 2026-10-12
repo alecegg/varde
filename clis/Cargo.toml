@@ -1,0 +1,35 @@
+[workspace]
+members = [
+    "varde-core",
+    "varde-contracts",
+    "varde",
+    "code/crates/varde-code",
+    "workflow/md-core",
+    "workflow/varde-workflow",
+    "toz/crates/toz-core",
+    "toz/crates/toz",
+    "learn/crates/varde-learn-core",
+    "learn/crates/varde-learn",
+    "doc/crates/varde-doc",
+]
+resolver = "2"
+
+[workspace.package]
+version = "2.0.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.88.0"
+
+[workspace.dependencies]
+anyhow = "1"
+varde-core = { path = "varde-core", version = "2.0.0" }
+varde-contracts = { path = "varde-contracts", version = "2.0.0" }
+
+# Dev builds omit debug info (panics keep file:line); a debugger session opts in with CARGO_PROFILE_DEV_DEBUG=true.
+[profile.dev]
+debug = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

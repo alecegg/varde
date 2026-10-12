@@ -44,7 +44,7 @@
     {
       "id": 5,
       "prompt": "I am working inside code-cli/. Refresh its documentation, including existing release records. The Git root has no CHANGELOG. Show proposed changes before applying them.",
-      "expected_output": "The default module refresh inventory includes code-cli/README.md and code-cli/CHANGELOG.md even though the Git root has no CHANGELOG. Memory storage is still resolved once from the Git root through varde-workflow paths --json. The agent proposes edits and waits for approval.",
+      "expected_output": "The default module refresh inventory includes code-cli/README.md and code-cli/CHANGELOG.md even though the Git root has no CHANGELOG. Memory storage is still resolved once from the Git root through varde setup paths --json. The agent proposes edits and waits for approval.",
       "assertions": [
         "Includes code-cli/CHANGELOG.md in the module refresh inventory",
         "Resolves working and knowledge paths from the Git root, independent of documentation scope"
@@ -131,12 +131,12 @@
     {
       "id": 10,
       "prompt": "Check whether the billing spec needs regeneration. A verified inventory cache says billing is up to date, another domain is unchanged, and the rendered specs index is byte-identical. Report the result.",
-      "expected_output": "Use the current verified inventory verdict, including unclassified/overlapping paths and architecture candidates. Skip reading and rehashing unrelated domains, do not regenerate billing without a forced request, and leave the byte-identical index untouched. Report the skipped domain and cache decision. Trust the cache verdict `varde-workflow spec inventory` returns (the CLI revalidates a stale cache itself); if the command is unavailable or fails, stop spec mode and report it instead of recomputing by hand.",
+      "expected_output": "Use the current verified inventory verdict, including unclassified/overlapping paths and architecture candidates. Skip reading and rehashing unrelated domains, do not regenerate billing without a forced request, and leave the byte-identical index untouched. Report the skipped domain and cache decision. Trust the cache verdict `varde doc spec inventory` returns (the CLI revalidates a stale cache itself); if `varde` is missing or the command fails, stop spec mode and report it instead of recomputing by hand.",
       "assertions": [
         "Uses only a verified current cache result to skip unchanged domain recomputation",
         "Still inspects architecture candidates and unclassified/overlapping paths",
         "Does not rewrite byte-identical specs/index.md",
-        "Stops spec mode and reports it if `varde-workflow spec inventory` is unavailable or fails, rather than recomputing by hand"
+        "Stops spec mode and reports it if `varde` is missing or `varde doc spec inventory` fails, rather than recomputing by hand"
       ]
     }
   ]

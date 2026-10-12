@@ -320,10 +320,7 @@ pub fn now() -> i64 {
 
 fn open_initialized_connection(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path).with_context(|| format!("opening {}", path.display()))?;
-    conn.busy_timeout(Duration::from_secs(30))?;
-    conn.pragma_update(None, "journal_mode", "WAL")?;
-    conn.pragma_update(None, "synchronous", "NORMAL")?;
-    conn.pragma_update(None, "foreign_keys", "ON")?;
+    varde_core::sqlite::configure_connection(&conn)?;
     conn.execute_batch(SCHEMA).context("applying schema")?;
     if !has_column(&conn, "captures", "state")? {
         conn.execute(
@@ -1059,6 +1056,9 @@ impl Store {
 
     pub fn prune(&mut self, policy: &Retention) -> Result<usize> {
         let t = now();
+        let chunks_before: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM chunks", [], |row| row.get(0))?;
         let mut removed = 0usize;
         removed += self.conn.execute(
             "DELETE FROM captures WHERE created_at < ?1 AND state != 'running'",
@@ -1071,6 +1071,16 @@ impl Store {
         )?;
         // Size backstop: evict oldest (superseded first) until under the cap.
         let cap_bytes = policy.max_mb.saturating_mul(1024 * 1024) as i64;
+        let chunks_after: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM chunks", [], |row| row.get(0))?;
+        let chunks_removed = chunks_before - chunks_after;
+        let (initial_page_size, initial_page_count, initial_freelist) = self.db_page_stats()?;
+        let live_bytes = initial_page_size
+            .saturating_mul(initial_page_count.saturating_sub(initial_freelist));
+        if (chunks_before > 0 && chunks_removed * 10 >= chunks_before) || live_bytes > cap_bytes {
+            self.optimize_fts()?;
+        }
         loop {
             let size = self.db_used_size_bytes()?;
             if size <= cap_bytes {
@@ -1097,11 +1107,24 @@ impl Store {
         }
         let (page_size, page_count, freelist) = self.db_page_stats()?;
         let exceeds_cap = page_size.saturating_mul(page_count) > cap_bytes;
+        // With zero pages, the >= 5% gate is true, but neither VACUUM reason can be true.
         let heavily_fragmented = page_count > 0 && freelist * 4 > page_count;
-        if freelist > 0 && (exceeds_cap || heavily_fragmented) {
+        if freelist * 20 >= page_count && (exceeds_cap || heavily_fragmented) {
             self.conn.execute_batch("VACUUM")?;
         }
         Ok(removed)
+    }
+
+    fn optimize_fts(&self) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO chunks_trigram(chunks_trigram) VALUES('optimize')",
+            [],
+        )?;
+        self.conn.execute(
+            "INSERT INTO chunks_porter(chunks_porter) VALUES('optimize')",
+            [],
+        )?;
+        Ok(())
     }
 
     /// Aggregate `stats_log`. `session` restricts to rows tagged with that session; otherwise
@@ -1357,9 +1380,32 @@ mod tests {
     use crate::config::Redact;
     use crate::redact::Redactor;
 
-    fn store() -> Store {
-        let dir = std::env::temp_dir().join(format!("toz-test-{}", crate::rand::next_u64()));
-        Store::open(&dir.join("toz.db")).unwrap()
+    struct TestStore {
+        _dir: tempfile::TempDir,
+        store: Store,
+    }
+
+    impl std::ops::Deref for TestStore {
+        type Target = Store;
+
+        fn deref(&self) -> &Self::Target {
+            &self.store
+        }
+    }
+
+    impl std::ops::DerefMut for TestStore {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.store
+        }
+    }
+
+    fn store() -> TestStore {
+        let dir = tempfile::Builder::new()
+            .prefix("toz-test-")
+            .tempdir()
+            .unwrap();
+        let store = Store::open(&dir.path().join("toz.db")).unwrap();
+        TestStore { _dir: dir, store }
     }
 
     #[test]
@@ -1377,7 +1423,8 @@ mod tests {
                    VALUES (1, 'chunk', 12, 'old-session');",
             )
             .unwrap();
-        drop(s);
+        let TestStore { store, _dir: dir } = s;
+        drop(store);
 
         let readonly = Store::open_readonly(&path).unwrap();
         let events = readonly
@@ -1403,6 +1450,8 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].details["handle"], "abc");
         assert_eq!(upgraded.stats(None, None).unwrap().query_bytes, 16);
+        drop(upgraded);
+        drop(dir);
     }
 
     fn cap<'a>(source: &'a str) -> NewCapture<'a> {
@@ -1437,6 +1486,7 @@ mod tests {
         let redactor = Redactor::from_config(&Redact {
             patterns: vec!["old-secret".into()],
             builtin: false,
+            ..Default::default()
         })
         .unwrap();
 
@@ -1488,6 +1538,7 @@ mod tests {
         let redactor = Redactor::from_config(&Redact {
             patterns: vec!["old-secret".into()],
             builtin: false,
+            ..Default::default()
         })
         .unwrap();
 
@@ -1524,6 +1575,7 @@ mod tests {
         let redactor = Redactor::from_config(&Redact {
             patterns: vec![],
             builtin: false,
+            ..Default::default()
         })
         .unwrap();
 
@@ -1556,6 +1608,7 @@ mod tests {
         let redactor = Redactor::from_config(&Redact {
             patterns: vec!["old-secret".into()],
             builtin: false,
+            ..Default::default()
         })
         .unwrap();
 
@@ -1626,9 +1679,11 @@ mod tests {
 
     #[test]
     fn opening_existing_store_installs_conditional_fts_triggers() {
-        let dir = std::env::temp_dir().join(format!("toz-migration-{}", crate::rand::next_u64()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("toz.db");
+        let dir = tempfile::Builder::new()
+            .prefix("toz-migration-")
+            .tempdir()
+            .unwrap();
+        let path = dir.path().join("toz.db");
         let conn = Connection::open(&path).unwrap();
         let old_schema = SCHEMA
             .replace(
@@ -1675,7 +1730,7 @@ mod tests {
 
         // Recover a store interrupted after columns were added but before
         // its old unconditional triggers were replaced.
-        let partial_path = dir.join("partial.db");
+        let partial_path = dir.path().join("partial.db");
         let conn = Connection::open(&partial_path).unwrap();
         let partial_schema = SCHEMA
             .replace("WHEN new.indexed = 1 BEGIN", "BEGIN")

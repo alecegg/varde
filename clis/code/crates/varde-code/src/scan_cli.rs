@@ -115,6 +115,9 @@ fn unresolved_finding_count(payload: &serde_json::Value, threshold: Severity) ->
 /// atomic writes. Findings from rules without a `rewrite` template are
 /// never written and never git-gated.
 pub fn scan_repo(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
+    if input.get("operation").and_then(serde_json::Value::as_str) == Some("setup") {
+        return setup_repo(input);
+    }
     let (repo_path, apply, force, findings_options) = scan_options(input)?;
     let (rules, rule_diagnostics, origins) = crate::rules::load_rules_with_origins(repo_path);
     let gate_rules = selected_gate_rules(input, &rules)?;
@@ -167,6 +170,213 @@ pub fn scan_repo(input: &serde_json::Value) -> Result<serde_json::Value, ApiErro
         crate::query::output::postprocess(&mut payload, input);
     }
     Ok(payload)
+}
+
+fn setup_repo(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
+    let repo_root = crate::query::req_str(input, "repoRoot")?;
+    let repo_path = std::path::Path::new(repo_root);
+    let preset_name = input
+        .get("preset")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| ApiError::new("invalid_input", "preset must be a string"))?;
+    let preset = crate::scan_setup::Preset::parse(preset_name)?;
+    let scope = match input.get("scope") {
+        None => "repo",
+        Some(value) => value
+            .as_str()
+            .ok_or_else(|| ApiError::new("invalid_input", "scope must be either repo or user"))?,
+    };
+    if !matches!(scope, "repo" | "user") {
+        return Err(ApiError::new(
+            "invalid_input",
+            "scope must be either repo or user",
+        ));
+    }
+    let force = match input.get("force") {
+        None => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| ApiError::new("invalid_input", "force must be a boolean"))?,
+    };
+
+    let languages = crate::scan_setup::detect_languages(repo_path)?;
+    let written_path = if let Some(contents) = crate::scan_setup::overrides_toml(preset) {
+        let path = if scope == "repo" {
+            repo_path.join(".varde-code/overrides.toml")
+        } else {
+            setup_user_overrides_path()
+        };
+        write_setup_overrides(&path, &contents, force)?;
+        Some(path)
+    } else {
+        None
+    };
+
+    let listed = rules_list(&serde_json::json!({ "repoRoot": repo_root }))?;
+    let detected: std::collections::BTreeSet<&str> = languages.iter().map(String::as_str).collect();
+    let mut effective_rules = listed["rules"].as_array().cloned().unwrap_or_default();
+    effective_rules.retain(|rule| {
+        if rule["kind"] == "sql" {
+            return true;
+        }
+        let Some(rule_languages) = rule["languages"].as_array() else {
+            return true;
+        };
+        if rule_languages.is_empty() {
+            return true;
+        }
+        rule_languages
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .any(|name| {
+                crate::parse::language_from_name(&name.to_ascii_lowercase()).is_some_and(
+                    |language| detected.contains(crate::parse::language_name(&language)),
+                )
+            })
+    });
+    let message = if preset == crate::scan_setup::Preset::Balanced {
+        "Balanced leaves existing overrides unchanged; no overrides file was written."
+    } else {
+        "Preset overrides were written."
+    };
+
+    Ok(serde_json::json!({
+        "preset": preset.as_str(),
+        "scope": scope,
+        "message": message,
+        "detectedLanguages": languages,
+        "written": written_path.map(|path| path.to_string_lossy().into_owned()),
+        "effectiveRules": effective_rules,
+        "diagnostics": listed["diagnostics"],
+        "orphanedOverrides": listed["orphanedOverrides"],
+        "findings": [],
+        "gate": { "status": "pass" },
+    }))
+}
+
+fn setup_user_overrides_path() -> std::path::PathBuf {
+    std::env::var_os("VARDE_CODE_USER_OVERRIDES_FILE")
+        .or_else(|| std::env::var_os("VARDE_USER_OVERRIDES_FILE"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| crate::db::path::config_dir().join("overrides.toml"))
+}
+
+fn write_setup_overrides(
+    path: &std::path::Path,
+    contents: &str,
+    force: bool,
+) -> Result<(), ApiError> {
+    use std::io::Write as _;
+
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            ApiError::new(
+                "io_error",
+                format!(
+                    "unable to create overrides directory {}: {error}",
+                    parent.display()
+                ),
+            )
+        })?;
+    }
+
+    if force {
+        return write_setup_overrides_atomically(path, contents);
+    }
+
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true);
+    options.create_new(true);
+    let mut file = options.open(path).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            ApiError::new(
+                "overwrite_refused",
+                format!(
+                    "{} already exists; pass --force to overwrite",
+                    path.display()
+                ),
+            )
+        } else {
+            ApiError::new(
+                "io_error",
+                format!("unable to write overrides file {}: {error}", path.display()),
+            )
+        }
+    })?;
+    if let Err(error) = file.write_all(contents.as_bytes()) {
+        drop(file);
+        let _ = std::fs::remove_file(path);
+        return Err(ApiError::new(
+            "io_error",
+            format!("unable to write overrides file {}: {error}", path.display()),
+        ));
+    }
+    Ok(())
+}
+
+fn write_setup_overrides_atomically(
+    path: &std::path::Path,
+    contents: &str,
+) -> Result<(), ApiError> {
+    use std::io::Write as _;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or("overrides");
+    let (temp_path, mut file) = loop {
+        let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+        let candidate = parent.join(format!(".{file_name}.{}.{}.tmp", std::process::id(), id));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => break (candidate, file),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(ApiError::new(
+                    "io_error",
+                    format!("unable to write overrides file {}: {error}", path.display()),
+                ));
+            }
+        }
+    };
+
+    if let Err(error) = file
+        .write_all(contents.as_bytes())
+        .and_then(|()| file.flush())
+    {
+        drop(file);
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(ApiError::new(
+            "io_error",
+            format!("unable to write overrides file {}: {error}", path.display()),
+        ));
+    }
+    drop(file);
+
+    if let Err(error) = std::fs::rename(&temp_path, path) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(ApiError::new(
+            "io_error",
+            format!(
+                "unable to replace overrides file {}: {error}",
+                path.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn selected_gate_rules(
@@ -312,7 +522,7 @@ fn open_scan_db(repo_path: &Path) -> Result<rusqlite::Connection, ApiError> {
         ApiError::new(
             "db_error",
             format!(
-                "database unavailable at {}: {error}; run `varde-code build --repo-root {}` first",
+                "database unavailable at {}: {error}; run `varde map build --repo-root {}` first",
                 db_path.display(),
                 repo_path.display()
             ),
@@ -1407,7 +1617,7 @@ fn splice(content: &str, applied: &[&RewriteTarget]) -> Option<String> {
 /// a read-only file stays read-only after the rewrite — the swap never
 /// silently resets the mode to the umask default. When the original does
 /// not exist (a brand-new write) the temp keeps its default mode.
-fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
     let name = path
         .file_name()
@@ -1447,19 +1657,33 @@ fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
 ///
 /// Entries include the active serialized definition, excluding self-tests.
 pub fn rules_list(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
+    if input.get("operation").and_then(serde_json::Value::as_str) == Some("diff") {
+        let rule_id = input
+            .get("ruleId")
+            .ok_or_else(|| ApiError::new("invalid_input", "ruleId is required for a rules diff"))?;
+        let rule_id = rule_id.as_str().ok_or_else(|| {
+            ApiError::new("invalid_input", "ruleId must be a built-in rule ID string")
+        })?;
+        return rules_diff(input, rule_id);
+    }
     let repo_path = require_repo_dir(input)?;
 
-    let (rules, diagnostics, origins) = crate::rules::load_rules_with_origins(repo_path);
+    let (rules, diagnostics, details) = crate::rules::load_rules_with_details(repo_path);
 
-    let rules_json: Vec<serde_json::Value> = rules
+    let mut rules_json: Vec<serde_json::Value> = rules
         .iter()
         .map(|rule| {
-            let source = match origins.get(&rule.id) {
+            let source = match details.origins.get(&rule.id) {
                 Some(crate::rules::RuleOrigin::Builtin) => "builtin",
                 Some(crate::rules::RuleOrigin::Override) => "override",
                 Some(crate::rules::RuleOrigin::Custom) => "custom",
                 None => unreachable!("every active rule has an origin"),
             };
+            let severity_source = details
+                .severity_sources
+                .get(&rule.id)
+                .expect("every active rule has a severity source")
+                .as_str();
             let mut definition = serde_json::to_value(rule).expect("rule serializes");
             if rule.verification == Some(crate::rules::Verification::DependencyBoundary) {
                 definition["configuration_status"] = serde_json::json!(
@@ -1472,6 +1696,8 @@ pub fn rules_list(input: &serde_json::Value) -> Result<serde_json::Value, ApiErr
             }
 
             definition["source"] = serde_json::json!(source);
+            definition["severitySource"] = serde_json::json!(severity_source);
+            definition["drifted"] = serde_json::json!(details.drifted.contains(&rule.id));
             // Preserve the original listing's nullable display fields.
             definition["name"] = serde_json::json!(rule.name);
             definition["description"] = serde_json::json!(rule.description);
@@ -1479,7 +1705,92 @@ pub fn rules_list(input: &serde_json::Value) -> Result<serde_json::Value, ApiErr
         })
         .collect();
 
-    Ok(serde_json::json!({ "rules": rules_json, "diagnostics": diagnostics }))
+    for disabled in &details.disabled_rules {
+        let rule = &disabled.rule;
+        let mut definition = serde_json::to_value(rule).expect("rule serializes");
+        if rule.verification == Some(crate::rules::Verification::DependencyBoundary) {
+            definition["configuration_status"] = serde_json::json!(
+                if crate::rules::boundary_configured(rule).unwrap_or(false) {
+                    "configured"
+                } else {
+                    "requires_configuration"
+                }
+            );
+        }
+
+        definition["severity"] = serde_json::json!("off");
+        definition["source"] = serde_json::json!("override");
+        definition["severitySource"] = serde_json::json!(disabled.severity_source.as_str());
+        definition["drifted"] = serde_json::json!(details.drifted.contains(&rule.id));
+        definition["disabled"] = serde_json::json!(true);
+        // Preserve the original listing's nullable display fields.
+        definition["name"] = serde_json::json!(rule.name);
+        definition["description"] = serde_json::json!(rule.description);
+        rules_json.push(definition);
+    }
+
+    Ok(serde_json::json!({
+        "rules": rules_json,
+        "diagnostics": diagnostics,
+        "orphanedOverrides": details.orphaned_overrides,
+    }))
+}
+
+/// Show a seeded pack against the current built-in version for one rule id.
+fn rules_diff(input: &serde_json::Value, rule_id: &str) -> Result<serde_json::Value, ApiError> {
+    if rule_id.is_empty() {
+        return Err(ApiError::new("invalid_input", "ruleId must not be empty"));
+    }
+    let repo_path = require_repo_dir(input)?;
+    let (builtin_label, builtin_contents) = crate::rules::builtin_rule_pack_for(rule_id)
+        .ok_or_else(|| {
+            ApiError::new(
+                "invalid_input",
+                format!("unknown built-in rule id: {rule_id}"),
+            )
+        })?;
+    let file_name = builtin_label
+        .rsplit('/')
+        .next()
+        .expect("built-in pack label has a file name");
+    let (_, _, details) = crate::rules::load_rules_with_details(repo_path);
+    let seeded_file = details
+        .definition_files
+        .get(rule_id)
+        .cloned()
+        .ok_or_else(|| {
+            ApiError::new(
+                "invalid_input",
+                format!("no seeded pack file found for built-in rule {rule_id}"),
+            )
+        })?;
+    let seed_scope = match details.definition_scopes.get(rule_id) {
+        Some(crate::rules::RuleScope::Repo) => "repo",
+        Some(crate::rules::RuleScope::User) => "user",
+        None => {
+            return Err(ApiError::new(
+                "invalid_input",
+                format!("no seeded pack scope found for built-in rule {rule_id}"),
+            ));
+        }
+    };
+    let seeded_contents = std::fs::read_to_string(&seeded_file).map_err(|error| {
+        ApiError::new(
+            "io_error",
+            format!("failed to read seeded pack {seeded_file}: {error}"),
+        )
+    })?;
+    let diff = similar::TextDiff::from_lines(seeded_contents.as_str(), builtin_contents)
+        .unified_diff()
+        .header(&format!("a/{seeded_file}"), &format!("b/{file_name}"))
+        .to_string();
+
+    Ok(serde_json::json!({
+        "ruleId": rule_id,
+        "file": seeded_file,
+        "seedScope": seed_scope,
+        "diff": diff,
+    }))
 }
 
 /// Materialize the built-in rule packs as editable TOML files in the repo
@@ -1490,6 +1801,18 @@ pub fn rules_seed(
     force: bool,
 ) -> Result<serde_json::Value, ApiError> {
     let repo_path = require_repo_dir(input)?;
+    let rule_id = match input.get("ruleId") {
+        None => None,
+        Some(value) => {
+            let rule_id = value.as_str().ok_or_else(|| {
+                ApiError::new("invalid_input", "ruleId must be a built-in rule ID string")
+            })?;
+            if rule_id.is_empty() {
+                return Err(ApiError::new("invalid_input", "ruleId must not be empty"));
+            }
+            Some(rule_id)
+        }
+    };
 
     let target_dir = if user {
         crate::rules::user_rules_dir()
@@ -1497,12 +1820,18 @@ pub fn rules_seed(
         repo_path.join(".varde-code").join("rules")
     };
 
-    let results = crate::rules::seed_builtin_rules(&target_dir, force).map_err(|e| {
-        ApiError::new(
-            "io_error",
-            format!("failed to seed rules into {}: {e}", target_dir.display()),
-        )
-    })?;
+    let results =
+        crate::rules::seed_builtin_rules_for(&target_dir, force, rule_id).map_err(|e| {
+            let code = if e.kind() == std::io::ErrorKind::InvalidInput {
+                "invalid_input"
+            } else {
+                "io_error"
+            };
+            ApiError::new(
+                code,
+                format!("failed to seed rules into {}: {e}", target_dir.display()),
+            )
+        })?;
 
     let seeded_json: Vec<serde_json::Value> = results
         .iter()
@@ -1768,13 +2097,12 @@ mod orchestration {
 
     #[test]
     fn truncated_findings_offer_toz_handle_and_short_page() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("varde-scan-toz-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let bin = dir.join("toz");
-        std::fs::write(&bin, "#!/bin/sh\ncat >/dev/null\necho '{\"handle\":\"scan-handle\",\"preview\":\"src/a.rs: 101 items\"}'\n").unwrap();
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let _path = crate::test_support::PathOverride::new(&dir);
+        let _path = crate::test_support::CaptureOverride::with(|_, _, _| {
+            Some(
+                serde_json::json!({"handle":"scan-handle","preview":"src/a.rs: 101 items"})
+                    .to_string(),
+            )
+        });
         let findings: Vec<_> = (0..101)
             .map(|i| serde_json::json!({"location":{"file":"src/a.rs"},"id":i}))
             .collect();
@@ -1792,7 +2120,7 @@ mod orchestration {
         assert_eq!(payload["guide"]["toz"]["items"], 101);
         assert_eq!(
             payload["guide"]["truncated"]["findings"]["toz_read"],
-            "toz query --handle scan-handle --lines 21:40"
+            "varde run query --handle scan-handle --lines 21:40"
         );
         assert_eq!(
             crate::query::output::postprocess(&mut payload, &serde_json::json!({}))
@@ -2771,8 +3099,21 @@ rewrite = "logger.info($MSG)"
 
         let by_id = |id: &str| rules.iter().find(|r| r["id"] == id).expect("rule present");
         assert_eq!(by_id("churn-complexity-hotspot")["source"], "override");
+        assert_eq!(
+            by_id("churn-complexity-hotspot")["severitySource"],
+            "repo-rule"
+        );
+        assert_eq!(by_id("churn-complexity-hotspot")["drifted"], false);
         assert_eq!(by_id("no-console")["source"], "custom");
+        assert_eq!(by_id("no-console")["severitySource"], "repo-rule");
+        assert_eq!(by_id("no-console")["drifted"], false);
         assert_eq!(by_id("file-complexity-hotspot")["source"], "builtin");
+        assert_eq!(
+            by_id("file-complexity-hotspot")["severitySource"],
+            "builtin"
+        );
+        assert_eq!(by_id("file-complexity-hotspot")["drifted"], false);
+        assert_eq!(payload["orphanedOverrides"], serde_json::json!([]));
 
         let overridden = by_id("churn-complexity-hotspot");
         assert_eq!(overridden["severity"], "error");
@@ -2849,6 +3190,8 @@ rewrite = "logger.info($MSG)"
             .find(|rule| rule["id"] == "churn-complexity-hotspot")
             .expect("seeded rule present");
         assert_eq!(rule["source"], "override");
+        assert_eq!(rule["severitySource"], "repo-rule");
+        assert_eq!(rule["drifted"], false);
 
         let _ = std::fs::remove_dir_all(&repo);
         let _ = std::fs::remove_dir_all(&home);

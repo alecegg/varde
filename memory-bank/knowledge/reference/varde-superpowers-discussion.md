@@ -55,7 +55,7 @@ excluded at the user's request.
 
 The review policy is encoded in self-contained review-gates.md copies in
 varde-change, varde-review, varde-agent-doc-authoring, varde-docs, and
-varde-prototype. A vendored-copy check keeps them identical. Planner and executor
+varde-prototype. A vendored-copy check keeps them identical. Planner and builder
 instructions were regenerated and installed for Codex, Claude, and OpenCode.
 Updated skills were installed. The affected varde-code binary was rebuilt,
 installed, and checked on full and incremental indexing. No commits were made
@@ -163,7 +163,7 @@ The evidence CLI foundation is committed (64d6950). Full-suite verification expo
 
 ## Topic 2: context recovery (existing coverage)
 
-The user pointed out that plan documents and handoffs already provide recovery.
+The user pointed out that plan documents and session notes already provide recovery.
 Source inspection supports this:
 
 - Plans/task Progress retain decisions, state, and verification evidence.

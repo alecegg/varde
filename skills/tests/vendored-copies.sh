@@ -13,23 +13,26 @@ import glob, re, sys
 
 paragraph = (
     "Resolve `<working>` and `<knowledge>` once with "
-    "`varde-workflow paths --json`; retry once with escalated access, then ask; "
+    "`varde setup paths --json`; retry once with escalated access, then ask; "
     "never guess. Outside a repo, use `mv`, not `git mv`."
 )
 normalized_paragraph = re.sub(r"\s+", " ", paragraph).strip()
+legacy_command = "varde-" + "workflow paths --json"
 
 checked = 0
 for skill_md in sorted(glob.glob("varde-*/SKILL.md")):
     text = open(skill_md, encoding="utf-8").read()
-    if "varde-workflow paths --json" not in text:
+    if legacy_command in text:
+        sys.exit(f"FAIL: {skill_md} still has the legacy memory paragraph")
+    if "varde setup paths --json" not in text:
         continue
     checked += 1
     normalized_text = re.sub(r"\s+", " ", text)
     if normalized_paragraph not in normalized_text:
         sys.exit(f"FAIL: {skill_md}'s memory paragraph differs from the pinned text")
 
-if checked != 6:
-    sys.exit(f"FAIL: expected 6 SKILL.md files to inline the memory paragraph, found {checked}")
+if checked != 7:
+    sys.exit(f"FAIL: expected 7 SKILL.md files to inline the memory paragraph, found {checked}")
 
 print(f"memory-location paragraph: pinned text matched in {checked} SKILL.md file(s)")
 PY

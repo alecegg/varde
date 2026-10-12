@@ -1,0 +1,62 @@
+{
+  "repository": "fixture",
+  "revision": "none",
+  "route": "fixture route",
+  "routes": {
+    "default": [
+      "gate"
+    ],
+    "whole": [
+      "gate",
+      "build"
+    ]
+  },
+  "entries": [
+    "src/a.md"
+  ],
+  "files": [
+    {
+      "path": "src/a.md",
+      "classification": "procedure",
+      "reason": "fixture"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "S-001",
+      "phase": "gate",
+      "source": "src/a.md",
+      "line_start": 3,
+      "line_end": 4,
+      "condition": "Approved?",
+      "alternatives": [
+        "build",
+        "stop"
+      ],
+      "units": 1,
+      "depth": 0,
+      "hash": "9647a4152e38a5d7252b849e354feb466bf4ecef9713a84525c6aeb4a68aa264"
+    },
+    {
+      "id": "S-002",
+      "phase": "build",
+      "source": "src/a.md",
+      "line_start": 6,
+      "line_end": 6,
+      "condition": "Tests fail?",
+      "alternatives": [
+        "fix",
+        "retry",
+        "escalate"
+      ],
+      "units": 2,
+      "depth": 1,
+      "hash": "17e38bc1bd43c5cf40239ff21cd763a6d8b13b9154f41ca7aa089345735b49c3"
+    }
+  ],
+  "calls": [],
+  "exclusions": [],
+  "unresolved_calls": [],
+  "control_ambiguities": [],
+  "coverage_notes": []
+}

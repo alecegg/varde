@@ -639,17 +639,19 @@ mod tests {
                 (0, 'three', 1, 21, 30, 5, 0, 6, 1),
                 (0, 'four', 1, 31, 40, 7, 0, 8, 1),
                 (0, 'five', 1, 41, 50, 9, 0, 10, 1),
+                (0, 'nested', 1, 5, 8, 1, 5, 1, 8),
                 (0, 'test_one', 2, 0, 10, 1, 0, 2, 1);
              INSERT INTO function_metrics (
                  file_id, identity, name, start_byte, end_byte, start_line, start_col,
                  end_line, end_col, cyclomatic, cognitive, max_nesting, line_span,
                  byte_size, confidence, confidence_reasons, metric_version)
              VALUES
-                 (1, 'one@0', 'one', 0, 10, 1, 0, 2, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
-                 (1, 'two@11', 'two', 11, 20, 3, 0, 4, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
-                 (1, 'three@21', 'three', 21, 30, 5, 0, 6, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
-                 (1, 'four@31', 'four', 31, 40, 7, 0, 8, 1, 2, 16, 1, 2, 10, 'high', '[]', 2),
-                 (1, 'five@41', 'five', 41, 50, 9, 0, 10, 1, 2, 16, 1, 2, 10, 'high', '[]', 2);",
+                 (1, 'one@0', 'one', 0, 10, 1, 0, 2, 1, 2, 16, 1, 2, 10, 'high', '[]', 3),
+                 (1, 'two@11', 'two', 11, 20, 3, 0, 4, 1, 2, 16, 1, 2, 10, 'high', '[]', 3),
+                 (1, 'three@21', 'three', 21, 30, 5, 0, 6, 1, 2, 16, 1, 2, 10, 'high', '[]', 3),
+                 (1, 'four@31', 'four', 31, 40, 7, 0, 8, 1, 2, 16, 1, 2, 10, 'high', '[]', 3),
+                 (1, 'five@41', 'five', 41, 50, 9, 0, 10, 1, 2, 16, 1, 2, 10, 'high', '[]', 3),
+                 (1, 'nested@5', 'nested', 5, 8, 1, 5, 1, 8, 2, 40, 2, 1, 3, 'high', '[]', 3);",
         )
         .expect("files fixture rows insert");
 
@@ -668,6 +670,8 @@ mod tests {
         );
         assert_eq!(hotspot_findings[0].location.file, "complex.rs");
         assert_eq!(hotspot_findings[0].certainty, None);
+        assert_eq!(hotspot_findings[0].evidence["complexity"], 80);
+        assert_eq!(hotspot_findings[0].evidence["functions"], 5);
         let _ = std::fs::remove_dir_all(&_dir);
     }
 
@@ -685,6 +689,9 @@ mod tests {
                 (1, 'complex_fn@0', 'complex_fn', NULL,
                  0, 500, 5, 0, 40, 1,
                  21, 16, 4, 36, 500, 'high', '[]', 2),
+                (1, 'nested_fn@100', 'nested_fn', NULL,
+                 100, 300, 12, 0, 25, 1,
+                 21, 18, 4, 14, 200, 'high', '[]', 2),
                 (1, 'boundary_fn@600', 'boundary_fn', NULL,
                  600, 700, 50, 0, 64, 1,
                  20, 15, 2, 15, 100, 'high', '[]', 2),
@@ -707,17 +714,21 @@ mod tests {
             .collect();
         assert_eq!(
             gate_findings.len(),
-            1,
-            "only trusted metrics above a threshold gate: {gate_findings:?}"
+            2,
+            "each trusted nested metric above a threshold gate: {gate_findings:?}"
         );
-        assert_eq!(gate_findings[0].location.file, "a.rs");
-        assert_eq!(
-            gate_findings[0]
-                .evidence
-                .get("name")
-                .and_then(|v| v.as_str()),
-            Some("complex_fn")
-        );
+        let names: Vec<_> = gate_findings
+            .iter()
+            .map(|finding| {
+                assert_eq!(finding.location.file, "a.rs");
+                finding
+                    .evidence
+                    .get("name")
+                    .and_then(|value| value.as_str())
+            })
+            .collect();
+        assert!(names.contains(&Some("complex_fn")));
+        assert!(names.contains(&Some("nested_fn")));
         assert_eq!(gate_findings[0].certainty, None);
 
         let advisory_findings: Vec<&Finding> = findings

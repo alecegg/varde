@@ -7,6 +7,6 @@ set -euo pipefail
 SKILLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$SKILLS_DIR"
 if [ "$#" -gt 0 ]; then
-  exec python3 varde-agent-doc-authoring/scripts/check-length.py "$@"
+  exec varde doc lint "$@"
 fi
-exec python3 varde-agent-doc-authoring/scripts/check-length.py varde-*/
+exec varde doc lint varde-*/

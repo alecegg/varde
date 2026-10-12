@@ -4,7 +4,9 @@ set -euo pipefail
 
 export PATH="$HOME/.cargo/bin:$PATH"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-BIN="$REPO_ROOT/target/release/varde-code"
+BIN="$REPO_ROOT/../target/release/varde"
+MAP=("$BIN" map)
+CONFIG_ROOT="${VARDE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/varde}"
 REF_REPOS="$HOME/source/reference-repos"
 
 require_release_bin() {
@@ -40,5 +42,5 @@ min_of_3() {
 
 clear_varde_cache() {
   local repo_name="$1"
-  rm -rf "$HOME/.config/varde-code/repos/"*"$repo_name"*
+  rm -rf "$CONFIG_ROOT/code/repos/"*"$repo_name"*
 }

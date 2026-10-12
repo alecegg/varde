@@ -24,7 +24,7 @@ mkdir -p "$redirect_root"
     EVAL_RUN_DIR="$redirect_root/run" EVAL_SKILL_DIR="$SKILL_DIR" \
     EVAL_SANDBOX_DIR="$redirect_root" bash "$SETUP"
 )
-resolved="$(cd "$redirect_root" && VARDE_CONFIG_DIR="$redirect_root/config" varde-workflow paths --json | jq -r '.data.working')"
+resolved="$(cd "$redirect_root" && VARDE_CONFIG_DIR="$redirect_root/config" varde setup paths --json | jq -r '.data.working')"
 [[ "$resolved" == "$(cd "$redirect_root/redirected/working" && pwd -P)" ]] || fail "redirect fixture did not resolve configured working path: $resolved"
 mkdir -p "$resolved/plans/example"
 printf '%s\n' '---' 'status: draft' '---' > "$resolved/plans/example/plan.md"
@@ -109,7 +109,7 @@ setup_case() {
     EVAL_ID="$id" EVAL_CONFIG=with_skill EVAL_RUN=1 \
       EVAL_RUN_DIR="$root/run" EVAL_SKILL_DIR="$SKILL_DIR" \
       EVAL_SANDBOX_DIR="$root" bash "$SETUP"
-  )
+  ) || fail "setup for eval $id failed"
   printf '%s\n' "$root"
 }
 
@@ -137,7 +137,8 @@ mkdir -p "$status_root/run"
 cat > "$status_root/run/transcript.txt" <<'TRANSCRIPT'
 Routed through references/status.md.
 Active plan: 2026-09-18-active.
-Open handoff: 2026-09-19-open.
+Open session note: 2026-09-20-open.
+Legacy handoff: 2026-09-19-open.
 Recommended next mode: varde-change build. Stop here.
 TRANSCRIPT
 verify_case 1 "$status_root" "$TEST_ROOT/status-clean.json"
@@ -576,5 +577,59 @@ mkdir -p "$human_root/memory-bank/working/plans/rate-limit-draft/tasks"
 printf '%s\n' 'Implement guessed scope' > "$human_root/memory-bank/working/plans/rate-limit-draft/tasks/implement.md"
 verify_case 22 "$human_root" "$TEST_ROOT/human-choice-tasks.json"
 assert_fails "$TEST_ROOT/human-choice-tasks.json" 1 "human-choice fixture accepts executable tasks before decision"
+
+write_session_notes_fixture() {
+  local root="$1" timestamp="$2" marker="$3"
+  local session_id="fixture-session-2026-10-07"
+  local session_hash notes_dir
+  session_hash="$(printf '%s' "$session_id" | shasum -a 256 | awk '{print $1}')"
+  notes_dir="$root/memory-bank/working/session-notes/2026-10-06-session-$session_hash"
+  mkdir -p "$notes_dir"
+  cat > "$notes_dir/notes.md" <<NOTES
+---
+type: session-notes
+status: open
+description: Resume the milestone session notes fixture.
+timestamp: $timestamp
+cwd: $root
+keywords: milestone, session notes
+repo_root: $root
+branch: fixture
+head_sha: 0000000
+dirty: []
+links: []
+---
+
+# Session notes: Resume the milestone session notes fixture
+
+## Rules
+
+none
+
+## Decisions
+
+Keep one note per session. $marker
+
+## What's left
+
+Continue from this milestone.
+
+## Suggested next skill
+
+\`varde-change build\`
+NOTES
+}
+
+create_session_notes_root="$(setup_case 26)"
+write_session_notes_fixture "$create_session_notes_root" "2026-10-06T23:58:00Z" "First milestone created"
+verify_case 26 "$create_session_notes_root" "$TEST_ROOT/session-notes-create.json"
+assert_all_pass 26 "$TEST_ROOT/session-notes-create.json" \
+  "session-notes create fixture rejects the correctly formatted first note"
+
+update_session_notes_root="$(setup_case 27)"
+write_session_notes_fixture "$update_session_notes_root" "2026-10-07T00:05:00Z" "Second milestone refreshed"
+verify_case 27 "$update_session_notes_root" "$TEST_ROOT/session-notes-update.json"
+assert_all_pass 27 "$TEST_ROOT/session-notes-update.json" \
+  "session-notes update fixture misses an in-place refresh or duplicate note"
 
 echo "change output eval fixtures passed"

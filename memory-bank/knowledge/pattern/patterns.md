@@ -1,6 +1,6 @@
 ---
 type: pattern
-title: varde-code coding patterns
+title: Code scanning patterns
 ---
 
 # Patterns

@@ -8,7 +8,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 
 root = Path(__file__).resolve().parents[1]
-expected_edit = {"varde-planner": "allow", "varde-executor": "allow", "varde-reviewer": "allow", "varde-explorer": "deny"}
+expected_edit = {"varde-planner": "allow", "varde-builder": "allow", "varde-reviewer": "allow", "varde-explorer": "deny"}
 for name, edit in expected_edit.items():
     header = (root / name / "opencode-v2.md").read_text().split("---", 2)[1]
     assert "\ntools:" not in header and "\npermission:" not in header, name

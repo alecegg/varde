@@ -25,8 +25,8 @@ Use user scope only for reusable personal rules:
 Validate and inspect provenance:
 
 ```bash
-varde-code rules test --json '{"rulesDir":"<rules-directory>"}'
-varde-code rules list --json '{"repoRoot":"<repo>"}'
+varde scan test --json '{"rulesDir":"<rules-directory>"}'
+varde scan rules list --json '{"repoRoot":"<repo>"}'
 ```
 
 Read `RULE-FORMAT.md` before writing TOML fields.

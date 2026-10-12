@@ -7,7 +7,7 @@ Direct editing remains supported when formats stay valid.
 
 - `knowledge/` contains durable, committed project knowledge.
 - `config/` contains durable, committed workflow configuration.
-- The working store selected by `varde-workflow paths --json` contains local
+- The working store selected by `varde setup paths --json` contains local
   plans, reviews, evidence, and friction observations.
 
 Personal knowledge belongs outside this repository entirely.

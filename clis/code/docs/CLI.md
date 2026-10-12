@@ -1,8 +1,8 @@
 # CLI
 
-The `varde-code` binary is a library plus a single CLI: one subcommand per query
-mode, plus `extract`, `build`, `scan`, `test`, the `rules_*` and `hooks`
-management commands, `slice_state`, and `watch`.
+The `varde-code` package is surfaced through the unified `varde` CLI. Query
+modes use `varde map`; scans and rule management use `varde scan`; watcher and
+hook setup use `varde setup`.
 Global flag: `-v`/`--verbose` (only applies when `RUST_LOG` is unset).
 
 ## Conventions
@@ -34,7 +34,7 @@ a file-grouped `toc`. The default inline page becomes 20 items; explicit
 For `find_pattern`, each stored row contains the file, kind, span, and first
 160 characters of match text (`meta.toz.projection: "match_preview_160"`).
 Use `matchesOffset` or `fullMatches` for full text and captures beyond the inline page.
-Use `toz query --handle <H> --lines 101:200` to read a one-based inclusive
+Use `varde run query --handle <H> --lines 101:200` to read a one-based inclusive
 range or search the handle by term. The next-page command is also in
 `data.guide.truncated.<list>.toz_read` or, for array payloads,
 `meta.pagination.<list>.toz_read`. Set `VARDE_CODE_TOZ=0` to disable capture.
@@ -46,9 +46,17 @@ slices are checked against that database. `find_pattern` parses live source.
 `dbPath` alone. `batch` applies these rules to each child after inheriting its
 parent input. Missing and stale indexes return `index_missing` and
 `index_stale` error codes in the normal JSON envelope. Queries never update
-the index; on either code, run `watch --ensure` and retry. `find_pattern` needs
-no index. If `watch --ensure` fails, search source until watcher coverage
-returns.
+the index; on either code, run `varde setup watch --ensure --repo <repo-root>`
+and retry. `find_pattern` needs no index. If that command fails, search source
+until watcher coverage returns.
+
+In a linked git worktree, a query whose worktree index is missing reads the
+main checkout's index instead, read-only, and adds a `base_index` note to the
+envelope carrying the main checkout's identity hash and a warning that answers
+may not reflect files the worktree changed. Nothing is built or written for
+the worktree. A worktree index, when present, wins; when the main checkout has
+no index either, the query returns `index_missing`. `dbPath` overrides are
+unchanged.
 
 Two output-shaping fields are accepted by every query mode and by `scan`:
 
@@ -76,7 +84,7 @@ repository orientation with up to five entrypoints, four shallow flows, and
 dependency graph, and hotspot data. It also captures a rendering without the
 token budget to `toz` when available
 (per-section hard caps still apply). A successful capture appends the handle
-and `varde-toz query` commands for searching or reading the expanded map. If
+and `varde run query` commands for searching or reading the expanded map. If
 Toz is disabled, unavailable, or capture fails, the orientation is unchanged.
 Query errors retain their raw envelope. Set `VARDE_CODE_TOZ=0` to disable
 capture. Add `--with-project-knowledge` to
@@ -95,6 +103,24 @@ present, without loading its contents. Session-start hooks use this option.
   `changedFilesCount` plus a small `changedFilesSample`; pass `--changed-files`
   to include the full `changedFiles` array instead (on a full build that is
   every reparsed path in the repo).
+- **`prune --json '{apply?, unknownOlderThanDays?}'`** — Remove index folders
+  under the code config root whose recorded source folder is gone. Every build
+  writes a `source-root` sidecar beside `index.db`; `prune` reads it and
+  classifies each folder as `source_missing` (recorded path no longer exists)
+  or kept (path exists). A folder with no sidecar, or an empty or unreadable
+  one, is `unknown`. The default is a dry run: nothing is deleted unless
+  `apply: true`, which removes `source_missing` folders only. Add
+  `unknownOlderThanDays: N` to also remove `unknown` folders whose `index.db`
+  was last modified at least `N` days ago (`unknown_idle`); without it,
+  `unknown` folders are reported and kept. Folders whose repository lock is
+  held by a live process are skipped. Deletion removes the whole
+  `repos/<name>-<hash>/` folder (database, sidecars, and lock). The envelope's
+  `data` reports `apply`, `removed`/`wouldRemove`, `failed`, `unknown`,
+  `keptBytes`, `selectedBytes`, and `counts` (`scanned`, `removed`/
+  `wouldRemove`, `failed`, `unknown`, `locked`, `kept`). A folder whose
+  deletion fails is recorded in `failed` (with its error) and the scan
+  continues, so `removed` still names the folders already deleted. Always
+  exits zero, including invalid input; pruning index caches is not a CI gate.
 
 ## Query modes
 
@@ -216,13 +242,14 @@ before source rewrites. Stale suppressions are informational and checked only
 in files containing findings.
 Successfully applied findings stop blocking; skipped rewrites remain unresolved.
 All 21 extraction languages have tested complexity profiles.
-The syntax pack covers 35 declared rule-language pairs.
+The syntax pack covers 127 declared rule-language pairs.
 The six informational rules are `vertical-slice-sprawl`,
 `churn-complexity-hotspot`, `function-complexity-advisory`, `solid-lsp`,
 `solid-isp`, and `console-log-strict`; selecting `info` includes them.
-Certified dependency facts cover relative JS/TS/TSX/Dart/Solidity paths and Go
-module package units. Cycle detection reports direct reciprocal pairs only.
-See [built-in coverage](../BUILT_IN_RULES.md) for thresholds and exceptions.
+Certified dependency facts cover all 21 extraction languages. Cycle detection
+reports direct reciprocal pairs only.
+See [built-in coverage](../BUILT_IN_RULES.md) "Certified dependency facts" for
+per-language units and limits, thresholds and exceptions.
 
 ## Rules management
 
@@ -272,7 +299,7 @@ These commands use flat flags instead of `--json`.
 
 ## Background watcher
 
-These commands describe the current checkout. Check `varde-code watch --help`
+These commands describe the current checkout. Check `varde setup watch --help`
 for `--ensure` before starting supervised coverage. If the option is missing
 or rejected, the installed binary predates this interface; follow the
 [README upgrade instructions](../README.md#usage). Use source search until a
@@ -296,5 +323,9 @@ watcher; it does not register a persistent user service.
 - **`watch --stop --repo ROOT`** — Stop and unregister that repo's supervised
   watcher, or stop a matching foreground watcher. It waits for kernel ownership
   to release before returning.
+- **`watch --stop --remove-index --repo ROOT`** — Stop the repo's watcher and
+  remove its `varde-code` index using the same derived path as builds and
+  queries. The command attempts index removal even if stopping fails, and exits
+  non-zero if either operation fails. A missing index is already clean.
 - **`watch --stop-all`** — Try every running watcher. Per-instance failures are
   included in the result array and do not prevent later stops.

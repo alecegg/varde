@@ -23,7 +23,7 @@ grep -Fq 'varde-example/references/bundle.md:2' "$fixture/result" || {
   cat "$fixture/result" >&2
   exit 1
 }
-printf '%s\n' 'When varde-workflow is unavailable, use memory-bank/working for plans.' \
+printf '%s\n' 'When varde is missing, use memory-bank/working for plans.' \
   > "$fixture/varde-example/references/bundle.md"
 if "$script_dir/storage-fallbacks.sh" "$fixture" > "$fixture/result" 2>&1; then
   echo 'FAIL: storage fallback guard missed unavailable wording' >&2

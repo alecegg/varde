@@ -24,8 +24,8 @@ key=$(printf 'build|%s' "$repo_root" | shasum -a 1 | cut -d' ' -f1)
 state_file="$state_dir/$key"
 
 clear_varde_cache "$cache_name"
-cold=$(time_ms "$BIN" build --repo-root "$repo_root")
-warm=$(time_ms "$BIN" build --repo-root "$repo_root")
+cold=$(time_ms "${MAP[@]}" build --repo-root "$repo_root")
+warm=$(time_ms "${MAP[@]}" build --repo-root "$repo_root")
 
 echo "repo:  $repo_root"
 echo "cold:  ${cold}ms"

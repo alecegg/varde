@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# select-plans.py filters, orders, and reports cycles with a fake varde-workflow.
+# select-plans.py filters, orders, and reports cycles with a fake varde plan CLI.
 
 SKILLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$SKILLS_DIR/varde-change/scripts/select-plans.py"
@@ -41,16 +41,18 @@ cat >"$FX/2026-01-blocked.readiness.json" <<'J'
 {"data":{"blockers":[{"artifact_id":"2026-01-blocked","code":"dependency_incomplete","dependency":"z","status":"backlog"}],"implementation_ready":false,"planning_ready":false}}
 J
 cat >"$FX/2026-02-b.readiness.json" <<'J'
-{"data":{"blockers":[],"implementation_ready":false,"planning_ready":true,"review":{"blockers":[{"code":"review_missing"}]}}}
+{"data":{"blockers":[],"implementation_ready":false,"planning_ready":true}}
 J
 # The cycle appears only in the second candidate's graph.
 cat >"$FX/2026-01-cyc-y.graph.json" <<'J'
 {"data":{"blockers":[{"artifact_id":"2026-01-cyc-y","code":"dependency_cycle","dependency":"2026-01-cyc-x","status":null}]}}
 J
 
-cat >"$BIN/varde-workflow" <<'FAKE'
+cat >"$BIN/varde" <<'FAKE'
 #!/usr/bin/env bash
 # Serves fixtures; graph without --all is an error, as pagination would hide cycles.
+[[ "${1:-}" == plan ]] || { echo "expected plan command" >&2; exit 2; }
+shift
 verb="$1"; plan_file="$2"; shift 2
 echo "$verb $*" >>"$FX/calls.log"
 id="$(basename "$(dirname "$plan_file")")"
@@ -63,7 +65,7 @@ fi
 file="$FX/$id.$verb.json"
 if [ -f "$file" ]; then cat "$file"; else echo "$default"; fi
 FAKE
-chmod +x "$BIN/varde-workflow"
+chmod +x "$BIN/varde"
 
 export FX
 PY="$(command -v python3)"
@@ -74,7 +76,7 @@ check 'assert [p["id"] for p in d["plans"]] == ["2026-01-a","2026-01-oq-empty","
 check 'assert d["excluded_by_dependency"] == 3' "excluded_by_dependency (blocked + two cycle plans)"
 check 'assert d["cycles"] == ["2026-01-cyc-x","2026-01-cyc-y"]' "cycles from second candidate"
 check 'assert d["degraded"] is False' "degraded set with workflow"
-check 'p = [p for p in d["plans"] if p["id"]=="2026-02-b"][0]; assert p["implementation_ready"] is False and p["blockers"] == [{"code":"review_missing"}] and p["title"] == "Title 2026-02-b"' "review blocker kept selectable"
+check 'p = [p for p in d["plans"] if p["id"]=="2026-02-b"][0]; assert p["implementation_ready"] is False and p["blockers"] == [] and p["title"] == "Title 2026-02-b"' "readiness blockers kept selectable"
 graphs="$(grep -c '^graph' "$FX/calls.log")"
 [ "$graphs" -eq 8 ] || fail "expected one graph call per candidate (8), got $graphs"
 [ "$(grep '^graph' "$FX/calls.log" | grep -vc -- '--all')" -eq 0 ] || fail "graph call without --all"

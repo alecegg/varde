@@ -1,7 +1,7 @@
 # varde-explore flow
 
 Generated for human readers; agents do not load this file. Regenerate
-with skill-flow.py --write from varde-agent-doc-authoring. Dotted edges
+with `varde doc flow --write`. Dotted edges
 are conditional loads; min tokens follow only solid edges. Thick edges
 are hand-offs to a later stage, outside min and max. Double-bordered
 nodes are skill modes run inline or agent dispatches. Min and max count
@@ -11,9 +11,9 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~306 tok; routes: An explicit ask to explain a diff or code area, or compar...)
+- SKILL.md (~332 tok; routes: An explicit ask to explain a diff or code area, or compar...)
   - references/explain.md (~506 tok; routes: An explicit ask to explain a diff or code area, or compar...)
-  - references/varde-code-cli.md (~46 tok; routes: An explicit ask to explain a diff or code area, or compar...)
+  - references/varde-code-cli.md (~54 tok; routes: An explicit ask to explain a diff or code area, or compar...)
 
 ```mermaid
 flowchart TD
@@ -24,14 +24,14 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  n0["references/explain.md (~506 tok)<br/>ref: references/varde-code-cli.md (~46 tok)"]
+  n0["references/explain.md (~506 tok)<br/>ref: references/varde-code-cli.md (~54 tok)"]
 ```
 
 ## Routes
 
 | Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |
 |---|---|---|---|---|---|---|---|
-| An explicit ask to explain a diff or code area, or compar... | ~858 | ~858 | ~858 | ~858 | - | 0 | references/explain.md, references/varde-code-cli.md |
+| An explicit ask to explain a diff or code area, or compar... | ~892 | ~892 | ~892 | ~892 | - | 0 | references/explain.md, references/varde-code-cli.md |
 
 ## Structure
 

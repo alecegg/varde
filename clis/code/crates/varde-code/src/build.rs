@@ -1,5 +1,6 @@
 //! `build` subcommand: populate the persisted SQLite index the 17 query
-//! modes read from (`~/.config/varde-code/repos/<name>-<hash>/index.db`).
+//! modes read from (`<varde config root>/code/repos/<name>-<hash>/index.db`,
+//! default `~/.config/varde/code/repos/<name>-<hash>/index.db`).
 //!
 //! Before this existed, `extract` only printed JSON to stdout and nothing
 //! ever wrote to that database — every query mode failed with `db_error` on
@@ -99,6 +100,7 @@ pub fn run_with_force(repo_root: &str, force: bool) -> Result<BuildSummary> {
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    crate::db::path::record_source_root(&db_path, Path::new(repo_root))?;
 
     if force {
         return run_full(repo_root, &db_path);
@@ -1048,23 +1050,27 @@ mod tests {
         std::fs::write(root.join("a.ts"), "import { foo } from './x';\nfoo();\n").unwrap();
         std::fs::write(root.join("x.ts"), "export function foo() { return 1; }\n").unwrap();
         run_full_while_locked(root.to_str().unwrap(), &db).unwrap();
-        let target_id = || {
+        let target = || {
             crate::db::open(&db).unwrap().query_row(
-                "SELECT t.id FROM resolved_edges e JOIN entities t ON t.id = e.to_entity_id JOIN files f ON f.id = e.from_file_id WHERE e.kind = 0 AND f.path LIKE '%/a.ts' AND t.name = 'foo'",
-                [], |r| r.get::<_, i64>(0),
+                "SELECT t.id, t.end_byte FROM resolved_edges e JOIN entities t ON t.id = e.to_entity_id JOIN files f ON f.id = e.from_file_id WHERE e.kind = 0 AND f.path LIKE '%/a.ts' AND t.name = 'foo'",
+                [], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
             ).expect("unchanged caller must target the current foo declaration")
         };
-        let before = target_id();
+        let (before_id, before_end) = target();
         std::fs::write(
             root.join("x.ts"),
             "export function foo() { return 12345; }\n",
         )
         .unwrap();
         run_incremental(root.to_str().unwrap(), &db).unwrap();
+        let (after_id, after_end) = target();
+        assert_eq!(
+            before_id, after_id,
+            "a matching callee declaration keeps its entity id, so the caller edge is not rewritten"
+        );
         assert_ne!(
-            before,
-            target_id(),
-            "callee reparse must refresh incoming target IDs"
+            before_end, after_end,
+            "the kept callee row must carry the reparsed span"
         );
         let _ = std::fs::remove_file(db);
         let _ = std::fs::remove_dir_all(root);

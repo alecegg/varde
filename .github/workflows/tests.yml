@@ -26,13 +26,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [code, workflow, toz, learn]
+        module: [shared, code, workflow, toz, learn, doc]
     steps:
       - uses: actions/checkout@v5
       - run: rustup toolchain install stable --profile minimal
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "clis/${{ matrix.module }} -> target"
+          workspaces: "clis -> target"
       - uses: taiki-e/install-action@v2
         with:
           tool: just

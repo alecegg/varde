@@ -316,6 +316,10 @@ fn invoke_harness(
             args.extend(["exec".to_string(), "--json".to_string(), query.to_string()]);
         }
     }
+    let sandbox = tempfile::Builder::new()
+        .prefix("varde-learn-trigger-sbox-")
+        .tempdir()
+        .map_err(|error| LearnError::Usage(format!("failed to create trigger sandbox: {error}")))?;
     let output_dir = tempfile::tempdir().map_err(|error| {
         LearnError::Usage(format!(
             "failed to create trigger output directory: {error}"
@@ -326,7 +330,7 @@ fn invoke_harness(
     let request = RunRequest {
         program: harness.as_str(),
         args: &args,
-        cwd: None,
+        cwd: Some(sandbox.path()),
         env: &[],
         stdin: &[],
         stdout_path: &stdout_path,

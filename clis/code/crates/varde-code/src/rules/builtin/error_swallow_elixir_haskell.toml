@@ -1,0 +1,146 @@
+# Error-swallowing rules for elixir, haskell.
+# Severity evidence: error needs zero false positives across this repository and
+# at least three reference repositories per language; tighten on a false positive.
+#
+# Languages and forms:
+# - elixir swallows through a `rescue` clause that returns `nil`, a `catch`
+#   clause that returns `:ok`, and a bare `_ = call(...)` discard. The rescue
+#   and catch patterns anchor on the surrounding `try`/`def`/`defp` construct
+#   because a bare `rescue _ -> nil` clause has no top-level syntax of its own;
+#   the `HEAD` constraint keeps the match on the constructs that can actually
+#   carry the clause. A `_ = call(...)` discard is the author's explicit
+#   "ignore this result" marker, the same idiom as Go's blank identifier, so it
+#   ships at `warning`; a literal or variable RHS (`_ = 5`, `_ = x`) stays valid.
+# - haskell swallows through a `catch`/`handle` handler that returns unit
+#   (`\_ -> pure ()` / `\_ -> return ()`) instead of logging, re-raising or
+#   returning the error, and through `_ <- try ...`, which discards the `Either`
+#   the action produced. The handler constraint accepts a single-expression
+#   lambda whose body is exactly `pure ()`/`return ()` (optionally
+#   parenthesized, any parameter) and rejects a multi-branch body (a further
+#   `->`, `case`, `of`, `do` or `;`), so a handler that logs or rethrows in
+#   another branch stays valid; a named handler is not matched, so
+#   `bar \`catch\` handler` stays valid.
+#
+# Measured 2026-10-10 with the branch binary (`map find_pattern` against the
+# read-only clones; constraints and `exclude_test_paths` applied):
+# see the task Progress table in
+# /Users/alec/source/agent-memory/projects/varde/working/plans/2026-10-08-scan-rule-coverage/tasks/src-swallow-elixir-haskell.md
+#
+# `exclude_test_paths` drops findings in test-path files, where these shapes are
+# written deliberately (a test asserting a raised exception, a fixture helper).
+# This repository has no Elixir or Haskell source, so these rules add no
+# default-gate finding.
+
+[[rule]]
+id = "error-swallow-elixir"
+kind = "pattern"
+severity = "error"
+name = "Elixir swallowed rescue"
+description = "A `rescue` clause returns `nil`, discarding the exception without handling it."
+message = "swallowed exception: the `rescue` clause returns nil and the error is never handled"
+remediation = "log the exception, re-raise it, or return it to the caller"
+pattern = "$HEAD $$$ARGS do $$$A rescue _ -> nil end"
+languages = ["elixir"]
+exclude_test_paths = true
+constraints = { HEAD = '^(try|def|defp|defmacro|defmacrop)$' }
+
+[[rule]]
+id = "error-swallow-elixir-catch"
+kind = "pattern"
+severity = "error"
+name = "Elixir swallowed catch"
+description = "A `catch` clause returns `:ok`, discarding the thrown or exited value without handling it."
+message = "swallowed throw or exit: the `catch` clause returns :ok and the value is never handled"
+remediation = "log the caught value, re-raise it, or return it to the caller"
+pattern = "$HEAD $$$ARGS do $$$A catch _, _ -> :ok end"
+languages = ["elixir"]
+exclude_test_paths = true
+constraints = { HEAD = '^(try|def|defp|defmacro|defmacrop)$' }
+
+[[rule]]
+id = "error-swallow-elixir-discard"
+kind = "pattern"
+severity = "warning"
+name = "Elixir discarded call result"
+description = "A call result is bound to `_`, discarding a value that may be an error."
+message = "discarded call result: the call's return value is bound to `_`"
+remediation = "handle the result, or assert the expected value so a failure is not silent"
+pattern = "_ = $CALL($$$ARGS)"
+languages = ["elixir"]
+exclude_test_paths = true
+
+[[rule]]
+id = "error-swallow-haskell"
+kind = "pattern"
+severity = "error"
+name = "Haskell swallowed catch"
+description = "A `catch` handler returns unit, ignoring the exception instead of handling it."
+message = "swallowed exception: the `catch` handler returns unit and the error is never handled"
+remediation = "log the exception, re-raise it, or return it to the caller"
+pattern = "catch $ACTION $HANDLER"
+languages = ["haskell"]
+exclude_test_paths = true
+constraints = { HANDLER = '^\(\s*\\[^->]*->\s*\(?(?:pure|return)\s+\(\s*\)[\s)]*$' }
+
+[[rule]]
+id = "error-swallow-haskell-infix"
+kind = "pattern"
+severity = "error"
+name = "Haskell swallowed infix catch"
+description = "An infix `catch` handler returns unit, ignoring the exception instead of handling it."
+message = "swallowed exception: the infix `catch` handler returns unit and the error is never handled"
+remediation = "log the exception, re-raise it, or return it to the caller"
+pattern = "$ACTION `catch` $HANDLER"
+languages = ["haskell"]
+exclude_test_paths = true
+constraints = { HANDLER = '^\(\s*\\[^->]*->\s*\(?(?:pure|return)\s+\(\s*\)[\s)]*$' }
+
+[[rule]]
+id = "error-swallow-haskell-handle"
+kind = "pattern"
+severity = "error"
+name = "Haskell swallowed handle"
+description = "A `handle` handler returns unit, ignoring the exception instead of handling it."
+message = "swallowed exception: the `handle` handler returns unit and the error is never handled"
+remediation = "log the exception, re-raise it, or return it to the caller"
+pattern = "handle $HANDLER $ACTION"
+languages = ["haskell"]
+exclude_test_paths = true
+constraints = { HANDLER = '^\(\s*\\[^->]*->\s*\(?(?:pure|return)\s+\(\s*\)[\s)]*$' }
+
+[[rule]]
+id = "error-swallow-haskell-try"
+kind = "pattern"
+severity = "error"
+name = "Haskell discarded try result"
+description = "`_ <- try action` discards the `Either` the action produced, hiding the exception."
+message = "discarded error value: `_ <- try` drops the Either the action returned"
+remediation = "bind the result and handle the Left case, or let the exception propagate"
+pattern = "do { _ <- try $ACTION; $$$AFTER }"
+languages = ["haskell"]
+exclude_test_paths = true
+
+# These exact shapes ship at `warning`: syntax alone cannot determine whether
+# an arbitrary rescue/catch body handles the error, whether a named Haskell
+# handler handles it, or whether a broader `Left` branch is safe in context.
+# A separate `Left _ -> return ()` rule is an accepted limit: the Haskell
+# matcher rejects standalone case-alternative patterns as unparseable.
+# A bare Elixir rescue/catch clause without its enclosing `try`/function is
+# not matched because the clause has no independent top-level syntax.
+#
+# A `_ <- try` that follows other statements needs its own pattern: a leading
+# variadic capture cannot match empty here. The two forms cover the head,
+# middle and sole-statement positions; the matcher's variadic backtracking
+# leaves a narrow gap (a `_ <- try` that is the last statement after exactly
+# one preceding statement) recorded in the task Progress.
+[[rule]]
+id = "error-swallow-haskell-try-late"
+kind = "pattern"
+severity = "error"
+name = "Haskell discarded try result after other statements"
+description = "`_ <- try action` after earlier do-statements discards the `Either` the action produced."
+message = "discarded error value: `_ <- try` drops the Either the action returned"
+remediation = "bind the result and handle the Left case, or let the exception propagate"
+pattern = "do { $$$BEFORE; _ <- try $ACTION; $$$AFTER }"
+languages = ["haskell"]
+exclude_test_paths = true

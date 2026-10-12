@@ -1,0 +1,249 @@
+== varde-change (SKILL.md ~575 tokens)
+Routes:
+  "What's in flight?", or an empty invocation — show curren...  [~813-3852 tokens with SKILL.md; main agent ~813-3852]
+    references/status.md (~238)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    handoff: references/plan.md
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  Plan a new feature before building  [~5844-9975 tokens with SKILL.md; main agent ~5844-9975]
+    references/plan.md (~2806)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    scripts/plan-path.py
+    references/varde-code-cli.md (~53)
+    references/plan-decomposition.md (~1039)
+    references/build-worktree.md (~1818)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    references/build-parallel.md (~645)
+    scripts/worktree-create.sh
+    scripts/worktree-permissions.py
+    scripts/worktree-wave.sh
+    handoff: varde-change plan
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  Resume planning with no feature named  [~5844-9975 tokens with SKILL.md; main agent ~5844-9975]
+    references/plan.md (~2806)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    scripts/plan-path.py
+    references/varde-code-cli.md (~53)
+    references/plan-decomposition.md (~1039)
+    references/build-worktree.md (~1818)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    references/build-parallel.md (~645)
+    scripts/worktree-create.sh
+    scripts/worktree-permissions.py
+    scripts/worktree-wave.sh
+    handoff: varde-change plan
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  One task file assigned by an orchestrator (builder)  [~1941-6688 tokens with SKILL.md; main agent ~1941-6688]
+    references/build-execution.md (~1366)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/build-worktree.md (~1818)
+    scripts/worktree-permissions.py
+    references/build-posture-debug.md (~989)
+    references/build-posture-refactor.md (~838)
+    references/build-parallel.md (~645)
+    scripts/worktree-create.sh
+    scripts/worktree-wave.sh
+  A settled single-outcome refactor  [~4495-7534 tokens with SKILL.md; main agent ~4495-7534]
+    references/build-micro-change.md (~619)
+    references/build-posture-refactor.md (~838)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/build-worktree.md (~1818)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    references/build-parallel.md (~645)
+    scripts/worktree-create.sh
+    scripts/worktree-permissions.py
+    scripts/worktree-wave.sh
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  A settled single-outcome change that fits one task  [~3657-6696 tokens with SKILL.md; main agent ~3657-6696]
+    references/build-micro-change.md (~619)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/build-worktree.md (~1818)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    references/build-parallel.md (~645)
+    scripts/worktree-create.sh
+    scripts/worktree-permissions.py
+    scripts/worktree-wave.sh
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  A named plan, multiple dependent outcomes, or unresolved...  [~5313-15168 tokens with SKILL.md; main agent ~5313-15168]
+    references/build.md (~2275)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/review-gate-plan.md (~538)
+    references/varde-code-cli.md (~53)
+    references/build-worktree.md (~1818)
+    references/plan-decomposition.md (~1039)
+    references/build-execution.md (~1366)
+    references/build-recovery.md (~373)
+    references/build-finish.md (~1689)
+    scripts/select-plans.py
+    references/orchestration.md (~469)
+    references/build-parallel.md (~645)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    scripts/worktree-create.sh
+    scripts/worktree-permissions.py
+    references/build-posture-debug.md (~989)
+    references/build-posture-refactor.md (~838)
+    scripts/worktree-merge.sh
+    scripts/worktree-wave.sh
+    handoff: varde-change plan
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/build-finish.md:27, references/review-gates.md:89
+    dispatch builder: varde-change: One task file assigned by an orchestrator (builder), ~3111-7858 per dispatch, from references/build-finish.md:51, references/build.md:58, references/build.md:139, references/orchestration.md:14, references/orchestration.md:18
+  Diagnose why something fails, without fixing it  [~3114-4603 tokens with SKILL.md; main agent ~3114-4603]
+    references/build-posture-debug.md (~989)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    dispatch review: review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  Fix a named bug or regression, no mode given  [~3114-4603 tokens with SKILL.md; main agent ~3114-4603]
+    references/build-posture-debug.md (~989)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    dispatch review: review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  Report evidence for finished work without changing anything  [~1053-4092 tokens with SKILL.md; main agent ~1053-4092]
+    references/verify.md (~478)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    handoff: varde-change build
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  Run a group of related plans end to end, in dependency order  [~8035-9524 tokens with SKILL.md; main agent ~10310-16926]
+    references/orchestrate.md (~1758)
+    references/review-gates.md (~1550)
+    references/varde-workflow-cli.md (~219)
+    references/workflow-state.md (~238)
+    references/build-worktree.md (~1818)
+    references/build-finish.md (~1689)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    references/build-parallel.md (~645)
+    scripts/worktree-create.sh
+    scripts/worktree-permissions.py
+    scripts/worktree-merge.sh
+    scripts/worktree-wave.sh
+    inline: varde-change build -> varde-change: A named plan, multiple dependent outcomes, or unresolved...
+    unresolved: varde-change builds
+    dispatch review: review gate, ~2442-3474 per dispatch, from references/build-finish.md:27, references/review-gates.md:89
+    dispatch builder: varde-change: One task file assigned by an orchestrator (builder), ~3111-7858 per dispatch, from references/build-finish.md:51, references/build.md:58, references/build.md:139, references/orchestration.md:14, references/orchestration.md:18
+Structure:
+  Mutual links: 0 (target 0) ok
+  Max links out of one file: 11 (references/build.md) (target < 6) warning
+  Average links per linking file: 3.08 (40 links, 13 files) (target <= 2) warning
+  Cross-module edges: 25 (target -) -
+  Diagram edges: 88 (target <= 60) warning
+  Max route cyclomatic: 29 (target <= 10) warning
+  Max route cognitive: 68 (target <= 10 warn, <= 15 error) defect
+  Most files reached by one route: 22 (A named plan, multiple dependent outcomes, or unresolved...) (target <= 15) warning
+Findings:
+  single caller: references/build-recovery.md <- references/build.md
+  single caller: references/build.md <- SKILL.md: A named plan, multiple dependent outcomes, or unresolved...
+  single caller: references/orchestrate.md <- SKILL.md: Run a group of related plans end to end, in dependency order
+  single caller: references/orchestration.md <- references/build.md
+  single caller: references/status.md <- SKILL.md: "What's in flight?", or an empty invocation — show curren...
+  single caller: references/verify.md <- SKILL.md: Report evidence for finished work without changing anything
+  single caller: references/workflow-state.md <- SKILL.md: Gotchas
+  shared: references/build-execution.md <- SKILL.md: One task file assigned by an orchestrator (builder); references/build.md
+  shared: references/build-finish.md <- references/build.md; references/orchestrate.md
+  shared: references/build-micro-change.md <- SKILL.md: A settled single-outcome change that fits one task; SKILL.md: A settled single-outcome refactor
+  shared: references/build-parallel.md <- references/build-worktree.md; references/build.md
+  shared: references/build-posture-debug.md <- SKILL.md: Diagnose why something fails, without fixing it; SKILL.md: Fix a named bug or regression, no mode given; references/build-execution.md
+  shared: references/build-posture-refactor.md <- SKILL.md: A settled single-outcome refactor; references/build-execution.md
+  shared: references/build-worktree.md <- references/build-execution.md; references/build-finish.md; references/build-micro-change.md; references/build-posture-refactor.md; references/build.md; references/orchestrate.md; references/plan.md
+  shared: references/plan-decomposition.md <- references/build.md; references/plan.md
+  shared: references/plan.md <- SKILL.md: Plan a new feature before building; SKILL.md: Resume planning with no feature named; references/status.md
+  fan-out: references/build.md (11 links out, target < 6)
+  fan-out: references/plan.md (6 links out, target < 6)
+  density: average 3.08 links per linking file (target <= 2)
+
+== varde-docs (SKILL.md ~226 tokens)
+Routes:
+  User-facing: README.md, docs/*.md, CHANGELOGs, release no...  [~682-3317 tokens with SKILL.md; main agent ~682-3317]
+    references/refresh.md (~456)
+    references/review-gates.md (~1550)
+    references/varde-code-cli.md (~53)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+  A generated domain specification under <knowledge>/specs/...  [~2531-5113 tokens with SKILL.md; main agent ~2531-5113]
+    references/spec.md (~1435)
+    references/review-gates.md (~1550)
+    references/spec-format.md (~817)
+    references/varde-code-cli.md (~53)
+    references/review-gate-plan.md (~538)
+    references/review-gate-worktree.md (~494)
+    scripts/risk-tier.py
+    scripts/source-hash.py
+    dispatch builder: varde-change: One task file assigned by an orchestrator (builder), ~3111-7858 per dispatch, from references/spec.md:44
+    dispatch review (conditional): review gate, ~2442-3474 per dispatch, from references/review-gates.md:89
+Structure:
+  Mutual links: 0 (target 0) ok
+  Max links out of one file: 3 (references/review-gates.md) (target < 6) ok
+  Average links per linking file: 1.6 (8 links, 5 files) (target <= 2) ok
+  Cross-module edges: 5 (target -) -
+  Diagram edges: 18 (target <= 60) ok
+  Max route cyclomatic: 4 (target <= 10) ok
+  Max route cognitive: 7 (target <= 10 warn, <= 15 error) ok
+  Most files reached by one route: 8 (A generated domain specification under <knowledge>/specs/...) (target <= 15) ok
+Findings:
+  chain: references/spec-format.md <- references/spec.md
+  single caller: references/refresh.md <- SKILL.md: User-facing: README.md, docs/*.md, CHANGELOGs, release no...
+  single caller: references/spec.md <- SKILL.md: A generated domain specification under <knowledge>/specs/...
+
+== varde-flow-gaps (SKILL.md ~57 tokens)
+Routes:
+  Plan the work  [~97-97 tokens with SKILL.md; main agent ~97-97]
+    references/alpha.md (~24)
+    references/beta.md (~16)
+  Check the work  [~73-97 tokens with SKILL.md; main agent ~73-97]
+    references/beta.md (~16)
+    references/alpha.md (~24)
+Structure:
+  Mutual links: 1 (target 0) defect
+  Max links out of one file: 1 (references/beta.md) (target < 6) ok
+  Average links per linking file: 1.0 (2 links, 2 files) (target <= 2) ok
+  Cross-module edges: 2 (target -) -
+  Diagram edges: 4 (target <= 60) ok
+  Max route cyclomatic: 2 (target <= 10) ok
+  Max route cognitive: 3 (target <= 10 warn, <= 15 error) ok
+  Most files reached by one route: 2 (Plan the work) (target <= 15) ok
+Findings:
+  shared: references/alpha.md <- SKILL.md: Plan the work; references/beta.md
+  shared: references/beta.md <- SKILL.md: Check the work; references/alpha.md
+  unreferenced: references/orphan.md
+  missing: references/alpha.md:3 -> references/ghost.md
+  cycle: references/alpha.md <-> references/beta.md

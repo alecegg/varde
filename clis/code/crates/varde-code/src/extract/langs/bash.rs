@@ -158,9 +158,21 @@ fn visit_part_2(
         // ---- control-flow ----
         // `until` reuses `while_statement`. `return`/`break`/`continue` are
         // commands (handled in `visit_command`), not distinct nodes here.
-        "if_statement" | "elif_clause" | "else_clause" | "for_statement" | "while_statement"
-        | "case_statement" | "case_item" => {
+        "elif_clause" => push_elif_header(node, ctx),
+        "else_clause" => push_else_header(node, ctx),
+        "if_statement" | "for_statement" | "while_statement" | "case_item" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "case_statement" => {
+            ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+            ctx.push(
+                EntityKind::ControlFlow,
+                "cognitive_decision".to_string(),
+                node,
+            );
+        }
+        "last_case_item" => {
+            ctx.push(EntityKind::ControlFlow, "case_item".to_string(), node);
         }
         "c_style_for_statement" => {
             ctx.push(EntityKind::ControlFlow, "for_statement".to_string(), node);
@@ -170,9 +182,90 @@ fn visit_part_2(
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
         }
+        "ternary_expression" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "cognitive_decision".to_string(),
+                node,
+            );
+        }
+        "unary_expression" | "negated_command" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+        }
         _ => return false,
     }
     true
+}
+
+/// The Bash grammar gives `elif_clause` the full branch-body span. Keep its
+/// flow event on the header so the `elif` does not add an extra nesting level
+/// to decisions inside its body.
+fn push_elif_header(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    let full_span = crate::extract::span_of(node);
+    let header_end = node
+        .children()
+        .find(|child| child.is_named())
+        .map(|condition| crate::extract::span_of(&condition))
+        .unwrap_or(full_span);
+    ctx.out.push(crate::model::Entity {
+        kind: EntityKind::ControlFlow,
+        name: "elif_clause".to_string(),
+        file_id: ctx.file_id,
+        span: crate::model::Span {
+            end_byte: header_end.end_byte,
+            end_line: header_end.end_line,
+            end_col: header_end.end_col,
+            ..full_span
+        },
+        enclosing_function: ctx.enclosing.map(str::to_owned),
+        method: None,
+        path: None,
+        status: None,
+        body_shape: None,
+        body_minhash: None,
+        is_async: None,
+        is_test: crate::extract::langs::node_is_test(node),
+        owner_type: ctx.type_scope.map(str::to_owned),
+    });
+}
+
+/// `else_clause` also spans its full body; the Else event itself does not
+/// make decisions in that body one level deeper.
+fn push_else_header(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
+    let mut entity = branch_header_entity(node, ctx, "else_clause");
+    let keyword_len = "else".len() as u32;
+    entity.span.end_byte = entity.span.start_byte + keyword_len;
+    entity.span.end_col = entity.span.start_col + keyword_len;
+    ctx.out.push(entity);
+}
+
+fn branch_header_entity(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &ExtractCtx,
+    name: &str,
+) -> crate::model::Entity {
+    crate::model::Entity {
+        kind: EntityKind::ControlFlow,
+        name: name.to_string(),
+        file_id: ctx.file_id,
+        span: crate::extract::span_of(node),
+        enclosing_function: ctx.enclosing.map(str::to_owned),
+        method: None,
+        path: None,
+        status: None,
+        body_shape: None,
+        body_minhash: None,
+        is_async: None,
+        is_test: crate::extract::langs::node_is_test(node),
+        owner_type: ctx.type_scope.map(str::to_owned),
+    }
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!')
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
 }
 
 /// Stable complexity name for Bash boolean operators.
@@ -209,7 +302,16 @@ fn visit_command(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut 
 
     // `return` / `break` / `continue` -> ControlFlow (not a Call).
     if CONTROL_FLOW_COMMANDS.contains(&callee.as_str()) {
-        ctx.push(EntityKind::ControlFlow, callee, node);
+        if matches!(callee.as_str(), "break" | "continue")
+            && first_arg_text(node).is_some_and(|arg| arg.parse::<u32>().is_ok())
+        {
+            // Keep the original jump entity for legacy file-complexity counts;
+            // the cognitive-only marker carries the numbered-jump increment.
+            ctx.push(EntityKind::ControlFlow, callee, node);
+            ctx.push(EntityKind::ControlFlow, "labeled_jump".to_string(), node);
+        } else {
+            ctx.push(EntityKind::ControlFlow, callee, node);
+        }
         return;
     }
 
@@ -269,7 +371,7 @@ fn first_arg_text(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option
         .find(|c| {
             matches!(
                 c.kind().as_ref(),
-                "word" | "string" | "raw_string" | "concatenation"
+                "word" | "number" | "string" | "raw_string" | "concatenation"
             )
         })
         .map(|c| c.text().into_owned())
@@ -410,4 +512,108 @@ mod tests {
         assert_eq!(function.cognitive, 6, "metric: {function:?}");
         assert_eq!(function.max_nesting, 0, "metric: {function:?}");
     }
+
+    #[test]
+    fn conformance_fixture_preserves_legacy_max_nesting_and_file_complexity() {
+        let source = include_str!("../../../tests/fixtures/complexity/bash/conformance.sh");
+        let es = entities(source);
+        let metrics = crate::complexity::function_complexities(&es);
+        let legacy_max_nesting = [
+            ("condition_nesting", 0),
+            ("early_return_zero", 0),
+            ("else_body_nesting", 1),
+            ("else_if_body_nesting", 1),
+            ("if_else_if_else", 0),
+            ("inner", 0),
+            ("labeled_jumps", 1),
+            ("logical_negated_run", 0),
+            ("logical_run_mixed", 0),
+            ("logical_run_same", 0),
+            ("loops", 3),
+            ("multi_level_break", 1),
+            ("named_nested_function", 0),
+            ("nested_if", 1),
+            ("recursion_cross_file_zero", 0),
+            ("recursion_direct", 0),
+            ("recursion_same_file_cycle_a", 0),
+            ("recursion_same_file_cycle_b", 0),
+            ("recursion_two_calls", 0),
+            ("spec_example_large", 2),
+            ("spec_example_small", 0),
+            ("switch_once", 0),
+            ("ternary", 0),
+        ];
+        for (name, expected) in legacy_max_nesting {
+            let metric = metrics
+                .iter()
+                .find(|metric| metric.name == name)
+                .unwrap_or_else(|| panic!("missing function metric for {name}"));
+            assert_eq!(metric.max_nesting, expected, "{metric:?}");
+        }
+        assert_eq!(crate::complexity::cyclomatic_for_entities(&es), 56);
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| node.kind() == "function_definition")
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let lexical_parent = node
+                .ancestors()
+                .find(|ancestor| ancestor.kind() == "function_definition")
+                .and_then(|ancestor| ancestor.field("name"))
+                .map(|name| name.text().into_owned());
+            Some(Callable {
+                owner: lexical_parent,
+                owner_type: None,
+                unqualified_callable: true,
+                name: name_node.text().into_owned(),
+                required_args: 0,
+                total_args: u16::MAX,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+    let mut references = Vec::new();
+    for command in root.dfs().filter(|node| node.kind() == "command") {
+        let Some(caller_node) = command
+            .ancestors()
+            .find(|ancestor| ancestor.kind() == "function_definition")
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(name) = command.field("name") else {
+            continue;
+        };
+        references.push(CalleeReference {
+            caller,
+            name: name.text().into_owned(),
+            argument_count: 0,
+            qualifier: Qualifier::None,
+            qualifier_name: None,
+        });
+    }
+    (callables, references)
 }

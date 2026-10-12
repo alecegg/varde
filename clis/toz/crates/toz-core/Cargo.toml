@@ -1,12 +1,13 @@
 [package]
+autotests = false
 name = "varde-toz-core"
 version.workspace = true
-edition.workspace = true
+edition = "2021"
 license.workspace = true
-repository.workspace = true
-description.workspace = true
-keywords.workspace = true
-categories.workspace = true
+repository = "https://github.com/alecegg/varde"
+description = "Keep large tool output out of an LLM agent's context window"
+keywords = ["llm", "agent", "claude-code", "context", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [lib]
 name = "toz_core"
@@ -29,6 +30,24 @@ strsim = "0.11.1"
 thiserror = "2.0.20"
 tempfile = "3.27.0"
 toml = "1.1.6"
+varde-core.workspace = true
 
 [dev-dependencies]
 insta = "1.48.0"
+varde-core = { workspace = true, features = ["write-meter"] }
+
+[[test]]
+name = "fixtures"
+path = "tests/fixtures_suite/main.rs"
+
+[[test]]
+name = "env_fallback"
+path = "tests/env_fallback.rs"
+
+[[test]]
+name = "prune_maintenance"
+path = "tests/prune_maintenance.rs"
+
+[[test]]
+name = "write_budget"
+path = "tests/write_budget.rs"

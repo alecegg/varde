@@ -1,0 +1,327 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 4
+cyclomatic = 4
+matrix = "if-else-if-else"
+rule = "spec:176-179, 491-518; root if +1, two else-if branches +1 each, else +1"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:176-179, 491-518; root if +1, else-if +1, its body if at root nesting +2"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:176-179, 491-518; root if +1, else +1, its body if at root nesting +2"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 6
+cyclomatic = 4
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer if +1, nested if +2, deepest if +3"
+
+[[case]]
+callable = "loops"
+cognitive = 3
+cyclomatic = 3
+matrix = "loops"
+rule = "spec:491-518; for +1 and nested while +2"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 4
+matrix = "switch-once"
+rule = "spec:196-205, 491-501; switch adds one cognitive point; arms do not add cognitive points"
+
+[[case]]
+callable = "ternary"
+cognitive = 3
+cyclomatic = 3
+matrix = "ternary"
+rule = "spec:491-518; outer ternary +1 and nested ternary +2"
+
+[[case]]
+callable = "catch_once"
+cognitive = 3
+cyclomatic = 3
+matrix = "catch-once"
+rule = "spec:190-203, 491-518; multi-catch adds once (+1), nested if +2"
+
+[[case]]
+callable = "try_finally_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "try-finally-zero"
+rule = "spec:190-203; try and finally add no cognitive points"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; if adds one; early return adds zero"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229; one same-operator && run adds 1"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229; one && run and one || run add 1 each"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-negated-run"
+rule = "spec:207-229; negation separates two && runs, each adds 1"
+
+[[case]]
+callable = "logical_run_across_lambda"
+cognitive = 2
+cyclomatic = 2
+matrix = "logical-run-across-lambda"
+rule = "spec:207-229, 267-291; outer and lambda && runs each add 1"
+
+[[case]]
+callable = "lambda_nesting"
+cognitive = 2
+cyclomatic = 1
+matrix = "lambda-nesting"
+rule = "spec:281-285; nested lambda raises the if nesting to one, so the outer callable gets 2"
+
+[[case]]
+callable = "class_in_method"
+cognitive = 2
+cyclomatic = 1
+matrix = "class-in-method"
+rule = "spec:267-291; local class declaration is not a flow event"
+
+[[case]]
+callable = "nested"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; local class method is a separate callable; its if adds 1"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "condition-nesting"
+rule = "spec:207-229, 491-518; if +1, && sequence +1, nested if +2"
+
+[[case]]
+callable = "goto_or_labeled_jump"
+cognitive = 4
+cyclomatic = 3
+matrix = "goto-or-labeled-jump"
+rule = "spec:230-243, 491-518; loop +1, nested if +2, labeled continue +1 = 4"
+
+[[case]]
+callable = "multi_level_break"
+cognitive = 7
+cyclomatic = 4
+matrix = "multi-level-break"
+rule = "spec:230-243, 491-518; loops +1 and +2, nested if +3, labeled break +1"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-501; if +1 and recursion +1"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-501; if +1 and the two recursive calls add one total"
+
+[[case]]
+callable = "recursion_qualified_self"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-qualified-self"
+rule = "spec:230-237, 491-501; if +1 and this-qualified recursion +1"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 1
+cyclomatic = 2
+matrix = "recursion-other-receiver"
+rule = "spec:230-237, 491-501; if +1; other receiver call is not recursion"
+
+[[case]]
+callable = "recursion_overload_delegate"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-overload-delegate"
+rule = "spec:230-237; one-argument method delegates to a two-argument overload, not recursion"
+
+[[case]]
+callable = "recursion_in_closure"
+cognitive = 3
+cyclomatic = 1
+matrix = "recursion-in-closure"
+rule = "spec:230-237, 267-291, 491-501; lambda if rolls up at +2 and method self-call adds 1"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237; member A of same-file cycle adds 1"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237; peer method absent from this file, so no same-file recursion binds"
+
+[[case]]
+callable = "spec_example_small_switch"
+cognitive = 1
+cyclomatic = 5
+matrix = "spec-example-small"
+rule = "spec:316-327; switch and cases together add 1"
+
+[[case]]
+callable = "spec_example_small_sum"
+cognitive = 7
+cyclomatic = 4
+rule = "spec:328-339; for +1, nested for +2, if +3, labeled continue +1"
+
+[[case]]
+callable = "spec_example_small_catch"
+cognitive = 9
+cyclomatic = 6
+rule = "spec:270-280; if +1, for +2, while +3, catch +1, catch body if +2"
+
+[[case]]
+callable = "overriddenSymbolFrom"
+cognitive = 19
+cyclomatic = 10
+matrix = "spec-example-large"
+rule = "spec:525-562; 1+1+2+1 logical run+3+4+5+1+1 = 19"
+
+[[case]]
+callable = "addVersion"
+cognitive = 35
+cyclomatic = 14
+rule = "spec:567-628; faithful Java rendering of annotated example totals 35"
+
+[[case]]
+callable = "toRegexp"
+cognitive = 20
+cyclomatic = 12
+rule = "spec:633-685; faithful Java rendering of annotated example totals 20"
+
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 2
+cyclomatic = 2
+rule = "spec:230-237; member B of same-file cycle adds 1"
+
+[[case]]
+callable = "anonymous_callable"
+cognitive = 2
+cyclomatic = 1
+rule = "spec:267-291, 491-518; anonymous class run method is a nested callable, so its if adds 2 to the enclosing method"
+
+[[case]]
+callable = "run"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; anonymous class method has an independent metric and its if adds 1"
+
+[[case]]
+callable = "switch_forms"
+cognitive = 2
+cyclomatic = 5
+rule = "spec:196-205, 491-501; switch expression and switch statement each add 1 cognitively"
+
+[[case]]
+callable = "JavaRecord"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:491-501; compact record constructor has an independent callable metric and its if adds 1"
+
+[[case]]
+callable = "read"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:491-501; record method has an independent callable metric and its if adds 1"
+
+[[case]]
+callable = "<anonymous>@41:62"
+cognitive = 1
+cyclomatic = 3
+rule = "spec:207-229, 267-291; lambda has its own && run worth 1"
+
+[[case]]
+callable = "<anonymous>@44:50"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:281-285; lambda's own if adds 1"
+
+[[case]]
+callable = "<anonymous>@70:50"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:230-237, 267-291, 491-501; lambda's own if adds 1"
+
+[[case]]
+callable = "instanceof_pattern"
+cognitive = 2
+cyclomatic = 3
+rule = "spec:175-179, 207-229, 491-501; if +1 and && sequence +1; instanceof pattern itself adds no point"
+
+[[case]]
+callable = "try_with_resources"
+cognitive = 2
+cyclomatic = 3
+rule = "spec:190-203, 491-501; try-with-resources adds nothing, its if +1 and catch +1"
+
+[["n/a"]]
+matrix_id = "null-coalescing-zero"
+reason = "Java has no null-coalescing operator; Optional APIs are method calls, not syntax."
+
+[["n/a"]]
+matrix_id = "named-nested-function"
+reason = "Java methods cannot be declared inside method bodies; local classes have class-in-method coverage instead."
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "The plan's declaration-only function and Python decorator compensating usage construct has no Java equivalent."
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "The negative compensating-usage callback case is specific to supported JavaScript/TypeScript/Python marker behavior."
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "Java has no preprocessor conditional syntax."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Java has no C/C++ extern-C preprocessor linkage region."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "Java has no comprehension or query syntax; streams are ordinary method calls and lambdas."

@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-WORKFLOW="${VARDE_WORKFLOW_BIN:-$(command -v varde-workflow)}"
+VARDE="${VARDE_BIN:-$(command -v varde)}"
+workflow() { "$VARDE" plan "$@"; }
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/wave.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
@@ -12,22 +11,12 @@ fail() {
   exit 1
 }
 
-test -x "$WORKFLOW" || fail "varde-workflow is missing or not executable"
+test -x "$VARDE" || fail "varde is missing or not executable"
 
-# Fake varde-code: blast radius comes from $TEST_ROOT/radius/<path with / as _>.
-fake_bin="$TEST_ROOT/bin"
-mkdir -p "$fake_bin" "$TEST_ROOT/radius"
-cat > "$fake_bin/varde-code" <<'EOF'
-#!/usr/bin/env bash
-path="$(printf '%s' "$3" | jq -r .filePath)"
-file="$RADIUS_DIR/$(printf '%s' "$path" | tr / _)"
-if [ -f "$file" ]; then data="$(cat "$file")"; else data='[]'; fi
-if [ "$data" = '__FAIL__' ]; then exit 1; fi
-printf '{"ok":true,"data":%s}\n' "$data"
-EOF
-chmod +x "$fake_bin/varde-code"
-export RADIUS_DIR="$TEST_ROOT/radius"
-radius() { printf '%s' "$2" > "$RADIUS_DIR/$(printf '%s' "$1" | tr / _)"; }
+# Blast-radius scenarios live in
+# clis/workflow/varde-workflow/tests/execution_wave_scenarios.rs, where a fake
+# ImpactQuery replaces the in-process varde map query. The scenarios here never
+# reach the impact query (creates-only, nothing ready, or one ready task).
 
 # plan <name>: creates a plan dir inside a repo root with src/ files present.
 plan() {
@@ -54,7 +43,7 @@ posture: ${10:-}
 ---
 EOF
 }
-run() { PATH="$fake_bin:$PATH" "$WORKFLOW" execution-wave --json --repo-root "$1" "${@:2}" "$1/plan" | jq -c .data; }
+run() { workflow execution-wave --json --repo-root "$1" "${@:2}" "$1/plan" | jq -c .data; }
 
 # A symlink ancestor aliases a not-yet-created destination.
 root="$(plan create-alias)"
@@ -80,30 +69,6 @@ task "$root" alpha todo "" "" "src/new.rs"
 task "$root" beta todo "" "" "alias/../new.rs"
 run "$root" | jq -e '.next_wave == ["alpha"] and .conflicts[0].files == ["src/new.rs"]' >/dev/null ||
   fail "symlink parent traversal was normalized lexically"
-
-# Existing modifications and both rename endpoints share canonical ownership.
-root="$(plan rename-alias)"
-ln -s src "$root/alias"
-radius src/alpha '["src/alpha-test"]'
-task "$root" alpha-renamer todo "" "" "" "alias/alpha -> alias/new.rs"
-task "$root" beta-source todo "" "src/alpha"
-task "$root" gamma-target todo "" "" "src/new.rs"
-run "$root" | jq -e '.next_wave == ["alpha-renamer"] and ([.conflicts[].files[]] | sort) == ["src/alpha","src/new.rs"]' >/dev/null ||
-  fail "aliased rename source or destination did not conflict"
-rm -f "$RADIUS_DIR"/*
-
-# Relative and absolute aliases returned by the graph use the same identity.
-root="$(plan graph-alias)"
-ln -s src "$root/alias"
-task "$root" alpha todo "" "alias/alpha"
-task "$root" beta todo "" "src/beta"
-radius src/beta '["src/beta-test"]'
-for graph_path in alias/beta "$root/alias/beta"; do
-  radius src/alpha "[\"$graph_path\"]"
-  run "$root" | jq -e '.next_wave == ["alpha"] and .conflicts[0].files == ["src/beta"]' >/dev/null ||
-    fail "graph aliases did not conflict with canonical writes"
-done
-rm -f "$RADIUS_DIR"/*
 
 # Uncertain ownership forces the whole wave serial, including other ready tasks.
 for uncertain in loop outside; do
@@ -132,17 +97,6 @@ for suffix in 'missing/../loop/new.rs' 'missing/../loop/../new.rs' 'hidden/new.r
   run "$root" | jq -e '.next_wave == ["alpha"] and (.reasons | any(contains("ownership path identity is uncertain")))' >/dev/null ||
     fail "missing prefix hid a symlink loop: $suffix"
 done
-
-# Unknown graph identity retains the existing conservative serial fallback.
-root="$(plan uncertain-graph)"
-ln -s loop "$root/loop"
-task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" "" "src/new.rs"
-radius src/alpha '["loop/graph.rs"]'
-run "$root" | jq -e '.next_wave == ["alpha"] and (.reasons | any(contains("blast_radius failed")))' >/dev/null ||
-  fail "uncertain graph identity was treated as independent"
-rm -f "$RADIUS_DIR"/*
-
 # Dot spellings and an aliased repository root preserve independent creates.
 root="$(plan aliased-repo)"
 ln -s "$root" "$TEST_ROOT/repo-alias"
@@ -150,150 +104,6 @@ task "$root" alpha todo "" "" "./src/../src/new-a.rs"
 task "$root" beta todo "" "" "src/new-b.rs"
 run "$TEST_ROOT/repo-alias" | jq -e '.next_wave == ["alpha","beta"] and .conflicts == []' >/dev/null ||
   fail "canonical repository aliases serialized independent destinations"
-
-# Independent ready tasks run as one wave; a dependent task waits.
-root="$(plan independent)"
-radius src/alpha '["src/alpha-test"]'
-radius src/beta '["src/beta-test"]'
-task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" "src/beta"
-task "$root" follow-up todo "alpha, beta" "src/gamma"
-[ "$(run "$root" | jq '.next_wave | length')" -ge 2 ] || fail "independent tasks did not form a parallel-safe wave"
-run "$root" | jq -e '.next_wave == ["alpha","beta"] and .ready == ["alpha","beta"] and (has("strategy") | not)' >/dev/null ||
-  fail "independent wave was unexpected"
-
-# A shared import that neither task writes does not conflict.
-root="$(plan shared-import)"
-radius src/alpha '["src/util"]'
-radius src/beta '["src/util"]'
-task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" "src/beta"
-[ "$(run "$root" | jq '.next_wave | length')" -ge 2 ] || fail "shared read-only import serialized the wave"
-rm -f "$RADIUS_DIR"/*
-
-# Both ends of a rename are owned paths, including the rename source.
-root="$(plan rename-source)"
-radius src/alpha '["src/alpha-test"]'
-radius src/gamma '["src/gamma-test"]'
-radius src/new-alpha '["src/new-alpha-test"]'
-task "$root" renamer todo "" "" "" "src/alpha -> src/new-alpha"
-task "$root" source-writer todo "" "src/alpha"
-task "$root" target-writer todo "" "src/new-alpha"
-run "$root" | jq -e '(.next_wave | length) <= 1 and ([.conflicts[].files[]] | sort) == ["src/alpha","src/new-alpha"]' >/dev/null ||
-  fail "rename source and destination did not conflict with other writes"
-rm -f "$RADIUS_DIR"/*
-
-# Tasks with distinct files but shared verification state run in separate waves.
-root="$(plan shared-verification-resource)"
-radius src/alpha '["src/alpha-test"]'
-radius src/beta '["src/beta-test"]'
-task "$root" alpha todo "" "src/alpha" "" "" "db:integration-snapshot"
-task "$root" beta todo "" "src/beta" "" "" "db:integration-snapshot"
-run "$root" | jq -e '(.next_wave | length) <= 1 and .conflicts[0].resources == ["db:integration-snapshot"]' >/dev/null ||
-  fail "shared verification resource did not serialize the wave"
-rm -f "$RADIUS_DIR"/*
-
-# Old task metadata without every ownership field stays on serial execution.
-root="$(plan missing-ownership)"
-radius src/alpha '["src/alpha-test"]'
-radius src/beta '["src/beta-test"]'
-printf -- '---\nstatus: todo\ndepends_on: []\nmodifies: [src/alpha]\ncreates: []\n---\n' > "$root/plan/tasks/alpha.md"
-task "$root" beta todo "" "src/beta"
-run "$root" | jq -e '.next_wave == ["alpha"]' >/dev/null ||
-  fail "missing ownership metadata did not force serial execution"
-rm -f "$RADIUS_DIR"/*
-
-# Writing into another task's blast radius serializes them. varde-code
-# returns absolute paths; the resolver compares them repo-relative.
-root="$(plan conflict)"
-radius src/left "[\"$root/src/right\"]"
-radius src/right '["src/right-test"]'
-task "$root" left todo "" "src/left"
-task "$root" right todo "" "src/right"
-[ "$(run "$root" | jq '.next_wave | length')" -le 1 ] || fail "blast-radius conflict did not fall back to serial"
-run "$root" | jq -e '.next_wave == ["left"] and .conflicts[0].files == ["src/right"]' >/dev/null ||
-  fail "conflict was not reported"
-rm -f "$RADIUS_DIR"/*
-
-# Reverse-only impact still catches conflicts when the consumer sorts first.
-root="$(plan reverse-impact)"
-radius src/alpha '["src/alpha-test"]'
-radius src/beta '["src/alpha"]'
-task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" "src/beta"
-run "$root" | jq -e '.next_wave == ["alpha"] and .conflicts[0].files == ["src/alpha"]' >/dev/null ||
-  fail "reverse-only impact missed a dependency conflict with consumer first"
-rm -f "$RADIUS_DIR"/*
-
-# A task with no declared write set never runs in parallel.
-root="$(plan unknown)"
-radius src/alpha '["src/alpha-test"]'
-task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" ""
-[ "$(run "$root" | jq '.next_wave | length')" -le 1 ] || fail "empty write set was parallelized"
-
-# An empty blast radius falls back to basename references for unindexed files.
-root="$(plan no-edges)"
-task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" "src/beta"
-run "$root" | jq -e '.next_wave == ["alpha","beta"]' >/dev/null ||
-  fail "unindexed files without basename references were serialized"
-
-# Duplicate basenames only reach matching references in the file's skill tree.
-root="$(plan duplicate-basename)"
-mkdir -p "$root/skills/a/evals" "$root/skills/b/evals" "$root/skills/third"
-printf 'evals.json\n' > "$root/skills/a/evals/evals.json"
-printf 'evals.json\n' > "$root/skills/b/evals/evals.json"
-printf 'See evals.json for the skill configuration.\n' > "$root/skills/third/SKILL.md"
-git -C "$root" add skills
-task "$root" a-edit todo "" "skills/a/evals/evals.json"
-task "$root" b-edit todo "" "skills/b/evals/evals.json"
-run "$root" | jq -e '.next_wave == ["a-edit","b-edit"]' >/dev/null ||
-  fail "duplicate basenames reached unrelated skills"
-
-# Markdown content edits have no graph edges, but only reach their own files.
-root="$(plan markdown-content)"
-mkdir -p "$root/docs"
-printf 'alpha\n' > "$root/docs/alpha.md"
-printf 'beta\n' > "$root/docs/beta.md"
-git -C "$root" add docs
-task "$root" alpha todo "" "docs/alpha.md"
-task "$root" beta todo "" "docs/beta.md"
-run "$root" | jq -e '.next_wave == ["alpha","beta"] and .wave_mode == "shared"' >/dev/null ||
-  fail "independent markdown content edits did not form a shared wave"
-
-# A markdown rename reaches tracked files that mention its basename.
-root="$(plan markdown-rename)"
-mkdir -p "$root/docs"
-printf 'guide\n' > "$root/docs/guide.md"
-printf 'See guide.md for details.\n' > "$root/docs/mentions.md"
-git -C "$root" add docs
-task "$root" rename todo "" "" "" "docs/guide.md -> docs/new-guide.md"
-task "$root" mentions todo "" "docs/mentions.md"
-run "$root" | jq -e '.next_wave == ["mentions"] and .conflicts[0].files == ["docs/mentions.md"]' >/dev/null ||
-  fail "markdown rename missed a file that names its basename"
-
-# A failed graph call stays unknown even for a path eligible for fallback.
-root="$(plan failed-graph)"
-task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" "src/beta"
-radius src/alpha '__FAIL__'
-radius src/beta '["src/beta-test"]'
-run "$root" | jq -e '.next_wave == ["alpha"] and (.reasons | any(contains("blast_radius failed for src/alpha")))' >/dev/null ||
-  fail "failed blast_radius call was treated as an empty unindexed result"
-
-# Tasks under one Cargo.toml share a compile unit and require worktrees.
-root="$(plan compile-unit)"
-mkdir -p "$root/crates/alpha/src" "$root/crates/beta/src"
-touch "$root/Cargo.toml" "$root/crates/alpha/src/lib.rs" "$root/crates/beta/src/lib.rs"
-git -C "$root" add Cargo.toml crates
-radius crates/alpha/src/lib.rs '["crates/alpha/src/lib.rs-test"]'
-radius crates/beta/src/lib.rs '["crates/beta/src/lib.rs-test"]'
-task "$root" alpha todo "" "crates/alpha/src/lib.rs"
-task "$root" beta todo "" "crates/beta/src/lib.rs"
-run "$root" | jq -e '.next_wave == ["alpha","beta"] and .wave_mode == "worktree"' >/dev/null ||
-  fail "tasks in one Cargo.toml compile unit did not select worktree mode"
-
 # A ready task must wait when its body points at another task's new file.
 root="$(plan new-file-pointer)"
 task "$root" a-creator todo "" "" "references/x.md"
@@ -315,22 +125,11 @@ Use `skills/varde-change/references/y.md`, which the other task renames.
 EOF
 run "$root" | jq -e '.next_wave == ["a-renamer"] and (.reasons | any(. == "b-mentions: mentions skills/varde-change/references/y.md created by a-renamer; add depends_on"))' >/dev/null ||
   fail "a task mentioning another task's renamed file was not held out of the wave"
-
-# A spike owns no paths, so it always runs alone: single, not worktree.
+# A spike owns no paths and runs alone, but placement remains isolated.
 root="$(plan spike-mode)"
 task "$root" spike todo "" "" "" "" "" spike
-run "$root" | jq -e '.next_wave == ["spike"] and .wave_mode == "single"' >/dev/null ||
-  fail "lone spike task did not select single mode"
-
-# Refactor posture selects worktrees even when its files have no shared build root.
-root="$(plan refactor-mode)"
-radius src/alpha '["src/alpha-test"]'
-radius src/beta '["src/beta-test"]'
-task "$root" alpha todo "" "src/alpha" "" "" "" "" refactor
-task "$root" beta todo "" "src/beta"
-run "$root" | jq -e '.next_wave == ["alpha","beta"] and .wave_mode == "worktree"' >/dev/null ||
-  fail "refactor posture did not select worktree mode"
-
+run "$root" | jq -e '.next_wave == ["spike"] and .wave_mode == "worktree"' >/dev/null ||
+  fail "lone spike task did not select isolated mode"
 # A missing or blocked dependency is reported, not a silent stall.
 root="$(plan deps)"
 task "$root" base blocked "" "src/base"
@@ -338,27 +137,10 @@ task "$root" needs-base todo "base" "src/x"
 task "$root" needs-ghost todo "ghost" "src/y"
 run "$root" | jq -e '.ready == [] and (.blocked_by_dep | map(.task + ":" + .reason) | sort) == ["needs-base:blocked","needs-ghost:missing"]' >/dev/null ||
   fail "missing or blocked dependencies were not reported"
-
-# Waves are capped at three workers.
+# Worker widths above three are accepted.
 root="$(plan capped)"
-for id in alpha beta gamma delta; do radius "src/$id" "[\"src/$id-test\"]"; task "$root" "$id" todo "" "src/$id"; done
-run "$root" | jq -e '(.next_wave | length) == 3' >/dev/null ||
-  fail "wave exceeded three workers"
-if run "$root" --max-workers 4 >/dev/null 2>&1; then
-  fail "worker limit above three was accepted"
-fi
-
-rm -f "$RADIUS_DIR"/*
-
-# Without varde-code, every wave is serial.
-root="$(plan no-cli)"
 task "$root" alpha todo "" "src/alpha"
-task "$root" beta todo "" "src/beta"
-no_cli_path="$TEST_ROOT/nocli"
-mkdir -p "$no_cli_path"
-for tool in git; do ln -sf "$(command -v "$tool")" "$no_cli_path/$tool"; done
-[ "$(PATH="$no_cli_path" "$WORKFLOW" execution-wave --json --repo-root "$root" "$root/plan" | jq -c .data | jq '.next_wave | length')" -le 1 ] ||
-  fail "missing varde-code did not fall back to serial"
+run "$root" --max-workers 4 >/dev/null || fail "worker limit above three was rejected"
 
 # Block-style YAML lists parse like inline lists.
 root="$(plan block-lists)"
@@ -367,7 +149,7 @@ printf -- '---\nstatus: todo\ndepends_on:\n  - alpha\nmodifies:\n  - "src/beta"\
 run "$root" | jq -e '.ready == ["beta"] and (.next_wave | length) <= 1' >/dev/null ||
   fail "block-style lists were misparsed"
 
-# Unindented block-style YAML lists (as varde-workflow transition writes them) still parse.
+# Unindented block-style YAML lists (as task files may carry them) still parse.
 root="$(plan unindented-block-lists)"
 printf -- '---\nstatus: blocked\ndepends_on: []\nmodifies:\n- src/alpha\ncreates: []\nrenames: []\nverification_resources: []\n---\n' > "$root/plan/tasks/alpha.md"
 printf -- '---\nstatus: todo\ndepends_on:\n- alpha\nmodifies:\n- src/beta\ncreates: []\nrenames: []\nverification_resources: []\n---\n' > "$root/plan/tasks/beta.md"
@@ -376,31 +158,6 @@ echo "$result" | jq -e '(.ready | index("beta")) == null and (.next_wave | index
   fail "unindented block-style depends_on let a blocked dependent through"
 echo "$result" | jq -e '[.blocked_by_dep[] | select(.task == "beta" and .dependency == "alpha")] | length == 1' >/dev/null ||
   fail "unindented block-style depends_on did not record beta in blocked_by_dep"
-
-# Continuing after a failure schedules only ready, independent work. Once that
-# work finishes, the blocked task and its dependent remain pending; after the
-# blocked task succeeds on a later run, its dependent becomes ready.
-root="$(plan continue-after-blocked)"
-radius src/beta '["src/beta-test"]'
-radius src/gamma '["src/gamma-test"]'
-radius src/delta '["src/delta-test"]'
-task "$root" failed blocked "" "src/alpha"
-task "$root" waiting todo "failed" "src/beta"
-task "$root" independent-a todo "" "src/gamma"
-task "$root" independent-b todo "" "src/delta"
-result="$(run "$root")"
-echo "$result" | jq -e '.ready == ["independent-a","independent-b"] and .next_wave == ["independent-a","independent-b"] and .blocked_by_dep == [{"task":"waiting","dependency":"failed","reason":"blocked"}]' >/dev/null ||
-  fail "continuation scheduled work that depends on a blocked task"
-task "$root" independent-a done "" "src/gamma"
-task "$root" independent-b done "" "src/delta"
-result="$(run "$root")"
-echo "$result" | jq -e '.ready == [] and .next_wave == [] and .blocked_by_dep == [{"task":"waiting","dependency":"failed","reason":"blocked"}]' >/dev/null ||
-  fail "completed independent work hid the still-blocked task or dependent"
-task "$root" failed done "" "src/alpha"
-result="$(run "$root")"
-echo "$result" | jq -e '.ready == ["waiting"] and .next_wave == ["waiting"] and .blocked_by_dep == []' >/dev/null ||
-  fail "dependent did not become ready after the blocked task succeeded on resume"
-rm -f "$RADIUS_DIR"/*
 
 # A dependency cycle is a hard failure.
 root="$(plan cycle)"
@@ -411,18 +168,4 @@ run "$root" >/dev/null 2>&1
 status=$?
 set -e
 [ "$status" -eq 3 ] || fail "cycle exited $status, expected 3"
-
-# The shipped task template's frontmatter is what the resolver parses.
-root="$(plan template)"
-awk '/^````/{n++; next} n==1' "$SKILLS_DIR/varde-change/assets/TASK-TEMPLATE.md" |
-  sed -e 's/depends_on: \["<dep-id>"\]/depends_on: []/' \
-    -e 's|^modifies: \[\]|modifies: [src/alpha]|' > "$root/plan/tasks/from-template-alpha.md"
-awk '/^````/{n++; next} n==1' "$SKILLS_DIR/varde-change/assets/TASK-TEMPLATE.md" |
-  sed -e 's/depends_on: \["<dep-id>"\]/depends_on: []/' \
-    -e 's|^modifies: \[\]|modifies: [src/beta]|' > "$root/plan/tasks/from-template-beta.md"
-radius src/alpha '["src/alpha-test"]'
-radius src/beta '["src/beta-test"]'
-run "$root" | jq -e '.next_wave == ["from-template-alpha","from-template-beta"]' >/dev/null ||
-  fail "resolver does not parse complete ownership from the task template"
-
 echo "Parallel wave scheduler fixtures passed."

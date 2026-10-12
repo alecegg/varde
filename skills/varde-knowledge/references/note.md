@@ -7,10 +7,7 @@
 | Broad discovery | Start from the generated root and type `index.md` concept maps. |
 | A precise term | Run ranked search (below), else Grep/Glob `<knowledge>/` per the fallback rule in `references/varde-workflow-cli.md`. |
 
-```bash
-varde-workflow concept search --text "<query>" --limit 10
-varde-workflow concept search --field type=decision --text "<query>"
-```
+Run `varde knowledge concept search --text "<query>" --limit 10`; add `--field key=value` to filter.
 
 Search defaults to the `<knowledge>` bundle. Read a note in full only after
 discovery identifies it.
@@ -27,7 +24,7 @@ discovery identifies it.
   `pattern/code-review`.
 - Reserved: root `index.md` and `log.md`. After note changes, or when the maps
   are missing or stale, regenerate root and type `index.md` maps with
-  `varde-workflow concept map --bundle <knowledge>`, never by hand; create
+  `varde knowledge concept map --bundle <knowledge>`, never by hand; create
   `log.md` only when asked.
 
 ## Write notes

@@ -1,0 +1,31 @@
+{
+  "mutations": [
+    {
+      "id": "remove-handle-query-route",
+      "file": "SKILL.md",
+      "remove": "Recover missing details with",
+      "evals": ["handle-query"]
+    },
+    {
+      "id": "remove-batched-script-route",
+      "file": "SKILL.md",
+      "remove": "Run a batch script",
+      "evals": ["batched-script"]
+    },
+    {
+      "id": "remove-no-rerun-rule",
+      "file": "SKILL.md",
+      "remove": "Recover missing details with",
+      "replace_with": "Rerun a command whenever captured output is incomplete.",
+      "evals": ["no-rerun"]
+    },
+    {
+      "id": "negative-mutation-filter-before-retain",
+      "file": "SKILL.md",
+      "remove": "Retain results before filtering;",
+      "replace_with": "Filter command output before retaining it; omit status and capture handle from the summary.",
+      "evals": ["batched-script"],
+      "negative": true
+    }
+  ]
+}

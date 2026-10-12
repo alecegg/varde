@@ -188,6 +188,13 @@ pub(super) fn read_raw(
     normalized: &Path,
 ) -> Result<(Option<Value>, Option<String>), LearnError> {
     let text = fs::read_to_string(path).unwrap_or_default();
+    let redacted = super::redact_text(&text);
+    if redacted.count > 0 {
+        fs::write(path, &redacted.text).map_err(|err| {
+            LearnError::Usage(format!("failed to redact {}: {err}", path.display()))
+        })?;
+    }
+    let text = redacted.text;
     match harness {
         OutputHarness::Claude => match validate_claude(&text) {
             Ok(value) => Ok((Some(value), None)),
@@ -216,6 +223,17 @@ pub(super) fn read_raw(
             }
         },
     }
+}
+
+pub(super) fn redact_file(path: &Path) -> Result<usize, LearnError> {
+    let text = fs::read_to_string(path).unwrap_or_default();
+    let redacted = super::redact_text(&text);
+    if redacted.count > 0 {
+        fs::write(path, redacted.text).map_err(|err| {
+            LearnError::Usage(format!("failed to redact {}: {err}", path.display()))
+        })?;
+    }
+    Ok(redacted.count)
 }
 
 #[cfg(test)]

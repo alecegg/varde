@@ -13,7 +13,16 @@ fail() {
   exit 1
 }
 
-"$SKILLS_DIR/install.sh" -f -d "$TEST_ROOT" >/dev/null
+if [[ -n "${VARDE_BIN:-}" ]]; then
+  VARDE="$VARDE_BIN"
+else
+  (cd "$SKILLS_DIR/../clis" && cargo build --locked -q -p varde --bin varde --target-dir "$SKILLS_DIR/../clis/target")
+  VARDE="$SKILLS_DIR/../clis/target/debug/varde"
+fi
+
+mkdir -p "$TEST_ROOT/home"
+HOME="$TEST_ROOT/home" VARDE_CONFIG_DIR="$TEST_ROOT/home/config" VARDE_AGENTS_OPENCODE_VERSION=1 \
+  "$VARDE" setup sync --skills-dir "$TEST_ROOT/skills" --agents-dir "$TEST_ROOT/agents" --harnesses none >/dev/null
 
 checks=0
 while IFS= read -r line; do
@@ -21,7 +30,7 @@ while IFS= read -r line; do
   rel_path="${line%% *}"
   read -r -a skills <<< "${line#* }"
   for skill in "${skills[@]}"; do
-    installed="$TEST_ROOT/$skill/$rel_path"
+    installed="$TEST_ROOT/skills/$skill/$rel_path"
     shared="$SKILLS_DIR/shared/$rel_path"
     [ -f "$installed" ] || fail "$skill is missing installed $rel_path"
     cmp -s "$installed" "$shared" || fail "$skill's $rel_path differs from skills/shared/$rel_path"

@@ -1,17 +1,23 @@
 # AGENTS.md — learn
 
-This independent Cargo workspace provides `varde-learn` evaluation and global
-friction commands. The user-facing CLI reference is [README.md](./README.md).
+This module provides the `varde-learn` package in the Rust workspace rooted at
+`clis/Cargo.toml`. Its evaluation and global friction commands are exposed
+through the unified `varde` CLI. The user-facing reference is
+[README.md](./README.md).
 
 ## Workspace
 
-- Build and test here: `cd clis/learn && cargo test --workspace`.
-- Keep this Cargo workspace independent. Do not add path dependencies or
-  source imports from `code/`, `workflow/`, or `toz/`.
-- Check clap help, `tests/diagnose.rs`, and `tests/help.rs` when changing
-  diagnosis command behavior or its documentation.
-- `varde-learn diagnose inspect` reads bounded evidence without opening the
-  friction store. Run `diagnose capture` only after saving a diagnosis report
+- Build and test from the workspace root: `cd clis && cargo test -p varde-learn --locked`.
+- Install the unified CLI: `cd clis && cargo install --path varde --locked --force --target-dir target`.
+- Format with `rustfmt --edition 2024 <file>` on owned files only, never
+  `cargo fmt`. rustfmt also formats out-of-line `mod` children, so check every
+  touched path afterward.
+- Follow the repository-root `AGENTS.md` for shared-crate and dependency rules;
+  module crates do not import one another.
+- When changing diagnosis behavior or its documentation, check clap help and
+  `clis/varde/tests/learn/diagnose.rs` plus `clis/varde/tests/learn/help.rs`.
+- `varde learn diagnose inspect` reads bounded evidence without opening the
+  friction store. Run `varde learn diagnose capture` only after saving a diagnosis report
   and checking that the incident and item grouping are eligible.
 
 ## Friction data
@@ -45,6 +51,6 @@ friction commands. The user-facing CLI reference is [README.md](./README.md).
 
 ## Tests and sandbox
 
-`tests/timeout.rs` launches shell processes and checks process-group cleanup. If
-an outer sandbox reports `Operation not permitted`, rerun the affected test
-with process control allowed.
+`clis/learn/crates/varde-learn/tests/timeout.rs` launches shell processes and
+checks process-group cleanup. If an outer sandbox reports `Operation not
+permitted`, rerun the affected test with process control allowed.

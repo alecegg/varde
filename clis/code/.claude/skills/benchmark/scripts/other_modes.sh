@@ -24,7 +24,7 @@
 # For each mode below, prints one TSV line:
 #   mode  cold_ms  warm_ms
 #
-# cold_ms = single run right after clearing the varde-code cache for this
+# cold_ms = single run right after clearing the varde code cache for this
 # repo (first call rebuilds whichever slice(s) that mode reads — see
 # FRESHNESS table in crates/varde-code/src/query/mod.rs).
 # warm_ms = min-of-3 subsequent calls.
@@ -34,22 +34,10 @@ require_release_bin
 
 repo_root="$1" file_path="$2" symbol_name="$3" cache_name="${4:-$(basename "$1")}"
 
-mode_group() {
-  case "$1" in
-    dependencies|dependents|find_imports|explore|blast_radius|symbol_blast_radius|type_hierarchy|map_path)
-      echo graph ;;
-    hotspots|clusters|context_pack|nav_map|detect_changes)
-      echo report ;;
-    *)
-      echo query ;;
-  esac
-}
-
 run_mode() {
-  local mode="$1" json="$2" group
-  group=$(mode_group "$mode")
+  local mode="$1" json="$2"
   clear_varde_cache "$cache_name"
-  local cmd=("$BIN" "$group" "$mode" --json "$json")
+  local cmd=("${MAP[@]}" "$mode" --json "$json")
   local cold warm
   cold=$(time_ms "${cmd[@]}")
   warm=$(min_of_3 "${cmd[@]}")

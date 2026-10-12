@@ -3,9 +3,12 @@
 mod codex;
 pub mod diagnose;
 mod error;
+pub mod friction_log;
 mod import;
 mod output;
 mod process;
+pub mod redact;
+pub mod session_link;
 mod store;
 mod trigger;
 
@@ -14,7 +17,8 @@ pub use import::{
     FrictionImportEntry, FrictionImportFile, FrictionImportSummary, read_import_files,
 };
 pub use output::{
-    Config, EvalOutcome, OutputHarness, OutputReport, OutputRequest, RunRecord, run_output,
+    Config, EvalOutcome, OutputHarness, OutputReport, OutputRequest, RunRecord, calibrate,
+    run_output,
 };
 pub use process::{ExitResult, RunOutcome, RunRequest, run_with_timeout};
 pub use store::{

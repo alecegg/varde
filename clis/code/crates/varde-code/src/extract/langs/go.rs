@@ -337,17 +337,68 @@ fn visit_part_5(
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
         // ---- control flow ----
-        "if_statement"
-        | "for_statement"
+        "for_statement"
         | "expression_switch_statement"
         | "type_switch_statement"
         | "select_statement"
         | "return_statement"
-        | "break_statement"
-        | "continue_statement"
         | "go_statement"
         | "defer_statement" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "if_statement" => {
+            let else_if = is_else_if_statement(node);
+            let name = if else_if {
+                "elseif_statement"
+            } else {
+                "if_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            if let Some(consequence) = node.field("consequence")
+                && let Some(event) = ctx.out.last_mut()
+            {
+                let span = crate::extract::span_of(&consequence);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
+            // Else-if decisions are not max_nesting parents in the new
+            // scorer, though the legacy extractor treated them as structural
+            // decisions. Keep their full span as a nesting parent. A regular
+            // if remains the parent in its consequence and needs a marker
+            // only for its alternative.
+            if else_if {
+                ctx.push(EntityKind::ControlFlow, "legacy_nesting".to_string(), node);
+            } else if let Some(alternative) = node.field("alternative") {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "legacy_nesting".to_string(),
+                    &alternative,
+                );
+            }
+            if let Some(alternative) = node
+                .field("alternative")
+                .filter(|alternative| alternative.kind() == "block")
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &alternative,
+                );
+            }
+        }
+        "goto_statement" => {
+            ctx.push(EntityKind::ControlFlow, "goto_jump".to_string(), node);
+        }
+        "break_statement" | "continue_statement" => {
+            let name = if node.children().any(|child| child.kind() == "label_name") {
+                "labeled_jump"
+            } else if kind == "break_statement" {
+                "break_statement"
+            } else {
+                "continue_statement"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
         }
         "expression_case" | "type_case" | "communication_case" | "default_case" => {
             ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
@@ -368,9 +419,28 @@ fn visit_part_6(
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
         }
+        "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+        }
         _ => return false,
     }
     true
+}
+
+fn is_else_if_statement(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent.kind() == "if_statement"
+            && parent
+                .field("alternative")
+                .is_some_and(|alternative| alternative.range() == node.range())
+    })
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!')
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
 }
 
 /// Names of a `var_spec`/`const_spec`/`parameter_declaration`: the `name`
@@ -699,4 +769,203 @@ func f(a, b bool, value any, channel chan int) {
         assert_eq!(function.cognitive, 5, "metric: {function:?}");
         assert_eq!(function.max_nesting, 0, "metric: {function:?}");
     }
+
+    #[test]
+    fn complexity_events_cover_else_goto_labeled_jumps_and_negation() {
+        let parsed = parse_source(
+            &SupportLang::Go,
+            "package main\nfunc f(a, b, c bool, values []int) {\n    if a { } else if b { } else { }\nouter: for range values { for range values { if a && !(b && c) { continue outer }; break outer } }\n    goto done\ndone:\n}\n",
+        );
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let names: Vec<&str> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"elseif_statement"),
+            "entities: {entities:?}"
+        );
+        assert!(names.contains(&"else_branch"), "entities: {entities:?}");
+        assert!(names.contains(&"goto_jump"), "entities: {entities:?}");
+        assert_eq!(
+            names.iter().filter(|name| **name == "labeled_jump").count(),
+            2,
+            "entities: {entities:?}"
+        );
+        assert!(names.contains(&"negation_break"), "entities: {entities:?}");
+    }
+
+    #[test]
+    fn else_tail_preserves_legacy_nesting_without_decision_score() {
+        let parsed = parse_source(
+            &SupportLang::Go,
+            "package p\nfunc f(a, b bool) { if a { } else if b { if a { } } }\n",
+        );
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::ControlFlow
+                    && entity.name == "legacy_nesting")
+                .count(),
+            2,
+            "entities: {entities:?}"
+        );
+        let metrics = crate::complexity::function_complexities(&entities);
+        let function = metrics.iter().find(|metric| metric.name == "f").unwrap();
+        assert_eq!(function.cyclomatic, 4, "metric: {function:?}");
+        assert_eq!(function.max_nesting, 2, "metric: {function:?}");
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] =
+    &[("legacy_nesting", crate::complexity::FlowRole::LegacyNesting)];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| {
+            matches!(
+                node.kind().as_ref(),
+                "function_declaration" | "method_declaration"
+            )
+        })
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let (required_args, total_args) = parameter_counts(node);
+            let owner = receiver_type_name(node);
+            Some(Callable {
+                owner_type: owner.clone(),
+                owner,
+                unqualified_callable: node.kind() == "function_declaration",
+                name: name_node.text().into_owned(),
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call.ancestors().find(|ancestor| {
+            matches!(
+                ancestor.kind().as_ref(),
+                "function_declaration" | "method_declaration"
+            )
+        }) else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier) = match function.kind().as_ref() {
+            "identifier" => (function.text().into_owned(), Qualifier::None),
+            "type_instantiation_expression" => {
+                let Some(ty) = function.field("type") else {
+                    continue;
+                };
+                (ty.text().into_owned(), Qualifier::None)
+            }
+            "selector_expression" => {
+                let (Some(method), Some(receiver)) =
+                    (function.field("field"), function.field("operand"))
+                else {
+                    continue;
+                };
+                let self_receiver = receiver_variable_name(&caller_node);
+                let qualifier = if self_receiver.as_deref() == Some(receiver.text().as_ref()) {
+                    Qualifier::SelfLike
+                } else {
+                    Qualifier::Other
+                };
+                (method.text().into_owned(), qualifier)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named())
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name: None,
+        });
+    }
+    (callables, references)
+}
+
+fn receiver_variable_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    let receiver = node.field("receiver")?;
+    let parameter = receiver
+        .children()
+        .find(|child| child.kind() == "parameter_declaration")?;
+    parameter.field("name").map(|name| name.text().into_owned())
+}
+
+fn parameter_counts(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> (u16, u16) {
+    let Some(parameters) = node.field("parameters") else {
+        return (0, 0);
+    };
+    let mut total = 0usize;
+    let mut variadic = false;
+    for parameter in parameters.children() {
+        match parameter.kind().as_ref() {
+            "parameter_declaration" => {
+                let names = parameter
+                    .children()
+                    .filter(|child| child.kind() == "identifier")
+                    .count();
+                total += names.max(1);
+            }
+            "variadic_parameter_declaration" => {
+                total += 1;
+                variadic = true;
+            }
+            _ => {}
+        }
+    }
+    let required = if variadic {
+        total.saturating_sub(1)
+    } else {
+        total
+    };
+    let maximum = if variadic {
+        usize::from(u16::MAX)
+    } else {
+        total
+    };
+    (
+        u16::try_from(required).unwrap_or(u16::MAX),
+        u16::try_from(maximum).unwrap_or(u16::MAX),
+    )
 }

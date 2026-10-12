@@ -140,7 +140,7 @@ impl Preview {
     pub fn render(&self) -> String {
         let mut s = String::new();
         s.push_str(&format!(
-            "varde-toz: captured {} → handle {} ({} lines, {} chunk{})  label: {:?}\n",
+            "varde: captured {} → handle {} ({} lines, {} chunk{})  label: {:?}\n",
             fmt_bytes(self.bytes),
             self.handle,
             self.lines,
@@ -166,7 +166,7 @@ impl Preview {
 
     fn render_next(&self, s: &mut String) {
         s.push_str(&format!(
-            "next: varde-toz query --handle {h} \"<query>\"   |   varde-toz query --handle {h} --chunk N\n",
+            "next: varde run query --handle {h} \"<query>\"   |   varde run query --handle {h} --chunk N\n",
             h = self.handle
         ));
     }
@@ -179,12 +179,12 @@ impl Preview {
             ));
             Self::render_lines(s, &entry.lines);
             s.push_str(&format!(
-                "read: varde-toz query --handle {} --lines {}:{}\n",
+                "read: varde run query --handle {} --lines {}:{}\n",
                 self.handle, entry.line_start, entry.line_end
             ));
         }
         s.push_str(&format!(
-            "search: varde-toz query --handle {} \"<term>\"\n",
+            "search: varde run query --handle {} \"<term>\"\n",
             self.handle
         ));
     }
@@ -1104,11 +1104,11 @@ mod tests {
         assert!(rendered.contains("Section One (4 items) L1-L4"));
         assert!(rendered.contains("Section Two (4 items) L5-L8"));
         assert!(rendered.contains(&format!(
-            "read: varde-toz query --handle {} --lines 1:4",
+            "read: varde run query --handle {} --lines 1:4",
             preview.handle
         )));
         assert!(rendered.contains(&format!(
-            "search: varde-toz query --handle {} \"<term>\"",
+            "search: varde run query --handle {} \"<term>\"",
             preview.handle
         )));
     }
@@ -1194,7 +1194,7 @@ mod tests {
         };
         assert_eq!(preview.script_output.as_deref(), Some("lines: 3\n"));
         let rendered = preview.render();
-        assert!(rendered.starts_with("varde-toz: captured"));
+        assert!(rendered.starts_with("varde: captured"));
         assert!(rendered.contains("lines: 3"));
         assert!(!rendered.contains("── sections"));
 

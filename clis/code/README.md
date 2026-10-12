@@ -1,7 +1,7 @@
 # varde-code
 
 A native Rust code-intelligence engine: tree-sitter parsing, entity/symbol extraction, and a
-SQLite-backed query/scan engine, exposed as a library plus a single `varde-code` CLI binary.
+SQLite-backed query/scan engine. The `varde-code` package is exposed through the unified `varde` CLI.
 
 ## Scope
 
@@ -18,7 +18,7 @@ SQLite-backed query/scan engine, exposed as a library plus a single `varde-code`
   (`find_pattern`) and rule-based scanning (`scan`, `rules_list`)
 - A host-supervised background watcher (`watch --ensure`) that keeps a repo's index incrementally fresh
 - Explicitly out of scope: no MCP server or long-running daemon beyond the optional watcher —
-  this module is a library plus a CLI binary
+  this module provides a library exposed through the unified `varde` CLI
 
 The scan engine's product direction is a language-agnostic counterpart to
 [Fallow](https://github.com/fallow-rs/fallow)'s static analysis workflow.
@@ -27,22 +27,24 @@ normalized imports, exports, references, entrypoints, and framework facts.
 Unsupported facts must remain explicit instead of weakening finding precision.
 All twenty-one extraction languages have tested complexity profiles.
 Unknown constructs and syntax errors lower affected metric confidence.
-Only high-confidence metrics block unreadable functions.
+High-confidence metrics are required for function complexity warnings; partial
+measurements remain informational.
 
 Scan reads the persisted index after checking freshness. It returns `index_missing`
 or `index_stale` instead of building the index:
 
 ```sh
-varde-code scan --json '{"repoRoot":".","severityThreshold":"error"}'
-varde-code rules_list --json '{"repoRoot":"."}'
+varde scan --json '{"repoRoot":".","severityThreshold":"error"}'
+varde scan rules list --json '{"repoRoot":"."}'
 ```
 
-The built-in pack has 35 rules: 28 errors, one function-length warning, and six informational advisories.
-The default gate includes certified function, file, structural, clone, and
-dependency budgets. Choose `warning` or `info` to widen the severity gate.
+The built-in pack has 127 rules: 102 errors, 19 warnings, and six informational advisories.
+The warning threshold includes certified complexity, structural, clone, and
+dependency-budget findings. Choose `warning` or `info` to widen the severity gate.
 Use `gateRules` for explicit active rule IDs; it cannot accompany
-`severityThreshold`. Syntax rules cover 35 declared rule-language pairs.
-The dependency boundary stays inactive until configured.
+`severityThreshold`. Syntax rules cover 127 declared rule-language pairs.
+The dependency boundary stays inactive until both prefixes are configured; a
+configured violation is an error and fails the default gate.
 `rules_list` exposes active definitions, thresholds, and override provenance.
 Scan exits nonzero for blocking findings or incomplete analysis.
 The envelope uses `schema_version: 1` and a top-level `outcome`.
@@ -53,54 +55,55 @@ See [BUILT_IN_RULES.md](BUILT_IN_RULES.md) for coverage and customization.
 
 ## Install
 
-Prebuilt binaries (macOS arm64/x86_64, Linux x86_64/arm64) are attached to each
-[tagged release](https://github.com/alecegg/varde/releases). Download the tarball for your
-platform, extract it, and put `varde-code` on your `PATH`. Each tarball also contains
+Prebuilt binaries (macOS arm64, Linux x86_64/arm64) are attached to each
+[tagged release](https://github.com/alecegg/varde/releases). Download the Varde tarball for your
+platform, extract it, and put `varde` on your `PATH`. Each tarball also contains
 `THIRD-PARTY-LICENSES.md` — the attribution notices for the statically-linked dependencies.
 
-Or build from source with Cargo (requires Rust 1.88+):
+Or install the unified CLI from this workspace with Cargo (requires Rust 1.88+):
 
 ```sh
-cargo install --path crates/varde-code
+cd clis && cargo install --path varde --locked --force --target-dir target
 ```
 
 ## Usage
 
-Check the installed binary before following this checkout's watcher examples:
+Check the installed CLI before following this checkout's watcher examples:
 
 ```sh
-command -v varde-code
-varde-code watch --help
+command -v varde
+varde setup watch --help
 ```
 
 The help must list `--ensure`. If it is absent, or the command reports
-`unexpected argument '--ensure'`, the binary on `PATH` predates the supervised
-watcher interface. Reinstall from this checkout (run inside `clis/code/`):
+`unexpected argument '--ensure'`, the CLI on `PATH` predates the supervised
+watcher interface. Reinstall from this checkout's workspace root:
 
 ```sh
-cargo install --path crates/varde-code --locked --force
+cd clis && cargo install --path varde --locked --force --target-dir target
 ```
 
-Then check `varde-code watch --help` again. If `--ensure` is still absent,
-check which binary `command -v varde-code` selects and update `PATH` to use the
+Then check `varde setup watch --help` again. If `--ensure` is still absent,
+check which executable `command -v varde` selects and update `PATH` to use the
 new installation. Use source search until the compatible binary is available.
 
 Ensure the watcher is ready before using indexed queries. The watcher builds the
 index initially and keeps it current; queries only read it:
 
 ```sh
-varde-code watch --ensure --repo . # persistent index coverage
-varde-code watch --list           # inspect registered, alive, ready, and index_ready
-varde-code hotspots --json '{"repoRoot": "."}'
-varde-code symbols_in_file --json '{"repoRoot": ".", "filePath": "src/main.rs"}'
-varde-code context_pack --json '{"repoRoot": ".", "query": "authentication"}'
+varde setup watch --ensure --repo . # persistent index coverage
+varde setup watch --list           # inspect registered, alive, ready, and index_ready
+varde map hotspots --json '{"repoRoot": "."}'
+varde map symbols_in_file --json '{"repoRoot": ".", "filePath": "src/main.rs"}'
+varde map context_pack --json '{"repoRoot": ".", "query": "authentication"}'
 ```
 
 Query directly: an indexed query reports `index_missing` or `index_stale`
 itself, so no separate readiness check is needed. On either error, run
-`watch --ensure` and retry; `find_pattern` needs no index. If `watch --ensure`
-fails, use source search until coverage is restored. Indexed queries require
-`repoRoot`; `dbPath` is an optional override paired with it. `find_pattern`
+`varde setup watch --ensure --repo <repo-root>` and retry; `find_pattern` needs
+no index. If that command fails, use source search until coverage is restored.
+Indexed queries require `repoRoot`; `dbPath` is an optional override paired
+with it. `find_pattern`
 parses live source, while `detect_changes` and `slice_state` remain diagnostic
 exceptions.
 
@@ -114,6 +117,16 @@ readable fresh index independently. If ownership or supervisor inspection is
 denied, `watch --ensure` leaves host state unchanged. Agents can use a fresh
 index read-only; otherwise inspect or manage the watcher on the host, or search
 source directly.
+
+### AST edits
+
+```sh
+varde edit preview --rules rules.json --path src/ --json
+varde edit preview --language typescript --pattern 'oldCall($ARG)' --replacement 'newCall($ARG)' --path src/ --json
+varde edit apply --proposal <data.proposal_path> --json
+```
+
+By default, proposals and diffs are stored under `<working>/ast-edit/`.
 
 Every query subcommand takes a single `--json '<object>'` argument and prints
 the versioned envelope documented in

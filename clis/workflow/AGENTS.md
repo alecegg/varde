@@ -12,6 +12,14 @@ validation and transitions.
 
 CLI-only. No MCP server surface.
 
+## Workspace
+
+The `varde-workflow` and `varde-workflow-core` packages belong to the workspace
+rooted at `clis/Cargo.toml`. From `clis`, test the CLI with
+`cargo test -p varde-workflow --locked` and install the unified CLI with
+`cargo install --path varde --locked --force --target-dir target`.
+Follow the repository-root `AGENTS.md` for shared-crate rules and module boundaries.
+
 ## Status
 
 Pre-alpha. See `../../memory-bank/knowledge/decision/` for confirmed decisions
@@ -33,6 +41,10 @@ and `../../memory-bank/knowledge/definition/` for the project glossary.
 ## Language and tooling
 
 Rust (see `../../memory-bank/knowledge/decision/implementation-language-rust.md`).
+
+Format with `rustfmt --edition 2024 <file>` on owned files only, never
+`cargo fmt`. rustfmt also formats out-of-line `mod` children, so check every
+touched path afterward.
 
 ## Core vocabulary
 
@@ -64,7 +76,7 @@ Highlights:
 - `../../memory-bank/knowledge/decision/` — accepted decisions with What/Why/
   Constraints.
 - `../../memory-bank/knowledge/pattern/` — concrete, testable style rules only.
-- The configured working store (`varde-workflow paths --json`) holds transient plans, tasks, and reviews.
+- The configured working store (`varde setup paths --json`) holds transient plans, tasks, and reviews.
 
 Do not duplicate content across these stores.
 

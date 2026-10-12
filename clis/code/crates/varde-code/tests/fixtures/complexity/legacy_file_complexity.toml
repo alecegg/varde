@@ -1,0 +1,265 @@
+# Captured with the installed varde 2.0.0 at base 8984237745c3bda8ab23e1f34a741e1503bb1fd0.
+
+[[file]]
+path = "fixtures/bash/sample.sh"
+complexity = 13
+
+[[file]]
+path = "fixtures/c/expression_level.c"
+complexity = 13
+
+[[file]]
+path = "fixtures/c/structural.c"
+complexity = 3
+
+[[file]]
+path = "fixtures/complexity/legacy/bash_else.sh"
+complexity = 3
+
+[[file]]
+path = "fixtures/complexity/legacy/c_goto.c"
+complexity = 4
+
+[[file]]
+path = "fixtures/complexity/legacy/cpp_goto.cpp"
+complexity = 5
+
+[[file]]
+path = "fixtures/complexity/legacy/csharp_when.cs"
+complexity = 14
+
+[[file]]
+path = "fixtures/complexity/legacy/lua_else.lua"
+complexity = 5
+
+[[file]]
+path = "fixtures/complexity/legacy/lua_goto.lua"
+complexity = 5
+
+[[file]]
+path = "fixtures/cpp/expression_level.cpp"
+complexity = 12
+
+[[file]]
+path = "fixtures/cpp/structural.cpp"
+complexity = 2
+
+[[file]]
+path = "fixtures/cs/Flow.cs"
+complexity = 16
+
+[[file]]
+path = "fixtures/cs/Program.cs"
+complexity = 7
+
+[[file]]
+path = "fixtures/dart/control_error.dart"
+complexity = 10
+
+[[file]]
+path = "fixtures/dart/structural.dart"
+complexity = 1
+
+[[file]]
+path = "fixtures/elixir/control_error.ex"
+complexity = 14
+
+[[file]]
+path = "fixtures/elixir/domain_specific.ex"
+complexity = 1
+
+[[file]]
+path = "fixtures/elixir/expression_level.ex"
+complexity = 1
+
+[[file]]
+path = "fixtures/elixir/structural.ex"
+complexity = 1
+
+[[file]]
+path = "fixtures/go/fixture.go"
+complexity = 19
+
+[[file]]
+path = "fixtures/haskell/control_error.hs"
+complexity = 10
+
+[[file]]
+path = "fixtures/haskell/structural.hs"
+complexity = 1
+
+[[file]]
+path = "fixtures/java/Controller.java"
+complexity = 19
+
+[[file]]
+path = "fixtures/javascript/control_error.js"
+complexity = 12
+
+[[file]]
+path = "fixtures/javascript/domain_specific.js"
+complexity = 1
+
+[[file]]
+path = "fixtures/javascript/expression_level.js"
+complexity = 1
+
+[[file]]
+path = "fixtures/javascript/statement_level.js"
+complexity = 2
+
+[[file]]
+path = "fixtures/javascript/structural.js"
+complexity = 3
+
+[[file]]
+path = "fixtures/kotlin/fixture.kt"
+complexity = 11
+
+[[file]]
+path = "fixtures/lua/sample.lua"
+complexity = 13
+
+[[file]]
+path = "fixtures/php/control_error.php"
+complexity = 10
+
+[[file]]
+path = "fixtures/php/domain_specific.php"
+complexity = 3
+
+[[file]]
+path = "fixtures/php/expression_level.php"
+complexity = 1
+
+[[file]]
+path = "fixtures/php/structural.php"
+complexity = 4
+
+[[file]]
+path = "fixtures/python/control_error.py"
+complexity = 13
+
+[[file]]
+path = "fixtures/python/domain_specific.py"
+complexity = 4
+
+[[file]]
+path = "fixtures/python/expression_level.py"
+complexity = 1
+
+[[file]]
+path = "fixtures/python/structural.py"
+complexity = 4
+
+[[file]]
+path = "fixtures/ruby/control_error.rb"
+complexity = 10
+
+[[file]]
+path = "fixtures/ruby/domain_specific.rb"
+complexity = 1
+
+[[file]]
+path = "fixtures/ruby/expression_level.rb"
+complexity = 1
+
+[[file]]
+path = "fixtures/ruby/structural.rb"
+complexity = 1
+
+[[file]]
+path = "fixtures/rust/control_flow.rs"
+complexity = 13
+
+[[file]]
+path = "fixtures/rust/errors.rs"
+complexity = 4
+
+[[file]]
+path = "fixtures/rust/exports.rs"
+complexity = 1
+
+[[file]]
+path = "fixtures/rust/expression.rs"
+complexity = 1
+
+[[file]]
+path = "fixtures/rust/structural.rs"
+complexity = 1
+
+[[file]]
+path = "fixtures/rust/variables.rs"
+complexity = 1
+
+[[file]]
+path = "fixtures/scala/control_error.scala"
+complexity = 9
+
+[[file]]
+path = "fixtures/scala/structural.scala"
+complexity = 1
+
+[[file]]
+path = "fixtures/solidity/control_error.sol"
+complexity = 10
+
+[[file]]
+path = "fixtures/solidity/structural.sol"
+complexity = 3
+
+[[file]]
+path = "fixtures/swift/fixture.swift"
+complexity = 10
+
+[[file]]
+path = "fixtures/ts/control_error.ts"
+complexity = 12
+
+[[file]]
+path = "fixtures/ts/domain_specific.ts"
+complexity = 1
+
+[[file]]
+path = "fixtures/ts/expression_level.ts"
+complexity = 1
+
+[[file]]
+path = "fixtures/ts/invalid.ts"
+complexity = 1
+
+[[file]]
+path = "fixtures/ts/mixed/binary.ts"
+complexity = 1
+
+[[file]]
+path = "fixtures/ts/mixed/broken.ts"
+complexity = 1
+
+[[file]]
+path = "fixtures/ts/mixed/valid.ts"
+complexity = 2
+
+[[file]]
+path = "fixtures/ts/statement_level.ts"
+complexity = 2
+
+[[file]]
+path = "fixtures/ts/structural.ts"
+complexity = 2
+
+[[file]]
+path = "fixtures/ts/symbols.ts"
+complexity = 3
+
+[[file]]
+path = "fixtures/ts/valid.ts"
+complexity = 3
+
+[[file]]
+path = "fixtures/tsx/component.tsx"
+complexity = 11
+
+[[file]]
+path = "fixtures/tsx/server.tsx"
+complexity = 3

@@ -1,0 +1,71 @@
+WARN  corpus/agents/README.md:38 (unit, 5 sentences)
+WARN  corpus/agents/README.md:38 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/agents/README.md:58 (inline list, 3 items); put one item per line under a lead-in
+ERROR corpus/agents/README.md:88 (unit, 10 sentences)
+WARN  corpus/agents/README.md:88 (inline list, 3 items); put one item per line under a lead-in
+ERROR corpus/agents/README.md:1 (prose share, 82 percent); steps or lists written as sentences?
+WARN  corpus/clis/code/docs/ARCHITECTURE.md:3 (unit, 4 sentences)
+WARN  corpus/clis/code/docs/ARCHITECTURE.md:3 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/clis/code/docs/ARCHITECTURE.md:65 (unit, 5 sentences)
+WARN  corpus/clis/code/docs/ARCHITECTURE.md:65 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/clis/code/docs/ARCHITECTURE.md:86 (unit, 5 sentences)
+ERROR corpus/clis/code/docs/ARCHITECTURE.md:95 (unit, 6 sentences)
+WARN  corpus/clis/code/docs/ARCHITECTURE.md:95 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/clis/code/docs/ARCHITECTURE.md:111 (lazy continuation; indent it under its item)
+ERROR corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:3 (unit, 7 sentences)
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:3 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:17 (unit, 5 sentences)
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:17 (inline list, 7 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:19 (unit, 5 sentences)
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:19 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:20 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:22 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:25 (unit, 5 sentences)
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:26 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:27 (inline list, 3 items); put one item per line under a lead-in
+ERROR corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:15 (section, 434 words)
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:35 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-agent-doc-authoring/assets/flow-ledger-prompt.md:47 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/SKILL.md:8 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/build-execution.md:5 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/build-execution.md:43 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/build-execution.md:59 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/build-execution.md:66 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/build-execution.md:66 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/build-execution.md:116 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/orchestration.md:14 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/orchestration.md:33 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/orchestration.md:44 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/orchestration.md:48 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/orchestration.md:1 (prose share, 50 percent); steps or lists written as sentences?
+WARN  corpus/skills/varde-change/references/plan.md:7 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/plan.md:49 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:53 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:68 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:82 (inline list, 5 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:86 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:96 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:110 (inline list, 6 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:126 (inline list, 4 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:137 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:149 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/plan.md:149 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:159 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/plan.md:159 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:170 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/plan.md:177 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/plan.md:177 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-change/references/plan.md:147 (section, 342 words)
+WARN  corpus/skills/varde-change/references/plan.md:199 (unit, 4 sentences)
+WARN  corpus/skills/varde-change/references/plan.md:207 (unit, 5 sentences)
+WARN  corpus/skills/varde-change/references/plan.md:207 (inline list, 4 items); put one item per line under a lead-in
+ERROR corpus/skills/varde-code/FLOW.md:3 (unit, 8 sentences)
+WARN  corpus/skills/varde-code/FLOW.md:1 (prose share, 43 percent); steps or lists written as sentences?
+ERROR corpus/skills/varde-review/FLOW.md:3 (unit, 8 sentences)
+WARN  corpus/skills/varde-review/FLOW.md:14 (unit, 4 sentences)
+WARN  corpus/skills/varde-review/FLOW.md:14 (inline list, 3 items); put one item per line under a lead-in
+ERROR corpus/skills/varde-review/FLOW.md:12 (section, 571 words)
+WARN  corpus/skills/varde-review/FLOW.md:172 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-review/FLOW.md:178 (inline list, 3 items); put one item per line under a lead-in
+WARN  corpus/skills/varde-review/SKILL.md:35 (inline list, 3 items); put one item per line under a lead-in
+8 error(s), 62 warning(s) across 10 file(s).

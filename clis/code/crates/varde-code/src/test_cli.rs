@@ -181,7 +181,7 @@ fn load_rules_for_test(input: &serde_json::Value) -> Result<LoadedTestRules, Api
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::PathOverride;
+    use crate::test_support::CaptureOverride;
 
     fn tempdir(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("varde-test-cli-{tag}-{}", std::process::id()));
@@ -389,21 +389,15 @@ name = "bogus rewrite expectation"
         }
         write(&dir.join("pack.toml"), &pack);
 
-        let bin = dir.join("bin");
-        std::fs::create_dir_all(&bin).expect("bin dir creates");
-        let capture = dir.join("captured.jsonl");
-        let script = format!(
-            "#!/bin/sh\ncat > '{}'\nprintf '%s\\n' '{{\"handle\":\"test-handle\"}}'\n",
-            capture.display()
-        );
-        let stub = bin.join("toz");
-        write(&stub, &script);
-        let mut perms = std::fs::metadata(&stub)
-            .expect("stub metadata")
-            .permissions();
-        std::os::unix::fs::PermissionsExt::set_mode(&mut perms, 0o755);
-        std::fs::set_permissions(&stub, perms).expect("stub permissions");
-        let _override = PathOverride::new(&bin);
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = std::sync::Arc::clone(&captured);
+        let _override = CaptureOverride::with(move |input, _, _| {
+            let varde_contracts::CaptureInput::Items(lines) = input else {
+                return None;
+            };
+            *sink.lock().unwrap() = lines.to_vec();
+            Some("{\"handle\":\"test-handle\"}".to_string())
+        });
         unsafe { std::env::set_var("VARDE_CODE_TOZ", "1") };
 
         let input = serde_json::json!({ "rulesDir": dir.display().to_string() });
@@ -418,16 +412,17 @@ name = "bogus rewrite expectation"
         assert_eq!(payload["guide"]["toz"]["handle"], "test-handle");
         assert_eq!(
             payload["guide"]["truncated"]["results"]["toz_read"],
-            "toz query --handle test-handle --lines 21:40"
+            "varde run query --handle test-handle --lines 21:40"
         );
         assert_eq!(
             payload["guide"]["truncated"]["results"]["toz_search"],
-            "toz query --handle test-handle \"<term>\""
+            "varde run query --handle test-handle \"<term>\""
         );
 
-        let captured = std::fs::read_to_string(&capture).expect("capture written");
         let items: Vec<serde_json::Value> = captured
-            .lines()
+            .lock()
+            .unwrap()
+            .iter()
             .map(|line| serde_json::from_str(line).expect("JSONL item"))
             .collect();
         assert_eq!(items.len(), 101);
@@ -436,7 +431,7 @@ name = "bogus rewrite expectation"
         assert_eq!(items[100]["test_name"], "case 100");
 
         drop(_override);
-        let _without_toz = PathOverride::without_toz();
+        let _without_toz = CaptureOverride::none();
         let fallback = run_tests(&input).expect("run succeeds without toz");
         assert_eq!(fallback["results"].as_array().unwrap().len(), 100);
         assert_eq!(

@@ -1,6 +1,7 @@
 ---
 name: varde-explore
 description: "Compare design options or explain how existing code works, in chat or as an HTML page. Not for planning, prototyping, or implementing."
+recommends: [varde-change, varde-code]
 ---
 
 # Explore before committing
@@ -20,7 +21,8 @@ description: "Compare design options or explain how existing code works, in chat
 
 ## Gotchas
 
-- Resolve `<working>` and `<knowledge>` once with `varde-workflow paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
-- If the user explicitly asks to plan or build after exploring, start the
-  matching `varde-change` route in the same turn without reconfirming; otherwise,
+- Resolve `<working>` and `<knowledge>` once with `varde setup paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
+- If the user explicitly asks to plan or build after exploring, load
+  `varde-change`: use your skill tool, or read `../varde-change/SKILL.md`, and
+  start the matching route in the same turn without reconfirming; otherwise,
   offer the next step and wait.

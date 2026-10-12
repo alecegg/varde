@@ -205,11 +205,11 @@ fn sanitize_cache_meta(meta: &mut CacheMeta, redactor: &Redactor) {
     meta.title = meta
         .title
         .as_ref()
-        .map(|value| metadata::sanitize_text(redactor, &value));
+        .map(|value| metadata::sanitize_text(redactor, value));
     meta.etag = meta
         .etag
         .as_ref()
-        .map(|value| metadata::sanitize_text(redactor, &value));
+        .map(|value| metadata::sanitize_text(redactor, value));
 }
 
 /// Move old URL-hashed cache entries to private keyed names and scrub their metadata.
@@ -226,7 +226,7 @@ fn migrate_legacy_cache_in(
     cache_paths_for: impl Fn(&str) -> Result<(PathBuf, PathBuf)>,
     project_identity_for: impl Fn(&str) -> Result<String>,
 ) -> Result<usize> {
-    let entries = match std::fs::read_dir(&dir) {
+    let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
         Err(err) => return Err(err.into()),
@@ -278,7 +278,7 @@ fn migrate_legacy_cache_in(
                 .project_key
                 .map(|key| project_identity_for(&key))
                 .transpose()?;
-            let mut temp = tempfile::NamedTempFile::new_in(&dir)?;
+            let mut temp = tempfile::NamedTempFile::new_in(dir)?;
             serde_json::to_writer(&mut temp, &meta)?;
             temp.as_file().sync_all()?;
             match temp.persist_noclobber(&target_meta) {
@@ -601,9 +601,6 @@ pub fn store_fetched(
 mod tests {
     use super::*;
     use std::io::{BufRead, BufReader, Write};
-    use std::sync::Mutex;
-
-    static CONFIG_ENV: Mutex<()> = Mutex::new(());
 
     const CA_ROOT_PEM: &str = include_str!("../tests/fixtures/ca-root.pem");
 
@@ -976,7 +973,7 @@ sensible default so the minimal program is just a few lines long and reads clear
 
     #[test]
     fn cache_does_not_persist_request_secrets_and_rehydrates_lookup_url() {
-        let _env_guard = CONFIG_ENV.lock().unwrap();
+        let _env_guard = crate::test_support::env_lock();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("TOZ_CONFIG_DIR", dir.path());
         let url = "https://alice:password@example.com/docs?token=secret123";
@@ -1035,9 +1032,7 @@ sensible default so the minimal program is just a few lines long and reads clear
 
     #[test]
     fn cache_roundtrip_and_ttl() {
-        let _env_guard = CONFIG_ENV
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _env_guard = crate::test_support::env_lock();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("TOZ_CONFIG_DIR", dir.path());
         let f = Fetched {
@@ -1069,9 +1064,7 @@ sensible default so the minimal program is just a few lines long and reads clear
 
     #[test]
     fn clear_cache_removes_current_second_entry() {
-        let _env_guard = CONFIG_ENV
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _env_guard = crate::test_support::env_lock();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("TOZ_CONFIG_DIR", dir.path());
         let fetched = Fetched {
@@ -1098,14 +1091,13 @@ sensible default so the minimal program is just a few lines long and reads clear
 
     #[test]
     fn stored_fetch_cache_contains_only_redacted_text() {
-        let _env_guard = CONFIG_ENV
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _env_guard = crate::test_support::env_lock();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("TOZ_CONFIG_DIR", dir.path());
         let mut cfg = Config::default();
         cfg.redact.patterns.push(r"internal-[0-9]+".into());
         let mut store = Store::open(&dir.path().join("store.db")).unwrap();
+        // varde-ignore-next-line hardcoded-credential-rust -- synthetic GitHub token fixture for the redaction test
         let secret = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
         let original = format!("credential \x1b[31m{secret}\x1b[0m\nreference=internal-4217\n");
         let mut fetched = Fetched {

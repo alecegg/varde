@@ -1,0 +1,308 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 4
+cyclomatic = 4
+matrix = "if-else-if-else"
+rule = "spec:491-501, 747-754; root if +1, two else-if branches +1 each, and else +1"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:502-518; root if +1, else-if +1, and its nested if +2"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:502-518; if-let +1, plain else +1, and nested if in the else body +2"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer if +1 and nested if +2"
+
+[[case]]
+callable = "loops"
+cognitive = 6
+cyclomatic = 4
+matrix = "loops"
+rule = "spec:491-518; for +1, nested while +2, nested if +3"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 4
+matrix = "switch-once"
+rule = "spec:196-205, 491-500; switch and its three cases add one cognitive point; pre-change cyclomatic is baseline 1 + three case arms"
+
+[[case]]
+callable = "ternary"
+cognitive = 3
+cyclomatic = 3
+matrix = "ternary"
+rule = "spec:491-518; outer ternary +1 and nested ternary +2"
+
+[[case]]
+callable = "catch_once"
+cognitive = 3
+cyclomatic = 3
+matrix = "catch-once"
+rule = "spec:190-203, 491-518; one catch +1 and nested if +2; do/try are ignored"
+
+[[case]]
+callable = "try_finally_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "try-finally-zero"
+rule = "spec:190-203, 491-518; Swift defer is the cleanup analogue to finally and adds 0; the separate if adds 1"
+
+[[case]]
+callable = "<anonymous>@34:10"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:267-291; defer's cleanup closure contains no structural increment"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; if adds 1 and its early return adds 0"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229; same-operator && sequence adds 1"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229; the && run and the following || run each add 1"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 3
+cyclomatic = 4
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256, 491-501; if +1, outer && run +1, and negated inner && run +1"
+
+[[case]]
+callable = "logical_run_across_lambda"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-across-lambda"
+rule = "spec:207-229, 267-291; the outer && and closure's separate && run each add 1"
+
+[[case]]
+callable = "<anonymous>@51:30"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:207-229, 267-291; closure's own && sequence adds 1"
+
+[[case]]
+callable = "null_coalescing_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "null-coalescing-zero"
+rule = "spec:160-168; Swift ?? is null coalescing and adds 0"
+
+[[case]]
+callable = "lambda_nesting"
+cognitive = 2
+cyclomatic = 1
+matrix = "lambda-nesting"
+rule = "spec:267-285, 491-501; closure raises nesting by one, so its if adds 2 to the outer method"
+
+[[case]]
+callable = "<anonymous>@59:15"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-285, 491-501; closure's own top-level if adds 1"
+
+[[case]]
+callable = "named_nested_function"
+cognitive = 2
+cyclomatic = 1
+matrix = "named-nested-function"
+rule = "spec:267-280, 491-501; nested named function raises nesting, so its if adds 2 to the outer function"
+
+[[case]]
+callable = "nested"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-280, 491-501; nested function's own top-level if adds 1"
+
+[[case]]
+callable = "class_in_method"
+cognitive = 2
+cyclomatic = 1
+matrix = "class-in-method"
+rule = "spec:267-280, 491-501; method nested in a local type adds one callable nesting level, so its if adds 2 to the outer function"
+
+[[case]]
+callable = "inner"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-280, 491-501; local type method's own top-level if adds 1"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "condition-nesting"
+rule = "spec:491-518; if +1 and ternary in its condition +2 for one nesting level"
+
+[[case]]
+callable = "goto_or_labeled_jump"
+cognitive = 4
+cyclomatic = 3
+matrix = "goto-or-labeled-jump"
+rule = "spec:238-243, 491-518; while +1, nested if +2, labeled break +1; the labeled jump does not change legacy cyclomatic"
+
+[[case]]
+callable = "multi_level_break"
+cognitive = 7
+cyclomatic = 4
+matrix = "multi-level-break"
+rule = "spec:238-243, 491-518; outer for +1, nested while +2, nested if +3, labeled break +1"
+
+[[case]]
+callable = "recursion_overload_delegate"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-overload-delegate"
+rule = "spec:230-237; the one-argument overload delegates to a distinct two-argument overload, so no recursion cycle is formed"
+
+[[case]]
+callable = "recursion_in_closure"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-in-closure"
+rule = "spec:230-237, 267-291; a self-call inside a closure belongs to the enclosing method and adds one recursion point"
+
+[[case]]
+callable = "<anonymous>@133:20"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:230-237, 267-291; recursion marker is attributed to the enclosing named method, not the closure"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237; the referenced peer is absent from this one-file fixture and does not resolve"
+
+[[case]]
+callable = "get_words"
+cognitive = 1
+cyclomatic = 5
+matrix = "spec-example-small"
+rule = "spec:316-327, 491-500; switch and all four cases combine for one cognitive point; pre-change cyclomatic is baseline 1 + four case arms"
+
+[[case]]
+callable = "sum_primes"
+cognitive = 7
+cyclomatic = 4
+rule = "spec:328-339, 238-243, 491-518; outer for +1, nested for +2, nested if +3, labeled continue +1"
+
+[[case]]
+callable = "my_method"
+cognitive = 9
+cyclomatic = 6
+rule = "spec:270-280, 491-518; if +1, for +2, while +3, catch +1, and if in catch +2"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-501; if +1 and one self-recursion cycle point +1"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-501; if +1 and two self-calls still yield one recursion point +1"
+
+[[case]]
+callable = "recursion_qualified_self"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-qualified-self"
+rule = "spec:230-237, 491-501; if +1 and self-qualified recursion cycle point +1"
+
+[[case]]
+callable = "recursion_qualified_type"
+cognitive = 2
+cyclomatic = 2
+rule = "spec:230-237, 491-501; same-type-qualified recursion and its nested if add 1 each"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-other-receiver"
+rule = "spec:230-237; other.receiver calls do not bind to the current method"
+
+[[case]]
+callable = "recursion_same_file_cycle"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237; this method and its same-file peer form one cycle, worth +1 each"
+
+[[case]]
+callable = "recursion_same_file_cycle_peer"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237; this peer and recursion_same_file_cycle form one cycle, worth +1 each"
+
+[[case]]
+callable = "preproc_conditional"
+cognitive = 4
+cyclomatic = 1
+matrix = "preproc-conditional"
+rule = "spec:175, 281-291; #if +1 and the closure's nested if +3; top-level #elseif/#else branches verify the Swift directive forms"
+
+[[case]]
+callable = "<anonymous>@173:15"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:281-291, 491-501; closure's own top-level if adds 1"
+
+[[case]]
+callable = "guard_else"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:491-518; Swift guard is a conditional +1 and its required else adds no separate point"
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "The plan's compensating-usage exception is defined for JavaScript/TypeScript declaration-only functions and Python decorators; Swift has no corresponding exception syntax."
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "The callback compensation example and marker semantics are defined for JavaScript-like functions; Swift has no corresponding exception semantics."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Swift has no extern \"C\" linkage blocks or C-preprocessor wrapper syntax; @_cdecl declarations are attributes, not linkage regions."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "Swift has no comprehension or query-clause syntax; map/filter/forEach are ordinary calls with closures, while for statements are structural loops."
+
+[["n/a"]]
+matrix_id = "spec-example-large"
+reason = "The plan's large worked example is specifically provided for Java, JavaScript, and C#; it has no Swift rendering."

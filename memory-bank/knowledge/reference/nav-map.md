@@ -23,8 +23,8 @@ auto-freshening via `freshen_for_mode`, and the uniform
 ## Invocation
 
 ```
-varde-code nav_map --json '{"repoRoot":"<repo-root>"}'
-varde-code nav_map --json '{"repoRoot":"<repo-root>"}' --format text
+varde map nav_map --json '{"repoRoot":"<repo-root>"}'
+varde map nav_map --json '{"repoRoot":"<repo-root>"}' --format text
 ```
 
 `--format` accepts `json` (default, the canonical output) or `text` (a
@@ -71,15 +71,15 @@ Generated/vendored paths (`target/`, `node_modules/`, `dist/`, `build/`) are
 excluded from every section via one shared filter
 (`query::noise_filter::is_generated_or_vendored_path`).
 
-## Text rendering and toz capture
+## Text rendering and Toz output capture
 
 For successful map data, `--format text` emits the compact repository
 orientation: up to five entrypoints, up to four shallow flow summaries, and
 commands for retrieving an expanded map or focused context, dependency graph,
 and hotspot data. Text mode also hands a rendering without the
 `maxTokensEstimate` token budget (still under each section's hard cap, e.g.
-`HOTSPOTS_SECTION_LIMIT`) to `toz capture`
-(source `varde-code nav_map <repoRoot>`, label `nav_map`) if a `toz` binary is
+`HOTSPOTS_SECTION_LIMIT`) to the capture command
+(source `varde map nav_map <repoRoot>`, label `nav_map`) if a `toz` binary is
 on `PATH`. A successful capture appends the Toz handle and commands to search
 or read the expanded map; Toz's TOC preview does not replace the orientation.
 If capture is unavailable, fails, or `VARDE_CODE_TOZ=0`, the orientation is

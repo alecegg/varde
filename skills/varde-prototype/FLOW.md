@@ -1,7 +1,7 @@
 # varde-prototype flow
 
 Generated for human readers; agents do not load this file. Regenerate
-with skill-flow.py --write from varde-agent-doc-authoring. Dotted edges
+with `varde doc flow --write`. Dotted edges
 are conditional loads; min tokens follow only solid edges. Thick edges
 are hand-offs to a later stage, outside min and max. Double-bordered
 nodes are skill modes run inline or agent dispatches. Min and max count
@@ -11,7 +11,7 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~474 tok; routes: Shape, prototype, or refine a frontend page, layout, or c..., "Does this state model, logic, or data shape feel right?"...)
+- SKILL.md (~513 tok; routes: Shape, prototype, or refine a frontend page, layout, or c..., "Does this state model, logic, or data shape feel right?"...)
   - references/logic-track.md (~402 tok; routes: "Does this state model, logic, or data shape feel right?"...)
   - references/visual-track.md (~638 tok; routes: Shape, prototype, or refine a frontend page, layout, or c...)
 
@@ -39,8 +39,8 @@ flowchart TD
 
 | Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |
 |---|---|---|---|---|---|---|---|
-| Shape, prototype, or refine a frontend page, layout, or c... | ~1112 | ~1112 | ~1112 | ~1112 | - | 0 | references/visual-track.md |
-| "Does this state model, logic, or data shape feel right?"... | ~876 | ~876 | ~876 | ~876 | - | 0 | references/logic-track.md |
+| Shape, prototype, or refine a frontend page, layout, or c... | ~1151 | ~1151 | ~1151 | ~1151 | - | 0 | references/visual-track.md |
+| "Does this state model, logic, or data shape feel right?"... | ~915 | ~915 | ~915 | ~915 | - | 0 | references/logic-track.md |
 
 ## Structure
 

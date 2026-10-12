@@ -620,29 +620,133 @@ fn read_named_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NamedRow> {
     ))
 }
 
-/// tests_for_file — test files that (transitively) import the given file.
+/// tests_for_file — test files that cover the given file.
 ///
 /// Inputs: `filePath` (required). Output: array of test file paths. A test
-/// file is a file whose path carries a test/spec marker and which reaches the
-/// target through resolved import edges. Empty array when no tests cover the
-/// file; `not_found` for an unknown file.
+/// file is a file whose path carries a test/spec marker. Import-graph results
+/// (tests that reach the target through resolved import edges) come first;
+/// when the graph has none — the normal case for non-code files — indexed test
+/// files whose text names the target's repo-relative path are returned instead
+/// (see [`TestCoverage::covering_with_names`]). Empty array when nothing
+/// covers the file; `not_found` for an unknown file.
 pub fn tests_for_file(input: &serde_json::Value) -> Result<serde_json::Value, ApiError> {
     freshen_for_mode("tests_for_file", input)?;
     let conn = open_db(input)?;
     let file_path = req_str(input, "filePath")?;
+    let repo_root = req_str(input, "repoRoot")?;
     let target = file_id(&conn, file_path)?;
-    Ok(serde_json::json!(covering_tests(&conn, target)?))
+    let target_path = file_path_of(&conn, target)?;
+    let coverage = TestCoverage::load(&conn)?;
+    Ok(serde_json::json!(coverage.covering_with_names(
+        target,
+        &target_path,
+        repo_root
+    )))
 }
 
-/// Reusable snapshot backing [`covering_tests`]: the test-file candidate set
-/// and the resolved import graph, loaded once. `context_pack` calls
-/// `covering_tests` once per seed file — loading via [`TestCoverage::load`]
-/// once up front and reusing it across seeds turns that from O(seeds *
-/// repo_size) full-table rescans into a single O(repo_size) load plus a
-/// cheap reverse-BFS per seed.
+/// The stored path of a persisted `files.id`.
+fn file_path_of(conn: &Connection, id: i64) -> std::result::Result<String, ApiError> {
+    conn.query_row("SELECT path FROM files WHERE id = ?1", [id], |r| r.get(0))
+        .map_err(db_err)
+}
+
+/// Basenames that appear under many directories, so a bare-basename name
+/// match is too ambiguous: the parent directory is kept as part of the needle.
+/// Mirrors `risk-tier.py`'s `GENERIC_BASENAMES` (plus `plan.md`).
+const GENERIC_BASENAMES: &[&str] = &[
+    "SKILL.md",
+    "FLOW.md",
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "main.rs",
+    "lib.rs",
+    "mod.rs",
+    "__init__.py",
+    "plan.md",
+];
+
+/// Whether `name` is a generic basename (`index.*` included, matching
+/// `risk-tier.py`'s `is_generic`).
+fn is_generic_basename(name: &str) -> bool {
+    GENERIC_BASENAMES.contains(&name)
+        || name
+            .strip_prefix("index.")
+            .is_some_and(|rest| !rest.is_empty())
+}
+
+/// A character that continues a path token; a name match must not be preceded
+/// by one. Mirrors `risk-tier.py`'s `(?<![A-Za-z0-9._-])` lookbehind.
+fn is_path_name_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')
+}
+
+/// Whether `text` names `needle` at a path boundary — the preceding character
+/// is not part of a path token.
+fn names_at_path_boundary(text: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    text.match_indices(needle).any(|(idx, _)| {
+        text[..idx]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !is_path_name_char(c))
+    })
+}
+
+/// The repo-relative, slash-separated form of a stored file path: the stored
+/// path with `repo_root` stripped when it is absolute and under the root, or
+/// unchanged when it is already relative.
+fn repo_relative_path(stored: &str, repo_root: &str) -> String {
+    let path = stored.replace('\\', "/");
+    let root = repo_root.replace('\\', "/");
+    let root = root.trim_end_matches('/');
+    let relative = if root.is_empty() {
+        path.as_str()
+    } else {
+        match path.strip_prefix(root) {
+            Some(rest) if rest.is_empty() || rest.starts_with('/') => rest,
+            _ => path.as_str(),
+        }
+    };
+    relative.trim_start_matches('/').to_string()
+}
+
+/// The name needles for a repo-relative path: the full path, plus
+/// `<parent>/<name>` for generic basenames, matching `risk-tier.py`'s
+/// `tests_naming_scope`.
+fn name_needles(relative_path: &str) -> Vec<String> {
+    let name = relative_path.rsplit('/').next().unwrap_or(relative_path);
+    let base = if is_generic_basename(name) {
+        match relative_path.rsplit_once('/') {
+            Some((parent, _)) => {
+                let parent_name = parent.rsplit('/').next().unwrap_or(parent);
+                format!("{parent_name}/{name}")
+            }
+            None => name.to_string(),
+        }
+    } else {
+        name.to_string()
+    };
+    if relative_path == base {
+        vec![relative_path.to_string()]
+    } else {
+        vec![relative_path.to_string(), base]
+    }
+}
+
+/// Reusable snapshot backing coverage queries: the test-file candidate set
+/// and the resolved import graph, loaded once. `context_pack` queries coverage
+/// once per seed file — loading via [`TestCoverage::load`] once up front and
+/// reusing it across seeds turns that from O(seeds * repo_size) full-table
+/// rescans into a single O(repo_size) load plus a cheap reverse-BFS per seed.
 pub(crate) struct TestCoverage {
     candidates: Vec<(i64, String)>,
     importers: std::collections::HashMap<i64, Vec<i64>>,
+    /// Test-file text, read from disk lazily and kept for the whole query so a
+    /// multi-seed caller reads each file at most once.
+    texts: std::cell::OnceCell<Vec<(String, String)>>,
 }
 
 impl TestCoverage {
@@ -686,6 +790,7 @@ impl TestCoverage {
         Ok(TestCoverage {
             candidates,
             importers,
+            texts: std::cell::OnceCell::new(),
         })
     }
 
@@ -715,19 +820,47 @@ impl TestCoverage {
         covering.sort();
         covering
     }
-}
 
-/// Test files that (transitively) import `target` through resolved import
-/// edges. Single-target convenience wrapper around [`TestCoverage`] — used
-/// by [`tests_for_file`] where only one target is ever queried. Callers that
-/// need this for multiple targets against the same db (e.g. `context_pack`,
-/// one call per seed file) should load a [`TestCoverage`] once and call
-/// [`TestCoverage::covering`] per target instead of calling this repeatedly.
-pub(crate) fn covering_tests(
-    conn: &Connection,
-    target: i64,
-) -> std::result::Result<Vec<String>, ApiError> {
-    Ok(TestCoverage::load(conn)?.covering(target))
+    /// Coverage for `target`: the import-graph test files, or — when the graph
+    /// has none — indexed test files whose text names `target_path` at a path
+    /// boundary. `target_path` is a stored path (absolute or repo-relative);
+    /// it is compared against the test text in repo-relative form.
+    pub(crate) fn covering_with_names(
+        &self,
+        target: i64,
+        target_path: &str,
+        repo_root: &str,
+    ) -> Vec<String> {
+        let graph = self.covering(target);
+        if !graph.is_empty() {
+            return graph;
+        }
+        let relative = repo_relative_path(target_path, repo_root);
+        let needles = name_needles(&relative);
+        let root = std::path::Path::new(repo_root);
+        let mut hits: Vec<String> = self
+            .candidate_texts(root)
+            .iter()
+            .filter(|(_, text)| needles.iter().any(|n| names_at_path_boundary(text, n)))
+            .map(|(path, _)| path.clone())
+            .collect();
+        hits.sort();
+        hits
+    }
+
+    /// Candidate test files paired with their on-disk text, read once.
+    fn candidate_texts(&self, repo_root: &std::path::Path) -> &[(String, String)] {
+        self.texts.get_or_init(|| {
+            self.candidates
+                .iter()
+                .filter_map(|(_, path)| {
+                    std::fs::read_to_string(repo_root.join(path))
+                        .ok()
+                        .map(|text| (path.clone(), text))
+                })
+                .collect()
+        })
+    }
 }
 
 /// find_imports — resolved import edges of a file.
@@ -1439,7 +1572,9 @@ mod covering_tests_tests {
         insert_import(&conn, java_test, target);
         insert_import(&conn, false_positive, target);
 
-        let covering = covering_tests(&conn, target).expect("covering computes");
+        let covering = TestCoverage::load(&conn)
+            .expect("coverage loads")
+            .covering(target);
 
         assert_eq!(
             covering,

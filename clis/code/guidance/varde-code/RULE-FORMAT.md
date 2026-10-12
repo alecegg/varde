@@ -4,8 +4,8 @@ Source of truth: `crates/varde-code/src/rules/mod.rs` (`Rule`/`TestCase` structs
 
 A rule pack is a TOML file with one or more `[[rule]]` array-of-tables entries. Each rule has a `kind = "pattern" | "sql"` discriminator; unrecognized extra fields are ignored (permissive), and a rule missing a required field is skipped with a diagnostic rather than failing the whole file.
 
-The embedded built-ins currently contain 35 rules: 28 errors, one warning, and 6 infos.
-Their pattern declarations cover 35 rule/language pairs.
+The embedded built-ins currently contain 127 rules: 102 errors, 19 warnings, and 6 infos.
+Their pattern declarations cover 127 rule/language pairs.
 
 ## Choosing pattern vs sql
 
@@ -51,7 +51,7 @@ Kind-agnostic optional fields:
 - `fix` (string) — free-text suggested-fix guidance. Purely informational, never applied automatically, valid on either kind.
 - `rewrite` (string) — pattern only. A meta-variable template (`$VAR`/`$$$VAR`) applied to matched spans when `scan --apply` runs. Every `$VAR`/`$$$VAR` in `rewrite` must also appear in `pattern` — the loader validates this and rejects the rule (with a diagnostic) if not.
 - `languages` (array of strings) — pattern only. `SupportLang`-resolvable names (e.g. `"javascript"`, `"typescript"`, `"tsx"`, `"python"`, `"rust"`, `"go"`...). Omitted/empty = run against every file whose parse succeeds (language-agnostic).
-- `test` — see "Test entries" below. Inert to `scan`; only consumed by `varde-code test`.
+- `test` — see "Test entries" below. Inert to `scan`; only consumed by `varde scan test`.
 
 Verification is SQL-only and requires a repository root at scan time.
 `exact-clone` reparses candidate spans and compares canonical syntax trees.
@@ -61,7 +61,9 @@ Its defaults are `min_tokens = 20`, `min_members = 3`, and
 `strings.source_prefix` and `strings.target_prefix`. Prefixes are normalized
 relative directories or `.`. Both blank leaves the policy inactive; one blank
 is invalid. Matching uses only explicitly configured source and target
-prefixes. It does not infer a blanket unresolved dependency prohibition.
+prefixes. It does not infer a blanket unresolved dependency prohibition. The
+rule defaults to `error` because a configured boundary represents an explicit
+architecture decision.
 
 Constraint forms can coexist:
 
@@ -87,7 +89,7 @@ Worked example (`crates/varde-code/src/rules/builtin/hardcoded_credential_litera
 
 ## SQL surface
 
-`kind = "sql"` queries run read-only against the persisted index built by `varde-code build`. The SELECT must alias a `file` column (source path) and a `line` column (1-indexed); use `1 AS line` for whole-file/no-natural-line checks.
+`kind = "sql"` queries run read-only against the persisted index built by `varde map build`. The SELECT must alias a `file` column (source path) and a `line` column (1-indexed); use `1 AS line` for whole-file/no-natural-line checks.
 
 ### Tables
 
@@ -98,7 +100,7 @@ Worked example (`crates/varde-code/src/rules/builtin/hardcoded_credential_litera
 | `path` | TEXT | repo-relative source path |
 | `mtime`, `size` | INTEGER | |
 | `content_hash` | TEXT | |
-| `complexity` | INTEGER | `1 + count(ControlFlow entities)` in the file |
+| `complexity` | INTEGER | `1 + count(ControlFlow entities)` in the file, excluding `else_branch`, `goto_jump`, `labeled_jump`, `recursive_call`, `preproc_if`, `preproc_branch`, `cognitive_decision`, `legacy_nesting`, `pattern_logical_and`, `pattern_logical_or`, `negation_break`, and `compensating_usage` |
 | `churn` | INTEGER | commit-touch count (see `git`-derived churn signal) |
 | `fan_in`, `fan_out` | INTEGER | denormalized edge counts |
 | `community_id` | INTEGER | clustering group, FK-ish to `communities.id` |
@@ -152,13 +154,13 @@ recreated in SQLite TEMP storage and never changes the index schema.
 | `source_entity_id` | INTEGER | import entity id |
 | `specifier` | TEXT | original import specifier |
 
-Relative JavaScript, TypeScript, TSX, Dart, and Solidity imports are certified
-only when one physical target and one indexed target agree. Go uses resolved,
-module-aware edges and checks the physical target. Test and tooling paths,
-type-only imports, and ambiguous loader targets are excluded. Treat
-`resolved_edges` and `clone_bands` as approximate signals. Dependency
-verification prepares `dependency_facts` only when an active rule declares
-`dependency-facts` or `dependency-boundary`.
+Certified dependency facts cover all 21 extraction languages; see
+"Certified dependency facts" in `BUILT_IN_RULES.md` for the per-language units
+and resolution limits. A fact is certified only when one physical target and
+one indexed target agree. Test and tooling paths, type-only imports, and
+ambiguous loader targets are excluded. Treat `resolved_edges` and `clone_bands`
+as approximate signals. Dependency verification prepares `dependency_facts`
+only when an active rule declares `dependency-facts` or `dependency-boundary`.
 
 For `exact-clone`, the SQL query must return valid indexed function spans:
 `file`, `line`, `start_byte`, `end_byte`, `end_line`, and optional
@@ -178,7 +180,7 @@ Indexes exist on `resolved_edges(from_file_id/to_file_id/from_entity_id/to_entit
 
 ## Test entries
 
-`[[rule.test]]` blocks are self-tests validated by `varde-code test`, inert to `scan`. Every entry needs `name`; the rest is kind-specific.
+`[[rule.test]]` blocks are self-tests validated by `varde scan test`, inert to `scan`. Every entry needs `name`; the rest is kind-specific.
 
 **Pattern rules:**
 ```toml
@@ -209,8 +211,8 @@ line = 1
 
 ## Scopes and precedence
 
-- **Built-in** — embedded in the `varde-code` binary (`crates/varde-code/src/rules/builtin/*.toml`), lowest priority.
+- **Built-in** — embedded from `crates/varde-code/src/rules/builtin/*.toml` in the unified `varde` CLI, lowest priority.
 - **User** — `$VARDE_CODE_USER_RULES_DIR` (legacy fallback: `$VARDE_USER_RULES_DIR`) or `~/.config/varde-code/rules/`, applies across every repo.
 - **Repo** — `<repo_root>/.varde-code/rules/`, applies to this repo only, highest priority.
 
-Merge is by `id`: repo wins over user wins over built-in, silently (no diagnostic) — this is the intended way to disable/replace a default. `varde-code rules_seed` materializes the built-ins as editable files in either scope so they can be edited in place instead of fully re-authored.
+Merge is by `id`: repo wins over user wins over built-in, silently (no diagnostic) — this is the intended way to disable/replace a default. `varde scan rules seed` materializes the built-ins as editable files in either scope so they can be edited in place instead of fully re-authored.

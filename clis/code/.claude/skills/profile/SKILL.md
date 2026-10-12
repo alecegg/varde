@@ -1,6 +1,6 @@
 ## What this is
 
-Perf-tuning loop for individual varde-code query modes ("tools"). Where the
+Perf-tuning loop for individual `varde map` query modes ("tools"). Where the
 `benchmark` skill tracks the canonical ast-grep-comparison numbers in
 `BENCHMARK.md`, this skill is for the iterate-fast work of finding *which*
 tool needs tuning next and hammering on just that one while you fix it —
@@ -32,14 +32,15 @@ anomaly doesn't require redoing it by hand.
    this after each edit-rebuild cycle:
    ```
    # edit code, then:
-   cargo build --release -p varde-code && scripts/watch.sh nav_map \
+   cargo build --release -p varde && scripts/watch.sh nav_map \
      "$HOME/source/reference-repos/hermes-agent" '{"repoRoot":"...","..."}'
    ```
    First call in a session has no baseline to diff against — that's
    expected, just the starting point.
-4. **Root-cause a slow query.** varde-code query modes are read-only SQL
-   over the on-disk SQLite db at `~/.config/varde-code/repos/<name>/`. If a
-   mode is disproportionately slow:
+4. **Root-cause a slow query.** `varde map` query modes are read-only SQL
+   over `<config>/varde/code/repos/<name>-<hash>/` (`<config>` defaults to
+   `$XDG_CONFIG_HOME` or `~/.config`; `$VARDE_CONFIG_DIR` overrides the Varde
+   config root). If a mode is disproportionately slow:
    - Check for a missing index: `EXPLAIN QUERY PLAN` the SQL in the
      relevant `src/query/*.rs` file against the repo's db (path from
      `clear_varde_cache`'s glob target) — a `SCAN` on a large table where
@@ -59,14 +60,14 @@ anomaly doesn't require redoing it by hand.
 
 ## Tuning `build` specifically
 
-`build` (indexing) isn't a query mode — different CLI shape (`varde-code
-build --repo-root <path>`, no `--json`), and it's a single operation, not
+`build` (indexing) isn't a query mode — different CLI shape (`varde map build
+--repo-root <path>`, no `--json`), and it's a single operation, not
 N modes to rank against each other, so it's outside `rank.sh`/`watch.sh`.
 Use `scripts/watch_build.sh <repo-root>` instead: same tight loop, just for
 `build`.
 ```
 # edit code, then:
-cargo build --release -p varde-code && scripts/watch_build.sh \
+cargo build --release -p varde && scripts/watch_build.sh \
   "$HOME/source/reference-repos/hermes-agent"
 ```
 For the initial "is `build` even worth tuning right now" read, use

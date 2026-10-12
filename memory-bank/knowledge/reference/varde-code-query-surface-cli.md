@@ -1,14 +1,14 @@
 ---
 type: reference
 status: active
-title: "varde-code query surface CLI"
+title: "Code query surface CLI"
 related: ["2026-08-12-varde-code-rust-port/query-surface"]
 reconciled: { at: 2026-10-02T05:30:44Z, sha: 3661ec713d1b9eae0ef1fa2155d37c03a69a4d44 }
 ---
 
-# varde-code query surface CLI reference
+# Code query surface CLI reference
 
-Reference for selected varde-code query modes and the shared CLI envelope.
+Reference for selected query modes and the shared CLI envelope.
 Indexed modes read the SQLite store and verify the required slices without
 writing or refreshing it. `find_pattern` parses live source; `includeBody`
 can read source text for persisted symbols.
@@ -18,13 +18,13 @@ input preflight and envelope),
 `clis/code/crates/varde-code/src/query/output.rs` (output policy), and
 `clis/code/crates/varde-code/src/cli.rs` /
 `clis/code/crates/varde-code/src/main.rs` (CLI routing).
-The mode tables below are an overview. Use `varde-code --help` and
-`varde-code <mode> --help` for the complete current command and field list.
+The mode tables below are an overview. Use `varde map --help` and
+`varde map <mode> --help` for the complete current command and field list.
 
 ## Invocation
 
 ```text
-varde-code <mode> --json '<input object>'
+varde map <mode> --json '<input object>'
 ```
 
 One subcommand per mode, one-shot process per call. For indexed queries,
@@ -43,7 +43,7 @@ Example input for an indexed query:
 ```
 
 Missing indexes return `index_missing`. Stale required slices return
-`index_stale`; on either code, run `watch --ensure` and retry (`find_pattern`
+`index_stale`; on either code, run `varde setup watch --ensure --repo <repo-root>` and retry (`find_pattern`
 needs no index). Queries never repair the index themselves. `detect_changes`
 deliberately skips the freshness gate so it can compare the stored snapshot
 with current source.

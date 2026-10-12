@@ -8,7 +8,7 @@ sys.dont_write_bytecode = True
 
 root = Path(__file__).resolve().parents[1]
 manifest = json.loads((root / "capabilities.json").read_text())
-expected_edit = {"varde-planner": "allow", "varde-executor": "allow", "varde-reviewer": "allow", "varde-explorer": "deny"}
+expected_edit = {"varde-planner": "allow", "varde-builder": "allow", "varde-reviewer": "allow", "varde-explorer": "deny"}
 
 
 def effect(allowed: bool) -> str:

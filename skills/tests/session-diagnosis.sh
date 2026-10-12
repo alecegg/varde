@@ -32,7 +32,7 @@ def contains(relative, *needles):
 skill = text("skills/varde-learn/SKILL.md")
 reference_path = root / "skills/varde-learn/references/diagnose.md"
 if "references/diagnose.md" not in skill or not reference_path.is_file():
-    raise SystemExit("FAIL: the varde-learn skill does not route diagnosis to a real reference")
+    raise SystemExit("FAIL: the varde learn skill does not route diagnosis to a real reference")
 quick_path = root / "skills/varde-learn/references/diagnose-quick.md"
 if "references/diagnose-quick.md" not in skill or not quick_path.is_file():
     raise SystemExit("FAIL: bounded visible-evidence triage lacks its own reference")
@@ -56,7 +56,7 @@ contains("skills/varde-learn/SKILL.md",
     "references/diagnose.md",
 )
 contains("skills/varde-learn/references/diagnose.md",
-    "varde-learn diagnose inspect --harness",
+    "varde learn diagnose inspect --harness",
     "--current",
     "--session",
     "--path",
@@ -161,7 +161,7 @@ contains("clis/learn/crates/varde-learn-core/src/diagnose/mod.rs",
     "CurrentOverlap::Unknown",
 )
 contains("clis/learn/crates/varde-learn-core/src/store.rs",
-    "const SCHEMA_VERSION: i64 = 3",
+    "const SCHEMA_VERSION: i64 = 4",
     "const SCHEMA_V3: &str",
     "identity_version INTEGER NOT NULL",
     "record_historical_occurrence",
@@ -183,8 +183,8 @@ contains("clis/learn/README.md",
     "`diagnose capture` records a reviewed event in that store.",
     "32 linked children plus the",
     "selected root (up to 33 sessions)",
-    "varde-learn diagnose inspect",
-    "varde-learn diagnose capture",
+    "varde learn diagnose inspect",
+    "varde learn diagnose capture",
     "varde-friction-item",
     "schema 3",
     "--harness opencode --session <SESSION_ID>",

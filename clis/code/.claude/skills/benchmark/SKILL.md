@@ -1,21 +1,21 @@
 ---
 name: benchmark
-description: "TRIGGER: Re-run the varde-code vs ast-grep benchmark suite and update BENCHMARK.md with fresh numbers. Use when the user asks to rerun/refresh benchmarks, re-benchmark a mode after a perf change, or check whether the 10%-of-ast-grep goal is closer. SKIP: Skip for one-off ad hoc timing checks unrelated to BENCHMARK.md's tracked rows — just run the command directly instead. Example phrases: \"rerun all the benchmarks\" or \"re-benchmark find_pattern on hermes-agent\"."
+description: "TRIGGER: Re-run the varde map vs ast-grep benchmark suite and update BENCHMARK.md with fresh numbers. Use when the user asks to rerun/refresh benchmarks, re-benchmark a mode after a perf change, or check whether the 10%-of-ast-grep goal is closer. SKIP: Skip for one-off ad hoc timing checks unrelated to BENCHMARK.md's tracked rows — just run the command directly instead. Example phrases: \"rerun all the benchmarks\" or \"re-benchmark find_pattern on hermes-agent\"."
 allowed-tools: Bash Read Edit
-compatibility: "Requires a release build (cargo build --release -p varde-code), ast-grep on PATH, and ~/source/reference-repos + ~/source/varde checked out for the scale-repo rows."
+compatibility: "Requires a release build (cargo build --release -p varde), ast-grep on PATH, and ~/source/reference-repos + ~/source/varde checked out for the scale-repo rows."
 ---
 
 ## What this is
 
 `BENCHMARK.md` (repo root) is the single canonical measurement file for
-varde-code's speed/quality vs `ast-grep`. Each row is reproducible from a
+`varde map` speed/quality vs `ast-grep`. Each row is reproducible from a
 command in that file. This skill scripts those commands so re-running the
 suite doesn't require re-deriving invocations by hand each time.
 
 ## Workflow
 
 1. **Build once.** `scripts/build_release.sh` — `cargo build --release
-   -p varde-code`. All other scripts depend on `target/release/varde-code`
+   -p varde`. All other scripts depend on `clis/target/release/varde`
    and will error out with a clear message if it's missing.
 2. **Run the suite.** `scripts/run_all.sh` runs every row currently tracked
    in `BENCHMARK.md`, in table order, printing labeled TSV/text output

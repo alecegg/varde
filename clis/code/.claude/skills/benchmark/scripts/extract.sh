@@ -6,5 +6,5 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require_release_bin
 
 path="${1:-$HOME/source/varde/src}"
-ms=$(min_of_3 "$BIN" extract "$path")
+ms=$(min_of_3 "${MAP[@]}" extract "$path")
 printf 'extract\t%sms\n' "$ms"

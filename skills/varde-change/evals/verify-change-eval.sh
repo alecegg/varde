@@ -182,12 +182,53 @@ human_choice_is_persisted() {
   ' "$plan_file"
 }
 
+parallel_wave_tasks_done() {
+  local tasks_dir="memory-bank/working/plans/2026-10-06-parallel-wave/tasks"
+  local task_name
+  [[ -d "$tasks_dir" ]] || return 1
+  [[ "$(find "$tasks_dir" -name '*.md' -type f | wc -l | tr -d ' ')" == 3 ]] || return 1
+  for task_name in a b c; do
+    [[ -f "$tasks_dir/$task_name.md" ]] &&
+      grep -Eq '^status:[[:space:]]*done[[:space:]]*$' "$tasks_dir/$task_name.md" || return 1
+  done
+}
+
+parallel_wave_test_files_exist() {
+  local task_name test_file
+  for task_name in a b c; do
+    test_file="test/$task_name.test.mjs"
+    [[ -f "src/$task_name.mjs" && -f "$test_file" ]] || return 1
+    grep -Fq 'node:test' "$test_file" || return 1
+    grep -Eq '(^|[^[:alnum:]_.])test[[:space:]]*\(' "$test_file" || return 1
+  done
+}
+
+parallel_wave_commits_are_ordered() {
+  local a_commit b_commit c_commit
+  a_commit="$(git log -1 --format=%H HEAD -- src/a.mjs 2>/dev/null)"
+  b_commit="$(git log -1 --format=%H HEAD -- src/b.mjs 2>/dev/null)"
+  c_commit="$(git log -1 --format=%H HEAD -- src/c.mjs 2>/dev/null)"
+  [[ -n "$a_commit" && -n "$b_commit" && -n "$c_commit" ]] || return 1
+  [[ "$c_commit" != "$a_commit" && "$c_commit" != "$b_commit" ]] || return 1
+  git merge-base --is-ancestor "$a_commit" "$c_commit" 2>/dev/null &&
+    git merge-base --is-ancestor "$b_commit" "$c_commit" 2>/dev/null
+}
+
+parallel_wave_target_branch_is_seeded() {
+  local seed target_branch target_head
+  seed="$(seed_commit)"
+  target_branch="$(git config --get eval.targetBranch 2>/dev/null)" || return 1
+  [[ -n "$seed" && -n "$target_branch" ]] || return 1
+  target_head="$(git rev-parse --verify "refs/heads/$target_branch" 2>/dev/null)" || return 1
+  [[ "$target_head" == "$seed" ]]
+}
+
 case "$EVAL_ID" in
   1)
     unchanged="$(verdict unchanged_since_seed memory-bank)"
     evidence="memory-bank differs from the seed"
     [[ "$unchanged" == PASS ]] && evidence="memory-bank matches the seed"
-    emit_results "$(emit "Leaves every plan, task, and handoff file byte-identical" "$unchanged" "$evidence")"
+    emit_results "$(emit "Leaves every plan, task, session note, and legacy handoff file byte-identical" "$unchanged" "$evidence")"
     ;;
   2)
     seeded="$(verdict plan_has_seed_sections)"
@@ -290,7 +331,7 @@ case "$EVAL_ID" in
       "$(emit "Builds the schema child and finds its task blocked, halting immediately" "$schema_status_unmoved" "$schema_status_evidence")" \
       "$(emit "Reports the blocked child, task, and reason without merging anything" "$nothing_merged" "$nothing_merged_evidence")"
     ;;
-  8)
+  8|24)
     plan_file="memory-bank/working/plans/2026-09-20-retry-policy/plan.md"
     named_plan="FAIL"
     if one_plan_exists && [[ -f "$plan_file" ]]; then
@@ -422,19 +463,19 @@ case "$EVAL_ID" in
     implemented_evidence="close() does not call flush()"
     [[ "$implemented" == PASS ]] && implemented_evidence="close() calls flush() before returning"
 
-    done_status="FAIL"
+    parent_progress="FAIL"
     if [[ -f "$task_file" ]] &&
        grep -Eq '^status:[[:space:]]*in_progress[[:space:]]*$' "$task_file" &&
-       grep -Eq '^- evidence:' "$task_file"; then
-      done_status="PASS"
+       unchanged_since_seed "$task_file"; then
+      parent_progress="PASS"
     fi
-    done_status_evidence="the task is not in_progress or has no evidence line"
-    [[ "$done_status" == PASS ]] && done_status_evidence="the task is in_progress with an evidence line"
+    parent_progress_evidence="the task file changed from its in_progress seed state"
+    [[ "$parent_progress" == PASS ]] && parent_progress_evidence="the task remains in_progress and the task file is unchanged for orchestrator-owned Progress"
 
     emit_results \
       "$(emit "Creates no additional task files" "$no_new_tasks" "$no_new_tasks_evidence")" \
       "$(emit "Implements flush() in src/logger.ts's close() method" "$implemented" "$implemented_evidence")" \
-      "$(emit "Ends Progress with an evidence entry and leaves the task in_progress" "$done_status" "$done_status_evidence")"
+      "$(emit "Reports evidence without editing task Progress; leaves the task in_progress for the orchestrator" "$parent_progress" "$parent_progress_evidence")"
     ;;
   15)
     old_dir="memory-bank/working/plans/2026-09-10-widget-exporter-draft"
@@ -487,6 +528,85 @@ case "$EVAL_ID" in
     emit_results \
       "$(emit "Leaves production source and test byte-identical while the human choice is unresolved" "$clean" "compared source and tests against seed")" \
       "$(emit "Persists the unresolved rate-limit scope in a draft plan without task files" "$planned" "requires draft plan, live account/IP Open Question, and no tasks")"
+    ;;
+  26|27)
+    session_id="fixture-session-2026-10-07"
+    session_hash="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$session_id")"
+    expected="memory-bank/working/session-notes/2026-10-06-session-$session_hash/notes.md"
+    path="FAIL"
+    [[ -f "$expected" ]] && path="PASS"
+    count="$(find memory-bank/working/session-notes -type f -name notes.md -path "*session-$session_hash/notes.md" | wc -l | tr -d ' ')"
+    one_note="FAIL"
+    [[ "$count" == 1 ]] && one_note="PASS"
+
+    formatted="FAIL"
+    if [[ -f "$expected" ]] && python3 - "$expected" "$EVAL_ID" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+eval_id = sys.argv[2]
+text = path.read_text(encoding="utf-8")
+frontmatter, _, body = text.partition("\n---\n")
+required_fields = (
+    "type: session-notes", "status: open", "description:", "timestamp:",
+    "cwd:", "keywords:", "repo_root:", "branch:", "head_sha:",
+    "dirty:", "links:",
+)
+required_sections = (
+    "# Session notes:", "## Rules", "## Decisions", "## What's left",
+    "## Suggested next skill",
+)
+valid = all(field in frontmatter for field in required_fields)
+valid = valid and all(section in body for section in required_sections)
+sys.exit(0 if valid else 1)
+PY
+    then
+      formatted="PASS"
+    fi
+
+    refreshed="PASS"
+    if [[ "$EVAL_ID" == 27 ]]; then
+      refreshed="FAIL"
+      if [[ -f "$expected" ]] && grep -Fq 'timestamp: 2026-10-07T00:05:00Z' "$expected" &&
+         grep -Fq 'Second milestone refreshed' "$expected"; then
+        refreshed="PASS"
+      fi
+    fi
+
+    if [[ "$EVAL_ID" == 27 ]]; then
+      emit_results \
+        "$(emit "Uses the original reserved first-date path keyed by the SHA-256 session ID" "$path" "$expected")" \
+        "$(emit "Uses the session-notes frontmatter and body format" "$formatted" "requires all standard frontmatter fields and template headings")" \
+        "$(emit "Changes the existing note timestamp and milestone content" "$refreshed" "requires the next UTC timestamp and refreshed body marker")" \
+        "$(emit "Leaves exactly one session note for this session" "$one_note" "found $count matching session note(s)")"
+    else
+      emit_results \
+        "$(emit "Uses the original reserved first-date path keyed by the SHA-256 session ID" "$path" "$expected")" \
+        "$(emit "Uses the session-notes frontmatter and body format" "$formatted" "requires all standard frontmatter fields and template headings")" \
+        "$(emit "Leaves exactly one session note for this session" "$one_note" "found $count matching session note(s)")"
+    fi
+    ;;
+  23|25)
+    tasks_done="$(verdict parallel_wave_tasks_done)"
+    task_files="$(verdict parallel_wave_test_files_exist)"
+    ordered_commits="$(verdict parallel_wave_commits_are_ordered)"
+    target_unchanged="$(verdict parallel_wave_target_branch_is_seeded)"
+    node_tests="FAIL"
+    node_tests_evidence="focused test files are missing or node --test failed"
+    if [[ "$task_files" == "PASS" ]] && node_available && node --test >/dev/null 2>&1; then
+      node_tests="PASS"
+      node_tests_evidence="node --test passed on the resulting branch"
+    elif ! node_available; then
+      node_tests_evidence="node unavailable"
+    fi
+
+    emit_results \
+      "$(emit "Marks all three parallel-wave task files done" "$tasks_done" "requires exactly a.md, b.md, and c.md with status: done")" \
+      "$(emit "Creates one source module and one node:test file for each task" "$task_files" "requires src/a.mjs, src/b.mjs, src/c.mjs and their three focused tests")" \
+      "$(emit "Makes the c task commit descend from the a and b task commits" "$ordered_commits" "checks commits touching each task source on the resulting branch")" \
+      "$(emit "Leaves the fixture target branch at the seed commit through the finish choice" "$target_unchanged" "compares the recorded target branch head with the root seed commit")" \
+      "$(emit "Passes the fixture tests with node --test on the resulting branch" "$node_tests" "$node_tests_evidence")"
     ;;
   *)
     printf 'unsupported change eval id: %s\n' "$EVAL_ID" >&2

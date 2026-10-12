@@ -8,13 +8,14 @@ Usage: worktree-merge.sh <id> [into]
 
 Merges worktree/<id> into <into> (default: the branch currently checked out
 in this checkout). An explicit <into> must name that checked-out branch. Does
-NOT commit on the caller's behalf — the worktree must be clean.
+NOT commit on the caller's behalf — the worktree must be clean. Merging into
+main or another target requires explicit user approval first.
 
 Exit codes:
   0  merged cleanly, worktree/<id> is now in <into>
   1  usage error
   2  worktree/<id> has no commits ahead of its base — nothing to merge
-  3  merge conflict — resolve via references/build-worktree.md, then finish the
+  3  merge conflict — resolve via references/build-orchestrate-tasks.md, then finish the
      merge manually; do NOT run worktree-cleanup.sh until it's resolved
   4  target rejected: branch/<id> is missing, <into> does not resolve, <into>
      does not name the currently checked-out branch, or the merge failed for
@@ -68,10 +69,10 @@ if git merge --no-ff --no-edit "${branch}"; then
   echo "merged ${branch} into ${into}"
   exit 0
 else
-  if ! git diff --name-only --diff-filter=U | grep -q .; then
+  if ! git diff --name-only --diff-filter=U | grep . >/dev/null; then
     echo "error: merge failed without conflicts" >&2
     exit 4
   fi
-  echo "conflict merging ${branch} into ${into} — see references/build-worktree.md" >&2
+  echo "conflict merging ${branch} into ${into} — see references/build-orchestrate-tasks.md" >&2
   exit 3
 fi

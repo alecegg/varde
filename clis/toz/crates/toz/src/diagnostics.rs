@@ -177,15 +177,20 @@ fn read_file(path: &Path, cutoff: u64, summary: &mut Summary) -> Result<()> {
 }
 
 pub fn recent() -> Result<Summary> {
-    let mut summary = Summary::default();
-    let cutoff = now().saturating_sub(WINDOW_SECS);
     let mut roots = BTreeSet::new();
     roots.insert(toz_core::config::config_dir()?);
     if let Some(root) = fallback_root() {
         roots.insert(root);
     }
+    summarize(&roots, now().saturating_sub(WINDOW_SECS))
+}
+
+/// Counts events newer than `cutoff` across `roots`, reading both the current log and the
+/// rotated one it replaced.
+fn summarize(roots: &BTreeSet<PathBuf>, cutoff: u64) -> Result<Summary> {
+    let mut summary = Summary::default();
     for root in roots {
-        let (current, previous, _) = paths(&root);
+        let (current, previous, _) = paths(root);
         let previous_ok = read_file(&previous, cutoff, &mut summary).is_ok();
         let current_ok = read_file(&current, cutoff, &mut summary).is_ok();
         if !previous_ok || !current_ok {
@@ -193,4 +198,83 @@ pub fn recent() -> Result<Summary> {
         }
     }
     Ok(summary)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event(time: u64, outcome: &str, reason: &str) -> Event {
+        Event {
+            time,
+            harness: "pi".into(),
+            outcome: outcome.into(),
+            reason: reason.into(),
+            tool: "bash".into(),
+            bytes: 42,
+        }
+    }
+
+    fn write_events(path: &Path, events: &[Event]) {
+        let mut text = String::new();
+        for event in events {
+            text.push_str(&serde_json::to_string(event).unwrap());
+            text.push('\n');
+        }
+        fs::write(path, text).unwrap();
+    }
+
+    fn serialized(event: &Event) -> String {
+        format!("{}\n", serde_json::to_string(event).unwrap())
+    }
+
+    #[test]
+    fn rotation_keeps_the_newest_events_in_the_current_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let (current, previous, _) = paths(dir.path());
+
+        // A log already at the size limit is rotated aside before the next event is appended.
+        let old = "x".repeat(MAX_LOG_BYTES as usize);
+        fs::write(&current, &old).unwrap();
+        record_in(dir.path(), &event(1, "captured", "stored")).unwrap();
+        assert_eq!(fs::read_to_string(&previous).unwrap(), old);
+        assert_eq!(
+            fs::read_to_string(&current).unwrap(),
+            serialized(&event(1, "captured", "stored"))
+        );
+
+        // With room again, later events accumulate in the current log; the rotated file is intact.
+        record_in(dir.path(), &event(2, "failed", "timeout")).unwrap();
+        assert_eq!(fs::read_to_string(&previous).unwrap(), old);
+        assert_eq!(
+            fs::read_to_string(&current).unwrap(),
+            format!(
+                "{}{}",
+                serialized(&event(1, "captured", "stored")),
+                serialized(&event(2, "failed", "timeout"))
+            )
+        );
+    }
+
+    #[test]
+    fn recent_counts_events_from_the_current_and_rotated_logs() {
+        let dir = tempfile::tempdir().unwrap();
+        let (current, previous, _) = paths(dir.path());
+        let cutoff = now().saturating_sub(WINDOW_SECS);
+        write_events(&previous, &[event(now(), "skipped", "excluded")]);
+        write_events(
+            &current,
+            &[
+                event(now(), "captured", "stored"),
+                // Older than the window, so it must not be counted.
+                event(1, "failed", "timeout"),
+            ],
+        );
+
+        let summary = summarize(&BTreeSet::from([dir.path().to_path_buf()]), cutoff).unwrap();
+        assert_eq!(summary.captured, 1);
+        assert_eq!(summary.skipped, 1);
+        assert_eq!(summary.failed, 0);
+        assert_eq!(summary.unreadable_lines, 0);
+    }
 }

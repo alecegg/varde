@@ -3,11 +3,13 @@ Frontmatter:
 
 ```
 ---
-status: backlog
+status: backlog      # backlog | active | blocked | completed | cancelled
 title: "<user's initial prompt>"
 type: plan
-depends_on: []       # optional; sibling plan dir names (a child's slug, never `<group>/<child>`) that must be `completed` first
-observed_specs: []   # optional; <knowledge>/specs/<domain>.md domains this plan touches
+depends_on: []       # optional; sibling plan dir names that must be `completed` first
+shared: []           # optional; paths any task may touch (lockfiles, registrations, changelogs)
+reviewed_commit: ""  # set at Finalize
+reviewed_on: ""      # set at Finalize
 ---
 ```
 
@@ -44,7 +46,7 @@ What will be true after this plan that isn't now?
 
 ### API / interface contracts
 
-(none) unless needed — one signature per line, edge cases as sub-bullets
+(none) unless needed — one signature per line; edge cases as sub-bullets
 
 ## Decisions so far
 
@@ -52,8 +54,8 @@ What will be true after this plan that isn't now?
 
 ## Open Questions
 
-<!-- answerable in chat or by editing here; if none, replace the bullet with plain text (not a bullet): n/a — <reason> -->
-- **<question>** — <why it matters or what it blocks>. Recommendation: <suggested answer — one-line reason>.
+<!-- Keep plain `n/a` until an open question remains; then add one bullet per question. -->
+n/a — no open questions
 
 ## Assumptions
 
@@ -62,7 +64,7 @@ What will be true after this plan that isn't now?
 
 ## Acceptance criteria
 
-<!-- plan-level definition of done -->
+<!-- definition of done -->
 - [ ] Given <precondition>
       When <action>
       Then <observable outcome>
@@ -71,11 +73,11 @@ What will be true after this plan that isn't now?
 
 ## Progress
 
-<!-- one line per event; first line: subject: <review-subject-id> -->
+<!-- progress events -->
 
 ## Related
 
-<!-- knowledge this plan relies on: [title](/decision/x.md), /specs/, /pattern/, /definition/ -->
+<!-- knowledge links -->
 ```
 
 No `## Tasks`: build writes task files; task evidence lives in each task's

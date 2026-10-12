@@ -1,0 +1,48 @@
+{
+  "skill_name": "varde-scan",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run a Varde scan on this repository and explain what to do with error, warning, and info findings.",
+      "expected_output": "Runs the scan workflow, checks command, analysis, and gate status separately, then applies the contract: fix errors, fix warnings in code being touched or report them, and use info only as context. It does not load varde-review or review-gate instructions.",
+      "assertions": [
+        "Uses varde-scan as the scan workflow",
+        "States the distinct required action for error, warning, and info",
+        "Does not depend on varde-review or review gates"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The scan says index_missing. What should happen next?",
+      "expected_output": "Uses the code-index readiness and fallback guidance according to whether the agent is a coordinator or worker. A worker does not build the index and reports scan capability unavailable if readiness cannot be restored.",
+      "assertions": [
+        "Routes index readiness through code-index guidance",
+        "Does not have a worker build the index",
+        "Reports the limitation if the scan remains unavailable"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Save these scan decisions so the next scan can update them: F-17 is unsafe-query, error, src/db.rs:27, and was fixed; F-18 is generated-code, warning, src/generated/db.rs:8, and is not real because the code is a test fixture.",
+      "expected_output": "Resolves the working path with varde setup paths --json and writes one line per finding to <working>/scan/findings.md using id, rule, path and line, severity, and disposition. It updates by finding ID on repeat scans.",
+      "assertions": [
+        "Uses the specified pipe-separated findings format",
+        "Persists the ledger under the working path from varde setup paths --json",
+        "Uses fixed and not-real dispositions with a concise reason for the latter",
+        "Updates existing IDs instead of duplicating findings"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "A `varde scan` finding remains for the user after triage: `rule_id=unsafe-query`, `severity=warning`, `data.rules.unsafe-query.message=Unsanitized query input` (no finding-level message), `location.file=src/db.rs`, `location.span.start_line=27`, and `data.rules.unsafe-query.remediation=Use a parameterized query`. How is it retained, and what happens if the same scan is run again?",
+      "expected_output": "Applies the varde-scan severity contract: because the warning remains outside code being touched, reports it and records one pipe-separated line in <working>/scan/findings.md using the scan-provided finding id, unsafe-query, src/db.rs:27, warning, and a concise left: reason. Uses the static rule message and remediation to explain the finding. A repeat scan updates the same finding ID instead of adding a duplicate; fixed and not-real findings are not persisted.",
+      "assertions": [
+        "A leftover warning outside code being touched is reported and mapped to warning in the findings ledger",
+        "The ledger line uses the scan-provided finding id, unsafe-query, src/db.rs:27, warning, and a concise left: reason",
+        "The static rule message and remediation are used when explaining the finding",
+        "A repeated finding with the same ID updates the existing line instead of creating a duplicate",
+        "Fixed and not-real findings are not persisted"
+      ]
+    }
+  ]
+}

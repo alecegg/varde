@@ -67,7 +67,7 @@ while [ "$#" -gt 0 ]; do
   for mode in "${MODES[@]}"; do
     json=$(json_for_mode "$mode" "$repo_root" "$file_path" "$symbol_name")
     clear_varde_cache "$repo_name"
-    cmd=("$BIN" "$mode" --json "$json")
+    cmd=("${MAP[@]}" "$mode" --json "$json")
     cold=$(time_ms "${cmd[@]}")
     warm=$(min_of_3 "${cmd[@]}")
     printf '%s\t%s\t%s\t%s\t%s\n' "$mode" "$repo_name" "$file_count" "$cold" "$warm" >> "$data_file"

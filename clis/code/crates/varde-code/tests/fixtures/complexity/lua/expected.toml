@@ -1,0 +1,251 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 3
+cyclomatic = 3
+matrix = "if-else-if-else"
+rule = "spec:491-501; `if` +1, `elseif` +1, and plain `else` +1; else is excluded from cyclomatic"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:491-518; root `if` +1, `elseif` +1, and its body `if` at the root branch level +2"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:491-518; root `if` +1, plain `else` +1, and its body `if` at the root branch level +2; else is excluded from cyclomatic"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer `if` +1 and nested `if` +2"
+
+[[case]]
+callable = "loops"
+cognitive = 10
+cyclomatic = 5
+matrix = "loops"
+rule = "spec:491-518; numeric `for` +1, generic `for` +2, nested `while` +3, and nested `repeat` +4"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; `if` +1; returns are early exits and add 0"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229; one contiguous `and` run adds 1"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229; `and` and `or` are distinct runs, +1 each; Lua's `and/or` idiom is not a ternary"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 3
+cyclomatic = 4
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256, 491-501; `if` +1, outer `and` run +1, and nested `and` after unary `not` starts another run +1"
+
+[[case]]
+callable = "logical_run_across_lambda"
+cognitive = 2
+cyclomatic = 2
+matrix = "logical-run-across-lambda"
+rule = "spec:207-229, 267-291; outer and anonymous function each have their own `and` run, one point each"
+
+[[case]]
+callable = "lambda_nesting"
+cognitive = 2
+cyclomatic = 1
+matrix = "lambda-nesting"
+rule = "spec:267-291, 491-501; nested function literal adds one callable level, so its `if` adds 2 to the enclosing function"
+
+[[case]]
+callable = "callback"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; the function literal's own top-level `if` adds 1"
+
+[[case]]
+callable = "named_nested_function"
+cognitive = 2
+cyclomatic = 1
+matrix = "named-nested-function"
+rule = "spec:267-280, 491-501; nested local function raises nesting by one, so its `if` adds 2 to the containing function"
+
+[[case]]
+callable = "inner"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-280, 491-501; local function's own top-level `if` adds 1"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 4
+cyclomatic = 2
+matrix = "condition-nesting"
+rule = "spec:491-518; outer `if` +1, and the `if` inside the condition closure gets the outer `if` and lambda nesting levels, +3"
+
+[[case]]
+callable = "<anonymous>@66:5"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:207-229, 267-291; anonymous function's own `and` sequence adds 1"
+
+[[case]]
+callable = "<anonymous>@89:4"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; the condition closure's own top-level `if` adds 1"
+
+[[case]]
+callable = "goto_or_labeled_jump"
+cognitive = 2
+cyclomatic = 2
+matrix = "goto-or-labeled-jump"
+rule = "spec:238-243, 491-501; `if` +1 and `goto LABEL` +1; target label adds no cognitive point"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-501; `if` +1 and the recursive function +1"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-501; `if` +1 and two self-calls still give one recursion increment"
+
+[[case]]
+callable = "M.recursion_qualified_self"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-qualified-self"
+rule = "spec:230-237, 491-501; `if` +1 and `M.f` binds to the same module-table function for one recursion increment"
+
+[[case]]
+callable = "M:recursion_method_self"
+cognitive = 2
+cyclomatic = 2
+rule = "spec:230-237, 491-501; `if` +1 and `self:m()` binds to the same `M:m` function for one recursion increment"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 1
+cyclomatic = 2
+matrix = "recursion-other-receiver"
+rule = "spec:230-237, 491-501; `if` +1; `other.f` is not a same-owner recursive edge"
+
+[[case]]
+callable = "recursion_in_closure"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-in-closure"
+rule = "spec:230-237, 267-280, 491-501; `if` +1 and recursive call inside its nested closure attributes one recursion increment to the enclosing function"
+
+[[case]]
+callable = "recursion_callback"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:267-280; callback closure has no own structural event; recursion is attributed to the enclosing named function"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237, 491-501; `if` +1 and this function participates in the same-file two-function cycle +1"
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 2
+cyclomatic = 2
+rule = "spec:230-237, 491-501; `if` +1 and this function participates in the same-file two-function cycle +1"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237; the peer is absent from this one-file fixture, so no same-file recursion edge binds"
+
+[[case]]
+callable = "sum_primes"
+cognitive = 7
+cyclomatic = 4
+matrix = "spec-example-small"
+rule = "spec:328-339, 238-243, 491-518; outer `for` +1, nested `for` +2, nested `if` +3, and `goto LABEL` +1"
+
+[["n/a"]]
+matrix_id = "switch-once"
+reason = "Lua has no switch statement or equivalent case container; table dispatch is ordinary data selection."
+
+[["n/a"]]
+matrix_id = "ternary"
+reason = "Lua has no ternary operator; the `and/or` idiom is logical mixing, covered by logical-run-mixed."
+
+[["n/a"]]
+matrix_id = "catch-once"
+reason = "Lua has no catch clause; pcall and xpcall are ordinary calls returning status values."
+
+[["n/a"]]
+matrix_id = "try-finally-zero"
+reason = "Lua has no try/finally statement form; protected calls are functions, not regions."
+
+[["n/a"]]
+matrix_id = "null-coalescing-zero"
+reason = "Lua has no null-coalescing operator; `or` is a logical operator and is covered by logical-run-mixed."
+
+[["n/a"]]
+matrix_id = "class-in-method"
+reason = "Lua has no class declaration syntax; table/metatable-based object conventions do not define structural local classes."
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "The plan's Appendix A compensation rule applies to JS/TS-style declarative functions and Python decorators; Lua has neither construct."
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "The plan's callback compensation case is meaningful only with a compensating-usage marker, which Lua does not have."
+
+[["n/a"]]
+matrix_id = "multi-level-break"
+reason = "Lua break has no label or numeric level; goto is covered separately by goto-or-labeled-jump."
+
+[["n/a"]]
+matrix_id = "recursion-overload-delegate"
+reason = "Lua functions cannot be overloaded by parameter signature, so no overload delegate case exists."
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "Lua has no preprocessor conditional directives."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Lua has no preprocessor directives or extern-C linkage blocks."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "Lua has no comprehension or query-clause syntax; iterator functions are ordinary calls/loops."
+
+[["n/a"]]
+matrix_id = "spec-example-large"
+reason = "The spec's large example is specific to Java, JavaScript, and C#; Lua has no corresponding language example."

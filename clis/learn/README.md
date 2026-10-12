@@ -1,21 +1,21 @@
 # varde-learn
 
-`varde-learn` runs skill trigger and output evaluations and maintains a global
-friction store.
+The `varde-learn` package runs skill trigger and output evaluations and
+maintains a global friction store through the unified `varde` CLI.
 
 ## Install
 
 ```sh
-cargo install --path crates/varde-learn
+cd clis && cargo install --path varde --locked --force --target-dir target
 ```
 
-Or run `varde sync` from the repository root once this module is wired in.
+The same installation provides every Varde module command.
 
 ## Evaluations
 
 ```sh
-varde-learn eval trigger <skill-name> <queries.json> --harness {claude,codex,opencode} [--runs N] [--skill-path PATH]
-varde-learn eval output <skill-dir> [--harness {codex,claude}] [--model MODEL] [--judge-model MODEL] [--runs N] [--iteration N] [--workspace DIR] [--eval ID]... [--timeout-seconds N] [--sandbox-dir DIR] [--no-baseline]
+varde learn eval trigger <skill-name> <queries.json> --harness {claude,codex,opencode} [--runs N] [--skill-path PATH]
+varde learn eval output <skill-dir> [--harness {codex,claude}] [--model MODEL] [--judge-model MODEL] [--runs N] [--iteration N] [--workspace DIR] [--eval ID]... [--timeout-seconds N] [--sandbox-dir DIR] [--no-baseline]
 ```
 
 Output evaluations default to the official Codex CLI with `gpt-6-luna`. The
@@ -26,9 +26,13 @@ run; the runner never falls back to another harness or model. Authentication
 stays in the official client.
 
 ```sh
-varde-learn eval output skills/varde-change --eval 3 --no-baseline --runs 1
-varde-learn eval output skills/varde-change --harness claude --model sonnet --eval 3 --no-baseline
+varde learn eval output skills/varde-change --eval 3 --no-baseline --runs 1
+varde learn eval output skills/varde-change --harness claude --model sonnet --eval 3 --no-baseline
 ```
+
+`varde learn eval calibrate <skill-dir>` checks whether declared mutations
+make that skill's evaluations fail. It defaults to Codex and accepts
+`--harness claude` or `--harness codex`.
 
 Each run uses a fresh disposable sandbox. Codex evaluation isolates personal
 configuration, instruction files, and discovered skills from the candidate
@@ -39,10 +43,23 @@ may report token counts without dollar cost; missing cost is not zero cost.
 
 Every eval launches one or more billed harness sessions; usage and charges
 scale with `--runs`. Codex trigger evaluation uses a substring proxy because
-Codex has no documented skill-invocation event. Run `varde-learn eval --help`
+Codex has no documented skill-invocation event. Run `varde learn eval --help`
 for details.
 
 ## Session diagnosis
+
+List recent local sessions for a repository and select a root run to include
+its linked workers:
+
+```sh
+varde learn diagnose list --harness all --repository /path/to/project --json
+varde learn diagnose list --harness codex --repository /path/to/project --run <RUN_ID> --json
+```
+
+The list scans local Codex, Claude, or OpenCode session sources. It returns up
+to five top-level sessions by default; `--limit` accepts 1 to 10. Selected
+sessions may include archived records and linked workers where the harness
+source exposes them. Use `diagnose inspect` to page bounded session evidence.
 
 `diagnose inspect` reads bounded local Codex, Claude, or OpenCode session
 evidence without starting another harness client or opening the friction
@@ -50,11 +67,11 @@ store. `diagnose capture` records a reviewed event in that store. Choose
 exactly one live selector and an explicit harness:
 
 ```sh
-varde-learn diagnose inspect --harness codex --session <THREAD_ID> \
+varde learn diagnose inspect --harness codex --session <THREAD_ID> \
   --snapshot-out <new-private-path>/bundle.json --json
 
-varde-learn diagnose inspect --harness claude --path <TRANSCRIPT.jsonl> --json
-varde-learn diagnose inspect --harness opencode --session <SESSION_ID> --json
+varde learn diagnose inspect --harness claude --path <TRANSCRIPT.jsonl> --json
+varde learn diagnose inspect --harness opencode --session <SESSION_ID> --json
 ```
 
 `--current`, `--session`, and `--path` are mutually exclusive. `--current`
@@ -71,6 +88,8 @@ handoff, report template, and capture procedure.
 `--snapshot-out` writes a new bounded normalized bundle and refuses to replace
 an existing path. Save its `data.snapshot.digest`, and page the same frozen
 bundle with `--snapshot-in <bundle.json> --offset <N> --limit <N> --json`.
+Snapshot record text passes through built-in secret redaction; review excerpts and
+paths for private information before sharing.
 `--limit` is 1 to 1,000, default 100. Inspect returns source and session
 identity, verified children, record anchors, overlap, coverage warnings, and
 page metadata. Its snapshot digest detects edits to the bundle; it does not
@@ -85,7 +104,7 @@ partial; ambiguous child branches are omitted, with a warning.
 Capture one reviewed incident from a strict JSON file:
 
 ```sh
-varde-learn diagnose capture --file <incident.json> --json
+varde learn diagnose capture --file <incident.json> --json
 ```
 
 The file carries the snapshot path and digest, canonical session ID, one
@@ -104,7 +123,7 @@ stays report-only.
 Or let the CLI build the request from the frozen bundle:
 
 ```sh
-varde-learn diagnose capture --snapshot <bundle.json> --source-id <id> \
+varde learn diagnose capture --snapshot <bundle.json> --source-id <id> \
   --record-index <n> [--native-id <id>] --kind <kind> --evidence <text> \
   (--item-id <id> | --item-source <s> --item-title <t> [--item-target <path>]) --json
 ```
@@ -133,8 +152,8 @@ this order:
 3. `learn/` under the varde config directory
 
 The config directory is `VARDE_CONFIG_DIR`, then `$XDG_CONFIG_HOME/varde`,
-then `~/.config/varde`. Use `varde-workflow paths set --learn <directory>`
-to set `[default].learn`; `varde-workflow paths --json` reports its resolved
+then `~/.config/varde`. Use `varde setup paths set --learn <directory>`
+to set `[default].learn`; `varde setup paths --json` reports its resolved
 path and source. A leading `~` expands, and relative paths resolve from the
 current directory.
 
@@ -154,12 +173,12 @@ it, while legacy Markdown imports remain unprovenanced.
 
 ```sh
 printf '%s\n' 'The check omitted a required path.' | \
-  varde-learn friction add --source varde-change --title "Missing path guidance" --target skills/example/SKILL.md --json
-printf '%s\n' 'Seen again after the latest edit.' | varde-learn friction add --item 42
+  varde learn friction add --source varde-change --title "Missing path guidance" --target skills/example/SKILL.md --json
+printf '%s\n' 'Seen again after the latest edit.' | varde learn friction add --item 42
 
-varde-learn friction list --repo /path/to/project --status open --source varde-change --limit 100 --json
-varde-learn friction show 42 --limit 100 --json
-varde-learn friction set-status 42 resolved --reason "The instructions now name the required path."
+varde learn friction list --repository /path/to/project --status open --source varde-change --limit 100 --json
+varde learn friction show 42 --limit 100 --json
+varde learn friction set-status 42 resolved --reason "The instructions now name the required path."
 ```
 
 New items are scoped to the current repository by default; use `--global` to
@@ -168,8 +187,8 @@ leave the repository scope empty. `--source` accepts a skill or tool name.
 `--item <ID>` without the create-only options.
 
 `friction list` filters by `--status` (`open`, `resolved`, `promoted`, or
-`archived`), exact `--source`, `--repo <ROOT>` or `--global`, and case-insensitive
-literal `--text` in titles or evidence. `--repo` and `--global` cannot be
+`archived`), exact `--source`, `--repository <ROOT>` or `--global`, and case-insensitive
+literal `--text` in titles or evidence. `--repository` and `--global` cannot be
 combined. `friction set-status` requires `--reason` and records every update
 in status history, including a repeat of the current status.
 
@@ -184,7 +203,7 @@ history and is not paged.
 After applying an approved change, record it against its source items:
 
 ```sh
-varde-learn adopt record --items 42,43 --summary "Clarify store path resolution" \
+varde learn adopt record --items 42,43 --summary "Clarify store path resolution" \
   --files "skills/varde-learn/SKILL.md,skills/varde-learn/references/distill.md" \
   --commit abc123 --eval-before before/benchmark.json --eval-after after/benchmark.json --json
 ```
@@ -198,7 +217,7 @@ transaction. Schema 2 forward-migrates
 schema-1 stores while preserving existing friction data; a newer unsupported
 schema is rejected.
 
-Check later occurrences with `varde-learn adopt recurrence --json`. Each row is
+Check later occurrences with `varde learn adopt recurrence --json`. Each row is
 a historical occurrence strictly later than its latest preceding adoption; it
 does not prove the issue is still present and never triggers a revert. Supported
 fixed timestamps beginning with `YYYY-MM-DD` are compared by SQLite; date-only
@@ -215,17 +234,17 @@ legacy notes, first preview the files in the old friction directory, such as
 `<working>/friction`:
 
 ```sh
-varde-learn friction import /path/to/working/friction --repo /path/to/project --dry-run --json
+varde learn friction import /path/to/working/friction --repository /path/to/project --dry-run --json
 ```
 
 If the report is correct, repeat without `--dry-run` to import. The required
-`--repo` associates legacy occurrences with a repository. Dry-run validates
+`--repository` associates legacy occurrences with a repository. Dry-run validates
 the source and configured store path but does not create or change the store.
 Malformed or unsupported Markdown files are reported as skipped. Re-imports
 skip slugs already present.
 
 Export every item, including its occurrences and status history, to a new
-directory with `varde-learn friction export <directory>`. Export files use the
+directory with `varde learn friction export <directory>`. Export files use the
 versioned `varde-friction-item` Markdown format; import accepts that format as
 well as legacy files with `type: friction` or `type: friction-item`. Use a new
 directory for each export: the command preserves unrelated files and refuses
@@ -242,8 +261,8 @@ directory outside the checkout.
 ## Build and test
 
 ```sh
-cargo build --workspace
-cargo test --workspace
+cd clis && cargo build --workspace --locked
+cd clis && cargo test --workspace --locked
 ```
 
 ### Per-case environment

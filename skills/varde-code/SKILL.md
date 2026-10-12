@@ -3,7 +3,7 @@ name: varde-code
 description: "Find where a symbol is declared, a file's imports and dependents, or an ordered set of source files to read for a topic, with varde-code. Not for explanations (`varde-explore`), code changes (`varde-change`), reviews (`varde-review`), or CLI installation (`varde-manage`)."
 ---
 
-# Query code with varde-code
+# Query code with varde map
 
 ## Index readiness
 
@@ -11,26 +11,34 @@ description: "Find where a symbol is declared, a file's imports and dependents, 
 - On either error, the coordinator starts the watcher once, then retries the query:
 
 ```sh
-varde-code watch --ensure --repo <absolute-root>
+varde setup watch --ensure --repo <absolute-root>
 ```
 
 - Workers never start watchers or build indexes; on either error they use the Fallback.
+- In a linked worktree with no index, an indexed query reads the main checkout's index read-only and reports `meta.base_index`; answers may not reflect files this worktree changed.
+- Coordinator cleanup: `varde map prune --json '{}'` dry-runs; `"apply": true` deletes orphaned index folders, and `unknownOlderThanDays` also removes unrecorded folders past that age.
 
 ## Choose a query
 
-- Index search matches paths/names, not text/docs/semantics; use `rg` for comments, strings, and docs.
-- Send JSON with absolute `repoRoot` and mode fields; verify optional fields with `<mode> --help`.
+Index search matches paths/names, not text/docs/semantics; use `rg` for comments, strings, and docs.
+Choose a query by intent; pass an absolute `repoRoot`; consult its mode's `--help` for JSON inputs:
 
-- Known symbol: `get_symbol` with `name`; add `filePath` to disambiguate and `includeBody:true` only when needed.
-- Usages and other code shapes: `find_pattern` with `language` and a `pattern`; omitting `path` searches all of `repoRoot`, and it needs no index. Call patterns:
-  - Functions: `<name>($$$ARGS)`
-  - Methods: `$RECV.<name>($$$ARGS)`
-  - Qualified calls (`a::b(...)`): the full path
-- Topic set: `context_pack` `query` adds one graph hop; files stay ranked. Its `tests` are import-reachability hints, not measured coverage; `includeReadingOrder:false` omits the duplicate sequence.
-- For declaration/body tracing, set `includeTests:false` when test hints aren't needed; keep it enabled for test work.
-- By default, `context_pack` returns Function/Class/Interface/Variable/Export/Route declarations with persisted 1-based spans. Set `includeOccurrences:true` to add matching occurrence/control rows.
-- Relationships: `dependencies` returns files reachable through imports; `dependents` returns files that reach `filePath`. Omit `maxDepth` for transitive results; set `maxDepth:1` for direct edges.
-- Broad orientation: use `nav_map`; skip it for known lookups.
+- Known symbol: `get_symbol`; code shapes: `find_pattern`; topic-based source set: `context_pack`.
+- Imports or impact: relationship queries; broad orientation: `nav_map`.
+- Calls: `<name>($$$ARGS)`; methods `$RECV.<name>($$$ARGS)`; qualified calls need the full path.
+- `find_pattern` needs no index. `context_pack` test results are import-reachability hints, not measured coverage. Omit `maxDepth` for transitive relationships; use `maxDepth:1` for direct edges.
+
+### AST rewrites
+
+Preview from one rules file or one inline rule, then apply its proposal:
+
+```sh
+varde edit preview --rules rules.json --path src/ --json
+varde edit preview --language typescript --pattern 'oldCall($ARG)' --replacement 'newCall($ARG)' --path src/ --json
+varde edit apply --proposal <data.proposal_path> --json
+```
+
+Use `varde edit preview --help` and `varde edit apply --help` for proposal fields and command inputs. Preview before applying, then review the diff because a parseable rewrite can still be wrong.
 
 ## Read results
 
@@ -41,17 +49,16 @@ varde-code watch --ensure --repo <absolute-root>
   only when matching occurrence rows are needed:
 
 ```sh
-varde-toz query --handle <H>
+varde run query --handle <H>
 ```
 
-- If no capture is available or it lacks needed sections, page with `resultsOffset` or use `fullResults:true`; it bypasses token and result caps and honors the offset, but does not change symbol-kind filtering.
-- `context_pack` defaults to `maxTokensEstimate:4000`, estimated as serialized bytes/4 (not a tokenizer or global context cap). The estimate also bounds symbols per file; pagination metadata reports omitted symbols.
+- If no capture is available or it lacks needed sections, page with `resultsOffset` or use `fullResults:true`; see `context_pack --help` for paging options and the token estimate's meaning.
 
 ## Fallback
 
 - On a sandbox denial, retry that exact command once with escalation.
 - On `index_missing`/`index_stale` or a failed `watch --ensure`, `find_pattern` still works; use `Read`/`Grep`/`Glob`/`rg` for other lookups and report degraded index access.
-- If the CLI is unavailable, use `Read`/`Grep`/`Glob`/`rg` and report degraded access. Never build or install the CLI.
+- Missing `varde`: stop and report it. Do not build or install the CLI.
 
 ## Gotchas
 

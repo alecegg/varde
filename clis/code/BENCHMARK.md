@@ -1,6 +1,6 @@
 # Benchmark: varde-code vs. ast-grep
 
-Tracks speed/quality for every varde-code query mode that overlaps
+Tracks speed/quality for every code-module query mode that overlaps
 functionality `ast-grep` already provides. Updated whenever a covered mode
 changes or a new overlapping mode ships. This file holds a single canonical
 set of current measurements — no optimization history or narrative. Past
@@ -22,7 +22,7 @@ framing; the win came from parsing fewer files, not from a faster matcher.
 The `scan` pattern-rule pipeline is the remaining overlapping mode still
 slower than ast-grep (1.56x). Because it matches a single target (not a tree),
 the prefilter's skip-files win does not apply; its options are matcher-level
-(adopt `ast_grep_core`'s own `Pattern`, which varde-code already links, in
+(adopt `ast_grep_core`'s own `Pattern`, which the code module already links, in
 place of the hand-rolled matcher) — see Open work.
 
 Feature adjustment or removal is on the table if a feature's complexity/cost
@@ -63,11 +63,11 @@ commands in each mode's section below.
 | `find_pattern` (Python `print($MSG)`) | hermes-agent | 1.325s | 0.588s | 0.787s | 0.75x | Yes ✓ |
 | `find_pattern` (Python `print($MSG)`) | oh-my-pi | 0.146s | 0.078s | 0.081s | 0.97x | ~tie |
 | `find_pattern` (Python `print($MSG)`) | repowise | 0.394s | 0.084s | 0.236s | 0.36x | Yes ✓ |
-| `scan` pattern-rule pipeline (`Ok($VALUE)`, Rust) | varde-code crate | — | 0.039s | 0.025s | 1.56x | No (1.56x slower) |
+| `scan` pattern-rule pipeline (`Ok($VALUE)`, Rust) | code crate | — | 0.039s | 0.025s | 1.56x | No (1.56x slower) |
 | `build` (index) | hermes-agent | 6.70s | 0.04s | n/a | n/a | n/a |
 | `build` (index) | oh-my-pi | 3.72s | 0.03s | n/a | n/a | n/a |
 | `build` (index) | repowise | 1.31s | 0.02s | n/a | n/a | n/a |
-| `extract` (parse-cost proxy) | varde-code crate | — | 0.277s | n/a | n/a | n/a (no ast-grep equivalent) |
+| `extract` (parse-cost proxy) | code crate | — | 0.277s | n/a | n/a | n/a (no ast-grep equivalent) |
 
 `find_pattern` has no persisted index, so its "cold" column is first-touch
 (no OS page-cache warm-up for that repo this session) rather than a cleared
@@ -340,7 +340,7 @@ cold build, leaf-frame self-time, own-code binary only):
 |---|---|
 | tree-sitter (parsing) | 67.1% |
 | other/libc/system | 15.4% |
-| varde-code own code | 12.7% |
+| code module own code | 12.7% |
 | sqlite/rusqlite | 4.8% |
 
 Two-thirds of all sampled time is inside tree-sitter's C parser — the
@@ -370,10 +370,11 @@ Repro:
 ```
 export PATH="$HOME/.cargo/bin:$PATH"
 BIN=target/release/varde-code
+REFERENCE_REPOS="$HOME/source/reference-repos"
 for repo in hermes-agent oh-my-pi repowise; do
   rm -rf ~/.config/varde-code/repos/*"$repo"*
-  /usr/bin/time -p "$BIN" build --repo-root "/Users/alec/source/reference-repos/$repo"
-  /usr/bin/time -p "$BIN" build --repo-root "/Users/alec/source/reference-repos/$repo"  # warm, no --force
+  /usr/bin/time -p "$BIN" build --repo-root "$REFERENCE_REPOS/$repo"
+  /usr/bin/time -p "$BIN" build --repo-root "$REFERENCE_REPOS/$repo"  # warm, no --force
 done
 ```
 
@@ -384,7 +385,7 @@ varde-code's own baseline, not an ast-grep comparison.
 ## Methodology
 
 - **Same version baseline.** ast-grep installed via `brew install ast-grep`
-  (0.45.1) for real-CLI comparisons; varde-code built with `cargo build
+  (0.45.1) for real-CLI comparisons; the code module built with `cargo build
   --release` (release binary only — debug builds inflate tree-sitter parse
   cost ~4x and are not representative).
 - **Same target, same query** for both tools; `find_pattern` matches
@@ -404,7 +405,7 @@ varde-code's own baseline, not an ast-grep comparison.
 lint/rewrite), `test`, `new`, `lsp`, `outline` (symbol/import/export
 structure), `completions`.
 
-| ast-grep command | Overlaps varde-code mode | In scope? |
+| ast-grep command | Overlaps a code-module mode | In scope? |
 |---|---|---|
 | `run -p <pattern>` | `find_pattern` | Yes |
 | `outline` | `symbols_in_file`, `symbols_in_files`, `filter_symbols`, `find_imports`, `build` | Yes |
@@ -432,7 +433,7 @@ directly comparable `ast-grep` number; tracked as a parse-cost proxy only.
 the `varde-code` crate's own source otherwise.
 
 ```
-varde-code extract <path>   # release build
+varde map extract <path>   # release build
 ```
 
 ## `find_pattern`
@@ -442,7 +443,7 @@ varde-code extract <path>   # release build
 
 ```
 ast-grep run -p '<pattern>' -l <lang> <path> --json=compact
-varde-code find_pattern --json '{"path":"<path>","pattern":"<pattern>","language":"<lang>"}'
+varde map find_pattern --json '{"path":"<path>","pattern":"<pattern>","language":"<lang>"}'
 ```
 
 Match counts are at parity (100%) across all tested repos/patterns. As of
@@ -479,13 +480,13 @@ separately rather than judged against the 10% goal.
 
 ```
 ast-grep outline <file>
-varde-code symbols_in_file --json '{"repoRoot":"...","filePath":"<file>"}'
+varde map symbols_in_file --json '{"repoRoot":"...","filePath":"<file>"}'
 ```
 
 ## `scan` pattern-rule pipeline
 
 ```
-cargo test --release -p varde-code --test pattern_rule_perf -- --ignored --nocapture
+cd clis && cargo test -p varde-code --release --locked --test pattern_rule_perf -- --ignored --nocapture
 ```
 
 Times the full rule pipeline — find_pattern matching + constraints +

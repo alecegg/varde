@@ -409,6 +409,15 @@ fn run_sql_fixture(
     rule: &Rule,
     fixture: &std::collections::HashMap<String, String>,
 ) -> Result<Vec<std::collections::HashMap<String, serde_json::Value>>, String> {
+    // Redirect the config-root inputs to a fresh temp directory so the
+    // fixture index lands in throwaway state, never the user's real config
+    // root. `run_with_force` derives its db path from
+    // `db::path::config_dir()`, which reads `HOME`/`XDG_CONFIG_HOME`/
+    // `VARDE_CONFIG_DIR` — with no redirection a fixture build from `varde
+    // test` (or a test suite) writes `repos/...` folders under the real
+    // `~/.config/varde/code`. The caller already holds `HOME_TEST_LOCK`, so
+    // the redirect cannot interleave with another test's `HOME` swap.
+    let _config_root = FixtureConfigRoot::new();
     let guard = TempFixture::build(fixture)
         .map_err(|error| format!("failed to prepare fixture temp directory: {error}"))?;
     let repo_root = guard.repo_root.to_string_lossy().into_owned();
@@ -477,6 +486,56 @@ impl Drop for TempFixture {
         if let Some(db_dir) = db_path.parent() {
             let _ = std::fs::remove_dir_all(db_dir);
         }
+    }
+}
+
+/// Redirect `HOME`/`XDG_CONFIG_HOME`/`VARDE_CONFIG_DIR` to a fresh temp
+/// directory until dropped, then restore the previous values and remove the
+/// temp directory.
+///
+/// Mirrors the `test_support::HomeOverride` pattern for the non-test code
+/// path (`run_sql_rule_tests` runs from `varde test`, so `#[cfg(test)]`
+/// helpers are unavailable). Must be created and dropped while the caller
+/// holds [`crate::HOME_TEST_LOCK`] so no other HOME-mutating test can weave
+/// its own redirect in between.
+struct FixtureConfigRoot {
+    saved: [(&'static str, Option<std::ffi::OsString>); 3],
+    root: std::path::PathBuf,
+}
+
+impl FixtureConfigRoot {
+    fn new() -> Self {
+        let root = std::env::temp_dir().join(format!(
+            "varde-sql-config-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        ));
+        let saved = [
+            ("HOME", std::env::var_os("HOME")),
+            ("XDG_CONFIG_HOME", std::env::var_os("XDG_CONFIG_HOME")),
+            ("VARDE_CONFIG_DIR", std::env::var_os("VARDE_CONFIG_DIR")),
+        ];
+        unsafe {
+            std::env::set_var("HOME", &root);
+            std::env::set_var("XDG_CONFIG_HOME", root.join(".config"));
+            std::env::set_var("VARDE_CONFIG_DIR", root.join(".config/varde"));
+        }
+        Self { saved, root }
+    }
+}
+
+impl Drop for FixtureConfigRoot {
+    fn drop(&mut self) {
+        for (key, value) in self.saved.clone() {
+            match value {
+                Some(value) => unsafe { std::env::set_var(key, value) },
+                None => unsafe { std::env::remove_var(key) },
+            }
+        }
+        let _ = std::fs::remove_dir_all(&self.root);
     }
 }
 

@@ -2,13 +2,14 @@
 
 ## Supported versions
 
-varde-code is pre-1.0. Security fixes land on the latest `0.1.x` release only;
-there is no back-porting to older tags. Always run the newest tagged release.
+The code module is part of the Varde workspace release. Security fixes land on
+the latest Varde release only; there is no back-porting to older tags. Always
+run the newest tagged release.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1   | :x:                |
+| Latest | :white_check_mark: |
+| Older  | :x:                |
 
 ## Reporting a vulnerability
 
@@ -23,7 +24,7 @@ if you haven't used it before.
 
 When reporting, please include:
 
-- affected version (`varde-code --version`) and platform,
+- affected version (`varde --version`) and platform,
 - a description of the issue and its impact,
 - steps to reproduce (a minimal repo or input is ideal),
 - any known workaround.
@@ -38,7 +39,7 @@ When reporting, please include:
 
 ## Scope notes
 
-varde-code is a local CLI that reads source trees and maintains a local
+The code package reads source trees and maintains a local
 SQLite index; it opens no network listeners and runs no server. The most
 relevant threat surface is untrusted **input** — a malicious repository,
 source file, or index database. Reports about parsing, extraction, or index

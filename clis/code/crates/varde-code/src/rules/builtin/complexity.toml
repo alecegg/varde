@@ -7,7 +7,7 @@
 [[rule]]
 id = "file-complexity-hotspot"
 kind = "sql"
-severity = "error"
+severity = "warning"
 name = "Concentrated file complexity"
 description = "Certified production functions exceed total and average cognitive complexity budgets."
 message = "file cognitive complexity {complexity} across {functions} functions exceeds total {max_complexity} and average {min_complexity_per_function} budgets"
@@ -20,10 +20,25 @@ WITH measured AS (
   FROM files f
   JOIN function_metrics fm ON fm.file_id = f.id
   WHERE f.is_test_path = 0 AND f.is_tooling_path = 0
+    AND NOT EXISTS (
+      SELECT 1 FROM function_metrics parent
+      WHERE parent.file_id = fm.file_id
+        AND parent.identity <> fm.identity
+        AND parent.start_byte <= fm.start_byte
+        AND parent.end_byte >= fm.end_byte
+        AND (parent.start_byte < fm.start_byte OR parent.end_byte > fm.end_byte)
+    )
   GROUP BY f.id
   HAVING COUNT(DISTINCT fm.identity) = (
       SELECT COUNT(*) FROM entities fn
       WHERE fn.file_id = f.id AND fn.kind = 0 AND fn.is_test = 0
+        AND NOT EXISTS (
+          SELECT 1 FROM entities parent
+          WHERE parent.file_id = fn.file_id AND parent.kind = 0 AND parent.is_test = 0
+            AND parent.id <> fn.id
+            AND parent.start_byte <= fn.start_byte AND parent.end_byte >= fn.end_byte
+            AND (parent.start_byte < fn.start_byte OR parent.end_byte > fn.end_byte)
+        )
     )
     AND SUM(CASE WHEN fm.confidence = 'high' THEN 0 ELSE 1 END) = 0
     AND MIN(fm.metric_version) = :current_metric_version
@@ -37,7 +52,7 @@ WHERE complexity > :max_complexity
   AND complexity_per_function > :min_complexity_per_function
 ORDER BY complexity_per_function DESC, complexity DESC, path
 """
-thresholds = { max_complexity = 50.0, min_complexity_per_function = 7.0, current_metric_version = 2.0 }
+thresholds = { max_complexity = 50.0, min_complexity_per_function = 7.0, current_metric_version = 3.0 }
 
 [[rule]]
 id = "churn-complexity-hotspot"
@@ -53,7 +68,7 @@ thresholds = { max_complexity = 50.0, min_churn = 20.0 }
 [[rule]]
 id = "function-complexity-gate"
 kind = "sql"
-severity = "error"
+severity = "warning"
 name = "Function complexity gate"
 description = "A certified function complexity metric exceeds a readability limit."
 message = "{name} exceeds complexity limits: cognitive {cognitive}, cyclomatic {cyclomatic}"

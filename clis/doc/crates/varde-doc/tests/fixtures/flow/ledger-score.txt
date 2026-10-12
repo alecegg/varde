@@ -1,0 +1,3 @@
+cyclomatic 4 cognitive 5 decisions 2 branch_units 3
+  gate: 1 decisions, 1 units, cognitive 1
+  build: 1 decisions, 2 units, cognitive 4

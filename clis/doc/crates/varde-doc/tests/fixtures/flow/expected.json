@@ -1,0 +1,2794 @@
+[
+  {
+    "skill": "varde-change",
+    "tokens": {
+      "SKILL.md": 575,
+      "assets/PLAN-TEMPLATE.md": 544,
+      "assets/TASK-TEMPLATE.md": 231,
+      "references/build-execution.md": 1366,
+      "references/build-finish.md": 1689,
+      "references/build-micro-change.md": 619,
+      "references/build-parallel.md": 645,
+      "references/build-posture-debug.md": 989,
+      "references/build-posture-refactor.md": 838,
+      "references/build-recovery.md": 373,
+      "references/build-worktree.md": 1818,
+      "references/build.md": 2275,
+      "references/orchestrate.md": 1758,
+      "references/orchestration.md": 469,
+      "references/plan-decomposition.md": 1039,
+      "references/plan.md": 2806,
+      "references/status.md": 238,
+      "references/verify.md": 478,
+      "references/workflow-state.md": 238,
+      "scripts/plan-path.py": 614,
+      "scripts/select-plans.py": 1692,
+      "scripts/worktree-cleanup.sh": 1180,
+      "scripts/worktree-create.sh": 952,
+      "scripts/worktree-merge.sh": 685,
+      "scripts/worktree-permissions.py": 2775,
+      "scripts/worktree-wave.sh": 3457,
+      "references/review-gate-plan.md": 538,
+      "references/review-gate-record.md": 544,
+      "references/review-gate-worktree.md": 494,
+      "references/review-gates.md": 1550,
+      "references/varde-code-cli.md": 53,
+      "references/varde-workflow-cli.md": 219,
+      "scripts/risk-tier.py": 3840
+    },
+    "references": [
+      "assets/PLAN-TEMPLATE.md",
+      "assets/TASK-TEMPLATE.md",
+      "references/varde-code-cli.md",
+      "references/varde-workflow-cli.md"
+    ],
+    "edges": [
+      {
+        "from": "SKILL.md",
+        "to": "references/review-gates.md",
+        "context": "Manage the change lifecycle",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 10,
+        "route": null
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build-execution.md",
+        "context": "Manage the change lifecycle",
+        "conditional": false,
+        "kind": "role",
+        "table": false,
+        "line": 13,
+        "route": null
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/status.md",
+        "context": "\"What's in flight?\", or an empty invocation — show curren...",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 25,
+        "route": "\"What's in flight?\", or an empty invocation — show curren..."
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/plan.md",
+        "context": "Plan a new feature before building",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 26,
+        "route": "Plan a new feature before building"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/plan.md",
+        "context": "Resume planning with no feature named",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 27,
+        "route": "Resume planning with no feature named"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build-execution.md",
+        "context": "One task file assigned by an orchestrator (builder)",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 28,
+        "route": "One task file assigned by an orchestrator (builder)"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build-micro-change.md",
+        "context": "A settled single-outcome refactor",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 29,
+        "route": "A settled single-outcome refactor"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build-posture-refactor.md",
+        "context": "A settled single-outcome refactor",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 29,
+        "route": "A settled single-outcome refactor"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build-micro-change.md",
+        "context": "A settled single-outcome change that fits one task",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 30,
+        "route": "A settled single-outcome change that fits one task"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build.md",
+        "context": "A named plan, multiple dependent outcomes, or unresolved...",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 31,
+        "route": "A named plan, multiple dependent outcomes, or unresolved..."
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build-posture-debug.md",
+        "context": "Diagnose why something fails, without fixing it",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 32,
+        "route": "Diagnose why something fails, without fixing it"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/build-posture-debug.md",
+        "context": "Fix a named bug or regression, no mode given",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 33,
+        "route": "Fix a named bug or regression, no mode given"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/verify.md",
+        "context": "Report evidence for finished work without changing anything",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 34,
+        "route": "Report evidence for finished work without changing anything"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/orchestrate.md",
+        "context": "Run a group of related plans end to end, in dependency order",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 35,
+        "route": "Run a group of related plans end to end, in dependency order"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/varde-workflow-cli.md",
+        "context": "Gotchas",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 43,
+        "route": null
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/workflow-state.md",
+        "context": "Gotchas",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 44,
+        "route": null
+      },
+      {
+        "from": "references/build-execution.md",
+        "to": "references/review-gates.md",
+        "context": "Review checks",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 13
+      },
+      {
+        "from": "references/build-execution.md",
+        "to": "references/build-worktree.md",
+        "context": "Separate execution checkout",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 36
+      },
+      {
+        "from": "references/build-execution.md",
+        "to": "scripts/worktree-permissions.py",
+        "context": "First worker action",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 44
+      },
+      {
+        "from": "references/build-execution.md",
+        "to": "references/build-posture-debug.md",
+        "context": "debug posture",
+        "conditional": true,
+        "kind": "load",
+        "table": true,
+        "line": 54
+      },
+      {
+        "from": "references/build-execution.md",
+        "to": "references/build-posture-refactor.md",
+        "context": "refactor posture",
+        "conditional": true,
+        "kind": "load",
+        "table": true,
+        "line": 55
+      },
+      {
+        "from": "references/build-finish.md",
+        "to": "references/review-gates.md",
+        "context": "2. Review the implementation",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 25
+      },
+      {
+        "from": "references/build-finish.md",
+        "to": "references/review-gates.md",
+        "context": "2. Review the implementation",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 26
+      },
+      {
+        "from": "references/build-finish.md",
+        "to": "scripts/worktree-merge.sh",
+        "context": "Finish choices",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 137
+      },
+      {
+        "from": "references/build-finish.md",
+        "to": "references/build-worktree.md",
+        "context": "Finish choices",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 138
+      },
+      {
+        "from": "references/build-micro-change.md",
+        "to": "references/build.md",
+        "context": "Build a bounded change",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 3
+      },
+      {
+        "from": "references/build-micro-change.md",
+        "to": "references/build-worktree.md",
+        "context": "Build a bounded change",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 4
+      },
+      {
+        "from": "references/build-micro-change.md",
+        "to": "references/review-gates.md",
+        "context": "Mechanical edits",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 11
+      },
+      {
+        "from": "references/build-micro-change.md",
+        "to": "references/build-worktree.md",
+        "context": "2. Edit, verify, complete / step 1: Run the contract's verification check...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 33
+      },
+      {
+        "from": "references/build-parallel.md",
+        "to": "scripts/worktree-wave.sh",
+        "context": "Isolated task wave",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 8
+      },
+      {
+        "from": "references/build-parallel.md",
+        "to": "scripts/worktree-wave.sh",
+        "context": "1. Start",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 15
+      },
+      {
+        "from": "references/build-parallel.md",
+        "to": "scripts/worktree-wave.sh",
+        "context": "3. Verify integration",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 36
+      },
+      {
+        "from": "references/build-parallel.md",
+        "to": "scripts/worktree-wave.sh",
+        "context": "4. Publish locally, record, and release",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 49
+      },
+      {
+        "from": "references/build-parallel.md",
+        "to": "scripts/worktree-wave.sh",
+        "context": "4. Publish locally, record, and release / step 2: Run scripts/worktree-wave.sh release...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 58
+      },
+      {
+        "from": "references/build-posture-debug.md",
+        "to": "references/build-execution.md",
+        "context": "Phase 6 — Cleanup",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 97
+      },
+      {
+        "from": "references/build-posture-debug.md",
+        "to": "references/review-gates.md",
+        "context": "Phase 6 — Cleanup",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 99
+      },
+      {
+        "from": "references/build-posture-refactor.md",
+        "to": "references/build-worktree.md",
+        "context": "Bootstrap / step 3: Use the fresh task worktree and appro...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 18
+      },
+      {
+        "from": "references/build-posture-refactor.md",
+        "to": "references/build-worktree.md",
+        "context": "Integrate",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 61
+      },
+      {
+        "from": "references/build-worktree.md",
+        "to": "scripts/worktree-create.sh",
+        "context": "Plan approval and review location / step 2: Allocate the plan worktree with scrip...",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 15
+      },
+      {
+        "from": "references/build-worktree.md",
+        "to": "references/build-parallel.md",
+        "context": "Task isolation and integration / step 2: Use references/build-parallel.md for...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 36
+      },
+      {
+        "from": "references/build-worktree.md",
+        "to": "scripts/worktree-create.sh",
+        "context": "Task isolation and integration / step 2: Use references/build-parallel.md for...",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 37
+      },
+      {
+        "from": "references/build-worktree.md",
+        "to": "scripts/worktree-merge.sh",
+        "context": "Task isolation and integration / step 1: scripts/worktree-merge.sh <plan-id> f...",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 48
+      },
+      {
+        "from": "references/build-worktree.md",
+        "to": "scripts/worktree-cleanup.sh",
+        "context": "Task isolation and integration / step 2: scripts/worktree-cleanup.sh <plan-id>...",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 49
+      },
+      {
+        "from": "references/build-worktree.md",
+        "to": "scripts/worktree-permissions.py",
+        "context": "Worker permission contract / step 1: Supply the absolute path to scripts/w...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 61
+      },
+      {
+        "from": "references/build-worktree.md",
+        "to": "references/review-gate-worktree.md",
+        "context": "Review authorization for isolated tasks",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 84
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-worktree.md",
+        "context": "Boundaries",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 8
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-recovery.md",
+        "context": "Boundaries",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 11
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/review-gate-plan.md",
+        "context": "An ad-hoc request with dependent outcomes",
+        "conditional": true,
+        "kind": "load",
+        "table": true,
+        "line": 21
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/varde-code-cli.md",
+        "context": "1. Choose a starting action",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 26
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-worktree.md",
+        "context": "2. Choose the execution location / step 1: Load references/build-worktree.md and...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 30
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/plan-decomposition.md",
+        "context": "3. Decompose and state a posture",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 41
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-execution.md",
+        "context": "4. Run tasks",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 54
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-recovery.md",
+        "context": "4. Run tasks / step 3: Read references/build-recovery.md whe...",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 64
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-finish.md",
+        "context": "5. Finish",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 74
+      },
+      {
+        "from": "references/build.md",
+        "to": "scripts/select-plans.py",
+        "context": "Select a plan / step 1: List. Run scripts/select-plans.py --w...",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 79
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/orchestration.md",
+        "context": "Dispatch tasks",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 92
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-parallel.md",
+        "context": "Choose a strategy",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 118
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-worktree.md",
+        "context": "Task-file ownership",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 126
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/review-gates.md",
+        "context": "Dispatch a builder / step 1: Obtain any missing pre-edit verdict p...",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 134
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-execution.md",
+        "context": "Dispatch a builder / step 3: Brief the builder with:",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 151
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-recovery.md",
+        "context": "Accept a result",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 159
+      },
+      {
+        "from": "references/build.md",
+        "to": "references/build-recovery.md",
+        "context": "Accept a result",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 164
+      },
+      {
+        "from": "references/orchestrate.md",
+        "to": "references/build-worktree.md",
+        "context": "Feature worktree / step 1: Load references/build-worktree.md and...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 38
+      },
+      {
+        "from": "references/orchestrate.md",
+        "to": "references/review-gates.md",
+        "context": "Finish / step 2: Review the group. After all children...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 104
+      },
+      {
+        "from": "references/orchestrate.md",
+        "to": "references/build-finish.md",
+        "context": "Finish / step 6: Offer one choice. Give the clickable...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 131
+      },
+      {
+        "from": "references/orchestration.md",
+        "to": "references/build-worktree.md",
+        "context": "Writer launch",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 34
+      },
+      {
+        "from": "references/plan-decomposition.md",
+        "to": "assets/TASK-TEMPLATE.md",
+        "context": "Task decomposition",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 5
+      },
+      {
+        "from": "references/plan-decomposition.md",
+        "to": "assets/TASK-TEMPLATE.md",
+        "context": "5. Present and record / step 2: Write each task from assets/TASK-TEMP...",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 82
+      },
+      {
+        "from": "references/plan.md",
+        "to": "scripts/plan-path.py",
+        "context": "First turn / step 1: Pick a temporary slug from the prompt...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 23
+      },
+      {
+        "from": "references/plan.md",
+        "to": "assets/PLAN-TEMPLATE.md",
+        "context": "First turn / step 1: Pick a temporary slug from the prompt...",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 25
+      },
+      {
+        "from": "references/plan.md",
+        "to": "references/varde-code-cli.md",
+        "context": "The growth loop",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 39
+      },
+      {
+        "from": "references/plan.md",
+        "to": "references/varde-code-cli.md",
+        "context": "External interface check",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 113
+      },
+      {
+        "from": "references/plan.md",
+        "to": "scripts/plan-path.py",
+        "context": "Finalize / step 1: Rename and validate.",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 152
+      },
+      {
+        "from": "references/plan.md",
+        "to": "references/plan-decomposition.md",
+        "context": "Finalize / step 2: Split or decompose before review. For...",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 158
+      },
+      {
+        "from": "references/plan.md",
+        "to": "references/build-worktree.md",
+        "context": "Finalize / step 3: Establish review location and review....",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 160
+      },
+      {
+        "from": "references/plan.md",
+        "to": "references/review-gate-plan.md",
+        "context": "Finalize / step 3: Establish review location and review....",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 164
+      },
+      {
+        "from": "references/plan.md",
+        "to": "references/review-gates.md",
+        "context": "Finalize / step 3: Establish review location and review....",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 164
+      },
+      {
+        "from": "references/plan.md",
+        "to": "references/build-worktree.md",
+        "context": "Split into child plans / step 2: Establish one visible group plan work...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 200
+      },
+      {
+        "from": "references/status.md",
+        "to": "references/plan.md",
+        "context": "Change status",
+        "conditional": true,
+        "kind": "handoff",
+        "table": false,
+        "line": 17
+      },
+      {
+        "from": "references/review-gate-plan.md",
+        "to": "scripts/risk-tier.py",
+        "context": "1. Initialize one aggregate subject",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 5
+      },
+      {
+        "from": "references/review-gate-record.md",
+        "to": "scripts/risk-tier.py",
+        "context": "Reviewer evidence record",
+        "conditional": false,
+        "kind": "role",
+        "table": false,
+        "line": 39
+      },
+      {
+        "from": "references/review-gate-worktree.md",
+        "to": "references/review-gate-record.md",
+        "context": "Isolated execution review bindings",
+        "conditional": true,
+        "kind": "role",
+        "table": false,
+        "line": 31
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-record.md",
+        "context": "Independent review gates",
+        "conditional": false,
+        "kind": "role",
+        "table": false,
+        "line": 10
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-plan.md",
+        "context": "2. Initialize the subject",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 47
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-worktree.md",
+        "context": "2. Initialize the subject",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 49
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "scripts/risk-tier.py",
+        "context": "2. Initialize the subject / step 1: Compute the risk tier: run",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 56
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-record.md",
+        "context": "3. Get the pre-edit verdict / step 2: The reviewer loads references/review-...",
+        "conditional": false,
+        "kind": "role",
+        "table": false,
+        "line": 97
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-record.md",
+        "context": "5. Complete with final review",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 147
+      }
+    ],
+    "external": [
+      {
+        "from": "references/build-finish.md",
+        "external": "skill",
+        "target": "varde-docs spec",
+        "skill": "varde-docs",
+        "mode": "spec",
+        "context": "1. Finish edits and checks / step 2: When plan.md lists observed_specs, re...",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 18
+      },
+      {
+        "from": "references/build-finish.md",
+        "external": "agent",
+        "target": "review",
+        "runs": null,
+        "context": "2. Review the implementation",
+        "conditional": false,
+        "table": false,
+        "line": 27
+      },
+      {
+        "from": "references/build-finish.md",
+        "external": "agent",
+        "target": "builder",
+        "runs": null,
+        "context": "3. Fix findings",
+        "conditional": true,
+        "table": false,
+        "line": 51
+      },
+      {
+        "from": "references/build-finish.md",
+        "external": "skill",
+        "target": "varde-change build",
+        "skill": "varde-change",
+        "mode": "build",
+        "context": "3. Fix findings",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 62
+      },
+      {
+        "from": "references/build-finish.md",
+        "external": "skill",
+        "target": "varde-change orchestrate",
+        "skill": "varde-change",
+        "mode": "orchestrate",
+        "context": "8. Offer finish choices",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 125
+      },
+      {
+        "from": "references/build-finish.md",
+        "external": "skill",
+        "target": "varde-change orchestrate",
+        "skill": "varde-change",
+        "mode": "orchestrate",
+        "context": "Finish choices",
+        "conditional": true,
+        "kind": "mention",
+        "table": false,
+        "line": 132
+      },
+      {
+        "from": "references/build.md",
+        "external": "skill",
+        "target": "varde-change plan",
+        "skill": "varde-change",
+        "mode": "plan",
+        "context": "An uncertain change",
+        "conditional": true,
+        "kind": "handoff",
+        "table": true,
+        "line": 22
+      },
+      {
+        "from": "references/build.md",
+        "external": "agent",
+        "target": "builder",
+        "runs": null,
+        "context": "4. Run tasks / step 2: Obtain any missing pre-edit verdict (...",
+        "conditional": false,
+        "table": false,
+        "line": 58
+      },
+      {
+        "from": "references/build.md",
+        "external": "agent",
+        "target": "builder",
+        "runs": null,
+        "context": "Dispatch a builder / step 3: Brief the builder with:",
+        "conditional": true,
+        "table": false,
+        "line": 139
+      },
+      {
+        "from": "references/orchestrate.md",
+        "external": "skill",
+        "target": "varde-change build",
+        "skill": "varde-change",
+        "mode": "build",
+        "context": "Names a plan without shape: group",
+        "conditional": true,
+        "kind": "load",
+        "table": true,
+        "line": 13,
+        "qualifier": "named-plan"
+      },
+      {
+        "from": "references/orchestrate.md",
+        "external": "skill",
+        "target": "varde-change build",
+        "skill": "varde-change",
+        "mode": "build",
+        "context": "Delegate children",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 72,
+        "qualifier": "named-plan"
+      },
+      {
+        "from": "references/orchestrate.md",
+        "external": "skill",
+        "target": "varde-change builds",
+        "skill": "varde-change",
+        "mode": "builds",
+        "context": "Finish / step 2: Review the group. After all children...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 108
+      },
+      {
+        "from": "references/orchestration.md",
+        "external": "agent",
+        "target": "builder",
+        "runs": null,
+        "context": "Pre-explore",
+        "conditional": false,
+        "table": false,
+        "line": 14
+      },
+      {
+        "from": "references/orchestration.md",
+        "external": "agent",
+        "target": "builder",
+        "runs": null,
+        "context": "Pre-explore",
+        "conditional": false,
+        "table": false,
+        "line": 18
+      },
+      {
+        "from": "references/plan-decomposition.md",
+        "external": "skill",
+        "target": "varde-change plan",
+        "skill": "varde-change",
+        "mode": "plan",
+        "context": "Has an unsettled interface",
+        "conditional": true,
+        "kind": "handoff",
+        "table": true,
+        "line": 18
+      },
+      {
+        "from": "references/verify.md",
+        "external": "skill",
+        "target": "varde-change build",
+        "skill": "varde-change",
+        "mode": "build",
+        "context": "Verify",
+        "conditional": true,
+        "kind": "handoff",
+        "table": false,
+        "line": 44
+      },
+      {
+        "from": "references/review-gates.md",
+        "external": "agent",
+        "target": "review",
+        "runs": null,
+        "context": "3. Get the pre-edit verdict / step 1: Give an agent with a clean, independe...",
+        "conditional": false,
+        "table": false,
+        "line": 89
+      }
+    ],
+    "routes": [
+      {
+        "route": "\"What's in flight?\", or an empty invocation — show curren...",
+        "entry": [
+          "references/status.md"
+        ],
+        "files": [
+          "references/status.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py"
+        ],
+        "min_files": [
+          "references/status.md"
+        ],
+        "min_tokens": 813,
+        "max_tokens": 3852,
+        "handoffs": [
+          "references/plan.md"
+        ],
+        "cyclomatic": 5,
+        "cognitive": 9,
+        "lookups": 0,
+        "main_min_tokens": 813,
+        "main_max_tokens": 3852,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "Plan a new feature before building",
+        "entry": [
+          "references/plan.md"
+        ],
+        "files": [
+          "references/plan.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "scripts/plan-path.py",
+          "references/varde-code-cli.md",
+          "references/plan-decomposition.md",
+          "references/build-worktree.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py",
+          "references/build-parallel.md",
+          "scripts/worktree-create.sh",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_files": [
+          "references/plan.md",
+          "scripts/plan-path.py",
+          "references/build-worktree.md",
+          "references/build-parallel.md",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_tokens": 5844,
+        "max_tokens": 9975,
+        "handoffs": [
+          "varde-change plan"
+        ],
+        "cyclomatic": 11,
+        "cognitive": 24,
+        "lookups": 2,
+        "main_min_tokens": 5844,
+        "main_max_tokens": 9975,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "Resume planning with no feature named",
+        "entry": [
+          "references/plan.md"
+        ],
+        "files": [
+          "references/plan.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "scripts/plan-path.py",
+          "references/varde-code-cli.md",
+          "references/plan-decomposition.md",
+          "references/build-worktree.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py",
+          "references/build-parallel.md",
+          "scripts/worktree-create.sh",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_files": [
+          "references/plan.md",
+          "scripts/plan-path.py",
+          "references/build-worktree.md",
+          "references/build-parallel.md",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_tokens": 5844,
+        "max_tokens": 9975,
+        "handoffs": [
+          "varde-change plan"
+        ],
+        "cyclomatic": 11,
+        "cognitive": 24,
+        "lookups": 2,
+        "main_min_tokens": 5844,
+        "main_max_tokens": 9975,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "One task file assigned by an orchestrator (builder)",
+        "entry": [
+          "references/build-execution.md"
+        ],
+        "files": [
+          "references/build-execution.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/build-worktree.md",
+          "scripts/worktree-permissions.py",
+          "references/build-posture-debug.md",
+          "references/build-posture-refactor.md",
+          "references/build-parallel.md",
+          "scripts/worktree-create.sh",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_files": [
+          "references/build-execution.md"
+        ],
+        "min_tokens": 1941,
+        "max_tokens": 6688,
+        "handoffs": [],
+        "cyclomatic": 9,
+        "cognitive": 20,
+        "lookups": 0,
+        "main_min_tokens": 1941,
+        "main_max_tokens": 6688,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": []
+      },
+      {
+        "route": "A settled single-outcome refactor",
+        "entry": [
+          "references/build-micro-change.md",
+          "references/build-posture-refactor.md"
+        ],
+        "files": [
+          "references/build-micro-change.md",
+          "references/build-posture-refactor.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/build-worktree.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py",
+          "references/build-parallel.md",
+          "scripts/worktree-create.sh",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_files": [
+          "references/build-micro-change.md",
+          "references/build-posture-refactor.md",
+          "references/build-worktree.md",
+          "references/build-parallel.md",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_tokens": 4495,
+        "max_tokens": 7534,
+        "handoffs": [],
+        "cyclomatic": 10,
+        "cognitive": 22,
+        "lookups": 0,
+        "main_min_tokens": 4495,
+        "main_max_tokens": 7534,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "A settled single-outcome change that fits one task",
+        "entry": [
+          "references/build-micro-change.md"
+        ],
+        "files": [
+          "references/build-micro-change.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/build-worktree.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py",
+          "references/build-parallel.md",
+          "scripts/worktree-create.sh",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_files": [
+          "references/build-micro-change.md",
+          "references/build-worktree.md",
+          "references/build-parallel.md",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_tokens": 3657,
+        "max_tokens": 6696,
+        "handoffs": [],
+        "cyclomatic": 10,
+        "cognitive": 22,
+        "lookups": 0,
+        "main_min_tokens": 3657,
+        "main_max_tokens": 6696,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "A named plan, multiple dependent outcomes, or unresolved...",
+        "entry": [
+          "references/build.md"
+        ],
+        "files": [
+          "references/build.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/review-gate-plan.md",
+          "references/varde-code-cli.md",
+          "references/build-worktree.md",
+          "references/plan-decomposition.md",
+          "references/build-execution.md",
+          "references/build-recovery.md",
+          "references/build-finish.md",
+          "scripts/select-plans.py",
+          "references/orchestration.md",
+          "references/build-parallel.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py",
+          "scripts/worktree-create.sh",
+          "scripts/worktree-permissions.py",
+          "references/build-posture-debug.md",
+          "references/build-posture-refactor.md",
+          "scripts/worktree-merge.sh",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_files": [
+          "references/build.md",
+          "references/build-worktree.md",
+          "references/build-parallel.md",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_tokens": 5313,
+        "max_tokens": 15168,
+        "handoffs": [
+          "varde-change plan"
+        ],
+        "cyclomatic": 29,
+        "cognitive": 68,
+        "lookups": 1,
+        "main_min_tokens": 5313,
+        "main_max_tokens": 15168,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/build-finish.md:27",
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/build-finish.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          },
+          {
+            "agent": "builder",
+            "runs": "varde-change: One task file assigned by an orchestrator (builder)",
+            "from": [
+              "references/build-finish.md:51",
+              "references/build.md:58",
+              "references/build.md:139",
+              "references/orchestration.md:14",
+              "references/orchestration.md:18"
+            ],
+            "conditional": false,
+            "min_tokens": 3111,
+            "max_tokens": 7858,
+            "files": [
+              {
+                "file": "agents/varde-builder/claude.md",
+                "tokens": 1170,
+                "via": "skills/varde-change/references/build-finish.md"
+              },
+              {
+                "file": "skills/varde-change/SKILL.md",
+                "tokens": 575,
+                "via": "agents/varde-builder/claude.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-execution.md",
+                "tokens": 1366,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-parallel.md",
+                "tokens": 645,
+                "via": "skills/varde-change/references/build-worktree.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-posture-debug.md",
+                "tokens": 989,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-posture-refactor.md",
+                "tokens": 838,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-worktree.md",
+                "tokens": 1818,
+                "via": "skills/varde-change/references/build-execution.md"
+              },
+              {
+                "file": "skills/varde-change/references/varde-workflow-cli.md",
+                "tokens": 219,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/workflow-state.md",
+                "tokens": 238,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-create.sh",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-worktree.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-permissions.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-execution.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-wave.sh",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-parallel.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "Diagnose why something fails, without fixing it",
+        "entry": [
+          "references/build-posture-debug.md"
+        ],
+        "files": [
+          "references/build-posture-debug.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py"
+        ],
+        "min_files": [
+          "references/build-posture-debug.md",
+          "references/review-gates.md",
+          "scripts/risk-tier.py"
+        ],
+        "min_tokens": 3114,
+        "max_tokens": 4603,
+        "handoffs": [],
+        "cyclomatic": 5,
+        "cognitive": 9,
+        "lookups": 0,
+        "main_min_tokens": 3114,
+        "main_max_tokens": 4603,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": false,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "Fix a named bug or regression, no mode given",
+        "entry": [
+          "references/build-posture-debug.md"
+        ],
+        "files": [
+          "references/build-posture-debug.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py"
+        ],
+        "min_files": [
+          "references/build-posture-debug.md",
+          "references/review-gates.md",
+          "scripts/risk-tier.py"
+        ],
+        "min_tokens": 3114,
+        "max_tokens": 4603,
+        "handoffs": [],
+        "cyclomatic": 5,
+        "cognitive": 9,
+        "lookups": 0,
+        "main_min_tokens": 3114,
+        "main_max_tokens": 4603,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": false,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "Report evidence for finished work without changing anything",
+        "entry": [
+          "references/verify.md"
+        ],
+        "files": [
+          "references/verify.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py"
+        ],
+        "min_files": [
+          "references/verify.md"
+        ],
+        "min_tokens": 1053,
+        "max_tokens": 4092,
+        "handoffs": [
+          "varde-change build"
+        ],
+        "cyclomatic": 4,
+        "cognitive": 7,
+        "lookups": 0,
+        "main_min_tokens": 1053,
+        "main_max_tokens": 4092,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "Run a group of related plans end to end, in dependency order",
+        "entry": [
+          "references/orchestrate.md"
+        ],
+        "files": [
+          "references/orchestrate.md",
+          "references/review-gates.md",
+          "references/varde-workflow-cli.md",
+          "references/workflow-state.md",
+          "references/build-worktree.md",
+          "references/build-finish.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py",
+          "references/build-parallel.md",
+          "scripts/worktree-create.sh",
+          "scripts/worktree-permissions.py",
+          "scripts/worktree-merge.sh",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_files": [
+          "references/orchestrate.md",
+          "references/build-worktree.md",
+          "references/review-gates.md",
+          "references/build-finish.md",
+          "references/build-parallel.md",
+          "scripts/worktree-permissions.py",
+          "scripts/risk-tier.py",
+          "scripts/worktree-wave.sh"
+        ],
+        "min_tokens": 8035,
+        "max_tokens": 9524,
+        "handoffs": [],
+        "cyclomatic": 9,
+        "cognitive": 22,
+        "lookups": 0,
+        "main_min_tokens": 10310,
+        "main_max_tokens": 16926,
+        "inline": [
+          {
+            "target": "varde-change build",
+            "resolved": "varde-change: A named plan, multiple dependent outcomes, or unresolved..."
+          }
+        ],
+        "unresolved": [
+          "varde-change builds"
+        ],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/build-finish.md:27",
+              "references/review-gates.md:89"
+            ],
+            "conditional": false,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-change/references/build-finish.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-change/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-change/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/review-gate-plan.md"
+              }
+            ]
+          },
+          {
+            "agent": "builder",
+            "runs": "varde-change: One task file assigned by an orchestrator (builder)",
+            "from": [
+              "references/build-finish.md:51",
+              "references/build.md:58",
+              "references/build.md:139",
+              "references/orchestration.md:14",
+              "references/orchestration.md:18"
+            ],
+            "conditional": false,
+            "min_tokens": 3111,
+            "max_tokens": 7858,
+            "files": [
+              {
+                "file": "agents/varde-builder/claude.md",
+                "tokens": 1170,
+                "via": "skills/varde-change/references/build-finish.md"
+              },
+              {
+                "file": "skills/varde-change/SKILL.md",
+                "tokens": 575,
+                "via": "agents/varde-builder/claude.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-execution.md",
+                "tokens": 1366,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-parallel.md",
+                "tokens": 645,
+                "via": "skills/varde-change/references/build-worktree.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-posture-debug.md",
+                "tokens": 989,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-posture-refactor.md",
+                "tokens": 838,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-worktree.md",
+                "tokens": 1818,
+                "via": "skills/varde-change/references/build-execution.md"
+              },
+              {
+                "file": "skills/varde-change/references/varde-workflow-cli.md",
+                "tokens": 219,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/workflow-state.md",
+                "tokens": 238,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-create.sh",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-worktree.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-permissions.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-execution.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-wave.sh",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-parallel.md"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "structure": {
+      "mutual_links": 0,
+      "mutual_pairs": [],
+      "max_links_out": 11,
+      "max_links_out_file": "references/build.md",
+      "average_links": 3.08,
+      "linking_files": 13,
+      "links": 40,
+      "links_out": {
+        "references/build-execution.md": 4,
+        "references/build-finish.md": 3,
+        "references/build-micro-change.md": 2,
+        "references/build-parallel.md": 1,
+        "references/build-posture-debug.md": 1,
+        "references/build-posture-refactor.md": 1,
+        "references/build-worktree.md": 3,
+        "references/build.md": 11,
+        "references/orchestrate.md": 3,
+        "references/plan.md": 6,
+        "references/review-gate-plan.md": 1,
+        "references/review-gates.md": 3,
+        "references/status.md": 1
+      },
+      "cross_module_edges": 25,
+      "diagram_edges": 88,
+      "max_route_cyclomatic": 29,
+      "max_route_cognitive": 68,
+      "max_route_files": 22,
+      "max_route_files_route": "A named plan, multiple dependent outcomes, or unresolved..."
+    },
+    "findings": {
+      "chain": [],
+      "single caller": [
+        {
+          "file": "references/build-recovery.md",
+          "caller": "references/build.md"
+        },
+        {
+          "file": "references/build.md",
+          "caller": "SKILL.md: A named plan, multiple dependent outcomes, or unresolved..."
+        },
+        {
+          "file": "references/orchestrate.md",
+          "caller": "SKILL.md: Run a group of related plans end to end, in dependency order"
+        },
+        {
+          "file": "references/orchestration.md",
+          "caller": "references/build.md"
+        },
+        {
+          "file": "references/status.md",
+          "caller": "SKILL.md: \"What's in flight?\", or an empty invocation — show curren..."
+        },
+        {
+          "file": "references/verify.md",
+          "caller": "SKILL.md: Report evidence for finished work without changing anything"
+        },
+        {
+          "file": "references/workflow-state.md",
+          "caller": "SKILL.md: Gotchas"
+        }
+      ],
+      "shared": [
+        {
+          "file": "references/build-execution.md",
+          "callers": [
+            "SKILL.md: One task file assigned by an orchestrator (builder)",
+            "references/build.md"
+          ]
+        },
+        {
+          "file": "references/build-finish.md",
+          "callers": [
+            "references/build.md",
+            "references/orchestrate.md"
+          ]
+        },
+        {
+          "file": "references/build-micro-change.md",
+          "callers": [
+            "SKILL.md: A settled single-outcome change that fits one task",
+            "SKILL.md: A settled single-outcome refactor"
+          ]
+        },
+        {
+          "file": "references/build-parallel.md",
+          "callers": [
+            "references/build-worktree.md",
+            "references/build.md"
+          ]
+        },
+        {
+          "file": "references/build-posture-debug.md",
+          "callers": [
+            "SKILL.md: Diagnose why something fails, without fixing it",
+            "SKILL.md: Fix a named bug or regression, no mode given",
+            "references/build-execution.md"
+          ]
+        },
+        {
+          "file": "references/build-posture-refactor.md",
+          "callers": [
+            "SKILL.md: A settled single-outcome refactor",
+            "references/build-execution.md"
+          ]
+        },
+        {
+          "file": "references/build-worktree.md",
+          "callers": [
+            "references/build-execution.md",
+            "references/build-finish.md",
+            "references/build-micro-change.md",
+            "references/build-posture-refactor.md",
+            "references/build.md",
+            "references/orchestrate.md",
+            "references/plan.md"
+          ]
+        },
+        {
+          "file": "references/plan-decomposition.md",
+          "callers": [
+            "references/build.md",
+            "references/plan.md"
+          ]
+        },
+        {
+          "file": "references/plan.md",
+          "callers": [
+            "SKILL.md: Plan a new feature before building",
+            "SKILL.md: Resume planning with no feature named",
+            "references/status.md"
+          ]
+        }
+      ],
+      "unreferenced": [],
+      "missing": [],
+      "cycle": [],
+      "fan-out": [
+        {
+          "file": "references/build.md",
+          "links": 11
+        },
+        {
+          "file": "references/plan.md",
+          "links": 6
+        }
+      ],
+      "density": [
+        {
+          "average": 3.08
+        }
+      ]
+    }
+  },
+  {
+    "skill": "varde-docs",
+    "tokens": {
+      "SKILL.md": 226,
+      "references/refresh.md": 456,
+      "references/spec-format.md": 817,
+      "references/spec.md": 1435,
+      "scripts/source-hash.py": 238,
+      "references/review-gate-plan.md": 538,
+      "references/review-gate-record.md": 544,
+      "references/review-gate-worktree.md": 494,
+      "references/review-gates.md": 1550,
+      "references/varde-code-cli.md": 53,
+      "scripts/risk-tier.py": 3840
+    },
+    "references": [
+      "references/spec-format.md",
+      "references/varde-code-cli.md"
+    ],
+    "edges": [
+      {
+        "from": "SKILL.md",
+        "to": "references/review-gates.md",
+        "context": "Maintain project documentation",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 8,
+        "route": null
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/refresh.md",
+        "context": "User-facing: README.md, docs/*.md, CHANGELOGs, release no...",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 15,
+        "route": "User-facing: README.md, docs/*.md, CHANGELOGs, release no..."
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/spec.md",
+        "context": "A generated domain specification under <knowledge>/specs/...",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 16,
+        "route": "A generated domain specification under <knowledge>/specs/..."
+      },
+      {
+        "from": "references/refresh.md",
+        "to": "references/varde-code-cli.md",
+        "context": "Workflow / step 2: When mapping docs to source is unclea...",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 12
+      },
+      {
+        "from": "references/spec-format.md",
+        "to": "scripts/source-hash.py",
+        "context": "Computing source_hash",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 37
+      },
+      {
+        "from": "references/spec.md",
+        "to": "references/spec-format.md",
+        "context": "Workflow / step 2: Generate domain documents per referen...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 10
+      },
+      {
+        "from": "references/spec.md",
+        "to": "references/varde-code-cli.md",
+        "context": "Workflow / step 2: Generate domain documents per referen...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 12
+      },
+      {
+        "from": "references/spec.md",
+        "to": "references/spec-format.md",
+        "context": "Workflow / step 5: Render the index after domain generat...",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 19
+      },
+      {
+        "from": "references/spec.md",
+        "to": "references/spec-format.md",
+        "context": "Architecture",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 87
+      },
+      {
+        "from": "references/review-gate-plan.md",
+        "to": "scripts/risk-tier.py",
+        "context": "1. Initialize one aggregate subject",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 5
+      },
+      {
+        "from": "references/review-gate-record.md",
+        "to": "scripts/risk-tier.py",
+        "context": "Reviewer evidence record",
+        "conditional": false,
+        "kind": "role",
+        "table": false,
+        "line": 39
+      },
+      {
+        "from": "references/review-gate-worktree.md",
+        "to": "references/review-gate-record.md",
+        "context": "Isolated execution review bindings",
+        "conditional": true,
+        "kind": "role",
+        "table": false,
+        "line": 31
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-record.md",
+        "context": "Independent review gates",
+        "conditional": false,
+        "kind": "role",
+        "table": false,
+        "line": 10
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-plan.md",
+        "context": "2. Initialize the subject",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 47
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-worktree.md",
+        "context": "2. Initialize the subject",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 49
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "scripts/risk-tier.py",
+        "context": "2. Initialize the subject / step 1: Compute the risk tier: run",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 56
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-record.md",
+        "context": "3. Get the pre-edit verdict / step 2: The reviewer loads references/review-...",
+        "conditional": false,
+        "kind": "role",
+        "table": false,
+        "line": 97
+      },
+      {
+        "from": "references/review-gates.md",
+        "to": "references/review-gate-record.md",
+        "context": "5. Complete with final review",
+        "conditional": false,
+        "kind": "mention",
+        "table": false,
+        "line": 147
+      }
+    ],
+    "external": [
+      {
+        "from": "references/spec.md",
+        "external": "agent",
+        "target": "builder",
+        "runs": null,
+        "context": "Delegating domains",
+        "conditional": false,
+        "table": false,
+        "line": 44
+      },
+      {
+        "from": "references/review-gates.md",
+        "external": "agent",
+        "target": "review",
+        "runs": null,
+        "context": "3. Get the pre-edit verdict / step 1: Give an agent with a clean, independe...",
+        "conditional": false,
+        "table": false,
+        "line": 89
+      }
+    ],
+    "routes": [
+      {
+        "route": "User-facing: README.md, docs/*.md, CHANGELOGs, release no...",
+        "entry": [
+          "references/refresh.md"
+        ],
+        "files": [
+          "references/refresh.md",
+          "references/review-gates.md",
+          "references/varde-code-cli.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py"
+        ],
+        "min_files": [
+          "references/refresh.md"
+        ],
+        "min_tokens": 682,
+        "max_tokens": 3317,
+        "handoffs": [],
+        "cyclomatic": 4,
+        "cognitive": 7,
+        "lookups": 1,
+        "main_min_tokens": 682,
+        "main_max_tokens": 3317,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-docs/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-docs/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-docs/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-docs/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-docs/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-docs/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-docs/SKILL.md"
+              },
+              {
+                "file": "skills/varde-docs/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-docs/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "route": "A generated domain specification under <knowledge>/specs/...",
+        "entry": [
+          "references/spec.md"
+        ],
+        "files": [
+          "references/spec.md",
+          "references/review-gates.md",
+          "references/spec-format.md",
+          "references/varde-code-cli.md",
+          "references/review-gate-plan.md",
+          "references/review-gate-worktree.md",
+          "scripts/risk-tier.py",
+          "scripts/source-hash.py"
+        ],
+        "min_files": [
+          "references/spec.md",
+          "references/spec-format.md",
+          "references/varde-code-cli.md",
+          "scripts/source-hash.py"
+        ],
+        "min_tokens": 2531,
+        "max_tokens": 5113,
+        "handoffs": [],
+        "cyclomatic": 4,
+        "cognitive": 7,
+        "lookups": 1,
+        "main_min_tokens": 2531,
+        "main_max_tokens": 5113,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": [
+          {
+            "agent": "builder",
+            "runs": "varde-change: One task file assigned by an orchestrator (builder)",
+            "from": [
+              "references/spec.md:44"
+            ],
+            "conditional": false,
+            "min_tokens": 3111,
+            "max_tokens": 7858,
+            "files": [
+              {
+                "file": "agents/varde-builder/claude.md",
+                "tokens": 1170,
+                "via": "skills/varde-docs/references/spec.md"
+              },
+              {
+                "file": "skills/varde-change/SKILL.md",
+                "tokens": 575,
+                "via": "agents/varde-builder/claude.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-execution.md",
+                "tokens": 1366,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-parallel.md",
+                "tokens": 645,
+                "via": "skills/varde-change/references/build-worktree.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-posture-debug.md",
+                "tokens": 989,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-posture-refactor.md",
+                "tokens": 838,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/build-worktree.md",
+                "tokens": 1818,
+                "via": "skills/varde-change/references/build-execution.md"
+              },
+              {
+                "file": "skills/varde-change/references/varde-workflow-cli.md",
+                "tokens": 219,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/references/workflow-state.md",
+                "tokens": 238,
+                "via": "skills/varde-change/SKILL.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-create.sh",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-worktree.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-permissions.py",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-execution.md"
+              },
+              {
+                "file": "skills/varde-change/scripts/worktree-wave.sh",
+                "tokens": 0,
+                "via": "skills/varde-change/references/build-parallel.md"
+              }
+            ]
+          },
+          {
+            "agent": "review",
+            "runs": "review gate",
+            "from": [
+              "references/review-gates.md:89"
+            ],
+            "conditional": true,
+            "min_tokens": 2442,
+            "max_tokens": 3474,
+            "files": [
+              {
+                "file": "agents/varde-reviewer/claude.md",
+                "tokens": 892,
+                "via": "skills/varde-docs/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-docs/references/review-gate-plan.md",
+                "tokens": 538,
+                "via": "skills/varde-docs/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-docs/references/review-gate-worktree.md",
+                "tokens": 494,
+                "via": "skills/varde-docs/references/review-gates.md"
+              },
+              {
+                "file": "skills/varde-docs/references/review-gates.md",
+                "tokens": 1550,
+                "via": "skills/varde-docs/SKILL.md"
+              },
+              {
+                "file": "skills/varde-docs/scripts/risk-tier.py",
+                "tokens": 0,
+                "via": "skills/varde-docs/references/review-gate-plan.md"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "structure": {
+      "mutual_links": 0,
+      "mutual_pairs": [],
+      "max_links_out": 3,
+      "max_links_out_file": "references/review-gates.md",
+      "average_links": 1.6,
+      "linking_files": 5,
+      "links": 8,
+      "links_out": {
+        "references/refresh.md": 1,
+        "references/review-gate-plan.md": 1,
+        "references/review-gates.md": 3,
+        "references/spec-format.md": 1,
+        "references/spec.md": 2
+      },
+      "cross_module_edges": 5,
+      "diagram_edges": 18,
+      "max_route_cyclomatic": 4,
+      "max_route_cognitive": 7,
+      "max_route_files": 8,
+      "max_route_files_route": "A generated domain specification under <knowledge>/specs/..."
+    },
+    "findings": {
+      "chain": [
+        {
+          "file": "references/spec-format.md",
+          "caller": "references/spec.md"
+        }
+      ],
+      "single caller": [
+        {
+          "file": "references/refresh.md",
+          "caller": "SKILL.md: User-facing: README.md, docs/*.md, CHANGELOGs, release no..."
+        },
+        {
+          "file": "references/spec.md",
+          "caller": "SKILL.md: A generated domain specification under <knowledge>/specs/..."
+        }
+      ],
+      "shared": [],
+      "unreferenced": [],
+      "missing": [],
+      "cycle": [],
+      "fan-out": [],
+      "density": []
+    }
+  },
+  {
+    "skill": "varde-flow-gaps",
+    "tokens": {
+      "SKILL.md": 57,
+      "references/alpha.md": 24,
+      "references/beta.md": 16,
+      "references/orphan.md": 8
+    },
+    "references": [],
+    "edges": [
+      {
+        "from": "SKILL.md",
+        "to": "references/alpha.md",
+        "context": "Plan the work",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 10,
+        "route": "Plan the work"
+      },
+      {
+        "from": "SKILL.md",
+        "to": "references/beta.md",
+        "context": "Check the work",
+        "conditional": false,
+        "kind": "load",
+        "table": true,
+        "line": 11,
+        "route": "Check the work"
+      },
+      {
+        "from": "references/alpha.md",
+        "to": "references/beta.md",
+        "context": "Alpha",
+        "conditional": false,
+        "kind": "load",
+        "table": false,
+        "line": 3
+      },
+      {
+        "from": "references/beta.md",
+        "to": "references/alpha.md",
+        "context": "Beta",
+        "conditional": true,
+        "kind": "load",
+        "table": false,
+        "line": 3
+      }
+    ],
+    "external": [],
+    "routes": [
+      {
+        "route": "Plan the work",
+        "entry": [
+          "references/alpha.md"
+        ],
+        "files": [
+          "references/alpha.md",
+          "references/beta.md"
+        ],
+        "min_files": [
+          "references/alpha.md",
+          "references/beta.md"
+        ],
+        "min_tokens": 97,
+        "max_tokens": 97,
+        "handoffs": [],
+        "cyclomatic": 2,
+        "cognitive": 3,
+        "lookups": 0,
+        "main_min_tokens": 97,
+        "main_max_tokens": 97,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": []
+      },
+      {
+        "route": "Check the work",
+        "entry": [
+          "references/beta.md"
+        ],
+        "files": [
+          "references/beta.md",
+          "references/alpha.md"
+        ],
+        "min_files": [
+          "references/beta.md"
+        ],
+        "min_tokens": 73,
+        "max_tokens": 97,
+        "handoffs": [],
+        "cyclomatic": 2,
+        "cognitive": 2,
+        "lookups": 0,
+        "main_min_tokens": 73,
+        "main_max_tokens": 97,
+        "inline": [],
+        "unresolved": [],
+        "dispatches": []
+      }
+    ],
+    "structure": {
+      "mutual_links": 1,
+      "mutual_pairs": [
+        [
+          "references/alpha.md",
+          "references/beta.md"
+        ]
+      ],
+      "max_links_out": 1,
+      "max_links_out_file": "references/beta.md",
+      "average_links": 1.0,
+      "linking_files": 2,
+      "links": 2,
+      "links_out": {
+        "references/alpha.md": 1,
+        "references/beta.md": 1
+      },
+      "cross_module_edges": 2,
+      "diagram_edges": 4,
+      "max_route_cyclomatic": 2,
+      "max_route_cognitive": 3,
+      "max_route_files": 2,
+      "max_route_files_route": "Plan the work"
+    },
+    "findings": {
+      "chain": [],
+      "single caller": [],
+      "shared": [
+        {
+          "file": "references/alpha.md",
+          "callers": [
+            "SKILL.md: Plan the work",
+            "references/beta.md"
+          ]
+        },
+        {
+          "file": "references/beta.md",
+          "callers": [
+            "SKILL.md: Check the work",
+            "references/alpha.md"
+          ]
+        }
+      ],
+      "unreferenced": [
+        "references/orphan.md"
+      ],
+      "missing": [
+        {
+          "from": "references/alpha.md",
+          "line": 3,
+          "target": "references/ghost.md"
+        }
+      ],
+      "cycle": [
+        {
+          "files": [
+            "references/alpha.md",
+            "references/beta.md"
+          ]
+        }
+      ],
+      "fan-out": [],
+      "density": []
+    }
+  }
+]

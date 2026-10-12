@@ -9,18 +9,19 @@ Usage: select-plans.py --working DIR
 
 Reads every `plan.md` at any depth under DIR/plans. Skips `shape: group` plans
 and drafts (id ending `-draft` or `-draft-<digits>`, or a live bullet under `## Open Questions`).
-Keeps `backlog` and `active` plans. With `varde-workflow` on PATH it runs
-`readiness <plan> --json` per plan and `graph <plan> --json --all` per
-candidate (graph covers one plan's `depends_on` closure, so every candidate is
-checked), excludes plans with an incomplete dependency or named by a
-`dependency_cycle` blocker, and orders backlog first, then by id.
+Keeps `backlog` and `active` plans. With `varde` on PATH it runs
+`varde plan readiness <plan> --json` per plan and
+`varde plan graph <plan> --json --all` per candidate. The graph covers one
+plan's `depends_on` closure, so every candidate is checked. The script excludes
+plans with an incomplete dependency or named by a `dependency_cycle` blocker,
+then puts backlog plans first and sorts each status group by id.
 
 Output (stdout, exit 0):
   {plans: [{id, title, status, implementation_ready, blockers: [...]}],
    excluded_by_dependency: N, cycles: [ids], degraded: bool,
    degraded_plans: [ids]}
 
-`degraded` is true when `varde-workflow` is missing or a call failed;
+`degraded` is true when `varde` is missing or a call failed;
 `degraded_plans` lists the affected ids. Those plans are filtered by their
 `depends_on` front matter instead: any dependency not `completed` excludes
 the plan. Failure prints {"error", "message"} and
@@ -92,9 +93,9 @@ def dependency_status(path, statuses):
 
 
 def workflow(args):
-    """Return the `data` object of a varde-workflow JSON call, or None."""
+    """Return the `data` object from a varde plan command, or None."""
     try:
-        done = subprocess.run(["varde-workflow", *args, "--json"], capture_output=True,
+        done = subprocess.run(["varde", "plan", *args, "--json"], capture_output=True,
                               text=True, timeout=60)
         if done.returncode != 0:
             return None
@@ -125,7 +126,7 @@ def main():
             candidates.append({"id": plan_id, "title": title, "status": status,
                                "path": path, "depends": depends})
 
-    have_cli = shutil.which("varde-workflow") is not None
+    have_cli = shutil.which("varde") is not None
     degraded_plans = set() if have_cli else {c["id"] for c in candidates}
     cycles = []
     excluded = 0
@@ -149,7 +150,7 @@ def main():
             if data is None:
                 degraded_plans.add(plan["id"])
         if data is None:
-            # Resolve like varde-workflow: <plan_dir>/../<dep>/plan.md, no id fallback.
+            # Resolve like varde plan: <plan_dir>/../<dep>/plan.md, no id fallback.
             plan_dir = plan["path"].parent
             if any(dependency_status(plan_dir.parent / d / "plan.md", statuses) != "completed"
                    for d in plan["depends"]):
@@ -157,7 +158,6 @@ def main():
                 continue
         else:
             blockers = list(data["blockers"])
-            blockers += (data.get("review") or {}).get("blockers", [])
             ready = bool(data["implementation_ready"])
             if not data["planning_ready"] or plan["id"] in cycles:
                 excluded += 1

@@ -1,9 +1,9 @@
-//! Chunk-strategy regression tests over real captured outputs in `tests/fixtures/`.
-//!
-//! Each fixture is a genuine tool output (a failing `cargo test`, a `git diff` from this repo,
-//! `cargo metadata`, a crate README, macOS launchd/kernel log lines). The snapshot records which
-//! strategy was chosen and the resulting section titles + line ranges, so a change to the
-//! sniffers or splitters shows up as a reviewable diff. Update with `cargo insta accept`.
+// Chunk-strategy regression tests over real captured outputs in `tests/fixtures/`.
+//
+// Each fixture is a genuine tool output (a failing `cargo test`, a `git diff` from this repo,
+// `cargo metadata`, a crate README, macOS launchd/kernel log lines). The snapshot records which
+// strategy was chosen and the resulting section titles + line ranges, so a change to the
+// sniffers or splitters shows up as a reviewable diff. Update with `cargo insta accept`.
 
 use toz_core::capture::expand_minified_json;
 use toz_core::chunk::chunk_default;

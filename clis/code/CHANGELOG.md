@@ -7,13 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Configured `dependency-boundary` violations now use error severity and fail
+  the default gate. Minimal and strict presets leave this rule unchanged.
+- **Cognitive complexity now follows the Sonar specification across all 21
+  certified languages, with C# first.** A conformance suite proves each
+  language. Cognitive values may change; cyclomatic, `max_nesting`, and
+  `files.complexity` are unchanged. C, C++, and C# files with conditional-
+  preprocessor parse errors now parse via a directive-masked retry and are
+  scored. `#if` regions score per the specification; include guards are
+  excluded. Function-metric version is now 3, so stored metrics refresh on the
+  next index. Full indexing is about 20% slower (597-file benchmark) because of
+  the added recursion matching, preprocessor scan, and rolled-up scoring.
+- **Import edges now resolve per language for the new dependency-fact
+  languages.** `match_import_target` dispatches dedicated resolvers for Python,
+  C/C++, Ruby, PHP, Lua, Bash, Java, Kotlin, Scala, C#, Swift, Elixir and
+  Haskell (Rust already had one), so persisted import edges — and the `map`
+  dependents, impact and clone/community inputs built from them — change for
+  those languages, not only scan facts. Ambiguous specifiers stay unresolved.
+
 ### Added
+- **`varde map` now answers in a task worktree with no index, and `varde map
+  prune` removes orphaned index folders.** A query in a linked git worktree
+  whose own index is missing reads the main checkout's index read-only and
+  adds a `base_index` note to the envelope; it builds and writes nothing for
+  the worktree. Every build now records its source root in a `source-root`
+  sidecar, so `prune` can tell an orphan from a live index: it reports
+  `source_missing` folders (the recorded source folder is gone) and `unknown`
+  folders (no usable sidecar), deletes nothing by default, and removes only
+  `source_missing` folders with `apply: true`, plus `unknown_idle` folders when
+  the caller also passes `unknownOlderThanDays`.
+- **Credential, error-swallowing and dependency-fact scan coverage now spans
+  every indexed language.** The built-in pack grows from 35 to 127 rules (102
+  error, 19 warning, six info) and from 35 to 127 declared rule-language
+  pairs. Hardcoded-credential rules add Go, Rust, JVM/.NET,
+  C/C++/Swift/Dart, Ruby/PHP/Lua/Bash and Elixir/Haskell/Solidity
+  declarations; error swallowing adds Go, Rust, C, Scala, Solidity, Elixir,
+  Haskell and Bash; certified dependency facts add Rust, Python, C/C++,
+  Ruby/PHP, Lua/Bash, Java/Kotlin/Scala, C#/Swift (including Xcode targets)
+  and Elixir/Haskell. Credential and swallow severities follow measured
+  false-positive rates, so rules whose hits are deliberate discards ship at
+  `warning`. Lua error-swallowing is not shipped, because a bare `pcall` and a
+  captured `pcall` parse to the same node.
 - **Trusted function complexity can now gate completion.** Function metrics
   separate cyclomatic paths, cognitive nesting, and unit size. Returns,
   wrappers, and nested callables no longer inflate their parents. Metrics
   carry versioned confidence evidence. All twenty-one extraction languages
-  have certified profiles. Findings above cyclomatic 20 or cognitive 15 block
-  default scans. Functions over 60 lines with both complexity metrics in bounds
+  have certified profiles. Findings above cyclomatic 20 or cognitive 15 warn
+  in default scans. Functions over 60 lines with both complexity metrics in bounds
   produce warnings. Unknown constructs and syntax errors lower affected confidence.
   Partial measurements remain informational advisories. Language adapters now
   normalize decision arms, boolean operators, and anonymous callables.
@@ -38,6 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `semantic_entrypoint_nestjs_controller_routes`.
 
 ### Changed
+- **Nine built-in maintainability rules now report warnings by default.** This
+  includes function and file complexity, exact clones, debug residue,
+  dependency breadth, and SOLID budgets. Their detection logic and thresholds
+  are unchanged.
 - **`context_pack` defaults to declaration rows.** It returns Function, Class,
   Interface, Variable, Export, and Route symbols with persisted 1-based span
   lines. Set `includeOccurrences: true` to add matching occurrence/control

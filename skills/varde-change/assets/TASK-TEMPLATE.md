@@ -2,37 +2,23 @@
 ````
 ---
 type: task
-status: todo
-depends_on: []
-modifies: []
-creates: []
-renames: []
-verification_resources: []
-# requires_signoff: true  # plan-author opt-in; absent means false
-# kind: research|spike   # optional: research is a cited doc; spike owns no paths, per references/plan-decomposition.md
-# posture: refactor      # optional: behavior-preserving restructuring; forces a worktree wave
+status: todo          # todo | in_progress | blocked | done
+depends_on: []        # task ids that must be `done` first
+owns: []              # directory/, glob, or file
+# posture: debug | refactor   # optional
 ---
 
 <title>
 
-<!-- optional task-specific context the executor can't cheaply re-derive -->
+<!-- optional task-specific context the builder can't cheaply re-derive -->
 
-#### Test approach
+#### Acceptance criteria
 
-profile: <tdd|regression|characterization|smoke|not-applicable>
-rationale: <one-line reason for choosing this profile>
-
-#### Out of scope
-
-- <item>
-
-#### Verification
-
-- assert: <verification command or structural check> → <expected output>
+- assert: <command or structural check> → <expected output>   # preferred
 - retrieve: <file(s) or grep to read for context> → targeted context for judgment
 
 #### Progress
 
-<!-- task owner only (parent after integration for isolated workers): one line per event (attempt, finding,
+<!-- plan owner only: one line per event (attempt, finding,
      verification, retry); end with `- evidence: <what ran, what it showed>` -->
 ````

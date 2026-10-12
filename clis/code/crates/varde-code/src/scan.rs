@@ -510,7 +510,12 @@ fn extract_source_file(
     source: &str,
 ) -> ProcessedFile {
     let parsed = parse_source_for_path(&lang, path, source);
-    let result = extract::extract(&parsed, file_id);
+    let mut result = extract::extract(&parsed, file_id);
+    if parsed.masked_preprocessor {
+        let mut markers = extract::preproc::scan(source, file_id, true, false);
+        extract::preproc::attribute_top_level_regions(&mut markers, &result.entities);
+        result.entities.extend(markers);
+    }
     // A syntax error is localized: tree-sitter's error recovery still parses
     // the rest of the file, so `result.entities`/`result.symbols` hold the
     // valid constructs outside the error region. Keep them and record a
@@ -556,14 +561,11 @@ mod tests {
     };
     use std::path::Path;
 
-    /// Regression: a localized syntax error must NOT discard the whole file.
-    /// C# conditional-compilation directives (`#if`/`#endif`) inside a
-    /// collection initializer trip tree-sitter-c-sharp into an ERROR node —
-    /// pervasive in cross-framework .NET code (Newtonsoft) — yet the class and
-    /// its methods parse fine. We keep the recovered entities and record a
-    /// `warning` diagnostic, rather than blanking the file from the index.
+    /// C# directives inside collection initializers can confuse the grammar.
+    /// Masked re-parse should recover the file, keep its entities, and restore
+    /// directive markers from the original text without a syntax warning.
     #[test]
-    fn syntax_error_keeps_partial_extract_and_records_diagnostic() {
+    fn csharp_conditional_initializer_uses_masked_parse() {
         let dir = std::env::temp_dir().join(format!("varde-scan-partial-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("dir");
@@ -607,9 +609,14 @@ mod tests {
                     entities.iter().any(|e| e.name == "Compute"),
                     "the method outside the error region must survive"
                 );
-                let d = diagnostic.expect("a syntax-error file must still carry a diagnostic");
-                assert_eq!(d.message, "syntax error — partial extract kept");
-                assert_eq!(d.severity, "warning");
+                assert!(
+                    diagnostic.is_none(),
+                    "directive-only syntax errors should be repaired"
+                );
+                assert!(
+                    entities.iter().any(|entity| entity.name == "preproc_if"),
+                    "the original source's preprocessor marker must be retained"
+                );
             }
             FileResult::Diagnostic(d) => {
                 panic!("file wrongly discarded on syntax error: {d:?}");

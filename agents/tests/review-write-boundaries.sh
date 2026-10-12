@@ -31,9 +31,9 @@ for text in (claude, codex, opencode, opencode_v2):
     assert "active review folder" in lowered
     assert "never edit production source" in lowered
     assert "write only review artifacts" in lowered
-    for required in ("caller-assigned", "review-gates", "varde-workflow review inspect", "varde-workflow review record", "--expected-version", "do not", "baseline", "plan/task status"):
-        assert required in lowered, required
-    assert "approval boolean" in lowered
-    assert "sole additional write" in lowered
+    assert "do not change plan or task status" in lowered
+    assert "spawn nothing except `varde-explorer`, and only as many as your brief allows" in lowered
+    for removed in ("gate evidence", "sole additional write", "approval boolean", "varde plan review"):
+        assert removed not in lowered, removed
 print("Review write-boundary contract passed.")
 PY

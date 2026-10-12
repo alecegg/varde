@@ -1,10 +1,10 @@
 # Architecture
 
-`varde-code` is a library plus a single CLI binary (see [CLI.md](CLI.md)): no
-MCP server, no long-running service beyond the supervised `watch` process. It
-parses source with tree-sitter, extracts entities/symbols, resolves cross-file
-relationships, and persists the result to a local SQLite index that the query
-subcommands read back.
+`varde-code` is a library package in the `clis` workspace. The unified `varde`
+CLI exposes its query, scan, and watcher commands (see [CLI.md](CLI.md)). There
+is no MCP server or long-running service beyond the supervised watcher. The
+module parses source with tree-sitter, extracts entities and symbols, resolves
+cross-file relationships, and persists the result to a local SQLite index.
 
 ## Modules
 
@@ -92,8 +92,8 @@ each child after inherited input is resolved.
 
 ## Watch loop
 
-The main agent runs `watch --ensure --repo ROOT` before dispatching indexed
-queries. This registers a user service through launchd or user systemd and
+Before dispatching indexed queries, the dispatching agent runs
+`watch --ensure --repo ROOT`. This registers a user service through launchd or user systemd and
 waits until the supervisor job is active, exclusive repo locks are held, and
 the initial reconcile has succeeded. The watcher subscribes before
 reconciliation, then drives `slice::ensure_fresh` after debounced filesystem

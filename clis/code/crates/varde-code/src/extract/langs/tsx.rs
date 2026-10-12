@@ -153,4 +153,39 @@ mod tests {
         );
         assert!(flows.iter().all(|name| !name.starts_with("jsx_")));
     }
+
+    #[test]
+    fn delegated_if_alternatives_preserve_legacy_nesting() {
+        let src = "function f(a: boolean, b: boolean, c: boolean) { if (a) { if (b) { } } else if (b) { if (c) { } } else { if (a) { } } }";
+        let parsed = parse_source(&SupportLang::Tsx, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let markers: Vec<_> = entities
+            .iter()
+            .filter(|entity| entity.name == "legacy_nesting")
+            .collect();
+
+        assert_eq!(markers.len(), 1, "entities: {entities:?}");
+        assert!(markers.iter().all(|marker| {
+            src[marker.span.start_byte as usize..marker.span.end_byte as usize].starts_with("else")
+        }));
+        let metrics = crate::complexity::function_complexities(&entities);
+        let metric = metrics.iter().find(|metric| metric.name == "f").unwrap();
+        assert_eq!(metric.cyclomatic, 6, "metric: {metric:?}");
+        assert_eq!(metric.max_nesting, 1, "metric: {metric:?}");
+        assert_eq!(crate::complexity::cyclomatic_for_entities(&entities), 6);
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    ts::match_callees_for_lang(root)
 }

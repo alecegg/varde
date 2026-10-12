@@ -1,0 +1,318 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 4
+cyclomatic = 4
+matrix = "if-else-if-else"
+rule = "spec:491-501, 502-518; `if` +1, two `else if` branches +1 each, plain `else` +1; total 4"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:491-518; root `if` +1, `else if` +1, and its body `if` at the root body's nesting adds 2"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:491-518; root `if` +1, plain `else` +1, and its body `if` adds 2"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer `if` +1 and nested `if` +2"
+
+[[case]]
+callable = "loops"
+cognitive = 3
+cyclomatic = 3
+matrix = "loops"
+rule = "spec:491-518; `for...of` +1 and nested `if` +2"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 4
+matrix = "switch-once"
+rule = "spec:196-205, 491-501; switch and all cases combined add 1 cognitively"
+
+[[case]]
+callable = "ternary"
+cognitive = 3
+cyclomatic = 3
+matrix = "ternary"
+rule = "spec:491-518; outer ternary +1 and nested ternary +2"
+
+[[case]]
+callable = "catch_once"
+cognitive = 3
+cyclomatic = 3
+matrix = "catch-once"
+rule = "spec:190-203, 491-518; catch +1 and nested `if` +2"
+
+[[case]]
+callable = "try_finally_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "try-finally-zero"
+rule = "spec:190-203; `try` and `finally` add no cognitive points"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; the `if` adds 1 and early returns add 0"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229; one same-operator `&&` sequence adds 1"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229; the `&&` and `||` sequences each add 1"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256; outer `&&` and negation-separated inner `&&` sequences each add 1"
+
+[[case]]
+callable = "logical_run_across_lambda"
+cognitive = 2
+cyclomatic = 2
+matrix = "logical-run-across-lambda"
+rule = "spec:207-229, 267-291; method and lambda `&&` sequences each add 1; logical operators get no nesting increment"
+
+[[case]]
+callable = "<anonymous>@59:25"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:207-229, 267-291; the lambda's own `&&` sequence adds 1"
+
+[[case]]
+callable = "null_coalescing_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "null-coalescing-zero"
+rule = "spec:163-168; `?.`, `??`, `??=`, and `||=` are shorthand and add 0"
+
+[[case]]
+callable = "lambda_nesting"
+cognitive = 2
+cyclomatic = 1
+matrix = "lambda-nesting"
+rule = "spec:281-291; the nested lambda raises nesting by one, so its `if` adds 2 to the method"
+
+[[case]]
+callable = "<anonymous>@70:17"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:281-291; the lambda's own top-level `if` adds 1"
+
+[[case]]
+callable = "named_nested_function"
+cognitive = 2
+cyclomatic = 1
+matrix = "named-nested-function"
+rule = "spec:267-280; the nested local function raises nesting by one, so its `if` adds 2 to the containing method"
+
+[[case]]
+callable = "Inner"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-280, 491-518; the local function's own top-level `if` adds 1"
+
+[[case]]
+callable = "class_in_method"
+cognitive = 2
+cyclomatic = 1
+matrix = "class-in-method"
+rule = "spec:267-291, 491-518; the local class method is nested in the function, so its `if` adds 2 to the outer function"
+
+[[case]]
+callable = "class_in_method_member"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; the local method's own top-level `if` adds 1"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "condition-nesting"
+rule = "spec:491-518; `if` +1 and its condition ternary at nesting 1 adds 2"
+
+[[case]]
+callable = "compensating_usage"
+cognitive = 1
+cyclomatic = 1
+matrix = "compensating-usage"
+rule = "spec:415-449, 267-291, 491-518; declaration-only outer function is compensated, so its assigned function's `if` adds 1"
+
+[[case]]
+callable = "<anonymous>@92:14"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; the nested function's own top-level `if` adds 1"
+
+[[case]]
+callable = "compensating_usage_non_declarative"
+cognitive = 3
+cyclomatic = 2
+rule = "spec:415-446, 267-291, 491-518; top-level `if` adds 1 and the assigned nested function's `if` adds 2 because this outer function is not compensated"
+
+[[case]]
+callable = "<anonymous>@99:14"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; the assigned function's own top-level `if` adds 1"
+
+[[case]]
+callable = "compensating_usage_callback"
+cognitive = 2
+cyclomatic = 1
+matrix = "compensating-usage-callback"
+rule = "spec:415-449; the top-level callback call makes this unmarked; nested callback `if` adds 2"
+
+[[case]]
+callable = "<anonymous>@103:13"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; the callback lambda's own top-level `if` adds 1"
+
+[[case]]
+callable = "goto_or_labeled_jump"
+cognitive = 2
+cyclomatic = 2
+matrix = "goto-or-labeled-jump"
+rule = "spec:238-243, 491-501; `while` +1 and labeled `break` +1"
+
+[[case]]
+callable = "multi_level_break"
+cognitive = 7
+cyclomatic = 4
+matrix = "multi-level-break"
+rule = "spec:238-243, 328-339, 491-518; outer `for` +1, nested `for` +2, nested `if` +3, labeled `continue` +1"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-501; direct self-recursion adds 1 once"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-501; the two self-calls still add one recursion point total"
+
+[[case]]
+callable = "recursion_qualified_self"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-qualified-self"
+rule = "spec:230-237, 491-501; `this.` calls the enclosing method and adds 1"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-other-receiver"
+rule = "spec:230-237; a call through another receiver does not bind to this method"
+
+[[case]]
+callable = "recursion_in_closure"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-in-closure"
+rule = "spec:230-237, 267-291, 491-501; the lambda's self-call belongs to the enclosing function, which gets one recursion point"
+
+[[case]]
+callable = "<anonymous>@140:16"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:267-291; the closure has no flow events of its own"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237, 491-501; member A of the same-file cycle adds 1"
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237, 491-501; member B of the same-file cycle adds 1"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237; the commented peer is absent from this fixture, so no same-file cycle binds"
+
+[[case]]
+callable = "spec_example_small"
+cognitive = 1
+cyclomatic = 5
+matrix = "spec-example-small"
+rule = "spec:316-327; the switch and all four cases combined add 1"
+
+[["n/a"]]
+matrix_id = "recursion-overload-delegate"
+reason = "JavaScript has no overload declaration syntax, so there are no distinct overload callables to delegate between."
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "JavaScript has no preprocessor conditional syntax."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "JavaScript has no C linkage declarations or preprocessor directives."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "JavaScript has no comprehension or query-clause syntax."
+
+
+[[case]]
+callable = "generator_callable"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; the generator function itself adds 0 and its top-level `if` adds 1"
+
+[[case]]
+callable = "<anonymous>@171:8"
+cognitive = 20
+cyclomatic = 3
+matrix = "spec-example-large"
+rule = "spec:690-738, 491-518; `if` +1, `||` +1, nested callback `if` +2 and `&&` +1, ternary +2, nested `if` +3, `else` +1, two nested `if`s +4 each, final `&&` +1; total 20"
+
+[[case]]
+callable = "<anonymous>@181:34"
+cognitive = 13
+cyclomatic = 4
+rule = "spec:700-735, 176-179, 267-291, 491-518; own `if` and `&&` +2, nested ternary +1, then nested callback's `if` +2, `else` +1, two nested `if`s +3 each, and `&&` +1; total 13"
+
+[[case]]
+callable = "<anonymous>@187:61"
+cognitive = 7
+cyclomatic = 5
+rule = "spec:706-735, 176-179, 491-518; `if` +1, `else` +1, nested `if`s +2 each, callback `&&` run +1"

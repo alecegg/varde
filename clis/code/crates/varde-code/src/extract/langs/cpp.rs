@@ -39,7 +39,10 @@
 //!   bonus kind (fixtures + resolve check) but not on the required checklist.
 
 use crate::extract::entity::ExtractCtx;
-use crate::extract::langs::c::{declarator_identifier, is_reserved_keyword};
+use crate::extract::langs::c::{
+    callable_arity, declarator_identifier, end_event_at_consequence, function_declarator,
+    function_name, is_reserved_keyword, name_token_span,
+};
 use crate::model::EntityKind;
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
@@ -103,11 +106,9 @@ fn visit_part_1_a(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
     match kind {
         // ---- structural ----
         "function_definition" => {
-            let name = node
-                .field("declarator")
-                .and_then(|d| declarator_identifier(&d))
-                .unwrap_or_default();
-            if !is_reserved_keyword(&name) {
+            if let Some(name) = function_name(node)
+                && !is_reserved_keyword(&name)
+            {
                 ctx.push(EntityKind::Function, name, node);
             }
         }
@@ -290,17 +291,45 @@ fn visit_part_5(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
         }
         // ---- control flow ----
         "if_statement" => {
-            let name = if is_else_if(node) {
+            let else_if = is_else_if(node);
+            let name = if else_if {
                 "elseif_statement"
             } else {
                 "if_statement"
             };
             ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            end_event_at_consequence(node, ctx);
+            if let Some(alternative) = node.field("alternative") {
+                // The pre-change event covered the whole `else` tail and was
+                // its max-nesting parent. The trim above ended the event at
+                // the consequence, so keep a legacy nesting marker over the
+                // tail (`legacy_nesting` counts only in `max_nesting`).
+                if !else_if {
+                    ctx.push(
+                        EntityKind::ControlFlow,
+                        "legacy_nesting".to_string(),
+                        &alternative,
+                    );
+                }
+                // A plain `else` is a hybrid increment. An `else` that
+                // directly wraps an `if` stays the `elseif_statement` event
+                // above (`spec:176-179`, `491-518`).
+                if let Some(body) = alternative
+                    .children()
+                    .find(|child| child.is_named() && child.kind() != "comment")
+                    && body.kind() != "if_statement"
+                {
+                    ctx.push(EntityKind::ControlFlow, "else_branch".to_string(), &body);
+                }
+            }
         }
         "binary_expression" => {
             if let Some(name) = boolean_operator_name(node) {
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
+        }
+        "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
         }
         "for_statement"
         | "for_range_loop"
@@ -348,6 +377,16 @@ fn boolean_operator_name(node: &Node<'_>) -> Option<&'static str> {
         "||" | "or" => Some("logical_or"),
         _ => None,
     }
+}
+
+/// Whether this unary expression is a negated binary logical sequence, which
+/// starts a new like-operator run (`spec:207-229`, `254-256`).
+fn is_negated_logical_sequence(node: &Node<'_>) -> bool {
+    node.field("operator")
+        .is_some_and(|operator| matches!(operator.text().as_ref(), "!" | "not"))
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
 }
 
 /// Whether this `if` is the direct branch of an `else` clause.
@@ -592,4 +631,216 @@ mod tests {
             crate::complexity::ComplexityConfidence::Low
         );
     }
+
+    #[test]
+    fn else_branch_lambda_and_negation_roles_are_emitted() {
+        let src = "int f(bool a, bool b, bool c) {\n\
+                     if (a) { return 1; } else { if (b) { return 2; } }\n\
+                     auto callback = [&] { return !(b && c); };\n\
+                     return callback() ? 1 : 0;\n\
+                   }\n";
+        let parsed = parse_source(&SupportLang::Cpp, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = crate::extract::extract(&parsed, 0).entities;
+        let flows = names(&entities, EntityKind::ControlFlow);
+        assert_eq!(
+            flows.iter().filter(|name| *name == "else_branch").count(),
+            1,
+            "entities: {flows:?}"
+        );
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| *name == "legacy_nesting")
+                .count(),
+            1
+        );
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| *name == "negation_break")
+                .count(),
+            1
+        );
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::CallableBoundary)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn operators_and_class_scoped_recursion_are_callables() {
+        let src = "struct Counter {\n\
+                     int value;\n\
+                     Counter other;\n\
+                     int step(int n) { return this->step(n - 1); }\n\
+                     int other_step(int n) { return other.step(n); }\n\
+                     Counter operator+(const Counter& rhs) { if (rhs.value) { return rhs; } return *this; }\n\
+                     ~Counter() {}\n\
+                   };\n";
+        let parsed = parse_source(&SupportLang::Cpp, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = crate::extract::extract(&parsed, 0).entities;
+        assert!(
+            names(&entities, EntityKind::Function).contains(&"operator+".to_string()),
+            "entities: {:?}",
+            names(&entities, EntityKind::Function)
+        );
+        let metrics = crate::complexity::function_complexities(&entities);
+        for (name, cognitive) in [
+            ("step", 1),
+            ("other_step", 0),
+            ("operator+", 1),
+            ("Counter", 0),
+        ] {
+            let metric = metrics.iter().find(|metric| metric.name == name).unwrap();
+            assert_eq!(metric.cognitive, cognitive, "{metric:?}");
+        }
+    }
+
+    #[test]
+    fn qualified_and_out_of_line_self_calls_bind() {
+        let src = "struct Runner {\n\
+                     int direct(int n) { return Runner::direct(n - 1); }\n\
+                     int out_of_line(int n);\n\
+                   };\n\
+                   int Runner::out_of_line(int n) { return out_of_line(n - 1); }\n";
+        let parsed = parse_source(&SupportLang::Cpp, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = crate::extract::extract(&parsed, 0).entities;
+        let metrics = crate::complexity::function_complexities(&entities);
+        for name in ["direct", "out_of_line"] {
+            let metric = metrics.iter().find(|metric| metric.name == name).unwrap();
+            assert_eq!(metric.cognitive, 1, "{metric:?}");
+        }
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];
+
+/// Collect method/free-function declarations and same-file call references for
+/// the shared class-scoped recursion resolver. `this->f` is self-like,
+/// `Type::f` names the enclosing type, and other receivers stay unbound.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let callables: Vec<_> = root
+        .dfs()
+        .filter(|node| FUNCTION_SCOPES.contains(&node.kind().as_ref()))
+        .filter_map(|node| {
+            let name = function_name(&node)?;
+            let (required_args, total_args) = callable_arity(&node);
+            let owner = declarator_owner(&node).or_else(|| enclosing_type_name(&node));
+            Some(Callable {
+                owner: owner.clone(),
+                owner_type: owner,
+                unqualified_callable: false,
+                name,
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(&node),
+                name_span: name_token_span(&node).unwrap_or_else(|| crate::extract::span_of(&node)),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| FUNCTION_SCOPES.contains(&ancestor.kind().as_ref()))
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier, qualifier_name) = match function.kind().as_ref() {
+            "identifier" | "field_identifier" => {
+                (function.text().into_owned(), Qualifier::None, None)
+            }
+            "field_expression" => {
+                let Some(method) = function.field("field") else {
+                    continue;
+                };
+                let Some(receiver) = function.field("argument") else {
+                    continue;
+                };
+                let receiver_text = receiver.text();
+                let owner = callables[caller].owner.as_deref();
+                let (qualifier, qualifier_name) = if receiver_text == "this" {
+                    (Qualifier::SelfLike, None)
+                } else if owner == Some(receiver_text.as_ref()) {
+                    (Qualifier::NamedType, Some(receiver_text.into_owned()))
+                } else {
+                    (Qualifier::Other, None)
+                };
+                (method.text().into_owned(), qualifier, qualifier_name)
+            }
+            "qualified_identifier" => {
+                let Some(method) = function.field("name") else {
+                    continue;
+                };
+                let Some(scope) = function.field("scope") else {
+                    continue;
+                };
+                let scope = scope.text();
+                let qualifier_name = scope
+                    .rsplit_once("::")
+                    .map_or(scope.as_ref(), |(_, name)| name);
+                (
+                    method.text().into_owned(),
+                    Qualifier::NamedType,
+                    Some(qualifier_name.to_owned()),
+                )
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named())
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
+}
+
+/// Owner named by an out-of-line definition's qualified declarator
+/// (`Vec::~Vec()`), which has no enclosing class in the tree.
+fn declarator_owner(node: &Node<'_>) -> Option<String> {
+    let inner = function_declarator(node)?.field("declarator")?;
+    let scope = inner.field("scope")?;
+    let name = scope.text().trim().to_string();
+    (!name.is_empty()).then_some(name)
+}
+
+fn enclosing_type_name(node: &Node<'_>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+        .and_then(|ancestor| ancestor.field("name").map(|name| name.text().into_owned()))
 }

@@ -30,8 +30,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
+use std::fs;
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
+use std::time::{Duration, SystemTime};
 use thiserror::Error;
 
 /// Per-process override for the working-memory directory.
@@ -46,8 +48,183 @@ pub const CONFIG_DIR_ENV: &str = "VARDE_CONFIG_DIR";
 pub const DEFAULT_WORKING: &str = "memory-bank/working";
 /// Built-in knowledge-memory location, relative to the project root.
 pub const DEFAULT_KNOWLEDGE: &str = "memory-bank/knowledge";
+/// Directory containing current session notes under the working store.
+pub const SESSION_NOTES_DIR: &str = "session-notes";
+/// Filename for a current session note.
+pub const NOTES_FILE: &str = "notes.md";
+/// Legacy directory containing session handoffs.
+pub const LEGACY_HANDOFFS_DIR: &str = "handoffs";
+/// Legacy session-note file name (`handoff.md`).
+pub const LEGACY_HANDOFF_FILE: &str = "handoff.md";
 const CONFIG_FILE: &str = "config.toml";
 const LEGACY_CONFIG_FILE: &str = "paths.toml";
+const LIVE_SESSION_WINDOW: Duration = Duration::from_secs(10 * 60);
+
+/// One note path planned or completed by the session-notes migration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionNotesMove {
+    pub from: PathBuf,
+    pub to: PathBuf,
+}
+
+/// A session directory left in place by the migration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionNotesSkip {
+    pub path: PathBuf,
+    pub reason: String,
+}
+
+/// A legacy note whose destination already exists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SessionNotesConflict {
+    pub from: PathBuf,
+    pub to: PathBuf,
+}
+
+/// Results from a dry-run or an applied session-notes migration.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SessionNotesMigration {
+    pub moved: Vec<SessionNotesMove>,
+    pub skipped: Vec<SessionNotesSkip>,
+    pub conflicts: Vec<SessionNotesConflict>,
+}
+
+/// Move legacy session directories from `handoffs/` into `session-notes/`.
+///
+/// A dry-run reports the paths that would move without writing anything.
+/// Recent notes are skipped as live unless `include_live` is true. Existing
+/// destination directories are always reported as conflicts and preserved.
+pub fn migrate_session_notes(
+    working: &Path,
+    dry_run: bool,
+    include_live: bool,
+) -> io::Result<SessionNotesMigration> {
+    let legacy_root = working.join(LEGACY_HANDOFFS_DIR);
+    let destination_root = working.join(SESSION_NOTES_DIR);
+    let mut result = SessionNotesMigration::default();
+
+    if !path_exists(&legacy_root)? {
+        return Ok(result);
+    }
+    if !fs::symlink_metadata(&legacy_root)?.file_type().is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "legacy handoffs path is not a directory: {}",
+                legacy_root.display()
+            ),
+        ));
+    }
+
+    migrate_session_scope(
+        &legacy_root,
+        &destination_root,
+        dry_run,
+        include_live,
+        &mut result,
+    )?;
+    if !dry_run {
+        remove_dir_if_empty(&legacy_root)?;
+    }
+    Ok(result)
+}
+
+fn migrate_session_scope(
+    legacy_parent: &Path,
+    destination_parent: &Path,
+    dry_run: bool,
+    include_live: bool,
+    result: &mut SessionNotesMigration,
+) -> io::Result<()> {
+    let mut entries = fs::read_dir(legacy_parent)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let legacy_dir = entry.path();
+        let destination_dir = destination_parent.join(entry.file_name());
+        if entry.file_name() == "archive" {
+            migrate_session_scope(&legacy_dir, &destination_dir, dry_run, include_live, result)?;
+            if !dry_run {
+                remove_dir_if_empty(&legacy_dir)?;
+            }
+            continue;
+        }
+
+        let from = legacy_dir.join(LEGACY_HANDOFF_FILE);
+        let source_metadata = match fs::symlink_metadata(&from) {
+            Ok(metadata) if metadata.file_type().is_file() => metadata,
+            Ok(_) => continue,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error),
+        };
+        let to = destination_dir.join(NOTES_FILE);
+
+        if path_exists(&destination_dir)? || path_exists(&legacy_dir.join(NOTES_FILE))? {
+            result.conflicts.push(SessionNotesConflict { from, to });
+            continue;
+        }
+        if !include_live && is_recent(source_metadata.modified()?) {
+            result.skipped.push(SessionNotesSkip {
+                path: legacy_dir,
+                reason: "live".to_owned(),
+            });
+            continue;
+        }
+
+        result.moved.push(SessionNotesMove {
+            from: from.clone(),
+            to: to.clone(),
+        });
+        if !dry_run {
+            fs::create_dir_all(destination_parent)?;
+            let renamed = legacy_dir.join(NOTES_FILE);
+            fs::rename(&from, &renamed)?;
+            if let Err(error) = fs::rename(&legacy_dir, &destination_dir) {
+                let _ = fs::rename(&renamed, &from);
+                return Err(error);
+            }
+        }
+    }
+
+    if !dry_run {
+        remove_dir_if_empty(legacy_parent)?;
+    }
+    Ok(())
+}
+
+fn path_exists(path: &Path) -> io::Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
+fn is_recent(modified: SystemTime) -> bool {
+    modified
+        .elapsed()
+        .map(|age| age < LIVE_SESSION_WINDOW)
+        .unwrap_or(true)
+}
+
+fn remove_dir_if_empty(path: &Path) -> io::Result<()> {
+    match fs::remove_dir(path) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::DirectoryNotEmpty
+            ) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum MemoryError {
@@ -190,15 +367,78 @@ pub struct Config {
     pub unknown: BTreeMap<String, toml::Value>,
 }
 
-/// Direct subagents in flight when `[orchestration] max_agents` is absent or invalid.
-pub const DEFAULT_MAX_AGENTS: u32 = 4;
+/// Background plan orchestrators allowed session-wide by default.
+pub const DEFAULT_ORCHESTRATORS: u32 = 4;
+/// Builders per orchestrator by default; also the `execution-wave` width.
+pub const DEFAULT_BUILDERS: u32 = 4;
+/// Planners per orchestrator by default.
+pub const DEFAULT_PLANNERS: u32 = 2;
+/// Reviewers per orchestrator by default.
+pub const DEFAULT_REVIEWERS: u32 = 2;
+/// Explorers per orchestrator by default.
+pub const DEFAULT_EXPLORERS: u32 = 4;
+/// Minutes without verified task activity before status marks it stalled.
+pub const DEFAULT_STALL_MINUTES: u64 = 20;
+/// Seconds allowed for a configured agent wake command.
+pub const DEFAULT_WAKE_TIMEOUT_SECONDS: u64 = 10;
+/// Consecutive wake failures before a watcher disables wake attempts.
+pub const DEFAULT_WAKE_MAX_FAILURES: u32 = 3;
+
+/// Per-role agent caps from `[orchestration]`, with their defaults.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RoleCaps {
+    pub orchestrators: u32,
+    pub builders: u32,
+    pub planners: u32,
+    pub reviewers: u32,
+    pub explorers: u32,
+}
+
+impl Default for RoleCaps {
+    fn default() -> Self {
+        Self {
+            orchestrators: DEFAULT_ORCHESTRATORS,
+            builders: DEFAULT_BUILDERS,
+            planners: DEFAULT_PLANNERS,
+            reviewers: DEFAULT_REVIEWERS,
+            explorers: DEFAULT_EXPLORERS,
+        }
+    }
+}
 
 /// The `[orchestration]` table.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Orchestration {
     /// Kept untyped so an invalid value never makes the whole config unreadable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchestrators: Option<toml::Value>,
+    /// Kept untyped so an invalid value never makes the whole config unreadable.
+    #[serde(default, alias = "executors", skip_serializing_if = "Option::is_none")]
+    pub builders: Option<toml::Value>,
+    /// Kept untyped so an invalid value never makes the whole config unreadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planners: Option<toml::Value>,
+    /// Kept untyped so an invalid value never makes the whole config unreadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviewers: Option<toml::Value>,
+    /// Kept untyped so an invalid value never makes the whole config unreadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explorers: Option<toml::Value>,
+    /// Legacy direct-agent cap, read as `builders` when that key is absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_agents: Option<toml::Value>,
+    /// Kept untyped so invalid input does not make the whole config unreadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stall_minutes: Option<toml::Value>,
+    /// Kept untyped so malformed commands can fall back without rejecting config.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wake_command: Option<toml::Value>,
+    /// Kept untyped so malformed values can fall back without rejecting config.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wake_timeout_seconds: Option<toml::Value>,
+    /// Kept untyped so malformed values can fall back without rejecting config.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wake_max_failures: Option<toml::Value>,
     /// Unknown keys under `[orchestration]`, kept on rewrite.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, toml::Value>,
@@ -226,35 +466,160 @@ where
 
 impl Orchestration {
     pub fn is_empty(&self) -> bool {
-        self.max_agents.is_none() && self.unknown.is_empty()
+        self.orchestrators.is_none()
+            && self.builders.is_none()
+            && self.planners.is_none()
+            && self.reviewers.is_none()
+            && self.explorers.is_none()
+            && self.max_agents.is_none()
+            && self.stall_minutes.is_none()
+            && self.wake_command.is_none()
+            && self.wake_timeout_seconds.is_none()
+            && self.wake_max_failures.is_none()
+            && self.unknown.is_empty()
     }
 
-    /// The configured cap, or `DEFAULT_MAX_AGENTS` plus a reason when the
-    /// value is not a positive integer.
-    pub fn max_agents(&self) -> (u32, Option<String>) {
+    /// One positive-integer cap, or `default` plus a reason when the value is
+    /// not a positive integer.
+    fn positive(&self, value: Option<&toml::Value>, default: u32) -> (u32, Option<String>) {
+        if self.not_a_table {
+            return (default, Some("`orchestration` is not a table".to_string()));
+        }
+        match value {
+            None => (default, None),
+            Some(toml::Value::Integer(n)) if *n > 0 => match u32::try_from(*n) {
+                Ok(n) => (n, None),
+                Err(_) => (default, Some(format!("{n} is too large"))),
+            },
+            Some(value) => (default, Some(format!("{value} is not a positive integer"))),
+        }
+    }
+
+    /// Background plan orchestrators allowed session-wide.
+    pub fn orchestrators(&self) -> (u32, Option<String>) {
+        self.positive(self.orchestrators.as_ref(), DEFAULT_ORCHESTRATORS)
+    }
+
+    /// Builders per orchestrator; legacy `max_agents` when `builders` is absent.
+    pub fn builders(&self) -> (u32, Option<String>) {
+        self.positive(
+            self.builders.as_ref().or(self.max_agents.as_ref()),
+            DEFAULT_BUILDERS,
+        )
+    }
+
+    /// Planners per orchestrator.
+    pub fn planners(&self) -> (u32, Option<String>) {
+        self.positive(self.planners.as_ref(), DEFAULT_PLANNERS)
+    }
+
+    /// Reviewers per orchestrator.
+    pub fn reviewers(&self) -> (u32, Option<String>) {
+        self.positive(self.reviewers.as_ref(), DEFAULT_REVIEWERS)
+    }
+
+    /// Explorers per orchestrator.
+    pub fn explorers(&self) -> (u32, Option<String>) {
+        self.positive(self.explorers.as_ref(), DEFAULT_EXPLORERS)
+    }
+
+    /// Set the builder cap while retaining unknown keys in the table. The
+    /// legacy `max_agents` key is superseded and dropped.
+    pub fn set_builders(&mut self, builders: u32) {
+        self.builders = Some(toml::Value::Integer(i64::from(builders)));
+        self.max_agents = None;
+        self.not_a_table = false;
+    }
+
+    /// The configured stall threshold, or `DEFAULT_STALL_MINUTES` plus a
+    /// reason when the value is not a positive integer.
+    pub fn stall_minutes(&self) -> (u64, Option<String>) {
         if self.not_a_table {
             return (
-                DEFAULT_MAX_AGENTS,
+                DEFAULT_STALL_MINUTES,
                 Some("`orchestration` is not a table".to_string()),
             );
         }
-        match &self.max_agents {
-            None => (DEFAULT_MAX_AGENTS, None),
-            Some(toml::Value::Integer(n)) if *n > 0 => match u32::try_from(*n) {
-                Ok(n) => (n, None),
-                Err(_) => (DEFAULT_MAX_AGENTS, Some(format!("{n} is too large"))),
-            },
+        match &self.stall_minutes {
+            None => (DEFAULT_STALL_MINUTES, None),
+            Some(toml::Value::Integer(minutes)) if *minutes > 0 => (
+                u64::try_from(*minutes).expect("positive i64 fits u64"),
+                None,
+            ),
             Some(value) => (
-                DEFAULT_MAX_AGENTS,
+                DEFAULT_STALL_MINUTES,
                 Some(format!("{value} is not a positive integer")),
             ),
         }
     }
 
-    /// Set the configured cap while retaining unknown keys in the table.
-    pub fn set_max_agents(&mut self, max_agents: u32) {
-        self.max_agents = Some(toml::Value::Integer(i64::from(max_agents)));
-        self.not_a_table = false;
+    /// The configured wake argv, or an empty command plus a reason if invalid.
+    pub fn wake_command(&self) -> (Vec<String>, Option<String>) {
+        if self.not_a_table {
+            return (
+                Vec::new(),
+                Some("`orchestration` is not a table".to_string()),
+            );
+        }
+        match &self.wake_command {
+            None => (Vec::new(), None),
+            Some(toml::Value::Array(values)) => {
+                let command = values
+                    .iter()
+                    .map(|value| value.as_str().map(str::to_owned))
+                    .collect::<Option<Vec<_>>>();
+                match command {
+                    Some(command) => (command, None),
+                    None => (
+                        Vec::new(),
+                        Some("array contains a non-string value".to_string()),
+                    ),
+                }
+            }
+            Some(value) => (
+                Vec::new(),
+                Some(format!("{value} is not an array of strings")),
+            ),
+        }
+    }
+
+    /// The configured wake timeout, or `DEFAULT_WAKE_TIMEOUT_SECONDS` plus a reason.
+    pub fn wake_timeout_seconds(&self) -> (u64, Option<String>) {
+        self.positive_u64(&self.wake_timeout_seconds, DEFAULT_WAKE_TIMEOUT_SECONDS)
+    }
+
+    /// The configured wake failure limit, or `DEFAULT_WAKE_MAX_FAILURES` plus a reason.
+    pub fn wake_max_failures(&self) -> (u32, Option<String>) {
+        if self.not_a_table {
+            return (
+                DEFAULT_WAKE_MAX_FAILURES,
+                Some("`orchestration` is not a table".to_string()),
+            );
+        }
+        match &self.wake_max_failures {
+            None => (DEFAULT_WAKE_MAX_FAILURES, None),
+            Some(toml::Value::Integer(n)) if *n > 0 => match u32::try_from(*n) {
+                Ok(n) => (n, None),
+                Err(_) => (DEFAULT_WAKE_MAX_FAILURES, Some(format!("{n} is too large"))),
+            },
+            Some(value) => (
+                DEFAULT_WAKE_MAX_FAILURES,
+                Some(format!("{value} is not a positive integer")),
+            ),
+        }
+    }
+
+    fn positive_u64(&self, value: &Option<toml::Value>, default: u64) -> (u64, Option<String>) {
+        if self.not_a_table {
+            return (default, Some("`orchestration` is not a table".to_string()));
+        }
+        match value {
+            None => (default, None),
+            Some(toml::Value::Integer(n)) if *n > 0 => {
+                (u64::try_from(*n).expect("positive i64 fits u64"), None)
+            }
+            Some(value) => (default, Some(format!("{value} is not a positive integer"))),
+        }
     }
 }
 
@@ -289,13 +654,28 @@ where
 }
 
 /// Session-start providers used when `[hooks.session_start]` omits them.
-pub const DEFAULT_SESSION_START_PROVIDERS: [&str; 1] = ["nav_map"];
+pub const DEFAULT_SESSION_START_PROVIDERS: [&str; 2] = ["nav_map", "toz_note"];
+/// Every session-start provider name the dispatcher recognises.
+pub const KNOWN_SESSION_START_PROVIDERS: [&str; 3] = ["nav_map", "toz_note", "orchestration"];
+/// Post-tool-use providers used when `[hooks.post_tool_use]` omits them.
+pub const DEFAULT_POST_TOOL_USE_PROVIDERS: [&str; 2] = ["capture", "session_notes"];
+/// Every post-tool-use provider name the dispatcher recognises.
+pub const KNOWN_POST_TOOL_USE_PROVIDERS: [&str; 3] =
+    ["capture", "session_notes", "context_handoff"];
+/// User-prompt-submit providers used when `[hooks.user_prompt_submit]` omits them.
+pub const DEFAULT_USER_PROMPT_SUBMIT_PROVIDERS: [&str; 1] = ["inbox"];
+/// Every user-prompt-submit provider name the dispatcher recognises.
+pub const KNOWN_USER_PROMPT_SUBMIT_PROVIDERS: [&str; 1] = ["inbox"];
 
 /// The `[hooks]` table.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Hooks {
     #[serde(default, skip_serializing_if = "SessionStart::is_empty")]
     pub session_start: SessionStart,
+    #[serde(default, skip_serializing_if = "PostToolUse::is_empty")]
+    pub post_tool_use: PostToolUse,
+    #[serde(default, skip_serializing_if = "UserPromptSubmit::is_empty")]
+    pub user_prompt_submit: UserPromptSubmit,
     /// Unknown keys under `[hooks]`, kept so a config rewrite never drops them.
     #[serde(flatten)]
     pub unknown: BTreeMap<String, toml::Value>,
@@ -303,7 +683,10 @@ pub struct Hooks {
 
 impl Hooks {
     pub fn is_empty(&self) -> bool {
-        self.session_start.is_empty() && self.unknown.is_empty()
+        self.session_start.is_empty()
+            && self.post_tool_use.is_empty()
+            && self.user_prompt_submit.is_empty()
+            && self.unknown.is_empty()
     }
 }
 
@@ -323,7 +706,72 @@ impl SessionStart {
     }
 }
 
+/// The `[hooks.post_tool_use]` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PostToolUse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub providers: Option<Vec<String>>,
+    /// Unknown keys under `[hooks.post_tool_use]`, kept on rewrite.
+    #[serde(flatten)]
+    pub unknown: BTreeMap<String, toml::Value>,
+}
+
+impl PostToolUse {
+    pub fn is_empty(&self) -> bool {
+        self.providers.is_none() && self.unknown.is_empty()
+    }
+}
+
+/// The `[hooks.user_prompt_submit]` table.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct UserPromptSubmit {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub providers: Option<Vec<String>>,
+    /// Unknown keys under `[hooks.user_prompt_submit]`, kept on rewrite.
+    #[serde(flatten)]
+    pub unknown: BTreeMap<String, toml::Value>,
+}
+
+impl UserPromptSubmit {
+    pub fn is_empty(&self) -> bool {
+        self.providers.is_none() && self.unknown.is_empty()
+    }
+}
+
 impl Config {
+    /// Configured user-prompt-submit providers, or the built-in default list.
+    pub fn user_prompt_submit_providers(&self) -> Vec<String> {
+        self.hooks
+            .user_prompt_submit
+            .providers
+            .clone()
+            .unwrap_or_else(|| {
+                DEFAULT_USER_PROMPT_SUBMIT_PROVIDERS
+                    .map(String::from)
+                    .to_vec()
+            })
+    }
+}
+
+impl Config {
+    /// Configured post-tool-use providers, or the built-in default list.
+    pub fn post_tool_use_providers(&self) -> Vec<String> {
+        self.hooks
+            .post_tool_use
+            .providers
+            .clone()
+            .unwrap_or_else(|| DEFAULT_POST_TOOL_USE_PROVIDERS.map(String::from).to_vec())
+            .into_iter()
+            .map(|provider| {
+                if provider == "context_handoff" {
+                    "session_notes".to_owned()
+                } else {
+                    provider
+                }
+            })
+            .collect()
+    }
+
     /// Configured session-start providers, or the built-in default list.
     pub fn session_start_providers(&self) -> Vec<String> {
         self.hooks
@@ -507,6 +955,11 @@ impl MemoryPaths {
         }
     }
 
+    /// The checkout the caller ran from; differs from `root` in a linked worktree.
+    pub fn checkout_root(&self) -> &Path {
+        &self.checkout_root
+    }
+
     /// Every directory a workflow write may land in: the caller checkout,
     /// repository memory root, and any redirected memory. Canonical where the directory exists, so
     /// callers can compare against canonicalized paths.
@@ -547,16 +1000,7 @@ pub fn legacy_config_path() -> PathBuf {
 }
 
 fn config_dir() -> PathBuf {
-    if let Some(dir) = env::var_os(CONFIG_DIR_ENV).filter(|value| !value.is_empty()) {
-        return PathBuf::from(dir);
-    }
-    if let Some(dir) = env::var_os("XDG_CONFIG_HOME").filter(|value| !value.is_empty()) {
-        return PathBuf::from(dir).join("varde");
-    }
-    dirs::home_dir()
-        .map(|home| home.join(".config"))
-        .unwrap_or_else(|| PathBuf::from(".config"))
-        .join("varde")
+    varde_core::paths::varde_config_dir()
 }
 
 /// Load `config.toml`, falling back to legacy `paths.toml` when absent.
@@ -583,6 +1027,75 @@ pub fn save_config(config: &Config) -> Result<PathBuf, MemoryError> {
     })
 }
 
+/// Rewrite `existing` so it holds the values of `fresh`, keeping the comments
+/// and formatting of every entry that did not change. Unparseable text falls
+/// back to `fresh`. Empty tables under `[hooks]` survive, so seeded comments do.
+pub fn merge_toml_text(existing: &str, fresh: &str) -> String {
+    let (Ok(mut old), Ok(new)) = (
+        existing.parse::<toml_edit::DocumentMut>(),
+        fresh.parse::<toml_edit::DocumentMut>(),
+    ) else {
+        return fresh.to_string();
+    };
+    merge_tables(old.as_table_mut(), new.as_table(), false);
+    old.to_string()
+}
+
+fn merge_tables(old: &mut toml_edit::Table, new: &toml_edit::Table, keep_empty: bool) {
+    let stale: Vec<String> = old
+        .iter()
+        .filter(|(key, item)| {
+            !new.contains_key(key) && !((keep_empty || *key == "hooks") && is_empty_tables(item))
+        })
+        .map(|(key, _)| key.to_string())
+        .collect();
+    for key in stale {
+        old.remove(&key);
+    }
+    for (key, new_item) in new.iter() {
+        let Some(old_item) = old.get_mut(key) else {
+            old.insert(key, new_item.clone());
+            continue;
+        };
+        if let (Some(old_table), Some(new_table)) = (old_item.as_table_mut(), new_item.as_table()) {
+            merge_tables(old_table, new_table, keep_empty || key == "hooks");
+        } else if item_text(old_item) != item_text(new_item) {
+            let decor = old_item.as_value().map(|value| value.decor().clone());
+            *old_item = new_item.clone();
+            if let (Some(decor), Some(value)) = (decor, old_item.as_value_mut()) {
+                *value.decor_mut() = decor;
+            }
+        }
+    }
+}
+
+fn is_empty_tables(item: &toml_edit::Item) -> bool {
+    item.as_table()
+        .is_some_and(|table| table.iter().all(|(_, child)| is_empty_tables(child)))
+}
+
+fn item_text(item: &toml_edit::Item) -> String {
+    match item.as_value() {
+        Some(value) => {
+            let mut bare = value.clone();
+            bare.decor_mut().clear();
+            bare.to_string()
+        }
+        None => item.to_string(),
+    }
+}
+
+/// Whether the file at `path` has comments or `[hooks]` tables worth keeping
+/// when the config itself holds no values.
+fn holds_seeded_hooks_or_comments(path: &Path) -> bool {
+    std::fs::read_to_string(path).is_ok_and(|text| {
+        text.lines().any(|line| {
+            let line = line.trim_start();
+            line.starts_with('#') || line.starts_with("[hooks")
+        })
+    })
+}
+
 fn save_config_at(
     config: &Config,
     path: &Path,
@@ -595,6 +1108,7 @@ fn save_config_at(
         && config.hooks.is_empty()
         && config.instructions.is_empty()
         && config.unknown.is_empty()
+        && !holds_seeded_hooks_or_comments(path)
     {
         remove_if_present(path)?;
         remove_if_present(legacy)?;
@@ -606,7 +1120,11 @@ fn save_config_at(
             source,
         })?;
     }
-    let text = toml::to_string_pretty(config)?;
+    let fresh = toml::to_string_pretty(config)?;
+    let text = match std::fs::read_to_string(path) {
+        Ok(existing) => merge_toml_text(&existing, &fresh),
+        Err(_) => fresh,
+    };
     let temp = unique_config_temp_path(path);
     let mut created = false;
     let result = (|| -> io::Result<()> {
@@ -883,9 +1401,255 @@ pub fn canonical_or_lexical(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDir(PathBuf);
+
+    impl TestDir {
+        fn new() -> Self {
+            let path = env::temp_dir().join(format!(
+                "varde-session-notes-{}-{}",
+                std::process::id(),
+                NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
 
     fn config(text: &str) -> Config {
         toml::from_str(text).unwrap()
+    }
+
+    #[test]
+    fn hook_providers_default_and_override_per_event() {
+        let empty = Config::default();
+        assert_eq!(empty.session_start_providers(), ["nav_map", "toz_note"]);
+        assert_eq!(
+            empty.post_tool_use_providers(),
+            ["capture", "session_notes"]
+        );
+        assert_eq!(empty.user_prompt_submit_providers(), ["inbox"]);
+
+        let set = config("[hooks.post_tool_use]\nproviders = []\n[hooks.session_start]\nx = 1\n");
+        assert!(set.post_tool_use_providers().is_empty());
+        assert_eq!(set.session_start_providers(), ["nav_map", "toz_note"]);
+        assert_eq!(set.user_prompt_submit_providers(), ["inbox"]);
+
+        let inbox_only = config("[hooks.user_prompt_submit]\nproviders = [\"inbox\"]\n");
+        assert_eq!(inbox_only.user_prompt_submit_providers(), ["inbox"]);
+
+        let legacy = config("[hooks.post_tool_use]\nproviders = [\"context_handoff\"]\n");
+        assert_eq!(legacy.post_tool_use_providers(), ["session_notes"]);
+        let current = config("[hooks.post_tool_use]\nproviders = [\"session_notes\"]\n");
+        assert_eq!(current.post_tool_use_providers(), ["session_notes"]);
+        assert!(KNOWN_POST_TOOL_USE_PROVIDERS.contains(&"session_notes"));
+        assert!(KNOWN_POST_TOOL_USE_PROVIDERS.contains(&"context_handoff"));
+    }
+
+    #[test]
+    fn migrate_session_notes_dry_run_reports_without_writing() {
+        let temp = TestDir::new();
+        let working = temp.path();
+        let legacy_dir = working.join("handoffs/session-a");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::write(legacy_dir.join("handoff.md"), "original note\n").unwrap();
+        fs::write(legacy_dir.join("index.md"), "extra file\n").unwrap();
+
+        let result = migrate_session_notes(working, true, true).unwrap();
+
+        assert_eq!(result.moved.len(), 1);
+        assert_eq!(result.moved[0].from, legacy_dir.join("handoff.md"));
+        assert_eq!(
+            result.moved[0].to,
+            working.join("session-notes/session-a/notes.md")
+        );
+        assert!(result.skipped.is_empty());
+        assert!(result.conflicts.is_empty());
+        assert_eq!(
+            fs::read_to_string(legacy_dir.join("handoff.md")).unwrap(),
+            "original note\n"
+        );
+        assert!(legacy_dir.join("index.md").exists());
+        assert!(!working.join("session-notes").exists());
+    }
+
+    #[test]
+    fn migrate_session_notes_moves_archives_and_is_idempotent() {
+        let temp = TestDir::new();
+        let working = temp.path();
+        let live_dir = working.join("handoffs/archive/old-session");
+        let regular_dir = working.join("handoffs/session-b");
+        fs::create_dir_all(&live_dir).unwrap();
+        fs::create_dir_all(&regular_dir).unwrap();
+        fs::write(live_dir.join("handoff.md"), "archived note\n").unwrap();
+        fs::write(regular_dir.join("handoff.md"), "current note\n").unwrap();
+        fs::write(regular_dir.join("index.md"), "keep alongside note\n").unwrap();
+
+        let first = migrate_session_notes(working, false, true).unwrap();
+
+        assert_eq!(first.moved.len(), 2);
+        assert!(first.skipped.is_empty());
+        assert!(first.conflicts.is_empty());
+        assert_eq!(
+            fs::read_to_string(working.join("session-notes/archive/old-session/notes.md")).unwrap(),
+            "archived note\n"
+        );
+        assert_eq!(
+            fs::read_to_string(working.join("session-notes/session-b/notes.md")).unwrap(),
+            "current note\n"
+        );
+        assert_eq!(
+            fs::read_to_string(working.join("session-notes/session-b/index.md")).unwrap(),
+            "keep alongside note\n"
+        );
+        assert!(!working.join("handoffs").exists());
+
+        let second = migrate_session_notes(working, false, false).unwrap();
+        assert!(second.moved.is_empty());
+        assert!(second.skipped.is_empty());
+        assert!(second.conflicts.is_empty());
+    }
+
+    #[test]
+    fn migrate_session_notes_reports_existing_targets_without_overwriting() {
+        let temp = TestDir::new();
+        let working = temp.path();
+        let legacy_dir = working.join("handoffs/session-c");
+        let other_legacy_dir = working.join("handoffs/session-c2");
+        let target_dir = working.join("session-notes/session-c");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::create_dir_all(&other_legacy_dir).unwrap();
+        fs::create_dir_all(&target_dir).unwrap();
+        fs::write(legacy_dir.join("handoff.md"), "legacy\n").unwrap();
+        fs::write(other_legacy_dir.join("handoff.md"), "move this\n").unwrap();
+        fs::write(target_dir.join("notes.md"), "existing\n").unwrap();
+
+        let result = migrate_session_notes(working, false, true).unwrap();
+
+        assert_eq!(result.moved.len(), 1);
+        assert_eq!(
+            result.moved[0].to,
+            working.join("session-notes/session-c2/notes.md")
+        );
+        assert_eq!(result.conflicts.len(), 1);
+        assert_eq!(result.conflicts[0].from, legacy_dir.join("handoff.md"));
+        assert_eq!(result.conflicts[0].to, target_dir.join("notes.md"));
+        assert_eq!(
+            fs::read_to_string(legacy_dir.join("handoff.md")).unwrap(),
+            "legacy\n"
+        );
+        assert_eq!(
+            fs::read_to_string(target_dir.join("notes.md")).unwrap(),
+            "existing\n"
+        );
+        assert_eq!(
+            fs::read_to_string(working.join("session-notes/session-c2/notes.md")).unwrap(),
+            "move this\n"
+        );
+    }
+
+    #[test]
+    fn migrate_session_notes_does_not_replace_notes_file_inside_legacy_dir() {
+        let temp = TestDir::new();
+        let working = temp.path();
+        let legacy_dir = working.join("handoffs/session-e");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::write(legacy_dir.join("handoff.md"), "legacy\n").unwrap();
+        fs::write(legacy_dir.join("notes.md"), "preserve this\n").unwrap();
+
+        let result = migrate_session_notes(working, false, true).unwrap();
+
+        assert!(result.moved.is_empty());
+        assert_eq!(result.conflicts.len(), 1);
+        assert_eq!(result.conflicts[0].from, legacy_dir.join("handoff.md"));
+        assert_eq!(
+            result.conflicts[0].to,
+            working.join("session-notes/session-e/notes.md")
+        );
+        assert_eq!(
+            fs::read_to_string(legacy_dir.join("notes.md")).unwrap(),
+            "preserve this\n"
+        );
+        assert_eq!(
+            fs::read_to_string(legacy_dir.join("handoff.md")).unwrap(),
+            "legacy\n"
+        );
+    }
+
+    #[test]
+    fn migrate_session_notes_skips_recent_sessions_as_live() {
+        let temp = TestDir::new();
+        let working = temp.path();
+        let legacy_dir = working.join("handoffs/session-live");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::write(legacy_dir.join("handoff.md"), "live note\n").unwrap();
+
+        let result = migrate_session_notes(working, false, false).unwrap();
+
+        assert!(result.moved.is_empty());
+        assert!(result.conflicts.is_empty());
+        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(result.skipped[0].path, legacy_dir);
+        assert_eq!(result.skipped[0].reason, "live");
+        assert!(!working.join("session-notes").exists());
+    }
+
+    #[test]
+    fn migrate_session_notes_reports_recreated_legacy_file_as_conflict() {
+        let temp = TestDir::new();
+        let working = temp.path();
+        let legacy_dir = working.join("handoffs/session-d");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::write(legacy_dir.join("handoff.md"), "first version\n").unwrap();
+        migrate_session_notes(working, false, true).unwrap();
+
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::write(legacy_dir.join("handoff.md"), "recreated version\n").unwrap();
+        let result = migrate_session_notes(working, false, false).unwrap();
+
+        assert!(result.moved.is_empty());
+        assert!(result.skipped.is_empty());
+        assert_eq!(result.conflicts.len(), 1);
+        assert_eq!(result.conflicts[0].from, legacy_dir.join("handoff.md"));
+        assert_eq!(
+            result.conflicts[0].to,
+            working.join("session-notes/session-d/notes.md")
+        );
+        assert_eq!(
+            fs::read_to_string(legacy_dir.join("handoff.md")).unwrap(),
+            "recreated version\n"
+        );
+        assert_eq!(
+            fs::read_to_string(working.join("session-notes/session-d/notes.md")).unwrap(),
+            "first version\n"
+        );
+    }
+
+    #[test]
+    fn merge_keeps_comments_order_and_drops_removed_keys() {
+        let existing = "# top\nz = 1\n[a] # tail\n# why\nk = 1\ngone = 2\n";
+        let fresh = "z = 1\n[a]\nk = 5\n[b]\nn = 1\n";
+        let merged = merge_toml_text(existing, fresh);
+        assert!(
+            merged.starts_with("# top\nz = 1\n[a] # tail\n# why\nk = 5\n"),
+            "{merged}"
+        );
+        assert!(!merged.contains("gone"), "{merged}");
+        assert!(merged.contains("[b]\nn = 1"), "{merged}");
     }
 
     #[test]
@@ -956,9 +1720,14 @@ working = "/fast/app-working"
 
     #[test]
     fn hooks_and_unknown_tables_round_trip() {
-        let text = "[hooks.session_start]\nproviders = [\"nav_map\"]\ntimeout = 10\n\n[hooks.post_tool_use]\nx = 1\n\n[orchestration]\nmode = \"x\"\n";
+        let text = "[hooks.session_start]\nproviders = [\"nav_map\"]\ntimeout = 10\n\n[hooks.post_tool_use]\nx = 1\n\n[hooks.user_prompt_submit]\nproviders = [\"inbox\"]\nkeep = \"yes\"\n\n[orchestration]\nmode = \"x\"\n";
         let cfg = config(text);
         assert_eq!(cfg.session_start_providers(), vec!["nav_map".to_string()]);
+        assert_eq!(
+            cfg.user_prompt_submit_providers(),
+            vec!["inbox".to_string()]
+        );
+        assert!(cfg.hooks.user_prompt_submit.unknown.contains_key("keep"));
         let out = toml::to_string_pretty(&cfg).unwrap();
         let again = config(&out);
         assert_eq!(again, cfg);
@@ -966,15 +1735,34 @@ working = "/fast/app-working"
         assert!(out.contains("providers"), "{out}");
         assert!(out.contains("timeout = 10"), "{out}");
         assert!(out.contains("[hooks.post_tool_use]"), "{out}");
+        assert!(out.contains("[hooks.user_prompt_submit]"), "{out}");
+        assert!(out.contains("keep = \"yes\""), "{out}");
     }
 
     #[test]
     fn orchestration_table_round_trips_with_unknown_keys() {
-        let cfg = config("[orchestration]\nmax_agents = 2\nmode = \"x\"\n");
-        assert_eq!(cfg.orchestration.max_agents(), (2, None));
+        let cfg = config("[orchestration]\nbuilders = 2\nmode = \"x\"\n");
+        assert_eq!(cfg.orchestration.builders(), (2, None));
         let again = config(&toml::to_string_pretty(&cfg).unwrap());
         assert_eq!(again, cfg);
         assert!(again.orchestration.unknown.contains_key("mode"));
+    }
+
+    #[test]
+    fn stall_minutes_default_round_trip_and_invalid_fallback() {
+        assert_eq!(Config::default().orchestration.stall_minutes(), (20, None));
+        let cfg = config("[orchestration]\nstall_minutes = 35\nmode = \"x\"\n");
+        assert_eq!(cfg.orchestration.stall_minutes(), (35, None));
+        let again = config(&toml::to_string_pretty(&cfg).unwrap());
+        assert_eq!(again, cfg);
+        assert_eq!(again.orchestration.stall_minutes(), (35, None));
+
+        for bad in ["0", "-3", "\"many\"", "2.5"] {
+            let cfg = config(&format!("[orchestration]\nstall_minutes = {bad}\n"));
+            let (minutes, reason) = cfg.orchestration.stall_minutes();
+            assert_eq!(minutes, 20, "{bad}");
+            assert!(reason.is_some(), "{bad}");
+        }
     }
 
     #[test]
@@ -991,26 +1779,90 @@ working = "/fast/app-working"
     fn non_table_orchestration_falls_back_with_a_reason() {
         for bad in ["3", "\"x\"", "[1]"] {
             let cfg = config(&format!("orchestration = {bad}\n"));
-            let (n, reason) = cfg.orchestration.max_agents();
+            let (n, reason) = cfg.orchestration.builders();
             assert_eq!(n, 4, "{bad}");
             assert!(reason.is_some(), "{bad}");
         }
     }
 
     #[test]
-    fn invalid_max_agents_falls_back_with_a_reason() {
+    fn orchestration_role_caps_default_to_four_four_two_two_four() {
+        let caps = Config::default().orchestration;
+        assert_eq!(caps.orchestrators(), (4, None));
+        assert_eq!(caps.builders(), (4, None));
+        assert_eq!(caps.planners(), (2, None));
+        assert_eq!(caps.reviewers(), (2, None));
+        assert_eq!(caps.explorers(), (4, None));
+        assert_eq!(
+            RoleCaps::default(),
+            RoleCaps {
+                orchestrators: 4,
+                builders: 4,
+                planners: 2,
+                reviewers: 2,
+                explorers: 4,
+            }
+        );
+    }
+
+    #[test]
+    fn orchestration_role_caps_read_legacy_max_agents_as_builders() {
+        let cfg = config("[orchestration]\nmax_agents = 6\n");
+        assert_eq!(cfg.orchestration.builders(), (6, None));
+        let cfg = config("[orchestration]\nmax_agents = 6\nbuilders = 2\n");
+        assert_eq!(cfg.orchestration.builders(), (2, None));
+        let cfg = config("[orchestration]\nexecutors = 3\n");
+        assert_eq!(cfg.orchestration.builders(), (3, None));
+    }
+
+    #[test]
+    fn orchestration_role_caps_fall_back_with_a_reason_when_invalid() {
         for bad in ["0", "-3", "\"many\"", "2.5"] {
             let cfg = config(&format!("[orchestration]\nmax_agents = {bad}\n"));
-            let (n, reason) = cfg.orchestration.max_agents();
+            let (n, reason) = cfg.orchestration.builders();
             assert_eq!(n, 4, "{bad}");
             assert!(reason.is_some(), "{bad}");
         }
-        assert_eq!(Config::default().orchestration.max_agents(), (4, None));
+        let cases: [(&str, u32); 5] = [
+            ("orchestrators", 4),
+            ("builders", 4),
+            ("planners", 2),
+            ("reviewers", 2),
+            ("explorers", 4),
+        ];
+        for (key, expected) in cases {
+            let cfg = config(&format!("[orchestration]\n{key} = 0\n"));
+            let orchestration = &cfg.orchestration;
+            let (n, reason) = match key {
+                "orchestrators" => orchestration.orchestrators(),
+                "builders" => orchestration.builders(),
+                "planners" => orchestration.planners(),
+                "reviewers" => orchestration.reviewers(),
+                _ => orchestration.explorers(),
+            };
+            assert_eq!(n, expected, "{key}");
+            assert!(reason.is_some(), "{key}");
+        }
+    }
+
+    #[test]
+    fn orchestration_role_caps_set_builders_drops_the_legacy_key() {
+        let mut cfg = config("[orchestration]\nexecutors = 6\nmode = \"x\"\n");
+        cfg.orchestration.set_builders(2);
+        assert_eq!(cfg.orchestration.builders(), (2, None));
+        let text = toml::to_string_pretty(&cfg).unwrap();
+        assert!(text.contains("builders = 2"), "{text}");
+        assert!(!text.contains("max_agents"), "{text}");
+        assert!(text.contains("mode = \"x\""), "{text}");
+        assert_eq!(config(&text), cfg);
     }
 
     #[test]
     fn session_start_providers_default_when_absent() {
-        assert_eq!(Config::default().session_start_providers(), vec!["nav_map"]);
+        assert_eq!(
+            Config::default().session_start_providers(),
+            vec!["nav_map", "toz_note"]
+        );
     }
 
     #[test]
@@ -1104,6 +1956,37 @@ working = "/fast/app-working"
         assert!(!legacy.exists());
         assert_eq!(config(&std::fs::read_to_string(&current).unwrap()), new);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn saving_an_empty_config_keeps_seeded_hook_comments() {
+        let dir = std::env::temp_dir().join(format!(
+            "varde-config-seeded-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&dir).unwrap();
+        let current = dir.join(CONFIG_FILE);
+        let legacy = dir.join(LEGACY_CONFIG_FILE);
+        let seeded = "[hooks.session_start]\n# providers = [\"nav_map\"]\n[hooks.post_tool_use]\n# providers = [\"capture\"]\n";
+        std::fs::write(&current, seeded).unwrap();
+
+        save_config_at(&Config::default(), &current, &legacy, |from, to| {
+            std::fs::rename(from, to)
+        })
+        .unwrap();
+        assert_eq!(std::fs::read_to_string(&current).unwrap(), seeded);
+
+        std::fs::write(&current, "[default]\nworking = \"/w\"\n").unwrap();
+        save_config_at(&Config::default(), &current, &legacy, |from, to| {
+            std::fs::rename(from, to)
+        })
+        .unwrap();
+        assert!(!current.exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

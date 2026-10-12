@@ -1,6 +1,8 @@
 //! Shared error reporting for command handlers.
 
+use crate::output::{Fix, for_code};
 use anyhow::Result;
+use std::any::Any;
 use varde_workflow_core::crud::create::CreateError;
 use varde_workflow_core::crud::delete::DeleteError;
 use varde_workflow_core::crud::list::ListError;
@@ -206,7 +208,35 @@ impl ExitCode for InternalError {}
 /// In `--json` mode the error is printed under `data.error` in the shared
 /// envelope. Text mode prints `error: <message>`. Never returns because the
 /// process exits after stderr is flushed.
-pub fn report_error(err: &(impl std::fmt::Display + ExitCode), json: bool) -> Result<()> {
+pub fn report_error(err: &(impl std::fmt::Display + ExitCode + 'static), json: bool) -> Result<()> {
+    if let Some(ownership_error) =
+        (err as &dyn Any).downcast_ref::<crate::task_ownership::OwnershipError>()
+    {
+        let fix = for_code(ownership_error.code);
+        return report_error_with_fix(
+            ownership_error.code,
+            err.exit_code(),
+            &ownership_error.message,
+            &fix,
+            json,
+        );
+    }
+    if let Some(conclude_error) =
+        (err as &dyn Any).downcast_ref::<crate::conclusion::ConcludeError>()
+    {
+        let fix = for_code(conclude_error.code);
+        return report_error_with_fix(
+            conclude_error.code,
+            err.exit_code(),
+            &conclude_error.message,
+            &fix,
+            json,
+        );
+    }
+    if let Some(internal_error) = (err as &dyn Any).downcast_ref::<InternalError>() {
+        let fix = for_code("internal");
+        return report_error_with_fix("internal", err.exit_code(), &internal_error.0, &fix, json);
+    }
     if json {
         crate::output::print_error(err.error_code(), err.to_string());
     } else {
@@ -215,12 +245,43 @@ pub fn report_error(err: &(impl std::fmt::Display + ExitCode), json: bool) -> Re
     std::process::exit(err.exit_code());
 }
 
+pub(crate) fn report_error_with_fix(
+    code: &str,
+    exit_code: i32,
+    message: &str,
+    fix: &Fix,
+    json: bool,
+) -> Result<()> {
+    if json {
+        crate::output::print_error_with_fix(code, message, fix);
+    } else {
+        eprintln!("error: {message}\nFix: {}", fix.text());
+    }
+    std::process::exit(exit_code);
+}
+
+pub(crate) fn report_failure_with_fix(
+    code: &str,
+    exit_code: i32,
+    message: &str,
+    details: serde_json::Value,
+    fix: &Fix,
+    json: bool,
+) -> Result<()> {
+    if json {
+        crate::output::print_failure_with_fix(code, message, details, fix);
+    } else {
+        eprintln!("error: {message}\nFix: {}", fix.text());
+    }
+    std::process::exit(exit_code);
+}
+
 /// Route a handler's `Result` through the `--json`/text rendering split and
 /// [`report_error`], so each handler supplies only its two payload
 /// renderers instead of hand-repeating the
 /// `match { Ok => if json {..} else {..}, Err => report_error }` scaffold.
 pub fn finish<T>(
-    result: Result<T, impl std::fmt::Display + ExitCode>,
+    result: Result<T, impl std::fmt::Display + ExitCode + 'static>,
     json: bool,
     render_json: impl FnOnce(&T) -> Result<()>,
     render_text: impl FnOnce(&T) -> Result<()>,

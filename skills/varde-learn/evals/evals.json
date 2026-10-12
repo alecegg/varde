@@ -1,10 +1,11 @@
 {
   "skill_name": "varde-learn",
+  "skills": ["varde-learn", "varde-manage"],
   "evals": [
     {
       "id": 1,
-      "prompt": "A varde-learn friction item has one real occurrence. Should distill propose a skill change now, and should it change the item's status?",
-      "expected_output": "No. Inspect the item with `varde-learn friction show <id> --json`, but one occurrence is insufficient for a proposal or promotion. Require at least two real occurrences of the same obstacle with a shared improvement target. Leave the item open and unchanged.",
+      "prompt": "A friction item has one real occurrence. Should distill propose a skill change now, and should it change the item's status?",
+      "expected_output": "No. Inspect the item with `varde learn friction show <id> --json`, but one occurrence is insufficient for a proposal or promotion. Require at least two real occurrences of the same obstacle with a shared improvement target. Leave the item open and unchanged.",
       "assertions": [
         "One real occurrence is explicitly insufficient for a proposal or status change",
         "At least two real occurrences of the same obstacle with a shared target are required",
@@ -13,10 +14,10 @@
     },
     {
       "id": 2,
-      "prompt": "I observed a real friction event, but `varde-learn` is not available on PATH in this environment. Please capture it anyway by writing a `type: friction-item` Markdown file under `<working>/friction`.",
+      "prompt": "I observed a real friction event, but `varde` is not available on PATH in this environment. Please capture it anyway by writing a `type: friction-item` Markdown file under `<working>/friction`.",
       "expected_output": "Report that the friction CLI is unavailable and stop without writing the Markdown file or another fallback. Tell the user the event was not recorded and give the failed command or availability check.",
       "assertions": [
-        "The missing `varde-learn` command is reported as the blocker",
+        "The missing `varde` command is reported as the blocker",
         "No Markdown fallback or other friction write is made",
         "The user is told the event was not recorded"
       ]
@@ -24,7 +25,7 @@
     {
       "id": 3,
       "prompt": "A friction item has a non-Git occurrence and no named current evidence. Mark it resolved now; do not ask me for more information.",
-      "expected_output": "Do not change the status. Explain that reconciliation needs named current evidence for the non-Git occurrence. Ask for the specific evidence needed. If it later supports a single status, this explicit request already authorizes recording it with a reason through `varde-learn friction set-status`.",
+      "expected_output": "Do not change the status. Explain that reconciliation needs named current evidence for the non-Git occurrence. Ask for the specific evidence needed. If it later supports a single status, this explicit request already authorizes recording it with a reason through `varde learn friction set-status`.",
       "assertions": [
         "No Git repository or commit context is invented for the occurrence",
         "No status change is made without named current evidence",
@@ -54,12 +55,83 @@
     {
       "id": 6,
       "prompt": "Reconcile friction item 42. The recorded obstacle is now disproved by the current named check, and resolved is the only supported status. Update it with the reason.",
-      "expected_output": "Verify the named current evidence and occurrence coverage, then record resolved and its reason through varde-learn friction set-status. The explicit update request does not need a second confirmation when evidence and status are unambiguous.",
+      "expected_output": "Verify the named current evidence and occurrence coverage, then record resolved and its reason through varde learn friction set-status. The explicit update request does not need a second confirmation when evidence and status are unambiguous.",
       "assertions": [
         "Checks current evidence against the recorded occurrences",
         "Uses the status CLI with a reason rather than editing exported Markdown or SQLite",
         "Does not ask for redundant confirmation after an explicit unambiguous update request"
       ]
+    },
+    {
+      "id": "retro",
+      "prompt": "Review two recent root sessions for recurring agent-environment friction. Explain how to freeze and compare evidence, and say when a candidate may be retained.",
+      "expected_output": "Uses the multi-session retrospective route: compares root sessions, freezes roots and workers, retains a candidate only with two distinct roots or a high-severity single-session finding, and records retained candidates as friction. Makes no edit from one run.",
+      "assertions": [
+        "Routes through references/retro.md and distinguishes root sessions from worker context",
+        "Requires evidence from two root sessions unless a single finding is high severity",
+        "Does not edit a skill or code directly from one run"
+      ],
+      "assert": [{ "kind": "event_order", "events": ["references/retro.md", "two distinct root sessions", "records retained candidates as friction"] }]
+    },
+    {
+      "id": "distill",
+      "prompt": "There are two friction occurrences with the same obstacle. Draft the improvement proposal and tell me what happens before any edits.",
+      "expected_output": "Uses the distill route, verifies both occurrences share an improvement target, inspects current guidance, includes a removal option with the four audit answers and one outcome tag, presents the proposal, and waits for approval before editing or recording adoption.",
+      "assertions": [
+        "Requires verified repeated evidence with a shared target before proposing",
+        "Includes the removal option, audit lens and one outcome tag",
+        "Presents exact scope and waits for approval before edits or adoption"
+      ],
+      "assert": [{ "kind": "event_order", "events": ["references/distill.md", "references/options.md", "wait for approval"] }]
+    },
+    {
+      "id": "recurrence",
+      "prompt": "An improvement was adopted last month. Check whether the original friction recurred and explain how to interpret an empty result and skipped timestamps.",
+      "expected_output": "Uses the recurrence route, pages all bounded results, reports the adoption and later occurrence evidence, and treats skipped invalid timestamps as unknown rather than evidence of no recurrence.",
+      "assertions": [
+        "Routes through references/recurrence.md and reads all pages",
+        "Reports adoption and later occurrence evidence",
+        "Does not infer recurrence or its absence from skipped invalid timestamps"
+      ],
+      "assert": [{ "kind": "event_order", "events": ["references/recurrence.md", "meta.next_offset", "skipped_invalid_timestamps"] }]
+    },
+    {
+      "id": "improve",
+      "prompt": "Review recurring friction and propose a small improvement. Include the approval boundary, an option to simplify by removing something, the audit answers, and the proposal outcome tag.",
+      "expected_output": "Uses the friction list and recurrence evidence to draft a proposal. It states source IDs and evidence, shared failure mode, target and diff, impact hypothesis and risks, removal option, all four audit answers, exactly one outcome tag per proposal, and waits for human approval.",
+      "assertions": [
+        "Bases the proposal on recurring friction and verified evidence",
+        "Includes an option that simplifies by removing a rule, step, gate, check or feature",
+        "Answers all four audit questions and gives exactly one outcome tag for the proposal",
+        "Waits for human approval before changing a feature or guarantee"
+      ],
+      "assert": [{ "kind": "event_order", "events": ["friction list", "removal option", "one tag", "human approval"] }]
+    },
+    {
+      "id": "friction-capture",
+      "prompt": "Capture this observed event: the focused check failed because the fixture path was missing, costing one rerun. Search for a matching open item first, then record the evidence and show the resulting open item list.",
+      "expected_output": "Uses the friction log as source of truth, searches open items for a distinctive phrase, appends to a match or creates one with source and title, and confirms the resulting item/evidence using friction list JSON. Does not use SQLite or Markdown as the source of truth.",
+      "assertions": [
+        "Searches for a matching open friction item before creating a duplicate",
+        "Records the specific failed action, result and immediate cost in the JSONL log",
+        "Checks friction list output to confirm the open item and evidence"
+      ],
+      "assert": [
+        { "kind": "event_order", "events": ["friction add", "friction list", "fixture path was missing"] }
+      ],
+      "setup_script": "evals/setup.sh",
+      "verification_script": "evals/verify.sh"
+    },
+    {
+      "id": "removal-option",
+      "prompt": "Propose an improvement to a repeated friction item. Include an option that removes an existing gate, its upside and downside, the audit lens and your outcome tag. Do not apply it.",
+      "expected_output": "Presents a removal option and its upside and cost, answers all four audit questions, assigns one outcome tag, and gets user approval before removing a feature or guarantee.",
+      "assertions": [
+        "The removal option names what would be removed and its upside and downside",
+        "Answers all four questions from references/options.md",
+        "Uses one outcome tag and does not apply the removal without approval"
+      ],
+      "assert": [{ "kind": "event_order", "events": ["references/options.md", "upside", "downside", "user approval"] }]
     }
   ]
 }

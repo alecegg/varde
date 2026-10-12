@@ -34,8 +34,8 @@ done
     done
 } > "$repo_root/src/lib.rs"
 
-varde-code build --repo-root "$repo_root" >/dev/null
-varde-code context_pack --json \
+varde map build --repo-root "$repo_root" >/dev/null
+varde map context_pack --json \
     "{\"repoRoot\":\"$repo_root\",\"query\":\"auth refresh\",\"resultsLimit\":2}" \
     > "$result_file"
 
@@ -55,4 +55,4 @@ assert len(envelope.get("data", {}).get("files", [])) == 2, "resultsLimit was no
 PY
 
 handle="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["meta"]["toz"]["handle"])' "$result_file")"
-varde-toz query --handle "$handle" --lines 21:21 >/dev/null
+varde run query --handle "$handle" --lines 21:21 >/dev/null

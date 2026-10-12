@@ -19,7 +19,7 @@ for repo in "${repos[@]}"; do
     continue
   fi
   clear_varde_cache "$repo"
-  cold_ms=$(time_ms "$BIN" build --repo-root "$repo_path")
-  warm_ms=$(time_ms "$BIN" build --repo-root "$repo_path")
+  cold_ms=$(time_ms "${MAP[@]}" build --repo-root "$repo_path")
+  warm_ms=$(time_ms "${MAP[@]}" build --repo-root "$repo_path")
   printf '%s\t%sms\t%sms\n' "$repo" "$cold_ms" "$warm_ms"
 done

@@ -23,7 +23,7 @@ key=$(printf '%s' "$mode|$repo_root|$json" | shasum -a 1 | cut -d' ' -f1)
 state_file="$state_dir/$key"
 
 clear_varde_cache "$cache_name"
-cmd=("$BIN" "$mode" --json "$json")
+cmd=("${MAP[@]}" "$mode" --json "$json")
 cold=$(time_ms "${cmd[@]}")
 warm=$(min_of_3 "${cmd[@]}")
 

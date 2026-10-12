@@ -674,6 +674,11 @@ fn open_or_build(repo_root: &str, scope: &Scope) -> Result<rusqlite::Connection>
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    // Record the source root here, where this path brings the index folder
+    // into being. The watcher and build-on-read reach the index through
+    // `ensure_fresh` → this function, never through `build::run_with_force`;
+    // without this call their folders would stay `unknown` to `prune` forever.
+    crate::db::path::record_source_root(&db_path, Path::new(repo_root))?;
     if !db_path.exists() {
         return build_or_open(repo_root, scope, &db_path);
     }
@@ -1538,6 +1543,62 @@ mod tests {
             let r_b1 = rev_of(&root, &b_str);
             assert!(r_a1 > r_a0, "changed file's rev bumps");
             assert_eq!(r_b0, r_b1, "unchanged file's rev is untouched");
+
+            let _ = std::fs::remove_file(db_of(&root));
+            let _ = std::fs::remove_dir_all(&root);
+        });
+    }
+
+    #[test]
+    fn churn_matches_recompute() {
+        with_isolated_home("churn-amend", || {
+            let root = temp_root("churn-amend");
+            run_git(&root, &["init", "-q"]);
+            run_git(&root, &["config", "user.email", "test@example.com"]);
+            run_git(&root, &["config", "user.name", "Churn Test"]);
+            let file = root.join("a.rs");
+            let path_str = file.to_string_lossy().into_owned();
+            for i in 0..3 {
+                std::fs::write(&file, format!("fn f{i}() {{}}\n")).expect("writes");
+                run_git(&root, &["add", "a.rs"]);
+                run_git(&root, &["commit", "-q", "-m", &format!("commit {i}")]);
+            }
+            build(&root);
+
+            // Replace the latest a.rs commit with one that only changes b.rs.
+            // The fresh count for a.rs drops from three commits to two.
+            std::fs::write(root.join("b.rs"), "fn b() {}\n").expect("writes b.rs");
+            run_git(&root, &["add", "b.rs"]);
+            run_git(
+                &root,
+                &[
+                    "commit",
+                    "--amend",
+                    "-q",
+                    "--only",
+                    "-m",
+                    "replace latest commit",
+                    "--",
+                    "b.rs",
+                ],
+            );
+
+            let expected =
+                crate::churn::commit_counts_batch(std::slice::from_ref(&path_str), &root);
+            let conn = crate::db::open(&db_of(&root)).expect("db opens");
+            refresh_churn(&conn, &[Slice::Churn], root.to_str().unwrap()).expect("churn refreshes");
+            let stored: i64 = conn
+                .query_row(
+                    "SELECT churn FROM files WHERE path = ?1",
+                    [&path_str],
+                    |row| row.get(0),
+                )
+                .expect("churn reads");
+            assert_eq!(
+                stored,
+                i64::from(expected[&path_str]),
+                "refresh_churn stores a fresh commit count after amend"
+            );
 
             let _ = std::fs::remove_file(db_of(&root));
             let _ = std::fs::remove_dir_all(&root);
@@ -2440,8 +2501,9 @@ mod tests {
                 "untouched e.ts edges keep their rowids (not rewritten)"
             );
 
-            // The changed file x.ts's reverse-dependent callers (a.ts, b.ts)
-            // got rewritten: their old rowids are gone.
+            // Reverse dependents are in the refresh scope, but unchanged edge
+            // rows can retain rowids. Their semantic rows must still match a
+            // full build after x.ts changes its exported names.
             for (path, name) in [(&a, "a.ts"), (&b, "b.ts")] {
                 let old = before
                     .get(path.to_str().unwrap())
@@ -2451,12 +2513,49 @@ mod tests {
                     .get(path.to_str().unwrap())
                     .cloned()
                     .unwrap_or_default();
-                assert!(
-                    old.iter().all(|id| !new.contains(id)),
-                    "{name} edges rewritten (old rowids dropped): old={old:?} new={new:?}"
-                );
                 assert_eq!(old.len(), new.len(), "{name} edge count preserved");
             }
+
+            let edge_content = |root: &std::path::Path, path: &str| {
+                let conn = crate::db::open(&db_of(root)).expect("db opens");
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT ff.path, fe.name, tf.path, te.name, e.kind, e.resolved
+                     FROM resolved_edges e
+                     JOIN files ff ON ff.id=e.from_file_id
+                     LEFT JOIN entities fe ON fe.id=e.from_entity_id
+                     LEFT JOIN files tf ON tf.id=e.to_file_id
+                     LEFT JOIN entities te ON te.id=e.to_entity_id
+                     WHERE ff.path=?1 ORDER BY e.kind, fe.name, tf.path, te.name, e.resolved",
+                    )
+                    .expect("edge content statement");
+                stmt.query_map([path], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, Option<String>>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, i64>(5)?,
+                    ))
+                })
+                .expect("edge content query")
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .expect("edge rows")
+            };
+            let incremental_a = edge_content(&root, a.to_str().unwrap());
+            let incremental_b = edge_content(&root, b.to_str().unwrap());
+            build(&root);
+            assert_eq!(
+                incremental_a,
+                edge_content(&root, a.to_str().unwrap()),
+                "a.ts edge content matches full build"
+            );
+            assert_eq!(
+                incremental_b,
+                edge_content(&root, b.to_str().unwrap()),
+                "b.ts edge content matches full build"
+            );
 
             let _ = std::fs::remove_file(db_of(&root));
             let _ = std::fs::remove_dir_all(&root);
@@ -2692,6 +2791,9 @@ mod tests {
     /// and reinserts every edge).
     #[test]
     fn scoped_path_falls_back_to_full_rewrite_on_large_stale_set() {
+        let _refresh_guard = crate::SCOPED_EDGE_REFRESH_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         with_isolated_home("edges-cap", || {
             let root = temp_root("edges-cap");
             // 510 files: f000 imports f001 (so it has an edge row); f002..
@@ -2731,9 +2833,16 @@ mod tests {
                 )
                 .expect("f000 edge rowid")
             };
+            let scoped_calls_before =
+                crate::SCOPED_EDGE_REFRESH_CALLS.load(std::sync::atomic::Ordering::Relaxed);
 
             ensure_fresh(&[Slice::Edges], root.to_str().unwrap(), &Scope::Repo)
                 .expect("large stale set falls back to the full path, no error");
+            assert_eq!(
+                scoped_calls_before,
+                crate::SCOPED_EDGE_REFRESH_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+                "the stale-set cap must bypass the scoped refresh engine"
+            );
 
             let rowid_after: i64 = {
                 let conn = crate::db::open(&db_of(&root)).expect("db opens");
@@ -2745,10 +2854,19 @@ mod tests {
                 )
                 .expect("f000 edge rowid")
             };
-            assert_ne!(
+            assert_eq!(
                 rowid_before, rowid_after,
-                "full path rewrote f000's edge rows (new rowids) — the cap fired"
+                "the stale-set cap fired, while unchanged f000 edge rows were retained"
             );
+            let conn = crate::db::open(&db_of(&root)).expect("db opens");
+            let stamped: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM files WHERE edges_built_rev = rev",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("fresh edge stamps");
+            assert_eq!(stamped, 510, "the full refresh stamps every file");
 
             let _ = std::fs::remove_file(db_of(&root));
             let _ = std::fs::remove_dir_all(&root);
@@ -2831,17 +2949,68 @@ mod tests {
             );
 
             // The scoped path ran inside run_mode: b.ts (unrelated) kept its
-            // edge rowids, while a.ts (a reverse-dependent of the edited x.ts)
-            // was rewritten.
+            // edge rowids. a.ts is a reverse-dependent whose resolved edges
+            // must match a full rebuild.
             let b_after = rowids_of(&root, b.to_str().unwrap());
             assert_eq!(
                 b_before, b_after,
                 "unrelated b.ts edges untouched by the scoped freshen"
             );
-            let a_after = rowids_of(&root, a.to_str().unwrap());
-            assert!(
-                a_before.iter().all(|id| !a_after.contains(id)),
-                "a.ts (reverse-dependent) rewritten: {a_before:?} -> {a_after:?}"
+            let a_content = {
+                let conn = crate::db::open(&db_of(&root)).expect("db opens");
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT ff.path, fe.name, tf.path, te.name, e.kind, e.resolved
+                     FROM resolved_edges e JOIN files ff ON ff.id=e.from_file_id
+                     LEFT JOIN entities fe ON fe.id=e.from_entity_id
+                     LEFT JOIN files tf ON tf.id=e.to_file_id
+                     LEFT JOIN entities te ON te.id=e.to_entity_id
+                     WHERE ff.path=?1 ORDER BY e.kind, fe.name, tf.path, te.name, e.resolved",
+                    )
+                    .expect("edge content statement");
+                stmt.query_map([a.to_str().unwrap()], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, Option<String>>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, i64>(5)?,
+                    ))
+                })
+                .expect("edge content query")
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .expect("edge rows")
+            };
+            build(&root);
+            let conn = crate::db::open(&db_of(&root)).expect("db opens");
+            let mut stmt = conn
+                .prepare(
+                    "SELECT ff.path, fe.name, tf.path, te.name, e.kind, e.resolved
+                 FROM resolved_edges e JOIN files ff ON ff.id=e.from_file_id
+                 LEFT JOIN entities fe ON fe.id=e.from_entity_id
+                 LEFT JOIN files tf ON tf.id=e.to_file_id
+                 LEFT JOIN entities te ON te.id=e.to_entity_id
+                 WHERE ff.path=?1 ORDER BY e.kind, fe.name, tf.path, te.name, e.resolved",
+                )
+                .expect("edge content statement");
+            let rebuilt_a = stmt
+                .query_map([a.to_str().unwrap()], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, Option<String>>(3)?,
+                        r.get::<_, i64>(4)?,
+                        r.get::<_, i64>(5)?,
+                    ))
+                })
+                .expect("edge content query")
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .expect("edge rows");
+            assert_eq!(
+                a_content, rebuilt_a,
+                "a.ts reverse-dependent edge content matches full build"
             );
 
             let _ = std::fs::remove_file(db_of(&root));

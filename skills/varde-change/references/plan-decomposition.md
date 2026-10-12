@@ -1,83 +1,23 @@
 # Task decomposition
 
-Break a settled spec and its plan-level acceptance criteria (`plan.md`, or the
-minimal plan synthesized for ad-hoc work) into `tasks/<task-id>.md` files from
-`assets/TASK-TEMPLATE.md`. Run once while finalizing a plan, or at build for
-an ad-hoc plan without tasks; a single bounded outcome writes one task directly from that template instead
-(plan AC → its Verification), skipping the edge-case checks below.
+- Turn a settled plan's acceptance criteria into the smallest useful tasks: one task for a single bounded outcome, otherwise a dependency DAG with one observable outcome per task. Split only when a task has independent value or one builder cannot complete it safely.
+- State each task as what to build, `#### Acceptance criteria` (assert preferred), `depends_on`, `owns`, `status`, and a short `#### Progress`.
+- `owns` holds the coarsest directory, glob, or exact file pattern that does not overlap a same-wave task, including tests and helpers; list other paths a task may touch in plan `shared:`. Use `varde map` for consumers and generated/deleted paths and their readers, and add dependencies for
+  consumers.
+- Execution-wave computes overlap by glob intersection; keep genuinely overlapping tasks in separate waves.
+- Keep dependency and risk context and explicit checks in each task.
+- No workspace-wide or full-suite asserts in task files; the integration gate owns them.
+- Follow `assets/TASK-TEMPLATE.md`; validate tasks before approval with
+  `varde plan validate`.
+- An unsettled interface: stop decomposing; return to the plan growth loop
+  (plan mode) or hand off to `varde-change plan`.
 
-## 1. Check the edge cases
-
-Check these:
-
-| The goal | Decompose as |
-|---|---|
-| Names a shared symbol, type, or interface (with `varde-code`, run `symbol_blast_radius` rather than guessing from package structure) | Wide refactor: expand, N migrate batches, contract, plus an integrate task if batches can't stay green |
-| Deletes a generated or intermediate file another task may read | Deletion: grep draft task bodies for the path, tests for hardcoded paths under the deleted dir, and dependents/importers of the deleted source |
-| Creates or renames a path another task body mentions | File pointer: grep draft task bodies for the new path and add `depends_on` |
-| Has an unsettled interface | Stop decomposing; in plan mode return to the plan growth loop, otherwise hand off to `varde-change plan` |
-
-Investigate codebase unknowns directly; `kind: research` is only for lasting
-external output. Add a doc task (writing `<knowledge>/reference/` or
-`<knowledge>/flows/`, depending on all implementation tasks) only when asked.
-
-## 2. Build the breakdown
-
-Require per task (no step count or named test function):
-
-- an observable outcome;
-- expected files touched, if known; otherwise say so and let the executor find
-  them;
-- dependencies and risks;
-- the `assert:`/`retrieve:` checks proving the slice works;
-- `#### Test approach`: one profile (`tdd`, `regression`,
-  `characterization`, `smoke`, or `not-applicable`) and a one-line rationale.
-
-Profile authority, highest first:
-
-1. Direct user instructions.
-2. Repository policy.
-3. The default: test-first for behavior changes.
-
-Name the directive in the rationale when one set the profile. Any other
-alternative (characterization for fragile legacy code, smoke for packaging)
-needs independent reviewer approval per `references/review-gates.md`.
-
-## 3. Declare ownership
-
-- Declare every written path in `modifies`, `creates`, and `renames` (each
-  rename as `old/path -> new/path`).
-- Name every shared database, snapshot, or other external state the task or
-  its checks use or change in `verification_resources`.
-- The plan lists generated outputs and their generator commands; no task owns
-  them.
-- Use `[]` for an empty category; omit a field whose contents are unknown so
-  automatic scheduling stays serial.
-- A behavior-preserving restructuring task sets `posture: refactor` so
-  `varde-workflow execution-wave` isolates it in a worktree.
-- A `spike` posture task owns no paths by design: set `kind: spike` with
-  empty `modifies`/`creates`/`renames` so `varde-workflow transition` skips
-  the ownership check instead of rejecting it.
-
-## 4. Check each task's size
-
-A task is the smallest execution-safe unit. Rewrite and re-check any task that
-fails one of these:
-
-- Exactly one public behavior or workflow rule changes, with one observable
-  outcome and no open choices.
-- Estimated peak context is 100k or less: `20k + 3 × (bytes of files it must
-  read ÷ 4) + 5k per verification run`. Include each estimate in the breakdown
-  table.
-- A schema/persistence change names the file where the schema lives, found by
-  reading, not analogy.
-
-## 5. Present and record
-
-1. Interactive: show the breakdown as a table and pause once for missing,
-   wrong-scoped, or badly split tasks. Unattended runs skip the pause.
-2. Write each task from `assets/TASK-TEMPLATE.md` in the plan's `tasks/`
-   directory, with populated `modifies`, `creates`, `depends_on`, and
-   `status: todo`. Task IDs are kebab-case with no date prefix, unique across
-   every plan's `tasks/*.md`. Readiness is computed live from `depends_on`,
-   never stored.
+- Use a child dependency only when the whole task needs its predecessor.
+- `posture` is a builder load hint and does not affect scheduling.
+- Compare ownership with active plans and serialize or split shared writes.
+- Follow direct user instructions, then repository policy, then test-first for
+  behavior changes.
+- Before approval, check verification commands against the base and record expected failures and generated writes.
+- Present the breakdown for interactive review; unattended runs skip the pause.
+- Identify the longest dependency path and advance it when capacity is limited.
+- Use unique kebab-case task ids.

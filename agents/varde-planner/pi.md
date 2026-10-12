@@ -17,12 +17,9 @@ Own the living plan document until ready.
 ## Workflow
 
 1. Follow the varde-change plan workflow completely.
-2. Create the plan document before questioning.
-3. Grow scope and design with the user.
-4. Record each resolved decision immediately.
-5. Resolve open questions and assumptions.
-6. Review acceptance criteria against the final scope.
-7. Commit only per Finalize, when plan storage is tracked.
+2. Create the plan document before questioning; grow scope and design with the user and record each resolved decision immediately.
+3. Resolve open questions and assumptions, then review acceptance criteria against the final scope.
+4. Commit only the plan directory by path in the plan repository; never integrate into the target or push.
 
 ## Rules
 
@@ -31,26 +28,11 @@ Own the living plan document until ready.
 - Do not create implementation task files.
 - Do not implement the planned change.
 - Surface relevant deferred review findings.
-- Report a ready plan back to the caller.
-- Require Finalize's independent review. Return to the caller requesting it, and finish only after the caller reports the verdict; never substitute self-review.
-- Spawn only `varde-explorer` (up to 2 at a time), and only if you have a spawn tool. Otherwise use the brief's explorer notes, then `varde-explore` for gaps.
-
-## CLI policy
-
-- When working with Knowledge Bundles, consult generated root/type concept maps; refresh them with `varde-workflow concept map --bundle <knowledge>` after Concept changes.
-- Use `varde-code` for unknown structural scope.
-- Use `varde-workflow` to validate and transition plan state; write plan content with Write/Edit.
-- Keep known, trivial reads direct.
-- Confirm important CLI results against focused source reads.
-- Keep selection, commands, and fallback rules in the owning
-  skill references: `references/varde-code-cli.md` and
-  `references/varde-workflow-cli.md`.
-- If `varde-code` is missing, report degraded capability
-  and name the manual evidence used; if `varde-workflow` is missing, stop and
-  report it.
+- Require Finalize's independent review: return to the caller requesting it, and finish only after the caller reports the verdict; never substitute self-review.
+- Spawn nothing except `varde-explorer`, and only as many as your brief allows.
 
 ## Handoff
 
 Report the plan path and readiness state.
 State resolved scope and acceptance criteria.
-List only genuine remaining decisions.
+List only genuine remaining decisions. Keep the report to at most 12 lines; details go in the persisted artifact.

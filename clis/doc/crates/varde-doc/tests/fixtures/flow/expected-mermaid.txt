@@ -1,0 +1,190 @@
+%% varde-change
+flowchart TD
+  n0["SKILL.md (~575 tok)"]
+  n1["assets/PLAN-TEMPLATE.md (~544 tok)"]
+  n2["assets/TASK-TEMPLATE.md (~231 tok)"]
+  n3["references/build-execution.md (~1366 tok)"]
+  n4["references/build-finish.md (~1689 tok)"]
+  n5["references/build-micro-change.md (~619 tok)"]
+  n6["references/build-parallel.md (~645 tok)"]
+  n7["references/build-posture-debug.md (~989 tok)"]
+  n8["references/build-posture-refactor.md (~838 tok)"]
+  n9["references/build-recovery.md (~373 tok)"]
+  n10["references/build-worktree.md (~1818 tok)"]
+  n11["references/build.md (~2275 tok)"]
+  n12["references/orchestrate.md (~1758 tok)"]
+  n13["references/orchestration.md (~469 tok)"]
+  n14["references/plan-decomposition.md (~1039 tok)"]
+  n15["references/plan.md (~2806 tok)"]
+  n16["references/status.md (~238 tok)"]
+  n17["references/verify.md (~478 tok)"]
+  n18["references/workflow-state.md (~238 tok)"]
+  n19["scripts/plan-path.py"]
+  n20["scripts/select-plans.py"]
+  n21["scripts/worktree-cleanup.sh"]
+  n22["scripts/worktree-create.sh"]
+  n23["scripts/worktree-merge.sh"]
+  n24["scripts/worktree-permissions.py"]
+  n25["scripts/worktree-wave.sh"]
+  n26["references/review-gate-plan.md (~538 tok)"]
+  n27["references/review-gate-record.md (~544 tok)"]
+  n28["references/review-gate-worktree.md (~494 tok)"]
+  n29["references/review-gates.md (~1550 tok)"]
+  n30["references/varde-code-cli.md (~53 tok)"]
+  n31["references/varde-workflow-cli.md (~219 tok)"]
+  n32["scripts/risk-tier.py"]
+  n33(["#quot;What's in flight?#quot;, or an empty invocation — show curren..."])
+  n0 --> n33
+  n34(["Plan a new feature before building"])
+  n0 --> n34
+  n35(["Resume planning with no feature named"])
+  n0 --> n35
+  n36(["One task file assigned by an orchestrator (builder)"])
+  n0 --> n36
+  n37(["A settled single-outcome refactor"])
+  n0 --> n37
+  n38(["A settled single-outcome change that fits one task"])
+  n0 --> n38
+  n39(["A named plan, multiple dependent outcomes, or unresolved..."])
+  n0 --> n39
+  n40(["Diagnose why something fails, without fixing it"])
+  n0 --> n40
+  n41(["Fix a named bug or regression, no mode given"])
+  n0 --> n41
+  n42(["Report evidence for finished work without changing anything"])
+  n0 --> n42
+  n43(["Run a group of related plans end to end, in dependency order"])
+  n0 --> n43
+  n0 -.->|"Manage the change lifecycle"| n29
+  n33 --> n16
+  n34 --> n15
+  n35 --> n15
+  n36 --> n3
+  n37 --> n5
+  n37 --> n8
+  n38 --> n5
+  n39 --> n11
+  n40 --> n7
+  n41 --> n7
+  n42 --> n17
+  n43 --> n12
+  n0 -.->|"Gotchas"| n31
+  n0 -.->|"Gotchas"| n18
+  n3 -.->|"Separate execution checkout"| n10
+  n3 -.->|"First worker action"| n24
+  n3 -.->|"debug posture"| n7
+  n3 -.->|"refactor posture"| n8
+  n4 -->|"2. Review the implementation"| n29
+  n4 -.->|"Finish choices"| n23
+  n4 -.->|"Finish choices"| n10
+  n5 -.->|"Build a bounded change"| n10
+  n5 -.->|"Mechanical edits"| n29
+  n5 -->|"2. Edit, verify, complete / step 1: Run the contract's verification check..."| n10
+  n6 -->|"1. Start"| n25
+  n6 -->|"3. Verify integration"| n25
+  n6 -->|"4. Publish locally, record, and release"| n25
+  n6 -->|"4. Publish locally, record, and release / step 2: Run scripts/worktree-wave.sh release..."| n25
+  n7 -->|"Phase 6 — Cleanup"| n29
+  n8 -->|"Bootstrap / step 3: Use the fresh task worktree and appro..."| n10
+  n8 -->|"Integrate"| n10
+  n10 -->|"Task isolation and integration / step 2: Use references/build-parallel.md for..."| n6
+  n10 -.->|"Task isolation and integration / step 2: Use references/build-parallel.md for..."| n22
+  n10 -->|"Worker permission contract / step 1: Supply the absolute path to scripts/w..."| n24
+  n11 -.->|"An ad-hoc request with dependent outcomes"| n26
+  n11 -.->|"1. Choose a starting action"| n30
+  n11 -->|"2. Choose the execution location / step 1: Load references/build-worktree.md and..."| n10
+  n11 -.->|"3. Decompose and state a posture"| n14
+  n11 -.->|"4. Run tasks"| n3
+  n11 -.->|"4. Run tasks / step 3: Read references/build-recovery.md whe..."| n9
+  n11 -.->|"5. Finish"| n4
+  n11 -.->|"Select a plan / step 1: List. Run scripts/select-plans.py --w..."| n20
+  n11 -.->|"Dispatch tasks"| n13
+  n11 -.->|"Choose a strategy"| n6
+  n11 -.->|"Task-file ownership"| n10
+  n11 -.->|"Dispatch a builder / step 1: Obtain any missing pre-edit verdict p..."| n29
+  n11 -.->|"Dispatch a builder / step 3: Brief the builder with:"| n3
+  n11 -.->|"Accept a result"| n9
+  n12 -->|"Feature worktree / step 1: Load references/build-worktree.md and..."| n10
+  n12 -->|"Finish / step 2: Review the group. After all children..."| n29
+  n12 -->|"Finish / step 6: Offer one choice. Give the clickable..."| n4
+  n15 -->|"First turn / step 1: Pick a temporary slug from the prompt..."| n19
+  n15 -.->|"The growth loop"| n30
+  n15 -.->|"External interface check"| n30
+  n15 -->|"Finalize / step 1: Rename and validate."| n19
+  n15 -.->|"Finalize / step 2: Split or decompose before review. For..."| n14
+  n15 -.->|"Finalize / step 3: Establish review location and review...."| n10
+  n15 -.->|"Finalize / step 3: Establish review location and review...."| n26
+  n15 -.->|"Finalize / step 3: Establish review location and review...."| n29
+  n15 -->|"Split into child plans / step 2: Establish one visible group plan work..."| n10
+  n16 ==>|"Change status"| n15
+  n26 -->|"1. Initialize one aggregate subject"| n32
+  n29 -.->|"2. Initialize the subject"| n26
+  n29 -.->|"2. Initialize the subject"| n28
+  n29 -->|"2. Initialize the subject / step 1: Compute the risk tier: run"| n32
+  n44[["agent: review"]]
+  n4 -->|"2. Review the implementation"| n44
+  n45[["agent: builder"]]
+  n4 -.->|"3. Fix findings"| n45
+  n46[["varde-change plan"]]
+  n11 ==>|"An uncertain change"| n46
+  n11 -->|"4. Run tasks / step 2: Obtain any missing pre-edit verdict (..."| n45
+  n11 -.->|"Dispatch a builder / step 3: Brief the builder with:"| n45
+  n47[["varde-change build"]]
+  n12 -.->|"Names a plan without shape: group"| n47
+  n12 -->|"Delegate children"| n47
+  n48[["varde-change builds"]]
+  n12 -->|"Finish / step 2: Review the group. After all children..."| n48
+  n13 -->|"Pre-explore"| n45
+  n14 ==>|"Has an unsettled interface"| n46
+  n17 ==>|"Verify"| n47
+  n29 -->|"3. Get the pre-edit verdict / step 1: Give an agent with a clean, independe..."| n44
+
+%% varde-docs
+flowchart TD
+  n0["SKILL.md (~226 tok)"]
+  n1["references/refresh.md (~456 tok)"]
+  n2["references/spec-format.md (~817 tok)"]
+  n3["references/spec.md (~1435 tok)"]
+  n4["scripts/source-hash.py"]
+  n5["references/review-gate-plan.md (~538 tok)"]
+  n6["references/review-gate-record.md (~544 tok)"]
+  n7["references/review-gate-worktree.md (~494 tok)"]
+  n8["references/review-gates.md (~1550 tok)"]
+  n9["references/varde-code-cli.md (~53 tok)"]
+  n10["scripts/risk-tier.py"]
+  n11(["User-facing: README.md, docs/*.md, CHANGELOGs, release no..."])
+  n0 --> n11
+  n12(["A generated domain specification under #lt;knowledge#gt;/specs/..."])
+  n0 --> n12
+  n0 -.->|"Maintain project documentation"| n8
+  n11 --> n1
+  n12 --> n3
+  n1 -.->|"Workflow / step 2: When mapping docs to source is unclea..."| n9
+  n2 -->|"Computing source_hash"| n4
+  n3 -->|"Workflow / step 2: Generate domain documents per referen..."| n2
+  n3 -->|"Workflow / step 2: Generate domain documents per referen..."| n9
+  n3 -->|"Workflow / step 5: Render the index after domain generat..."| n2
+  n3 -.->|"Architecture"| n2
+  n5 -->|"1. Initialize one aggregate subject"| n10
+  n8 -.->|"2. Initialize the subject"| n5
+  n8 -.->|"2. Initialize the subject"| n7
+  n8 -->|"2. Initialize the subject / step 1: Compute the risk tier: run"| n10
+  n13[["agent: builder"]]
+  n3 -->|"Delegating domains"| n13
+  n14[["agent: review"]]
+  n8 -->|"3. Get the pre-edit verdict / step 1: Give an agent with a clean, independe..."| n14
+
+%% varde-flow-gaps
+flowchart TD
+  n0["SKILL.md (~57 tok)"]
+  n1["references/alpha.md (~24 tok)"]
+  n2["references/beta.md (~16 tok)"]
+  n3["references/orphan.md (~8 tok)"]
+  n4(["Plan the work"])
+  n0 --> n4
+  n5(["Check the work"])
+  n0 --> n5
+  n4 --> n1
+  n5 --> n2
+  n1 -->|"Alpha"| n2
+  n2 -.->|"Beta"| n1

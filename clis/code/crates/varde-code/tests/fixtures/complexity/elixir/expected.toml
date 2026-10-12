@@ -1,0 +1,290 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 3
+cyclomatic = 3
+matrix = "if-else-if-else"
+rule = "spec:176-179, 491-518; root `if` +1, nested `if` in its else is one hybrid else-if +1, final else +1"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 5
+cyclomatic = 5
+matrix = "else-if-body-nesting"
+rule = "spec:176-179, 491-518; three `cond` conditions +1 each and the `if` inside a later alternative +2 at hybrid nesting depth"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:176-179, 491-518; root `if` +1, plain else +1, and nested body `if` +2"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer `if` +1 and nested `if` +2"
+
+[[case]]
+callable = "loops"
+cognitive = 0
+cyclomatic = 2
+matrix = "loops"
+rule = "spec:155-168; Elixir `for` is a comprehension, treated as shorthand with no cognitive increment; pre-change cyclomatic counts the legacy `for` event"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 4
+matrix = "switch-once"
+rule = "spec:190-205, 491-500; `case` is the switch analogue and adds once; three `case_item` arms remain cyclomatic"
+
+[["n/a"]]
+matrix_id = "ternary"
+reason = "Elixir has no ternary operator; `if` is a macro with do/else branches, not a ternary expression"
+
+[[case]]
+callable = "catch_once"
+cognitive = 3
+cyclomatic = 4
+matrix = "catch-once"
+rule = "spec:190-203, 491-518; two rescue clauses and one catch clause each add one; `try` and `after` add zero"
+
+[[case]]
+callable = "try_finally_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "try-finally-zero"
+rule = "spec:190-203; `try` and `after` are ignored"
+
+[["n/a"]]
+matrix_id = "early-return-zero"
+reason = "Elixir has no return statement or early-return keyword; function results are expressions"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229; one same-operator `&&` run adds one"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229; mixed `&&` and `||` form two runs"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256; outer and inner `&&` runs are separated by `not`, adding one each"
+
+[[case]]
+callable = "logical_run_across_lambda"
+cognitive = 2
+cyclomatic = 2
+matrix = "logical-run-across-lambda"
+rule = "spec:207-229, 267-291; outer and lambda `&&` runs score separately"
+
+[[case]]
+callable = "<anonymous>@85:27"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:207-229, 267-291; the lambda's own `&&` is one logical run"
+
+[["n/a"]]
+matrix_id = "null-coalescing-zero"
+reason = "Elixir has no null-coalescing operator (`||` is a binary logical operator, not null coalescing)"
+
+[[case]]
+callable = "lambda_nesting"
+cognitive = 2
+cyclomatic = 1
+matrix = "lambda-nesting"
+rule = "spec:267-291, 491-518; the `if` inside a lambda adds one nested-callable level"
+
+[[case]]
+callable = "<anonymous>@90:22"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; the lambda's top-level `if` adds one"
+
+[["n/a"]]
+matrix_id = "named-nested-function"
+reason = "Elixir forbids defining `def`/`defp` inside a function body; `fn` is an anonymous function and is covered by lambda-nesting"
+
+[[case]]
+callable = "class_in_method"
+cognitive = 2
+cyclomatic = 1
+matrix = "class-in-method"
+rule = "spec:267-291, 491-518; the nested module function's `if` rolls up one nested-callable level"
+
+[[case]]
+callable = "inner"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; nested module function has its own top-level `if`"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "condition-nesting"
+rule = "spec:491-518; outer condition `if` +1 and the nested condition `if` +2"
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "Appendix A's compensating usage applies only to JavaScript/TypeScript and Python; Elixir has no corresponding rule"
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "Appendix A's compensating callback exception applies only to JavaScript/TypeScript and Python"
+
+[["n/a"]]
+matrix_id = "goto-or-labeled-jump"
+reason = "Elixir has no goto labels or labeled break/continue constructs"
+
+[["n/a"]]
+matrix_id = "multi-level-break"
+reason = "Elixir comprehensions have no numbered or labeled break/continue statements"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 3
+cyclomatic = 2
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-518; `if` +1, `else` +1, and the recursive method +1"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-518; `if` +1 and two self-calls still produce one recursion increment"
+
+[[case]]
+callable = "recursion_qualified_self"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-qualified-self"
+rule = "spec:230-237; `__MODULE__.function/1` resolves to the enclosing module and adds one"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-other-receiver"
+rule = "spec:230-237; a remote call through another receiver is not a self-cycle"
+
+[[case]]
+callable = "recursion_overload_delegate"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-overload-delegate"
+rule = "spec:230-237; a call from arity one to the same name at arity two is not recursion"
+
+[[case]]
+callable = "recursion_in_closure"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-in-closure"
+rule = "spec:230-237, 267-291; the enclosing named function receives one marker for its recursive call in a lambda"
+
+[[case]]
+callable = "recursion_cycle_a"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237; each member of the same-file function cycle receives one marker"
+
+[[case]]
+callable = "recursion_cycle_b"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237; second callable in the same-file cycle receives one marker"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237; unresolved peer function is absent from this one-file fixture, so it creates no cycle"
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "Elixir has no source preprocessor or #if/#ifdef directives"
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Elixir has no C preprocessor or extern-C linkage syntax"
+
+[[case]]
+callable = "comprehension_or_query"
+cognitive = 1
+cyclomatic = 4
+matrix = "comprehension-or-query"
+rule = "spec:155-168, 207-229; the `for` comprehension and its filters are shorthand; the `&&` sequence adds one"
+
+[[case]]
+callable = "spec_example_small"
+cognitive = 1
+cyclomatic = 5
+matrix = "spec-example-small"
+rule = "spec:196-205, 491-501; Elixir `case` is the switch analogue and contributes one cognitive point"
+
+[["n/a"]]
+matrix_id = "spec-example-large"
+reason = "The example requires nested imperative loops with a labeled `continue`; Elixir offers comprehensions and no break/continue jump, so a faithful structural rendering is unavailable"
+
+[[case]]
+callable = "spec_example_large"
+cognitive = 1
+cyclomatic = 3
+rule = "spec:155-168, 491-518; helper row: `for` is shorthand and its body `if` adds one"
+
+[[case]]
+callable = "with_else"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:176-179, 491-501; `with ... else` alternatives use the nearest conditional hybrid analogy; its legacy case-arm flow remains cyclomatic"
+
+[[case]]
+callable = "guard_legacy_only"
+cognitive = 1
+cyclomatic = 3
+rule = "spec:207-229, 491-518; the function-head guard is legacy-only; the body `if` adds one"
+
+[[case]]
+callable = "anonymous_with_logical"
+cognitive = 2
+cyclomatic = 1
+rule = "spec:207-229, 267-291; nested lambda contains separate `&&` and `||` runs"
+
+[[case]]
+callable = "<anonymous>@94:4"
+cognitive = 2
+cyclomatic = 3
+rule = "spec:207-229, 267-291; the lambda's mixed logical operators form two runs"
+
+[[case]]
+callable = "multi_clause_self"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237; each same-name/same-arity clause is a separate callable and its self-call contributes one"
+
+[[case]]
+callable = "<anonymous>@155:22"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:230-237, 267-291; recursive-call attribution belongs to the enclosing named function, not its lambda"
+
+[[case]]
+callable = "guard_nested_nesting"
+cognitive = 3
+cyclomatic = 5
+rule = "spec:491-518; outer `if` +1 and nested `case` +2; the guard has no cognitive increment"

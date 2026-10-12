@@ -18,6 +18,7 @@ pub const FUNCTION_SCOPES: &[&str] = &[
     "function_declaration",
     "function_expression",
     "arrow_function",
+    "generator_function",
     "method_definition",
     "generator_function_declaration",
 ];
@@ -45,6 +46,13 @@ pub fn visit(
     kind: &str,
     ctx: &mut ExtractCtx,
 ) {
+    if FUNCTION_SCOPES.contains(&kind) && is_compensating_usage(node) {
+        ctx.push(
+            EntityKind::ControlFlow,
+            "compensating_usage".to_string(),
+            node,
+        );
+    }
     if visit_part_1(node, kind, ctx) {
         return;
     }
@@ -465,18 +473,55 @@ fn visit_part_9(
                 "if_statement"
             };
             ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            if let Some(consequence) = node.field("consequence")
+                && let Some(event) = ctx.out.last_mut()
+            {
+                let span = crate::extract::span_of(&consequence);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
+            if !is_else_if(node)
+                && let Some(alternative) =
+                    node.children().find(|child| child.kind() == "else_clause")
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "legacy_nesting".to_string(),
+                    &alternative,
+                );
+            }
+        }
+        "else_clause" => {
+            if let Some(alternative) = node.children().find(|child| child.is_named())
+                && alternative.kind() != "if_statement"
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &alternative,
+                );
+            }
         }
         "binary_expression" => {
             if let Some(name) = boolean_operator_name(node) {
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
         }
+        "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+        }
         "switch_case" | "switch_default" => {
             ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
         }
+        "break_statement" | "continue_statement" => {
+            if node.field("label").is_some() {
+                ctx.push(EntityKind::ControlFlow, "labeled_jump".to_string(), node);
+            }
+            ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
         "for_statement" | "for_in_statement" | "for_of_statement" | "while_statement"
-        | "switch_statement" | "try_statement" | "ternary_expression" | "return_statement"
-        | "break_statement" | "continue_statement" => {
+        | "switch_statement" | "try_statement" | "ternary_expression" | "return_statement" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
         _ => return false,
@@ -492,6 +537,52 @@ fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
                     .parent()
                     .is_some_and(|outer| outer.kind() == "if_statement"))
     })
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!')
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
+}
+
+fn is_compensating_usage(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(body) = node
+        .field("body")
+        .filter(|body| body.kind() == "statement_block")
+    else {
+        return false;
+    };
+    let statements: Vec<_> = body
+        .children()
+        .filter(|child| child.is_named() && child.kind() != "comment")
+        .collect();
+    !statements.is_empty()
+        && statements
+            .iter()
+            .all(|statement| is_declarative_statement(statement))
+}
+
+fn is_declarative_statement(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    match node.kind().as_ref() {
+        "function_declaration"
+        | "generator_function_declaration"
+        | "lexical_declaration"
+        | "variable_declaration" => true,
+        "expression_statement" => node.children().find(|child| child.is_named()).is_some_and(
+            |expression| match expression.kind().as_ref() {
+                "string" | "string_literal" => true,
+                "assignment_expression" => expression.field("right").is_some_and(|right| {
+                    matches!(
+                        right.kind().as_ref(),
+                        "function_expression" | "generator_function" | "arrow_function"
+                    )
+                }),
+                _ => false,
+            },
+        ),
+        _ => false,
+    }
 }
 
 fn push_named(
@@ -926,4 +1017,302 @@ mod tests {
         assert_eq!(get.method.as_deref(), Some("GET"));
         assert_eq!(get.path.as_deref(), Some(":id"));
     }
+
+    #[test]
+    fn complexity_metadata_covers_else_jumps_negation_and_compensation() {
+        let src = r#"
+            function events(a: boolean, b: boolean, c: boolean) {
+                if (a) {} else {}
+                outer: while (a) { break outer; }
+                return a && !(b && c);
+            }
+            function declarative() { function child(a: boolean) { if (a) {} } }
+            function assigned() { assigned.child = function (a: boolean) { if (a) {} }; }
+            function callback(xs: boolean[]) { xs.forEach(x => { if (x) {} }); }
+        "#;
+        let parsed = parse_source(&SupportLang::TypeScript, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flows: Vec<_> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .collect();
+
+        for name in [
+            "else_branch",
+            "labeled_jump",
+            "negation_break",
+            "compensating_usage",
+        ] {
+            assert!(
+                flows.iter().any(|entity| entity.name == name),
+                "{name}: {flows:?}"
+            );
+        }
+        let markers: Vec<_> = flows
+            .iter()
+            .filter(|entity| entity.name == "compensating_usage")
+            .collect();
+        assert_eq!(markers.len(), 2, "{flows:?}");
+        let callback = entities
+            .iter()
+            .find(|entity| entity.kind == EntityKind::Function && entity.name == "callback")
+            .unwrap();
+        assert!(!markers.iter().any(|marker| {
+            marker.span.start_byte <= callback.span.start_byte
+                && callback.span.end_byte <= marker.span.end_byte
+        }));
+    }
+
+    #[test]
+    fn recursion_matcher_marks_direct_cycles_and_calls_in_closures() {
+        let src = r#"
+            function direct(n: number) { return direct(n - 1); }
+            function closure(n: number) { const next = () => closure(n - 1); return next(); }
+            function cycle_a(n: number) { return cycle_b(n - 1); }
+            function cycle_b(n: number) { return cycle_a(n - 1); }
+            class SelfCall { method(n: number) { return this.method(n - 1); } }
+            class OtherCall {
+                method(other: {method: (n: number) => number}, n: number) {
+                    return other.method(n - 1);
+                }
+            }
+        "#;
+        let parsed = parse_source(&SupportLang::TypeScript, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let recursive: Vec<_> = entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::ControlFlow && entity.name == "recursive_call"
+            })
+            .collect();
+        assert_eq!(recursive.len(), 5, "{entities:?}");
+        assert!(
+            recursive
+                .iter()
+                .any(|entity| entity.enclosing_function.as_deref() == Some("direct"))
+        );
+        assert!(
+            recursive
+                .iter()
+                .any(|entity| entity.enclosing_function.as_deref() == Some("closure"))
+        );
+        assert!(
+            recursive
+                .iter()
+                .any(|entity| entity.owner_type.as_deref() == Some("SelfCall"))
+        );
+        assert!(
+            recursive
+                .iter()
+                .any(|entity| entity.enclosing_function.as_deref() == Some("cycle_a"))
+        );
+        assert!(
+            recursive
+                .iter()
+                .any(|entity| entity.enclosing_function.as_deref() == Some("cycle_b"))
+        );
+    }
+    #[test]
+    fn if_alternatives_preserve_legacy_nesting_without_changing_other_metrics() {
+        let src = "function f(a: boolean, b: boolean, c: boolean) { if (a) { if (b) { } } else if (b) { if (c) { } } else { if (a) { } } }";
+        let parsed = parse_source(&SupportLang::TypeScript, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let markers: Vec<_> = entities
+            .iter()
+            .filter(|entity| entity.name == "legacy_nesting")
+            .collect();
+
+        assert_eq!(markers.len(), 1, "entities: {entities:?}");
+        assert!(markers.iter().all(|marker| {
+            src[marker.span.start_byte as usize..marker.span.end_byte as usize].starts_with("else")
+        }));
+        let metrics = crate::complexity::function_complexities(&entities);
+        let metric = metrics.iter().find(|metric| metric.name == "f").unwrap();
+        assert_eq!(metric.cyclomatic, 6, "metric: {metric:?}");
+        assert_eq!(metric.max_nesting, 1, "metric: {metric:?}");
+        assert_eq!(crate::complexity::cyclomatic_for_entities(&entities), 6);
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    match_callees_for_lang(root)
+}
+
+pub(super) fn match_callees_for_lang(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| is_recursion_callable(&node.kind()) && recursion_name(node).is_some())
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .map(|node| {
+            let name = recursion_name(node).expect("filtered callable has a name");
+            let parent = node.ancestors().find(|ancestor| {
+                declarations
+                    .iter()
+                    .any(|candidate| candidate.range() == ancestor.range())
+            });
+            let nested = parent.is_some();
+            let owner_type = enclosing_type_name(node);
+            let owner = parent
+                .as_ref()
+                .and_then(|parent| recursion_name(parent))
+                .or_else(|| owner_type.clone());
+            let parameters: Vec<_> = node
+                .field("parameters")
+                .map(|list| {
+                    list.children()
+                        .filter(|parameter| {
+                            matches!(
+                                parameter.kind().as_ref(),
+                                "required_parameter" | "optional_parameter" | "rest_pattern"
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let total_args = u16::try_from(parameters.len()).unwrap_or(u16::MAX);
+            let required_args = u16::try_from(
+                parameters
+                    .iter()
+                    .filter(|parameter| {
+                        parameter.kind() != "optional_parameter"
+                            && parameter.kind() != "rest_pattern"
+                            && !parameter.text().contains('=')
+                            && !parameter.text().contains('?')
+                    })
+                    .count(),
+            )
+            .unwrap_or(u16::MAX);
+            let name_span = node
+                .field("name")
+                .map(|name| crate::extract::span_of(&name))
+                .unwrap_or_else(|| crate::extract::span_of(node));
+            (
+                node.clone(),
+                Callable {
+                    owner,
+                    owner_type: owner_type.clone(),
+                    unqualified_callable: !is_class_method(node, owner_type.is_some())
+                        && (nested || owner_type.is_none()),
+                    name,
+                    required_args,
+                    total_args,
+                    file_id: 0,
+                    span: crate::extract::span_of(node),
+                    name_span,
+                },
+            )
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller) = call.ancestors().find_map(|ancestor| {
+            callables
+                .iter()
+                .position(|(declaration, _)| declaration.range() == ancestor.range())
+        }) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier, qualifier_name) = match function.kind().as_ref() {
+            "identifier" => (function.text().into_owned(), Qualifier::None, None),
+            "member_expression" => {
+                let Some(property) = function.field("property") else {
+                    continue;
+                };
+                let Some(object) = function.field("object") else {
+                    continue;
+                };
+                let owner_type = callables[caller].1.owner_type.as_deref();
+                let object_name = object.text().into_owned();
+                let (qualifier, qualifier_name) = if object_name == "this" {
+                    (Qualifier::SelfLike, None)
+                } else if owner_type == Some(object_name.as_str()) {
+                    (Qualifier::NamedType, Some(object_name))
+                } else {
+                    (Qualifier::Other, None)
+                };
+                (property.text().into_owned(), qualifier, qualifier_name)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named() && child.kind() != "comment")
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (
+        callables
+            .into_iter()
+            .map(|(_, callable)| callable)
+            .collect(),
+        references,
+    )
+}
+
+fn is_recursion_callable(kind: &str) -> bool {
+    matches!(
+        kind,
+        "function_declaration"
+            | "generator_function_declaration"
+            | "function_expression"
+            | "generator_function"
+            | "method_definition"
+    )
+}
+
+fn recursion_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    field_name(node).filter(|name| !name.is_empty())
+}
+
+fn enclosing_type_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| matches!(ancestor.kind().as_ref(), "class_declaration" | "class"))
+        .and_then(|ancestor| field_name(&ancestor))
+}
+
+fn is_class_method(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    has_owner_type: bool,
+) -> bool {
+    node.kind() == "method_definition"
+        && (has_owner_type
+            || node
+                .parent()
+                .is_some_and(|parent| parent.kind() == "class_body"))
 }

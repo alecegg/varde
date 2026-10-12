@@ -1,6 +1,6 @@
 // Injected by varde-code (see `varde-code hooks install --agent pi`).
 //
-// Pi extension: on session start, shells out to `varde-code nav_map`
+// Pi extension: on session start, shells out to `varde map nav_map`
 // and returns the result as the session's system prompt so the coding agent
 // starts oriented in the repo. Follows Pi's native, first-party
 // `ExtensionAPI` factory function shape: `export default function(pi) {...}`
@@ -19,8 +19,9 @@ export default function (pi) {
     try {
       const cwd = (ctx && (ctx.cwd || ctx.directory)) || process.cwd();
       navMap = execFileSync(
-        "varde-code",
+        "varde",
         [
+          "map",
           "nav_map",
           "--json",
           JSON.stringify({ repoRoot: cwd }),
@@ -32,7 +33,7 @@ export default function (pi) {
       );
     } catch (err) {
       // Best-effort: never block session start on a nav_map failure.
-      console.error("varde-code nav_map hook failed:", err);
+      console.error("varde map nav_map hook failed:", err);
       navMap = "";
     }
 

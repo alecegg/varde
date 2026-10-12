@@ -1,0 +1,18 @@
+{
+  "decisions": 2,
+  "branch_units": 3,
+  "cyclomatic": 4,
+  "cognitive": 5,
+  "phases": {
+    "gate": {
+      "decisions": 1,
+      "branch_units": 1,
+      "cognitive": 1
+    },
+    "build": {
+      "decisions": 1,
+      "branch_units": 2,
+      "cognitive": 4
+    }
+  }
+}

@@ -690,9 +690,9 @@ fn build_cluster(
 /// pull-in); seeds rank exact declarations and paths/basenames first, then
 /// by distinct query-token matches, then by complexity+churn. Neighbors use
 /// the complexity+churn score (richest first). `readingOrder` is just that
-/// ranked path list — no separate ranking logic. `tests` reuses `tests_for_file`'s heuristic
-/// per seed file (neighbors aren't probed for coverage, to keep the query
-/// count bounded).
+/// ranked path list — no separate ranking logic. `tests` reuses `tests_for_file`'s heuristic —
+/// import graph first, then a name match for files nothing imports — per seed file
+/// (neighbors aren't probed for coverage, to keep the query count bounded).
 ///
 /// What's missing vs. a doc-backed pack: no knowledge-bundle field — there's
 /// no doc corpus here to search, so "why does this code exist" isn't
@@ -701,6 +701,7 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
     freshen_for_mode("context_pack", input)?;
     let conn = open_db(input)?;
     let query = req_str(input, "query")?;
+    let repo_root = req_str(input, "repoRoot")?;
     let include_occurrences = input
         .get("includeOccurrences")
         .map(|value| {
@@ -757,9 +758,19 @@ pub fn context_pack(input: &serde_json::Value) -> Result<serde_json::Value, ApiE
         &symbol_rows,
         &seed_ranked,
         &neighbor_ranked,
-        include_occurrences,
-        include_tests,
+        ContextPackOptions {
+            include_occurrences,
+            include_tests,
+            repo_root,
+        },
     )
+}
+
+/// Output-shaping options for [`context_pack_output`].
+struct ContextPackOptions<'a> {
+    include_occurrences: bool,
+    include_tests: bool,
+    repo_root: &'a str,
 }
 
 fn context_pack_output(
@@ -768,8 +779,7 @@ fn context_pack_output(
     symbol_rows: &[ContextSymbol],
     seed_ranked: &[(i64, String)],
     neighbor_ranked: &[(i64, String)],
-    include_occurrences: bool,
-    include_tests: bool,
+    options: ContextPackOptions<'_>,
 ) -> Result<serde_json::Value, ApiError> {
     let mut files = Vec::with_capacity(seed_ranked.len() + neighbor_ranked.len());
     let mut reading_order = Vec::with_capacity(files.capacity());
@@ -786,7 +796,7 @@ fn context_pack_output(
 
     let symbols: Vec<serde_json::Value> = symbol_rows
         .iter()
-        .filter(|symbol| include_occurrences || is_context_declaration(symbol.kind))
+        .filter(|symbol| options.include_occurrences || is_context_declaration(symbol.kind))
         .filter_map(|symbol| {
             graph
                 .paths_of(&[symbol.file_id])
@@ -809,14 +819,14 @@ fn context_pack_output(
         .collect();
 
     let mut tests = Vec::new();
-    if include_tests {
+    if options.include_tests {
         // `tests` reuses `tests_for_file`'s heuristic per seed file only —
         // neighbors aren't probed, to keep the query count bounded. Loaded once
-        // and reused across seeds (not `covering_tests` per seed) so this stays
-        // O(repo_size) instead of O(seeds * repo_size).
+        // and reused across seeds so this stays O(repo_size) instead of
+        // O(seeds * repo_size).
         let coverage = crate::query::simple::TestCoverage::load(conn)?;
         for (fid, path) in seed_ranked {
-            for t in coverage.covering(*fid) {
+            for t in coverage.covering_with_names(*fid, path, options.repo_root) {
                 tests.push(serde_json::json!({ "path": t, "coversFile": path }));
             }
         }

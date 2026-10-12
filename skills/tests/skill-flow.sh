@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# skill-flow.py maps routes, chains, unreferenced files, and missing targets,
+# `varde doc flow` maps routes, chains, unreferenced files, and missing targets,
 # and completes on every shipped skill.
 set -euo pipefail
 
 SKILLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FLOW="$SKILLS_DIR/varde-agent-doc-authoring/scripts/skill-flow.py"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -39,7 +38,7 @@ printf 'Detail words here.\n' > "$skill/references/detail.md"
 printf 'Recovery steps for a failed build.\n' > "$skill/references/recover.md"
 printf 'Unused.\n' > "$skill/assets/unused.md"
 
-report="$(python3 "$FLOW" "$skill")" || fail "clean fixture exited non-zero"
+report="$(varde doc flow "$skill")" || fail "clean fixture exited non-zero"
 grep -qF 'Build a thing' <<<"$report" || fail "route row missing: $report"
 grep -qF '    references/detail.md (~5)' <<<"$report" || fail "transitive file missing"
 grep -qF 'chain: references/detail.md <- references/build.md' <<<"$report" \
@@ -67,7 +66,7 @@ printf 'debug path words\n' > "$files/references/build-posture-debug.md"
 printf 'other path words\n' > "$files/references/other.md"
 printf 'unused path words\n' > "$files/references/unentered.md"
 
-python3 -B "$FLOW" --write "$files" >/dev/null
+varde doc flow --write "$files" >/dev/null
 doc="$(cat "$files/FLOW.md")"
 files_at="$(grep -n '^## Files$' <<<"$doc" | cut -d: -f1 || true)"
 routes_at="$(grep -n '^## Routes$' <<<"$doc" | cut -d: -f1 || true)"
@@ -90,15 +89,15 @@ grep -qF -- '- references/unentered.md (~5 tok; routes: -)' <<<"$doc" \
 grep -q ' words[;)]' <<<"$doc" && fail "FLOW.md still reports word counts: $doc"
 grep -qF 'scripts/run.sh"]' <<<"$doc" || fail "script node label is not the bare path: $doc"
 ! grep -Eq 'scripts/[^"]*\(~[0-9]+ tok' <<<"$doc" || fail "script node shows a size: $doc"
-python3 -B "$FLOW" --json "$files" | python3 -c '
+varde doc flow --json "$files" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 assert set(d) == {"skill", "tokens", "references", "edges", "external",
                   "routes", "structure", "findings"}, d.keys()
 ' || fail "--json shape changed"
 echo "FLOW.md Files tree nests references, counts tokens, and lists entering routes."
 
-mermaid="$(python3 "$FLOW" --mermaid "$skill")"
+mermaid="$(varde doc flow --mermaid "$skill")"
 grep -qx 'flowchart TD' <<<"$mermaid" || fail "no flowchart header"
 grep -qF '(["Build a thing"])' <<<"$mermaid" || fail "no route node"
 grep -qF 'references/detail.md (~5 tok)' <<<"$mermaid" || fail "no token-count label"
@@ -106,9 +105,9 @@ grep -qF -- '-->|"Build / step 1: Read references/detail.md for the steps."|' <<
   || fail "edge not labeled with its step: $mermaid"
 grep -qF -- '-.->|"Build / step 2: When it fails, read references/recove..."|' <<<"$mermaid" \
   || fail "conditional edge not dotted: $mermaid"
-python3 "$FLOW" --json "$skill" | python3 -c '
+varde doc flow --json "$skill" | python3 -c '
 import json, sys
-r = json.load(sys.stdin)[0]["routes"][0]
+r = json.load(sys.stdin)["data"][0]["routes"][0]
 assert r["min_tokens"] < r["max_tokens"], r
 ' || fail "min cost does not skip the conditional load"
 echo "Mermaid output has route nodes, token counts, edge labels, and dotted conditional edges."
@@ -116,7 +115,7 @@ echo "Mermaid output has route nodes, token counts, edge labels, and dotted cond
 # A pointer to a nonexistent file exits 1 and names the target.
 printf '\nSee `references/gone.md`.\n' >> "$skill/references/build.md"
 set +e
-report="$(python3 "$FLOW" "$skill")"
+report="$(varde doc flow "$skill")"
 status=$?
 set -e
 [ "$status" -eq 1 ] || fail "missing target exited $status, want 1"
@@ -146,13 +145,13 @@ description: Fixture skill.
 EOF
 done
 
-report="$(python3 "$FLOW" "$listed")" || fail "shared pointer exited non-zero"
+report="$(varde doc flow "$listed")" || fail "shared pointer exited non-zero"
 grep -qF 'missing' <<<"$report" && fail "listed skill still reports missing: $report"
 grep -qF '    references/x.md' <<<"$report" || fail "shared file's tokens missing from route: $report"
 echo "A MANIFEST-listed shared file resolves with no missing finding."
 
 set +e
-report="$(python3 "$FLOW" "$unlisted")"
+report="$(varde doc flow "$unlisted")"
 status=$?
 set -e
 [ "$status" -eq 1 ] || fail "unlisted skill's missing shared file exited $status, want 1"
@@ -160,11 +159,11 @@ grep -qF 'missing: SKILL.md' <<<"$report" || fail "unlisted skill did not report
 echo "A skill not listed in MANIFEST still reports the file missing."
 
 # Classification rules: sibling skills where varde-flow calls varde-other inline
-# and through an executor dispatch.
+# and through an builder dispatch.
 pair="$tmp/pair"
 flow_skill="$pair/skills/varde-flow"
 other_skill="$pair/skills/varde-other"
-mkdir -p "$flow_skill/references" "$other_skill/references" "$pair/agents/varde-executor"
+mkdir -p "$flow_skill/references" "$other_skill/references" "$pair/agents/varde-builder"
 cat > "$flow_skill/SKILL.md" <<'EOF'
 # Rules
 
@@ -185,7 +184,7 @@ cat > "$flow_skill/references/work.md" <<'EOF'
 4. Run `varde-other check` for the final pass.
 5. Run `varde-other check` again after fixes.
 6. Run `varde-other missing` last.
-7. Dispatch one `executor` round of `varde-other check`.
+7. Dispatch one `builder` round of `varde-other check`.
 8. Use `references/redirect.md` instead, regardless of scope.
 9. Follow `references/compare.md` instead of guessing.
 
@@ -206,16 +205,16 @@ cat > "$other_skill/SKILL.md" <<'EOF'
 EOF
 printf 'Check steps.\n' > "$other_skill/references/check.md"
 printf 'Large %s\n' {1..200} > "$other_skill/references/large.md"
-printf -- '---\nname: varde-executor\nskills: varde-other\n---\n# Executor\n' \
-  > "$pair/agents/varde-executor/claude.md"
+printf -- '---\nname: varde-builder\nskills: varde-other\n---\n# Builder\n' \
+  > "$pair/agents/varde-builder/claude.md"
 
-python3 -B "$FLOW" --json "$flow_skill" | python3 -c '
+varde doc flow --json "$flow_skill" | python3 -c '
 import json, sys
 from pathlib import Path
 pair = Path(sys.argv[1])
 def size(path):
     return -(-len(path.read_text()) // 4)
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 edge = {e["to"].split("/")[-1]: e for e in d["edges"] if e["from"] == "references/work.md"}
 work, other = d["routes"]
 own = d["tokens"]
@@ -253,8 +252,8 @@ checks = {
         and other["dispatches"] == [],
 }
 disp = work["dispatches"]
-definition = size(pair / "agents/varde-executor/claude.md")
-checks["dispatch is a separate line item"] = len(disp) == 1 and disp[0]["agent"] == "executor" \
+definition = size(pair / "agents/varde-builder/claude.md")
+checks["dispatch is a separate line item"] = len(disp) == 1 and disp[0]["agent"] == "builder" \
     and disp[0]["runs"] == "varde-other: Check the result" \
     and disp[0]["from"] == ["references/work.md:9"] and not disp[0]["conditional"]
 checks["dispatch cost is definition, preload and route, each once"] = \
@@ -262,35 +261,36 @@ checks["dispatch cost is definition, preload and route, each once"] = \
 bad = [name for name, ok in checks.items() if not ok]
 assert not bad, (bad, json.dumps(d, indent=1))
 ' "$pair" || fail "classification rules"
-mermaid="$(python3 -B "$FLOW" --mermaid "$flow_skill")"
+mermaid="$(varde doc flow --mermaid "$flow_skill")"
 grep -qF '==>|"Work / step 3: Then continue with references/next.md."|' <<<"$mermaid" \
   || fail "hand-off not drawn thick: $mermaid"
 grep -qF '[["varde-other check"]]' <<<"$mermaid" || fail "inline mode node missing: $mermaid"
-grep -qF '[["agent: executor"]]' <<<"$mermaid" || fail "dispatch node missing: $mermaid"
+grep -qF '[["agent: builder"]]' <<<"$mermaid" || fail "dispatch node missing: $mermaid"
 grep -qF 'aside.md"' <<<"$(grep -- '-->\|-.->' <<<"$mermaid")" \
   && fail "mention drawn as an edge: $mermaid"
-report="$(python3 -B "$FLOW" "$flow_skill")"
+report="$(varde doc flow "$flow_skill")"
 grep -qF 'inline: varde-other check -> varde-other: Check the result' <<<"$report" \
   || fail "inline mode missing from text report: $report"
-grep -qF 'dispatch executor: varde-other: Check the result, ~' <<<"$report" \
+grep -qF 'dispatch builder: varde-other: Check the result, ~' <<<"$report" \
   || fail "dispatch missing from text report: $report"
-python3 -B "$FLOW" --write "$flow_skill" >/dev/null || true
+varde doc flow --write "$flow_skill" >/dev/null || true
 grep -qF '| Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |' \
   "$flow_skill/FLOW.md" || fail "FLOW.md lacks main, subagent, and lookups columns"
-grep -qE '^\| Do the work \| .* \| executor ~[0-9]+ \|' "$flow_skill/FLOW.md" \
+grep -qE '^\| Do the work \| .* \| builder ~[0-9]+ \|' "$flow_skill/FLOW.md" \
   || fail "FLOW.md lacks the per-dispatch cost: $(cat "$flow_skill/FLOW.md")"
 # Real repo: dispatch cost must include the agents/varde-reviewer definition.
 # A copy without agents/ silently drops it, so the difference is its cost.
 bare="$tmp/bare-skills"
 mkdir -p "$bare"
 cp -R "$SKILLS_DIR/varde-change" "$SKILLS_DIR/varde-review" "$bare/"
-python3 -B "$FLOW" --json "$SKILLS_DIR/varde-change" >"$tmp/real.json"
-python3 -B "$FLOW" --json "$bare/varde-change" >"$tmp/bare.json" || true  # exits 1: sibling skills absent
+varde doc flow --json "$SKILLS_DIR/varde-change" >"$tmp/real.json"
+varde doc flow --json "$bare/varde-change" >"$tmp/bare.json" || true  # exits 1: sibling skills absent
 python3 -c '
 import json, sys
 from pathlib import Path
 def reviews(path):
-    d = json.load(open(path))[0]
+    data = json.load(open(path))["data"]  # a missing-target exit nests the list in the error
+    d = (data if isinstance(data, list) else data["error"]["details"])[0]
     return [x["min_tokens"] for r in d["routes"] for x in r["dispatches"] if x["agent"] == "review"]
 real, bare = reviews(sys.argv[1]), reviews(sys.argv[2])
 definition = -(-len(Path(sys.argv[3]).read_text()) // 4)
@@ -333,9 +333,9 @@ printf 'Named workflow steps.\n' > "$change/references/build.md"
 printf 'Small task steps.\n' > "$change/references/build-micro-change.md"
 printf 'Named plan steps.\n' > "$change/references/plan.md"
 
-python3 -B "$FLOW" --json "$caller" | python3 -c '
+varde doc flow --json "$caller" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 routes = {r["route"]: r for r in d["routes"]}
 micro, plan, mentions = (routes[name] for name in
                          ["Small change", "Named plan", "Cited modes"])
@@ -378,9 +378,9 @@ EOF
 printf 'Fallback text.\n' > "$entry_skill/references/redirect.md"
 printf 'Do steps.\n' > "$entry_skill/references/do.md"
 
-python3 -B "$FLOW" --json "$entry_skill" | python3 -c '
+varde doc flow --json "$entry_skill" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 route = d["routes"][0]
 external = [x for x in d["external"] if x["target"] == "varde-other check"]
 redirect = next(e for e in d["edges"] if e["to"] == "references/redirect.md")
@@ -421,9 +421,9 @@ cat > "$table_skill/references/steps.md" <<'EOF'
 EOF
 printf 'More steps.\n' > "$table_skill/references/more.md"
 
-python3 -B "$FLOW" --json "$table_skill" | python3 -c '
+varde doc flow --json "$table_skill" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 route = d["routes"][0]
 checks = {
     "table hand-off row is a hand-off": "varde-other check" in route["handoffs"]
@@ -455,19 +455,19 @@ EOF
 } > "$shape/references/hub.md"
 printf 'Read `references/b.md`.\n' > "$shape/references/a.md"
 printf 'Read `references/a.md` again.\n' > "$shape/references/b.md"
-report="$(python3 -B "$FLOW" "$shape")" || fail "structure findings changed the exit code"
+report="$(varde doc flow "$shape")" || fail "structure findings changed the exit code"
 grep -qF 'cycle: references/a.md <-> references/b.md' <<<"$report" || fail "cycle missing: $report"
 grep -qF 'fan-out: references/hub.md (6 links out, target < 6)' <<<"$report" \
   || fail "fan-out missing: $report"
 grep -qF 'density:' <<<"$report" || fail "density missing: $report"
-python3 -B "$FLOW" --json "$shape" | python3 -c '
+varde doc flow --json "$shape" | python3 -c '
 import json, sys
-s = json.load(sys.stdin)[0]["structure"]
+s = json.load(sys.stdin)["data"][0]["structure"]
 want = {"mutual_links": 1, "max_links_out": 6, "max_links_out_file": "references/hub.md",
         "links": 8, "linking_files": 3, "average_links": 2.67}
 assert all(s[k] == v for k, v in want.items()), s
 ' || fail "structure JSON"
-python3 -B "$FLOW" --write "$shape" >/dev/null
+varde doc flow --write "$shape" >/dev/null
 for row in '| Measure | Value | Target | Status |' '| Mutual links | 1 | 0 | defect |' \
   '| Max links out of one file | 6 (references/hub.md) | < 6 | warning |' \
   '- cycle: references/a.md <-> references/b.md'; do
@@ -492,15 +492,15 @@ Read `references/plan-one.md`.
 EOF
 printf 'Build two.\n' > "$mods/references/build-two.md"
 printf 'Plan one.\n' > "$mods/references/plan-one.md"
-python3 -B "$FLOW" --json "$mods" | python3 -c '
+varde doc flow --json "$mods" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 checks = {
     "cross-module edges counted": d["structure"]["cross_module_edges"] == 1,
 }
 assert all(checks.values()), (checks, d)
 ' || fail "module grouping JSON"
-python3 -B "$FLOW" --write "$mods" >/dev/null
+varde doc flow --write "$mods" >/dev/null
 doc="$(cat "$mods/FLOW.md")"
 grep -qF '### build' <<<"$doc" || fail "no build module section: $doc"
 grep -qF '### plan' <<<"$doc" || fail "no plan module section: $doc"
@@ -536,19 +536,19 @@ cat > "$cx/references/mid.md" <<'EOF'
 EOF
 printf 'Leaf A.\n' > "$cx/references/leaf-a.md"
 printf 'Leaf B.\n' > "$cx/references/leaf-b.md"
-python3 -B "$FLOW" --json "$cx" | python3 -c '
+varde doc flow --json "$cx" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 r = d["routes"][0]
 assert (r["cyclomatic"], r["cognitive"]) == (3, 6), r
 assert d["structure"]["diagram_edges"] == 4, d["structure"]
 assert (d["structure"]["max_route_files"],
         d["structure"]["max_route_files_route"]) == (4, "Do the work"), d["structure"]
 ' || fail "complexity, diagram edges, or route-files formula"
-python3 -B "$FLOW" "$cx" | grep -qF "Max route cyclomatic: 3" || fail "cyclomatic missing from report"
-python3 -B "$FLOW" "$cx" | grep -qF "Max route cognitive: 6" || fail "cognitive missing from report"
-python3 -B "$FLOW" "$cx" | grep -qF "Diagram edges: 4" || fail "diagram edges missing from report"
-python3 -B "$FLOW" "$cx" | grep -qF "Most files reached by one route: 4 (Do the work)" \
+varde doc flow "$cx" | grep -F "Max route cyclomatic: 3" >/dev/null || fail "cyclomatic missing from report"
+varde doc flow "$cx" | grep -F "Max route cognitive: 6" >/dev/null || fail "cognitive missing from report"
+varde doc flow "$cx" | grep -F "Diagram edges: 4" >/dev/null || fail "diagram edges missing from report"
+varde doc flow "$cx" | grep -F "Most files reached by one route: 4 (Do the work)" >/dev/null \
   || fail "route-files missing from report"
 echo "Flow complexity: cyclomatic, cognitive, diagram edges, and route-files" \
      "pinned against a hand-computed fixture."
@@ -578,16 +578,16 @@ cat > "$kind/references/r.md" <<'EOF'
 EOF
 printf 'Body of P.\n' > "$kind/references/p.md"
 printf 'Leaf body.\n' > "$kind/references/leaf.md"
-python3 -B "$FLOW" --json "$kind" | python3 -c '
+varde doc flow --json "$kind" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 r = d["routes"][0]
 assert (r["cyclomatic"], r["cognitive"], r["lookups"]) == (3, 4, 1), r
 assert d["references"] == ["references/r.md"], d["references"]
 assert set(r["files"]) == {"references/entry.md", "references/r.md",
                            "references/p.md", "references/leaf.md"}, r
 ' || fail "file kind: lookups and reference-caller depth"
-python3 -B "$FLOW" --write "$kind" >/dev/null
+varde doc flow --write "$kind" >/dev/null
 grep -qE '^\| Do the work \|.* \| 1 \| ' "$kind/FLOW.md" \
   || fail "FLOW.md lacks the Lookups column: $(cat "$kind/FLOW.md")"
 echo "File kind: a marked reference's edge is a lookup, not a branch, and adds no nesting."
@@ -623,7 +623,7 @@ Read `references/leaf.md`.
 EOF
 printf 'Body of Q.\n' > "$fold/references/q.md"
 printf 'Leaf body.\n' > "$fold/references/leaf.md"
-python3 -B "$FLOW" --write "$fold" >/dev/null
+varde doc flow --write "$fold" >/dev/null
 doc="$(cat "$fold/FLOW.md")"
 grep -qF '["references/r1.md' <<<"$doc" && fail "reference r1.md drawn as its own node: $doc"
 grep -qF '["references/r2.md' <<<"$doc" && fail "reference r2.md drawn as its own node: $doc"
@@ -637,18 +637,18 @@ grep -qF 'n0 -.-> n2' <<<"$doc" || fail "no dotted edge from entry to q: $doc"
 echo "Diagram folding: references fold into their caller's label, transitively, with an edge to the procedure they reach."
 
 set +e
-python3 "$FLOW" >/dev/null 2>&1
+varde doc flow >/dev/null 2>&1
 status=$?
 set -e
 [ "$status" -eq 2 ] || fail "no arguments exited $status, want 2"
 
 # Exit 1 (real missing targets) is allowed here; a traceback or bad JSON is not.
-python3 "$FLOW" --json "$SKILLS_DIR"/varde-*/ >"$tmp/all.json" 2>"$tmp/all.err" || true
+varde doc flow --json "$SKILLS_DIR"/varde-*/ >"$tmp/all.json" 2>"$tmp/all.err" || true
 if grep -q Traceback "$tmp/all.err"; then
   fail "crashed on shipped skills: $(cat "$tmp/all.err")"
 fi
 python3 -m json.tool "$tmp/all.json" >/dev/null || fail "invalid JSON on shipped skills"
-echo "skill-flow.py completes on every shipped skill."
+echo "varde doc flow completes on every shipped skill."
 
 # Route-scoped skip: entry file A says "skip `references/g.md`"; A reaches
 # p.md which points to g.md. Route A drops g.md; route B (entry B), also
@@ -673,9 +673,9 @@ printf 'Read `references/p.md` for steps.\n' > "$skip_skill/references/b.md"
 printf 'Read `references/g.md` for guidance.\n' > "$skip_skill/references/p.md"
 printf 'Guidance text.\n' > "$skip_skill/references/g.md"
 
-python3 -B "$FLOW" --json "$skip_skill" | python3 -c '
+varde doc flow --json "$skip_skill" | python3 -c '
 import json, sys
-d = json.load(sys.stdin)[0]
+d = json.load(sys.stdin)["data"][0]
 by_route = {r["route"]: r for r in d["routes"]}
 a, b = by_route["Route A"], by_route["Route B"]
 assert "references/g.md" not in a["files"], a
@@ -685,21 +685,95 @@ assert "references/p.md" in a["files"] and "references/p.md" in b["files"]
 echo "Route-scoped skip drops a target and its exclusive descendants from one route only."
 
 # FLOW.md: --write creates it, --check passes, then fails once the skill changes.
-python3 -B "$FLOW" --write "$skill" >/dev/null || true
+varde doc flow --write "$skill" >/dev/null || true
 grep -qF 'flowchart TD' "$skill/FLOW.md" || fail "--write produced no chart"
 sed -i.bak '/gone.md/d' "$skill/references/build.md" && rm -f "$skill/references/build.md.bak"
-python3 -B "$FLOW" --write "$skill" >/dev/null
-python3 -B "$FLOW" --check "$skill" >/dev/null || fail "--check failed right after --write"
+varde doc flow --write "$skill" >/dev/null
+varde doc flow --check "$skill" >/dev/null || fail "--check failed right after --write"
 printf '\nSee `references/extra.md`.\n' >> "$skill/SKILL.md"
 printf 'Extra.\n' > "$skill/references/extra.md"
 set +e
-python3 -B "$FLOW" --check "$skill" >/dev/null
+varde doc flow --check "$skill" >/dev/null
 status=$?
 set -e
 [ "$status" -eq 1 ] || fail "--check missed a stale FLOW.md (exit $status)"
 echo "FLOW.md write and drift check work."
 
 # Every shipped skill's committed FLOW.md matches its current references.
-python3 -B "$FLOW" --check "$SKILLS_DIR"/varde-*/ \
-  || fail "stale FLOW.md; run skill-flow.py --write on the listed skills"
+varde doc flow --check "$SKILLS_DIR"/varde-*/ \
+  || fail "stale FLOW.md; run varde doc flow --write on the listed skills"
 echo "Shipped FLOW.md files are current."
+
+# Ledger subcommands: scoring, hash round-trip, validate, and stale/moved checks.
+LEDGERS="$SKILLS_DIR/tests/fixtures/flow-ledger"
+score="$(varde doc flow ledger score "$LEDGERS/varde.json" --json)"
+grep -q '"cyclomatic":418' <<<"$score" || fail "fixture cyclomatic is not 418"
+grep -q '"cognitive":570' <<<"$score" || fail "fixture cognitive is not 570"
+route="$(varde doc flow ledger score "$LEDGERS/small.json" --route default --json)"
+grep -q '"cyclomatic":2' <<<"$route" || fail "default route cyclomatic is not 2"
+route="$(varde doc flow ledger score "$LEDGERS/small.json" --route whole --json)"
+grep -q '"cognitive":5' <<<"$route" || fail "whole route cognitive is not 5"
+set +e
+varde doc flow ledger score "$LEDGERS/small.json" --route nope >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 2 ] || fail "missing route did not error (exit $status)"
+
+led="$tmp/ledger"
+cp -R "$LEDGERS" "$led"
+varde doc flow ledger validate "$led/small.json" --root "$led" || fail "committed small ledger does not validate"
+varde doc flow ledger check "$led/small.json" --root "$led" || fail "fresh ledger reported stale"
+
+# hash round-trip: blank the hashes, refill them, and match the committed file.
+sed -E 's/"hash": "[0-9a-f]+"/"hash": ""/' "$LEDGERS/small.json" > "$led/blank.json"
+varde doc flow ledger hash "$led/blank.json" --root "$led"
+cmp -s <(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])))' "$led/blank.json") \
+       <(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])))' "$LEDGERS/small.json") \
+  || fail "ledger hash did not reproduce the committed hashes"
+
+# moved: insert lines above the cited range; the id is reported with its new range.
+printf 'intro\nmore intro\n' | cat - "$LEDGERS/src/a.md" > "$led/src/a.md"
+set +e
+out="$(varde doc flow ledger check "$led/small.json" --root "$led")"
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "moved lines not reported (exit $status)"
+grep -q 'S-001: moved to src/a.md lines 5-6' <<<"$out" || fail "moved range missing: $out"
+grep -q 'S-002: moved to src/a.md lines 8-8' <<<"$out" || fail "moved range missing: $out"
+
+# stale: edit one decision's lines; only that id is named.
+sed 's/Otherwise stop\./Otherwise halt./' "$LEDGERS/src/a.md" > "$led/src/a.md"
+set +e
+out="$(varde doc flow ledger check "$led/small.json" --root "$led")"
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "stale decision not reported (exit $status)"
+grep -q 'S-001: changed or vanished' <<<"$out" || fail "stale id missing: $out"
+grep -q 'S-002' <<<"$out" && fail "unchanged decision reported stale"
+
+# validate failures: range past EOF, hash mismatch, units mismatch, unresolved call.
+set +e
+out="$(varde doc flow ledger validate "$led/small.json" --root "$led")"
+status=$?
+set -e
+[ "$status" -eq 1 ] && grep -q 'S-001: hash does not match' <<<"$out" || fail "validate missed hash mismatch: $out"
+cp "$LEDGERS/src/a.md" "$led/src/a.md"
+sed -e 's/"line_end": 6/"line_end": 60/' -e 's/"units": 1/"units": 3/' \
+  -e 's/"unresolved_calls": \[\]/"unresolved_calls": [{"kind": "local", "target": "x.md"}]/' \
+  "$LEDGERS/small.json" > "$led/bad.json"
+set +e
+out="$(varde doc flow ledger validate "$led/bad.json" --root "$led")"
+status=$?
+set -e
+[ "$status" -eq 1 ] || fail "validate accepted a bad ledger"
+grep -q 'S-002: src/a.md lines 6-60 not found' <<<"$out" || fail "validate missed range past EOF: $out"
+grep -q 'S-001: units do not match' <<<"$out" || fail "validate missed units mismatch: $out"
+grep -q 'unresolved local call' <<<"$out" || fail "validate missed unresolved call: $out"
+echo "Ledger subcommands work."
+
+# Committed ledger: a skill edit that leaves a decision stale fails here;
+# refresh it per varde-agent-doc-authoring references/flow-ledger.md.
+DELIVERY="$SKILLS_DIR/ledgers/varde-delivery.json"
+varde doc flow ledger validate "$DELIVERY" --root "$SKILLS_DIR/.." || fail "committed ledger invalid"
+varde doc flow ledger check "$DELIVERY" --root "$SKILLS_DIR/.." || fail "committed ledger has stale decisions"
+echo "Committed ledger is current."

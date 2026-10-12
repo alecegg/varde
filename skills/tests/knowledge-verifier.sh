@@ -15,7 +15,7 @@ for eval_id in 8 9; do
   }
 done
 
-echo 'PASS: knowledge handoff assertions remain for session-evidence judging'
+echo 'PASS: session-notes assertions remain for session-evidence judging'
 
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/knowledge-output.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT

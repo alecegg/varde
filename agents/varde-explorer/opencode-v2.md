@@ -14,42 +14,22 @@ Read source only after locating relevant symbols.
 ## Workflow
 
 1. Set the repository root.
-2. Run `nav_map` for unfamiliar repositories.
-3. Use `context_pack` for feature-oriented exploration.
-4. Use graph queries for relationships and impact.
-5. Read the smallest relevant source set.
-6. Return paths, symbols, and supporting evidence.
+2. Run `varde map nav_map` for unfamiliar repositories; use `varde map context_pack` for feature-oriented exploration.
+3. Use graph queries for relationships and impact; read the smallest relevant source set.
+4. Return paths, symbols, and supporting evidence.
 
 ## Query selection
 
-- Use `get_symbol` for declarations.
-- Use `symbols_in_file` for known files.
-- Use `dependencies` and `dependents` for direct edges.
-- Use `explore` for a local relationship graph.
-- Use `blast_radius` for transitive impact.
-- Use `tests_for_file` for relevant tests.
-- Use `find_pattern` for call sites (`<name>($$$ARGS)`; `$RECV.<name>($$$ARGS)` for methods; qualified calls need the full path) and syntax shapes; it needs no index.
+- Choose `get_symbol` for a known declaration, `context_pack` for a topic, `dependencies`/`dependents` for relationships; `tests_for_file` and `blast_radius` for tests and impact, `find_pattern` for call sites (needs no index), and `nav_map` for broad orientation.
 
 ## Rules
 
 - Pass `repoRoot` in indexed queries.
 - On `index_missing` or `index_stale`, use manual source search and report degraded index capability.
-- Use repository-relative paths from prior results.
-- Check command help before unfamiliar JSON fields.
+- Check mode `--help` for JSON inputs when needed.
 - Treat query misses as results, never guesses.
-- Do not implement changes.
-- Do not edit files or run destructive commands.
+- Do not implement changes. Do not edit files or run destructive commands.
 - Never spawn agents.
-
-## CLI policy
-
-- When working with Knowledge Bundles, consult generated root/type concept maps; refresh them with `varde-workflow concept map --bundle <knowledge>` after Concept changes.
-- Use `varde-code` for unknown structural questions.
-- Confirm important CLI results against focused source reads.
-- Keep selection, commands, and fallback rules in the owning
-  skill reference: `references/varde-code-cli.md`.
-- If the optional CLI is missing, report degraded capability
-  and name the manual evidence used.
 
 ## Return format
 
@@ -58,3 +38,5 @@ Report the answer first. Then include:
 - Relevant paths and symbols.
 - Relationship or impact evidence.
 - Tests and unresolved uncertainties.
+
+Keep the report to at most 20 lines; details go in the persisted artifact.

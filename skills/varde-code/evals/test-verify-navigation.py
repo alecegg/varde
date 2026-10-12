@@ -160,8 +160,8 @@ def case6_evidence():
         }
     )
     return [
-        event("varde-code context_pack --json '{...}'", context),
-        event("varde-code get_symbol --json '{...}'", body_result),
+        event("varde map context_pack --json '{...}'", context),
+        event("varde map get_symbol --json '{...}'", body_result),
     ]
 
 
@@ -211,10 +211,10 @@ def case7_evidence():
     return [
         event("cat /sandbox/context-result.json", envelope),
         event(
-            "varde-toz query --handle capture-abc --lines 21:27",
+            "varde run query --handle capture-abc --lines 21:27",
             capture_rows,
         ),
-        event("varde-code context_pack --json '{\"resultsOffset\":20}'", page),
+        event("varde map context_pack --json '{\"resultsOffset\":20}'", page),
     ]
 
 
@@ -301,6 +301,13 @@ def answer_text(answer):
 
 
 class NavigationVerifierTests(unittest.TestCase):
+    def test_current_and_archived_command_forms_are_recognized(self):
+        for mode in ("context_pack", "symbols_in_files", "get_symbol"):
+            self.assertTrue(VERIFY.command_uses_mode(f"varde map {mode} --json", mode))
+            self.assertTrue(VERIFY.command_uses_mode(f"varde-code {mode} --json", mode))
+        self.assertTrue(VERIFY.command_uses_toz_query("varde run query --handle abc"))
+        self.assertTrue(VERIFY.command_uses_toz_query("varde-" + "toz " + "query --handle abc"))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.project = Path(self.temp.name) / "project"
@@ -563,6 +570,37 @@ class NavigationVerifierTests(unittest.TestCase):
         ]
         self.assertEqual(self.verdicts(self.verify("6", events))[:2], ["PASS", "PASS"])
 
+    def test_compound_cat_reads_are_exact_source_evidence(self):
+        first = COORDINATOR
+        second = SESSION
+        events = [event(
+            "cat ./project/src/auth/coordinator.rs && cat -- ./project/src/auth/session.rs",
+            first + second,
+        )]
+        rows = VERIFY.source_match_rows(self.project, VERIFY.completed_commands({"messages": [{"content": events}]}))
+        self.assertIn(("src/auth/coordinator.rs", 1, "use crate::auth::{session, store};"), rows)
+        self.assertIn(("src/auth/session.rs", 1, "#[derive(Default)]"), rows)
+
+    def test_cat_multiple_paths_and_separators_require_complete_output(self):
+        paths = "./project/src/auth/coordinator.rs ./project/src/auth/session.rs"
+        good = VERIFY.direct_cat_rows(self.project, {"command": f"cat {paths}", "output": COORDINATOR + SESSION})
+        self.assertTrue(good)
+        partial = VERIFY.direct_cat_rows(self.project, {
+            "command": f"cat ./project/src/auth/coordinator.rs; cat ./project/src/auth/session.rs",
+            "output": COORDINATOR,
+        })
+        self.assertEqual(partial, set())
+
+    def test_cat_compound_rejects_non_cat_commands_and_redirection(self):
+        for command in (
+            "cat ./project/src/auth/coordinator.rs && rm x",
+            "cat ./project/src/auth/coordinator.rs > out",
+            "cat ./project/src/auth/coordinator.rs | cat",
+        ):
+            with self.subTest(command=command):
+                rows = VERIFY.direct_cat_rows(self.project, {"command": command, "output": COORDINATOR})
+                self.assertEqual(rows, set())
+
     def test_case6_three_get_symbol_body_results_pass_without_context_or_source_search(self):
         declarations = (
             ("refresh_auth_session", "src/auth/coordinator.rs", COORDINATOR),
@@ -571,7 +609,7 @@ class NavigationVerifierTests(unittest.TestCase):
         )
         events = [
             event(
-                f"varde-code get_symbol {name}",
+                f"varde map get_symbol {name}",
                 get_symbol_output(name, path, source),
             )
             for name, path, source in declarations
@@ -586,7 +624,7 @@ class NavigationVerifierTests(unittest.TestCase):
         )
         events = [
             event(
-                f"varde-code get_symbol {name}",
+                f"varde map get_symbol {name}",
                 get_symbol_output(name, path, source, wrong_span=wrong_span),
             )
             for name, path, source, wrong_span in declarations
@@ -601,7 +639,7 @@ class NavigationVerifierTests(unittest.TestCase):
         )
         events = [
             event(
-                f"varde-code get_symbol {name}",
+                f"varde map get_symbol {name}",
                 get_symbol_output(name, path, source, wrong_body=wrong_body),
             )
             for name, path, source, wrong_body in declarations
@@ -655,7 +693,7 @@ class NavigationVerifierTests(unittest.TestCase):
         events = [
             case7_evidence()[0],
             event(
-                "varde-toz query --handle capture-abc-other --lines 21:27",
+                "varde run query --handle capture-abc-other --lines 21:27",
                 capture_output(
                     [f"src/auth_refresh_helper_{number:02}.rs" for number in range(20, 26)]
                     + ["src/lib.rs"]
@@ -674,7 +712,7 @@ class NavigationVerifierTests(unittest.TestCase):
                 events = [
                     case7_evidence()[0],
                     event(
-                        f"varde-toz query --handle {quote}capture-abc{quote} --lines 21:27",
+                        f"varde run query --handle {quote}capture-abc{quote} --lines 21:27",
                         tail,
                     ),
                 ]
@@ -737,8 +775,8 @@ class NavigationVerifierTests(unittest.TestCase):
 
     def test_case6_symbols_in_files_adapter_through_configured_bash_runner(self):
         data = case6_symbols_in_files_data()
-        batch_command = "varde-code symbols_in_files --json '{...}'"
-        body_command = "varde-code get_symbol refresh_auth_session"
+        batch_command = "varde map symbols_in_files --json '{...}'"
+        body_command = "varde map get_symbol refresh_auth_session"
         body_output = get_symbol_output(
             "refresh_auth_session", "src/auth/coordinator.rs", COORDINATOR
         )
@@ -823,16 +861,16 @@ class NavigationVerifierTests(unittest.TestCase):
             ["src/auth/coordinator.rs", "src/auth/session.rs", "src/auth/store.rs"], symbols
         )
         events = [
-            event("varde-code context_pack --json", context, "item.started"),
-            event("varde-code context_pack --json", context, "item.updated"),
-            event("varde-code context_pack --json", "", "item.completed"),
+            event("varde map context_pack --json", context, "item.started"),
+            event("varde map context_pack --json", context, "item.updated"),
+            event("varde map context_pack --json", "", "item.completed"),
         ]
         self.assertEqual(self.verdicts(self.verify("6", events))[0], "FAIL")
 
     def test_requested_flags_without_returned_results_do_not_pass(self):
         events = [
             event(
-                "varde-code context_pack --json '{\"includeOccurrences\":true,\"fullResults\":true}'",
+                "varde map context_pack --json '{\"includeOccurrences\":true,\"fullResults\":true}'",
                 "query started",
             )
         ]
@@ -869,7 +907,7 @@ class NavigationVerifierTests(unittest.TestCase):
             declaration("persist_access_token", "src/auth/store.rs", 6, 8),
         ]
         events[0] = event(
-            "varde-code context_pack --json",
+            "varde map context_pack --json",
             context_output(
                 ["src/auth/coordinator.rs", "src/auth/session.rs", "src/auth/store.rs"], wrong
             ),
@@ -885,13 +923,13 @@ class NavigationVerifierTests(unittest.TestCase):
         events = case6_evidence()[1:]
         events[:0] = [
             event(
-                "varde-code context_pack --json",
+                "varde map context_pack --json",
                 context_output(
                     ["src/auth/coordinator.rs", "src/auth/session.rs"], symbols[:2]
                 ),
             ),
             event(
-                "varde-code context_pack --json",
+                "varde map context_pack --json",
                 context_output(["src/auth/store.rs"], symbols[2:]),
             ),
         ]
@@ -914,8 +952,8 @@ class NavigationVerifierTests(unittest.TestCase):
         first = [f"src/auth_refresh_helper_{number:02}.rs" for number in range(20, 23)]
         second = [f"src/auth_refresh_helper_{number:02}.rs" for number in range(23, 26)] + ["src/lib.rs"]
         events[1:2] = [
-            event("varde-toz query --handle capture-abc --lines 21:23", capture_output(first)),
-            event("varde-toz query --handle capture-abc --lines 24:27", capture_output(second)),
+            event("varde run query --handle capture-abc --lines 21:23", capture_output(first)),
+            event("varde run query --handle capture-abc --lines 24:27", capture_output(second)),
         ]
         self.assertEqual(self.verdicts(self.verify("7", events))[0], "PASS")
 
@@ -926,7 +964,7 @@ class NavigationVerifierTests(unittest.TestCase):
         events.extend(
             [
                 event("cat /sandbox/context-result.json", envelope),
-                event("varde-toz query --handle capture-abc --lines 21:27", capture),
+                event("varde run query --handle capture-abc --lines 21:27", capture),
             ]
         )
         self.assertEqual(self.verdicts(self.verify("7", events))[0], "PASS")
@@ -940,7 +978,7 @@ class NavigationVerifierTests(unittest.TestCase):
         events = case7_evidence()[:1]
         events.append(
             event(
-                "varde-toz query --handle capture-abc; varde-code context_pack --json '{\"resultsOffset\":20}'",
+                "varde run query --handle capture-abc; varde map context_pack --json '{\"resultsOffset\":20}'",
                 "src/auth_refresh_helper_21.rs\n" + context_output(
                     ["src/auth_refresh_helper_21.rs"],
                     [
@@ -960,7 +998,7 @@ class NavigationVerifierTests(unittest.TestCase):
         events = case7_evidence()
         output = json.loads(events[2]["input"]["item"]["aggregated_output"])
         output["data"]["symbols"][0]["span"] = {"start_line": 1, "end_line": 4}
-        events[2] = event("varde-code context_pack --json", json.dumps(output))
+        events[2] = event("varde map context_pack --json", json.dumps(output))
         self.assertEqual(self.verdicts(self.verify("7", events))[1], "FAIL")
 
 

@@ -9,10 +9,11 @@ use tempfile::TempDir;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use super::{
-    ChildSession, Coverage, CurrentOverlap, EvidenceRecord, InspectionSnapshot, MAX_FAMILY,
-    MAX_FAMILY_SOURCE_BYTES, MAX_RECORD_BYTES, MAX_RECORDS, MAX_SOURCE_BYTES, MAX_TEXT_EXCERPT,
-    MAX_WARNINGS, NormalizedRecordBudget, RecordAnchor, SessionMetadata, SourceCompanion,
-    SourceSnapshot, ToolObservation, build_snapshot, digest, error, file_identity,
+    ChildSession, Coverage, CurrentOverlap, DiscoveredSession, EvidenceRecord, InspectionSnapshot,
+    MAX_DISCOVERY_FILES, MAX_FAMILY, MAX_FAMILY_SOURCE_BYTES, MAX_LIST_DISCOVERY_BYTES,
+    MAX_RECORD_BYTES, MAX_RECORDS, MAX_SOURCE_BYTES, MAX_TEXT_EXCERPT, MAX_WARNINGS,
+    NormalizedRecordBudget, RecordAnchor, SessionMetadata, SourceCompanion, SourceSnapshot,
+    ToolObservation, build_snapshot, digest, error, file_identity, is_retro_analyst,
     parse_rfc3339_nanos,
 };
 use crate::LearnError;
@@ -118,10 +119,173 @@ struct CapturedComponent {
     identity: Option<(u64, u64, u128)>,
 }
 
+pub(super) struct ListDiscovery {
+    pub sessions: Vec<DiscoveredSession>,
+    pub warnings: Vec<String>,
+    pub has_readable_source: bool,
+}
+
 pub(super) fn inspect_id(root: &Path, session_id: &str) -> Result<InspectionSnapshot, LearnError> {
     validate_id(session_id)?;
     let database = database_path(root)?;
     inspect_database(&database, Some(session_id))
+}
+
+pub(super) fn list_sessions(root: &Path, repo: &Path) -> Result<ListDiscovery, LearnError> {
+    let configured = std::env::var_os("OPENCODE_DB").map(PathBuf::from);
+    let database = if root.is_file() {
+        root.to_path_buf()
+    } else if let Some(path) = configured {
+        if path.is_absolute() {
+            path
+        } else {
+            root.join(path)
+        }
+    } else {
+        root.join("opencode.db")
+    };
+    if !database.exists() {
+        return Ok(ListDiscovery {
+            sessions: Vec::new(),
+            warnings: Vec::new(),
+            has_readable_source: false,
+        });
+    }
+    let database = database_path(root)?;
+    let connection = Connection::open_with_flags(
+        &database,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|cause| {
+        error(
+            "diagnose_store_read_failed",
+            format!("cannot open OpenCode database for listing: {cause}"),
+        )
+    })?;
+    validate_schema(&connection)?;
+    let mut statement = connection
+        .prepare("SELECT id,project_id,parent_id,fork_session_id,fork_boundary,directory,version,time_created FROM session_v2 ORDER BY time_created DESC,id LIMIT ?1")
+        .map_err(|cause| {
+            error(
+                "diagnose_store_read_failed",
+                format!("cannot list OpenCode sessions: {cause}"),
+            )
+        })?;
+    let rows = statement
+        .query_map([(MAX_DISCOVERY_FILES + 1) as i64], session_from_row)
+        .map_err(|cause| {
+            error(
+                "diagnose_store_read_failed",
+                format!("cannot list OpenCode sessions: {cause}"),
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|cause| {
+            error(
+                "diagnose_store_read_failed",
+                format!("cannot decode OpenCode session: {cause}"),
+            )
+        })?;
+    if rows.len() > MAX_DISCOVERY_FILES {
+        return Err(error(
+            "diagnose_discovery_incomplete",
+            "OpenCode session discovery exceeded its entry bound",
+        ));
+    }
+    let has_readable_source = rows.iter().any(|row| row.version == OPENCODE_VERSION);
+    let mut total_bytes = 0usize;
+    let mut sessions = Vec::with_capacity(rows.len());
+    let mut skipped_sessions = 0usize;
+    for row in rows {
+        if row.version != OPENCODE_VERSION {
+            skipped_sessions += 1;
+            continue;
+        }
+        if !super::list::cwd_is_in_repo(&row.directory, repo) {
+            continue;
+        }
+        let (retro_analyst, bytes_read) = match first_user_analyst(&connection, &row.id) {
+            Ok(result) => result,
+            Err(_) => {
+                skipped_sessions += 1;
+                continue;
+            }
+        };
+        total_bytes = total_bytes.saturating_add(bytes_read);
+        if total_bytes > MAX_LIST_DISCOVERY_BYTES {
+            return Err(error(
+                "diagnose_discovery_incomplete",
+                "OpenCode first-user discovery exceeded its byte bound",
+            ));
+        }
+        let identity = format!("opencode:{}", row.id);
+        sessions.push(DiscoveredSession {
+            harness: "opencode",
+            identity,
+            session_id: row.id.clone(),
+            aliases: vec![row.id.clone()],
+            parent_identity: row
+                .parent_id
+                .as_deref()
+                .map(|parent| format!("opencode:{parent}")),
+            parent_known: true,
+            started_at: timestamp_from_ms(row.time_created),
+            cwd: Some(row.directory),
+            retro_analyst,
+        });
+    }
+    let warnings = if skipped_sessions == 0 {
+        Vec::new()
+    } else {
+        vec![format!(
+            "OpenCode discovery skipped {skipped_sessions} sessions with unsupported versions or unreadable or malformed first user records; coverage is partial"
+        )]
+    };
+    Ok(ListDiscovery {
+        sessions,
+        warnings,
+        has_readable_source,
+    })
+}
+
+fn first_user_analyst(
+    connection: &Connection,
+    session_id: &str,
+) -> Result<(bool, usize), LearnError> {
+    let row = connection
+        .query_row(
+            "SELECT substr(CAST(data AS BLOB),1,?1),length(CAST(data AS BLOB)) FROM session_message WHERE session_id=?2 AND type='user' ORDER BY seq LIMIT 1",
+            params![MAX_RECORD_BYTES as i64 + 1, session_id],
+            |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .optional()
+        .map_err(|cause| {
+            error(
+                "diagnose_store_read_failed",
+                format!("cannot read first OpenCode user record: {cause}"),
+            )
+        })?;
+    let Some((data, length)) = row else {
+        return Ok((false, 0));
+    };
+    if length < 0 || length as usize > MAX_RECORD_BYTES {
+        return Err(error(
+            "diagnose_discovery_incomplete",
+            "OpenCode first-user record exceeded its byte bound",
+        ));
+    }
+    let value: Value = serde_json::from_slice(&data).map_err(|cause| {
+        error(
+            "diagnose_discovery_incomplete",
+            format!("cannot parse OpenCode first user record: {cause}"),
+        )
+    })?;
+    let text = value
+        .get("text")
+        .and_then(Value::as_str)
+        .or_else(|| value.pointer("/parts/0/text").and_then(Value::as_str))
+        .unwrap_or_default();
+    Ok((is_retro_analyst(text), length as usize))
 }
 
 pub(super) fn inspect_path(_root: &Path, path: &Path) -> Result<InspectionSnapshot, LearnError> {
@@ -788,6 +952,8 @@ fn build_native_inspection(
             record_count: records.len(),
             malformed_records,
             omitted_records,
+            unknown_events: 0,
+            inherited_events: 0,
             warnings,
         },
     )
@@ -1388,26 +1554,7 @@ fn normalize_message(
     let cache_write = tokens
         .and_then(|value| value.pointer("/cache/write"))
         .and_then(Value::as_u64);
-    let usage_record = if [
-        input_tokens,
-        output_tokens,
-        reasoning,
-        cache_read,
-        cache_write,
-    ]
-    .iter()
-    .any(Option::is_some)
-    {
-        let total = [
-            input_tokens,
-            output_tokens,
-            reasoning,
-            cache_read,
-            cache_write,
-        ]
-        .into_iter()
-        .flatten()
-        .fold(0u64, u64::saturating_add);
+    let usage_record = if let Some(total) = tokens_context_occupancy(tokens) {
         Some(json!({
             "input_tokens": input_tokens, "output_tokens": output_tokens,
             "reasoning_tokens": reasoning, "cache_read_tokens": cache_read,
@@ -1533,6 +1680,79 @@ fn normalize_message(
         timestamp_raw,
         session_location: None,
         location_provenance: None,
+    })
+}
+
+pub(super) fn context_occupancy(record: &Value) -> Option<u64> {
+    tokens_context_occupancy(
+        record
+            .pointer("/message/tokens")
+            .or_else(|| record.get("tokens")),
+    )
+}
+
+pub(super) fn context_usage_from_export(path: &Path) -> Option<(u64, Option<String>)> {
+    if path.extension().and_then(|extension| extension.to_str()) != Some("json")
+        || !path.is_absolute()
+    {
+        return None;
+    }
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() == 0 {
+        return None;
+    }
+    let canonical = path.canonicalize().ok()?;
+    let bytes =
+        read_bounded_file(&canonical, super::context_usage::MAX_CONTEXT_USAGE_BYTES).ok()?;
+    let export: Value = serde_json::from_slice(&bytes).ok()?;
+    let session_id = export.pointer("/info/id")?.as_str()?;
+    validate_id(session_id).ok()?;
+    let messages = export.get("messages")?.as_array()?;
+    if messages.is_empty() || messages.len() > super::context_usage::MAX_CONTEXT_USAGE_RECORDS {
+        return None;
+    }
+    let mut latest = None;
+    for message in messages {
+        if message.get("type").and_then(Value::as_str) == Some("compaction") {
+            latest = None;
+            continue;
+        }
+        if let Some(tokens) = context_occupancy(message) {
+            latest = Some((
+                tokens,
+                message
+                    .pointer("/model/id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            ));
+        }
+    }
+    latest
+}
+
+fn tokens_context_occupancy(tokens: Option<&Value>) -> Option<u64> {
+    let components = [
+        tokens
+            .and_then(|value| value.get("input"))
+            .and_then(Value::as_u64),
+        tokens
+            .and_then(|value| value.get("output"))
+            .and_then(Value::as_u64),
+        tokens
+            .and_then(|value| value.get("reasoning"))
+            .and_then(Value::as_u64),
+        tokens
+            .and_then(|value| value.pointer("/cache/read"))
+            .and_then(Value::as_u64),
+        tokens
+            .and_then(|value| value.pointer("/cache/write"))
+            .and_then(Value::as_u64),
+    ];
+    components.iter().any(Option::is_some).then(|| {
+        components
+            .into_iter()
+            .flatten()
+            .fold(0u64, u64::saturating_add)
     })
 }
 
@@ -1722,6 +1942,8 @@ fn inspect_export(path: &Path, bytes: &[u8]) -> Result<InspectionSnapshot, Learn
             record_count,
             malformed_records: malformed,
             omitted_records: omitted,
+            unknown_events: 0,
+            inherited_events: 0,
             warnings,
         },
     )

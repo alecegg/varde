@@ -1,0 +1,290 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 4
+cyclomatic = 4
+matrix = "if-else-if-else"
+rule = "spec:491-518; `if` +1, two `else if` branches +1 each, and final `else` +1"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:491-518; root `if` +1, `else if` +1, and branch-body `if` at root nesting +2"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:491-518; root `if` +1, `else` +1, and body `if` +2"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer `if` +1 and nested `if` +2"
+
+[[case]]
+callable = "loops"
+cognitive = 8
+cyclomatic = 5
+matrix = "loops"
+rule = "spec:491-518; `for` +1, nested `while` +2, nested `if` +3, and nested `loop` +2"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 4
+matrix = "switch-once"
+rule = "spec:196-205, 491-500; one `match` container +1; pre-change cyclomatic is baseline 1 + match entity + three arms"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; `if` +1; return is a zero-cost early exit"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229, 491-501; one run of `&&` adds 1 regardless of operator count"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229, 491-501; mixed `&&` and `||` form two sequences, each +1"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256; outer `&&` +1 and negation breaks a second `&&` sequence +1"
+
+[[case]]
+callable = "logical_run_across_lambda"
+cognitive = 2
+cyclomatic = 2
+matrix = "logical-run-across-lambda"
+rule = "spec:207-229, 267-291; the outer `&&` and closure `&&` are separate sequences; closure adds one nesting level"
+
+[[case]]
+callable = "<anonymous>@42:10"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:207-229, 267-291; closure's `&&` sequence adds 1"
+
+[[case]]
+callable = "null_coalescing_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "null-coalescing-zero"
+rule = "spec:163-168; Rust's `?` operator is interpreted by analogy to null-coalescing shorthand and adds 0"
+
+[[case]]
+callable = "lambda_nesting"
+cognitive = 2
+cyclomatic = 1
+matrix = "lambda-nesting"
+rule = "spec:267-285, 491-501; nested closure raises nesting one level, so its `if` adds 2 to the outer function"
+
+[[case]]
+callable = "<anonymous>@48:17"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-285, 491-501; closure's own top-level `if` adds 1"
+
+[[case]]
+callable = "named_nested_function"
+cognitive = 2
+cyclomatic = 1
+matrix = "named-nested-function"
+rule = "spec:267-280, 491-501; nested named function raises nesting by one, so its `if` adds 2 to the outer function"
+
+[[case]]
+callable = "nested_inner"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-280, 491-501; local function's own top-level `if` adds 1"
+
+[[case]]
+callable = "recursion_nested_local"
+cognitive = 4
+cyclomatic = 1
+rule = "spec:230-237, 267-280, 491-518; the nested function's `if` +1, `else` +1, and recursion +1 roll up with one nested-callable level"
+
+[[case]]
+callable = "recursive_inner"
+cognitive = 3
+cyclomatic = 2
+rule = "spec:230-237, 491-518; local function's own `if` +1, `else` +1, and direct recursive call +1"
+
+[[case]]
+callable = "class_in_method"
+cognitive = 2
+cyclomatic = 1
+matrix = "class-in-method"
+rule = "spec:267-280, 491-501; function inside a local `impl` is nested, so its `if` adds 2 to the outer function"
+
+[[case]]
+callable = "read"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-280, 491-501; local impl method's own top-level `if` adds 1"
+
+[[case]]
+callable = "if_let_else"
+cognitive = 2
+cyclomatic = 2
+matrix = "ternary"
+rule = "spec:491-518; `if let` is an `if` (+1) and its plain `else` is hybrid (+1); interpretation recorded on the Rust page"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "condition-nesting"
+rule = "spec:491-518; outer `if` +1, nested condition `if` +2, and its `else` +1; conditions are inside their structure per the plan interpretation"
+
+[[case]]
+callable = "let_else"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:176-179, 491-501; `let ... else` is interpreted as a hybrid `else` branch (+1), by analogy to `if`-family `else`; early return is 0"
+
+[[case]]
+callable = "goto_or_labeled_jump"
+cognitive = 4
+cyclomatic = 3
+matrix = "goto-or-labeled-jump"
+rule = "spec:238-243, 491-518; `for` +1, nested `if` +2, and labeled `break` +1"
+
+[[case]]
+callable = "multi_level_break"
+cognitive = 7
+cyclomatic = 4
+matrix = "multi-level-break"
+rule = "spec:238-243, 491-518; two nested `for`s +1 and +2, nested `if` +3, labeled `continue` +1"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 3
+cyclomatic = 2
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-518; `if` +1, else +1, and recursive method +1"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-two-calls"
+rule = "spec:230-237; two self calls still produce one increment for this method in a recursion cycle"
+
+[[case]]
+callable = "recursion_qualified_self"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-qualified-self"
+rule = "spec:230-237; `self.method` binds to the same impl method and contributes one recursion increment"
+
+[[case]]
+callable = "recursion_self_type"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237; `Self::method` binds to the same impl method and contributes one recursion increment"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-other-receiver"
+rule = "spec:230-237; `other.method` is not a same-owner recursive edge"
+
+[[case]]
+callable = "recursion_in_closure"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-in-closure"
+rule = "spec:230-237, 267-280; the enclosing named function receives one recursive marker for the call inside its closure"
+
+[[case]]
+callable = "<anonymous>@105:18"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:267-280; closure contains no structural event of its own; recursion is attributed to the enclosing named function"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237; this method participates in a same-file two-function recursion cycle"
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237; this method participates in a same-file two-function recursion cycle"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237; the referenced peer is absent from the one-file fixture and does not resolve"
+
+[[case]]
+callable = "get_words"
+cognitive = 1
+cyclomatic = 5
+matrix = "spec-example-small"
+rule = "spec:316-327, 491-500; one `match` combines all four arms into one cognitive increment; pre-change cyclomatic is baseline 1 + four arms"
+
+[[case]]
+callable = "sum_primes"
+cognitive = 7
+cyclomatic = 4
+rule = "spec:328-339, 238-243; nested loops and `if` score +1/+2/+3, labeled `continue` +1"
+
+[["n/a"]]
+matrix_id = "catch-once"
+reason = "Rust has no catch clause; matching a Result remains a match expression."
+
+[["n/a"]]
+matrix_id = "try-finally-zero"
+reason = "Rust has no try/finally statement form."
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "The defined compensating-usage exception applies to JavaScript-like declarative functions and Python decorators; Rust has neither idiom."
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "Rust has no callback-compensation exception in the spec or plan."
+
+[["n/a"]]
+matrix_id = "recursion-overload-delegate"
+reason = "Rust does not support function overloading."
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "Rust cfg attributes are not preprocessor conditionals; the plan's conditional scanner does not apply to Rust."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Rust has no C preprocessor extern-C guard form."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "Rust has iterator adapters but no comprehension or query-clause syntax."
+
+[["n/a"]]
+matrix_id = "spec-example-large"
+reason = "The large Sonar example matrix is defined for Java, JavaScript, and C# only."

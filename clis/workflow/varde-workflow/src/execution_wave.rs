@@ -1,29 +1,31 @@
 //! Advisory execution waves from task frontmatter and read-only code reach.
-use crate::execution_wave_paths::{canonical_path, compile_unit};
+use crate::execution_wave_paths::{
+    canonical_declaration, declarations_overlap, matches_declaration,
+};
 use crate::execution_wave_tools as tools;
+use crate::task_ownership::OwnershipDeclarations;
 use serde_json::{Value, json};
 use serde_yaml::Value as Yaml;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
+use varde_contracts::ImpactQuery;
 use varde_workflow_core::frontmatter;
 
 type Paths = BTreeSet<String>;
-const OWNERSHIP: [&str; 4] = ["modifies", "creates", "renames", "verification_resources"];
+const OWNERSHIP: [&str; 4] = ["owns", "modifies", "creates", "renames"];
 
 #[derive(Default)]
 struct Task {
     status: String,
     dependencies: Vec<String>,
-    kind: String,
-    posture: String,
     writes: Paths,
+    owns: Paths,
     modifies: Vec<String>,
     renames: Paths,
     creates: Paths,
     body: String,
     sources: Paths,
-    resources: Paths,
     missing: Vec<String>,
 }
 
@@ -59,9 +61,28 @@ fn norm(path: &str) -> String {
     path.trim().trim_start_matches("./").to_owned()
 }
 
+/// Plan-level paths any task may touch (`shared:`, with legacy `generated:`).
+/// They are resolved by the merge queue, not by wave conflicts.
+fn load_shared(plan: &Path) -> Result<Paths, String> {
+    let path = plan.join("plan.md");
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Paths::new()),
+        Err(error) => return Err(format!("{}: {error}", path.display())),
+    };
+    let (frontmatter, _) =
+        frontmatter::parse(&bytes).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut paths = Paths::new();
+    for key in ["shared", "generated"] {
+        paths.extend(list(&frontmatter, key)?.iter().map(|value| norm(value)));
+    }
+    Ok(paths)
+}
+
 fn load_task(path: &Path) -> Result<Task, String> {
     let bytes = fs::read(path).map_err(|error| error.to_string())?;
     let (fm, body) = frontmatter::parse(&bytes).map_err(|error| error.to_string())?;
+    let owns: Paths = list(&fm, "owns")?.iter().map(|value| norm(value)).collect();
     let modifies: Vec<_> = list(&fm, "modifies")?
         .iter()
         .map(|value| norm(value))
@@ -70,26 +91,32 @@ fn load_task(path: &Path) -> Result<Task, String> {
         .iter()
         .map(|value| norm(value))
         .collect();
+    scalar(&fm, "kind", "", true)?;
+    scalar(&fm, "posture", "", true)?;
     let mut task = Task {
         status: scalar(&fm, "status", "todo", false)?,
         dependencies: list(&fm, "depends_on")?,
-        kind: scalar(&fm, "kind", "", true)?,
-        posture: scalar(&fm, "posture", "", true)?,
-        sources: modifies.iter().cloned().collect(),
-        writes: modifies
+        sources: owns
+            .iter()
+            .chain(&modifies)
+            .filter(|path| !path.contains('*') && !path.ends_with('/'))
+            .cloned()
+            .collect(),
+        writes: owns
             .iter()
             .cloned()
+            .chain(modifies.iter().cloned())
             .chain(creates.iter().cloned())
             .collect(),
+        owns,
         modifies,
         creates,
         body,
-        resources: list(&fm, "verification_resources")?.into_iter().collect(),
-        missing: OWNERSHIP
-            .iter()
-            .filter(|key| fm.get(**key).is_none())
-            .map(|key| (*key).into())
-            .collect(),
+        missing: if OWNERSHIP.iter().any(|key| fm.get(*key).is_some()) {
+            Vec::new()
+        } else {
+            vec!["owns (or legacy modifies/creates/renames)".into()]
+        },
         ..Task::default()
     };
     for rename in list(&fm, "renames")? {
@@ -130,6 +157,36 @@ fn load_tasks(plan: &Path) -> Result<BTreeMap<String, Task>, String> {
         tasks.insert(id.into(), task);
     }
     Ok(tasks)
+}
+
+/// Read the ownership declarations for every task using the same parser as
+/// execution-wave planning. Each entry carries `(id, status, declarations)`.
+pub(crate) fn ownership_declarations(
+    plan: &Path,
+) -> Result<Vec<(String, String, OwnershipDeclarations)>, String> {
+    if !plan.join("tasks").exists() {
+        return Ok(Vec::new());
+    }
+    let tasks = load_tasks(plan)?;
+    let shared = load_shared(plan)?;
+    Ok(tasks
+        .into_iter()
+        .map(|(id, task)| {
+            let renamed_sources = task.renames.difference(&task.creates).cloned();
+            let mut owned: Paths = task.modifies.into_iter().collect();
+            owned.extend(renamed_sources);
+            (
+                id,
+                task.status,
+                OwnershipDeclarations {
+                    owned,
+                    owns: task.owns,
+                    creates: task.creates,
+                    generated: shared.clone(),
+                },
+            )
+        })
+        .collect())
 }
 
 fn has_cycle(tasks: &BTreeMap<String, Task>) -> bool {
@@ -196,13 +253,43 @@ fn canonical_set(
 ) -> Result<Paths, String> {
     values
         .into_iter()
-        .map(|value| canonical_path(root, value.as_ref()))
+        .map(|value| canonical_declaration(root, value.as_ref()))
         .collect()
 }
 
-pub fn execution_wave(plan: &Path, root: &Path, workers: usize) -> Result<Value, WaveError> {
-    if !(1..=3).contains(&workers) {
-        return Err(WaveError::Input("--max-workers must be 1..3".into()));
+fn overlapping_paths(left: &Paths, right: &Paths) -> Paths {
+    let mut overlaps = Paths::new();
+    for a in left {
+        for b in right {
+            if !declarations_overlap(a, b) {
+                continue;
+            }
+            let a_is_path = !a.contains('*') && !a.ends_with('/');
+            let b_is_path = !b.contains('*') && !b.ends_with('/');
+            let path = if a_is_path && matches_declaration(b, a) {
+                a
+            } else if b_is_path && matches_declaration(a, b) {
+                b
+            } else {
+                a
+            };
+            overlaps.insert(path.clone());
+        }
+    }
+    overlaps
+}
+
+pub fn execution_wave(
+    plan: &Path,
+    root: &Path,
+    workers: usize,
+    impact: Option<&'static dyn ImpactQuery>,
+) -> Result<Value, WaveError> {
+    if workers == 0 {
+        return Err(WaveError::Input(
+            "--max-workers must be at least 1; omit --max-workers to use [orchestration] builders"
+                .into(),
+        ));
     }
     let tasks = load_tasks(plan).map_err(WaveError::Input)?;
     if has_cycle(&tasks) {
@@ -214,7 +301,7 @@ pub fn execution_wave(plan: &Path, root: &Path, workers: usize) -> Result<Value,
     if !root.is_dir() {
         return Err(WaveError::Input("repo root is not a directory".into()));
     }
-    Ok(resolve(&tasks, &root, workers))
+    Ok(resolve(&tasks, &root, workers, impact))
 }
 
 pub enum WaveError {
@@ -230,7 +317,12 @@ impl std::fmt::Display for WaveError {
     }
 }
 
-fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value {
+fn resolve(
+    tasks: &BTreeMap<String, Task>,
+    root: &Path,
+    workers: usize,
+    impact: Option<&'static dyn ImpactQuery>,
+) -> Value {
     let ready: Vec<_> = tasks
         .iter()
         .filter(|(_, task)| {
@@ -243,7 +335,6 @@ fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value
         .map(|(id, _)| id.clone())
         .collect();
     let mut reasons = Vec::new();
-    let mut conflicts = Vec::new();
     let mut blocked = Vec::new();
     for (id, task) in tasks.iter().filter(|(_, task)| task.status == "todo") {
         for dependency in &task.dependencies {
@@ -274,9 +365,8 @@ fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value
             }
         }
     }
-    let have_cli = tools::available();
-    if !have_cli {
-        reasons.push("varde-code unavailable: independence cannot be checked".into());
+    if impact.is_none() {
+        reasons.push("varde map unavailable: independence cannot be checked".into());
     }
     let mut uncertain = false;
     let mut writes = BTreeMap::new();
@@ -285,6 +375,17 @@ fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value
     let mut renames = BTreeMap::new();
     for id in &ready {
         let task = &tasks[id];
+        if task
+            .modifies
+            .iter()
+            .chain(&task.renames)
+            .any(|path| path.contains('*') || path.ends_with('/'))
+        {
+            uncertain = true;
+            reasons.push(format!(
+                "{id}: source ownership pattern has unknown dependency reach"
+            ));
+        }
         if !task.missing.is_empty() {
             uncertain = true;
             reasons.push(format!(
@@ -296,11 +397,17 @@ fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value
         let identities = (|| {
             Ok::<_, String>((
                 canonical_set(root, &task.writes)?,
-                canonical_set(root, &task.sources)?,
                 canonical_set(
                     root,
-                    task.modifies
+                    task.sources
                         .iter()
+                        .filter(|path| !path.contains('*') && !path.ends_with('/')),
+                )?,
+                canonical_set(
+                    root,
+                    task.owns
+                        .iter()
+                        .chain(&task.modifies)
                         .filter(|path| path.to_lowercase().ends_with(".md")),
                 )?,
                 canonical_set(root, &task.renames)?,
@@ -331,21 +438,24 @@ fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value
             continue;
         };
         if owned.is_empty() {
-            reasons.push(format!("{id}: empty modifies/creates/renames"));
+            reasons.push(format!("{id}: empty ownership declarations"));
             continue;
         }
-        if !have_cli {
+        let Some(impact) = impact else {
             continue;
-        }
+        };
         let mut area = owned.clone();
         let mut known = true;
         for path in &sources[id] {
             if !root.join(path).exists() {
                 continue;
             }
-            match tools::blast_radius(root, path) {
+            match tools::blast_radius(impact, root, path) {
                 None => {
-                    reasons.push(format!("{id}: blast_radius failed for {path}"));
+                    reasons.push(format!(
+                        "{id}: blast_radius failed for {path} (impact query unavailable; if the code index is missing run: varde map build --repo-root {})",
+                        root.display()
+                    ));
                     known = false;
                     break;
                 }
@@ -368,22 +478,30 @@ fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value
             candidates.push(id.clone());
         }
     }
+    let mut conflicts: BTreeMap<(String, String), Paths> = BTreeMap::new();
+    for (index, left) in ready.iter().enumerate() {
+        for right in ready.iter().skip(index + 1) {
+            let (Some(left_writes), Some(right_writes)) = (writes.get(left), writes.get(right))
+            else {
+                continue;
+            };
+            let files = overlapping_paths(left_writes, right_writes);
+            if !files.is_empty() {
+                conflicts.insert((left.clone(), right.clone()), files);
+            }
+        }
+    }
     let mut wave: Vec<String> = Vec::new();
     for id in candidates {
         let mut clash = false;
         for other in &wave {
-            let shared: Paths = writes[&id]
-                .intersection(&reach[other])
-                .cloned()
-                .chain(writes[other].intersection(&reach[&id]).cloned())
-                .collect();
-            let resources: Paths = tasks[&id]
-                .resources
-                .intersection(&tasks[other].resources)
-                .cloned()
-                .collect();
-            if !shared.is_empty() || !resources.is_empty() {
-                conflicts.push(json!({"tasks":[other,id],"files":shared,"resources":resources}));
+            let mut shared = overlapping_paths(&writes[&id], &reach[other]);
+            shared.extend(overlapping_paths(&writes[other], &reach[&id]));
+            if !shared.is_empty() {
+                conflicts
+                    .entry((other.clone(), id.clone()))
+                    .or_default()
+                    .extend(shared);
                 clash = true;
                 break;
             }
@@ -400,31 +518,127 @@ fn resolve(tasks: &BTreeMap<String, Task>, root: &Path, workers: usize) -> Value
             .cloned()
             .collect();
     }
-    let units: Vec<Paths> = wave
-        .iter()
-        .map(|id| {
-            writes
-                .get(id)
-                .into_iter()
-                .flatten()
-                .filter_map(|path| compile_unit(root, path))
-                .collect()
-        })
-        .collect();
-    let shared_unit = units.iter().enumerate().any(|(index, unit)| {
-        units[index + 1..]
-            .iter()
-            .any(|other| !unit.is_disjoint(other))
-    });
-    let special = wave
-        .iter()
-        .any(|id| tasks[id].kind == "spike" || tasks[id].posture == "refactor");
-    let mode = if wave.len() <= 1 {
+    let mode = if wave.is_empty() {
         "single"
-    } else if shared_unit || special {
-        "worktree"
     } else {
-        "shared"
+        "worktree"
     };
+    let conflicts: Vec<_> = conflicts
+        .into_iter()
+        .map(|((left, right), files)| json!({"tasks":[left,right],"files":files}))
+        .collect();
     json!({"schema_version":3,"ready":ready,"blocked_by_dep":blocked,"next_wave":wave,"wave_mode":mode,"conflicts":conflicts,"reasons":reasons})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    struct FakeImpact<F>(F);
+
+    impl<F> ImpactQuery for FakeImpact<F>
+    where
+        F: Fn(&Path) -> Option<Vec<PathBuf>> + Send + Sync,
+    {
+        fn dependents(&self, _repo_root: &Path, file: &Path) -> Option<Vec<PathBuf>> {
+            (self.0)(file)
+        }
+    }
+
+    fn fake(
+        impact: impl Fn(&Path) -> Option<Vec<PathBuf>> + Send + Sync + 'static,
+    ) -> Option<&'static dyn ImpactQuery> {
+        Some(Box::leak(Box::new(FakeImpact(impact))))
+    }
+
+    /// A plan with todo tasks alpha, beta and gamma each owning `src/<id>`.
+    fn fixture(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("wave-unit-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("tasks")).unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        for id in ["alpha", "beta", "gamma"] {
+            fs::write(root.join(format!("src/{id}")), "").unwrap();
+            fs::write(
+                root.join(format!("tasks/{id}.md")),
+                format!("---\nstatus: todo\ndepends_on: []\nmodifies: [src/{id}]\ncreates: []\nrenames: []\nverification_resources: []\n---\n"),
+            )
+            .unwrap();
+        }
+        root.canonicalize().unwrap()
+    }
+
+    fn wave(root: &Path, impact: Option<&'static dyn ImpactQuery>) -> Value {
+        match execution_wave(root, root, 3, impact) {
+            Ok(data) => data,
+            Err(error) => panic!("{error}"),
+        }
+    }
+
+    fn reasons(data: &Value) -> Vec<String> {
+        data["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|reason| reason.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn unknown_reach_for_every_task_runs_only_the_first() {
+        let root = fixture("all-unknown");
+        let data = wave(&root, fake(|_| None));
+        assert_eq!(data["next_wave"], serde_json::json!(["alpha"]));
+        let expected_reason = format!(
+            "alpha: blast_radius failed for src/alpha (impact query unavailable; if the code index is missing run: varde map build --repo-root {})",
+            root.display()
+        );
+        assert!(reasons(&data).contains(&expected_reason));
+    }
+
+    #[test]
+    fn failure_for_one_task_is_local_and_known_independent_tasks_still_run() {
+        let root = fixture("local-failure");
+        let data = wave(
+            &root,
+            fake(|file| {
+                if file.ends_with("src/alpha") {
+                    None
+                } else {
+                    Some(vec![PathBuf::from("src/unwritten-consumer")])
+                }
+            }),
+        );
+        assert_eq!(data["next_wave"], serde_json::json!(["beta", "gamma"]));
+    }
+
+    #[test]
+    fn missing_impact_capability_is_reported_and_serializes_the_wave() {
+        let root = fixture("no-impact");
+        let data = wave(&root, None);
+        assert_eq!(data["next_wave"], serde_json::json!(["alpha"]));
+        assert!(
+            reasons(&data)
+                .iter()
+                .any(|reason| reason.contains("varde map unavailable"))
+        );
+    }
+
+    #[test]
+    fn dependents_reported_by_the_impact_query_join_the_owned_area() {
+        let root = fixture("dependents");
+        let data = wave(
+            &root,
+            fake(|file| {
+                let reach = match file.file_name().and_then(|name| name.to_str()) {
+                    Some("alpha") => "src/beta",
+                    Some("beta") => "src/consumer-of-beta",
+                    _ => "src/consumer-of-gamma",
+                };
+                Some(vec![PathBuf::from(reach)])
+            }),
+        );
+        assert_eq!(data["next_wave"], serde_json::json!(["alpha", "gamma"]));
+    }
 }

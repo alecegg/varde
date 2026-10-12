@@ -11,12 +11,12 @@ git -C "$fixture/main" config user.name 'Varde Eval'
 git -C "$fixture/main" commit -qm initial --allow-empty
 git -C "$fixture/main" worktree add -qb linked "$fixture/linked"
 
-VARDE_CONFIG_DIR="$fixture/config" varde-workflow paths set \
+VARDE_CONFIG_DIR="$fixture/config" varde setup paths set \
   --project "$fixture/main" \
   --working "$fixture/main-working" \
   --knowledge "$fixture/main-knowledge" --json >/dev/null
-main_paths="$(cd "$fixture/main" && VARDE_CONFIG_DIR="$fixture/config" varde-workflow paths --json)"
-linked_paths="$(cd "$fixture/linked" && VARDE_CONFIG_DIR="$fixture/config" varde-workflow paths --json)"
+main_paths="$(cd "$fixture/main" && VARDE_CONFIG_DIR="$fixture/config" varde setup paths --json)"
+linked_paths="$(cd "$fixture/linked" && VARDE_CONFIG_DIR="$fixture/config" varde setup paths --json)"
 for field in root working knowledge; do
   main_value="$(jq -r --arg field "$field" '.data[$field]' <<< "$main_paths")"
   linked_value="$(jq -r --arg field "$field" '.data[$field]' <<< "$linked_paths")"
@@ -32,8 +32,8 @@ import re
 import sys
 
 text = re.sub(r'\s+', ' ', Path(sys.argv[1]).read_text())
-assert text.count("parent's resolved absolute `<working>` and `<knowledge>` paths") == 2
-assert 'reviewer to use those paths without re-resolving' in text
-assert 'executor uses them without re-resolving' in text
+assert 'Branch, base, checks, and remaining concerns reported.' in text
+assert "Merge only on the user's explicit approval." in text
+assert 'varde plan conclude' in text
 PY
-echo 'Build finish briefs preserve parent paths and linked worktrees share repository memory.'
+echo 'Build finish reports the branch and merge approval; linked worktrees share repository memory.'

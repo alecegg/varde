@@ -9,142 +9,112 @@ import sys
 root = Path(sys.argv[1])
 checks = 0
 
+
+def text(relative):
+    return " ".join((root / relative).read_text(encoding="utf-8").split())
+
+
 def contains(relative, *needles):
     global checks
-    path = root / relative
-    text = " ".join(path.read_text(encoding="utf-8").split())
-    missing = [needle for needle in needles if needle not in text]
+    body = text(relative)
+    missing = [needle for needle in needles if needle not in body]
     if missing:
         raise SystemExit(f"FAIL: {relative} is missing: {missing}")
     checks += len(needles)
 
 
-gate_path = "skills/shared/references/review-gates.md"
+def excludes(relative, *needles):
+    global checks
+    body = text(relative)
+    present = [needle for needle in needles if needle in body]
+    if present:
+        raise SystemExit(f"FAIL: {relative} still contains: {present}")
+    checks += len(needles)
 
-# Core gates remain mandatory outside the mechanical exception; each branch is
-# loaded only for its operation.
-contains(gate_path,
-    "Mechanical edit exception", "entire diff", "exact operational meaning",
-    "mixed or uncertain diffs", "targeted checks", "Existing review subjects",
-    "Skill edits still get `varde-agent-doc-authoring` review",
-    "Take the full gate for mixed or uncertain diffs and for changes to any of: - commands - paths - conditions - instruction meaning - output contracts - configuration - code - tests",
-    "review init --subject <safe-id> --contract <contract.json>",
-    "--checkpoint start", "--checkpoint resume", "--checkpoint complete",
-    "stop implementation", "manual fallback", "shared contracts",
-    "exact approval checkout",
-    "references/review-gate-record.md", "before writing", "either phase",
-    "references/review-gate-plan.md", "Persisted plan",
-    "references/review-gate-worktree.md", "before dispatch",
-    "--artifact", "absolute", "file",
+
+gate = "skills/shared/references/review-gates.md"
+
+# One independent review per change, two axes, one fixer, and the report header.
+contains(gate,
+    "One independent review per plan or change",
+    "since a fixed `base` commit",
+    "Spec",
+    "Standards",
+    "one fixer",
+    "`review.md`",
+    "`verdict`",
+    "`approved`",
+    "`changes-requested`",
+    "`reviewer`",
+    "`head`",
 )
-branches = {
-    "review-gate-record.md": [
-        "data.record_template",
-        "data.version", "schema_version",
-        "review inspect --subject <subject-id> --phase <pre-edit|implementation> --json",
-        "review record --subject <subject-id>",
-        "failing test before implementation",
-    ],
-    "review-gate-plan.md": [
-        "review init --plan <plan.md>", "review contract", "review expand",
-        "Tasks inherit", "aggregate", "conclude",
-    ],
-    "review-gate-worktree.md": [
-        "review bind-worktree", "review abandon-worktree", "--binding",
-        "--worktree", "parents", "live bindings", "completion",
-    ],
-}
-for branch, needles in branches.items():
-    relative = f"skills/shared/references/{branch}"
-    if not (root / relative).is_file():
-        raise SystemExit(f"FAIL: missing conditional gate reference {branch}")
-    contains(relative, *needles)
-contains("skills/varde-change/references/build-micro-change.md",
-    "mechanical edit exception", "entire diff", "An existing review subject",
-    "review init --subject <safe-id>",
-    "--checkpoint start",
-    "complete",
+# Every text change gets the doc-authoring review, stated here once.
+contains(gate, "Every text change", "varde-agent-doc-authoring")
+# The fix re-check rules.
+contains(gate,
+    "fixes-only re-review",
+    "block only at critical or high",
+    "header-only re-check",
+    "holds only the named fixes",
+    "rewrites `head`",
 )
-contains("skills/varde-change/references/build.md",
-    "planning_ready",
-    "implementation_ready",
-    "do not dispatch implementation until its start or resume check passes",
+# `varde plan conclude` is the only gate.
+contains(gate, "varde plan conclude", "is the only gate")
+# The removed machinery stays out of the shared gate text.
+excludes(gate,
+    "Mechanical edit exception",
+    "start-bounded",
+    "checkpoint",
+    "tier",
+    "review subject",
+    "--subject",
+    "review-gate-",
 )
-contains("skills/varde-change/references/build.md",
-    "--checkpoint start --json",
-    "--checkpoint resume --json",
-)
-contains("skills/shared/references/review-gate-plan.md",
-    "readiness.data.planning_ready",
-    "readiness.data.implementation_ready",
-)
-contains("skills/varde-change/references/build-execution.md",
-    "--checkpoint start --json",
-    "--checkpoint resume",
-    "Tasks inherit that subject",
-)
-contains("skills/varde-change/references/plan.md",
-    "review init --plan <plan.md>",
-    "review record",
-    "keep the subject id in plan Progress",
-)
-contains("skills/varde-change/references/build-finish.md",
-    "Finish all source and documentation edits",
-    "phase `implementation`",
-    "--checkpoint complete --json",
-    "varde-workflow conclude <plan.md> --json",
-)
-finish = " ".join((root / "skills/varde-change/references/build-finish.md").read_text().split())
-if not (finish.index("Finish all source and documentation edits") <
-        finish.index("phase `implementation`") <
-        finish.index("--checkpoint complete --json") <
-        finish.index("varde-workflow conclude <plan.md> --json")):
-    raise SystemExit("FAIL: final review/check must follow changes and precede conclude")
+
+# Only the surviving shared gate reference ships; the removed gate references
+# and the shared tier script leave no file behind.
+refs = sorted(path.name for path in (root / "skills/shared/references").glob("review-gate*"))
+if refs != ["review-gates.md"]:
+    raise SystemExit(f"FAIL: unexpected shared gate references: {refs}")
 checks += 1
-contains("skills/shared/references/review-gate-record.md",
-    "review inspect --subject <subject-id>",
-    "review record --subject <subject-id>",
-)
-contains("skills/shared/references/review-gate-plan.md",
-    "`review contract`",
-    "`review expand`",
-)
+if (root / "skills/shared/scripts").exists():
+    raise SystemExit("FAIL: skills/shared/scripts should be gone with the tier script")
+checks += 1
+
+# MANIFEST installs only surviving shared files, and no longer sends
+# review-gates.md to varde-review.
+manifest = {}
+for line in (root / "skills/shared/MANIFEST").read_text(encoding="utf-8").splitlines():
+    if line.strip():
+        parts = line.split()
+        manifest[parts[0]] = parts[1:]
+gate_entries = sorted(path for path in manifest if path.startswith("references/review-gate"))
+if gate_entries != ["references/review-gates.md"]:
+    raise SystemExit(f"FAIL: MANIFEST lists stale gate files: {gate_entries}")
+checks += 1
+recipients = manifest.get("references/review-gates.md", [])
+if "varde-review" in recipients:
+    raise SystemExit("FAIL: MANIFEST still installs review-gates.md into varde-review")
+checks += 1
+# Each recipient must name the reference it receives.
+for skill in recipients:
+    if not any("references/review-gates.md" in path.read_text(encoding="utf-8")
+               for path in (root / "skills" / skill).rglob("*.md")):
+        raise SystemExit(f"FAIL: {skill} installs review-gates.md but never names it")
+    checks += 1
+
+# The CLI reference keeps the fallback rule and names no removed command.
 contains("skills/shared/references/varde-workflow-cli.md",
     "Never replace approval with prose",
-    "Not on `PATH`: stop every operation, reads included",
-    "Every other command, including `review inspect`, stops and reports the failure",
+    "When `varde` is missing: stop every operation, reads included",
+    "varde setup sync",
 )
-contains("skills/varde-review/references/report.md",
-    "Review-gate evidence",
-    "references/review-gate-record.md",
-)
-contains("skills/shared/references/review-gate-record.md",
-    "review record",
-    "`data.version`",
-    "coordinator-written approval is insufficient",
-)
-contains("clis/workflow/README.md",
-    "varde-workflow review init --plan",
-    "varde-workflow review inspect",
-    "varde-workflow review record",
-    "varde-workflow review check",
-    "planning_ready",
-    "implementation_ready",
-)
-contains("memory-bank/knowledge/reference/workflow-artifact-kernel.md",
-    "## Review evidence",
-    "immutable scoped baseline",
-    "required for gated work",
-)
-contains("memory-bank/knowledge/reference/workflow-schema.md",
-    "`planning_ready`",
-    "`implementation_ready`",
-    "review checkpoint",
-)
-contains("memory-bank/knowledge/reference/workflow-conclusion.md",
-    "review prerequisites",
-    "evidence must cover the complete subject change",
-    "consumed review and source revisions",
+excludes("skills/shared/references/varde-workflow-cli.md",
+    "review inspect",
+    "transition",
+    "recover",
+    "escalate-deferred",
+    "varde plan review",
 )
 
 print(f"Review gate routing checks passed ({checks} assertions).")

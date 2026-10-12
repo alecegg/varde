@@ -1,0 +1,42 @@
+use super::Case;
+
+pub fn cases() -> Vec<Case> {
+    vec![
+        Case::new(
+            "python-breakpoint-strict",
+            &["python"],
+            vec!["breakpoint()".into()],
+            vec!["print(value)".into()],
+        ),
+        Case::new(
+            "python-pdb-set-trace-strict",
+            &["python"],
+            vec!["pdb.set_trace()".into()],
+            vec!["pdb.post_mortem()".into()],
+        ),
+        Case::new(
+            "php-var-dump-strict",
+            &["php"],
+            vec!["var_dump($value);".into()],
+            vec!["print_r($value);".into()],
+        ),
+        Case::new(
+            "php-dd-strict",
+            &["php"],
+            vec!["dd($value);".into()],
+            vec!["dump_value($value);".into()],
+        ),
+        Case::new(
+            "elixir-io-inspect-strict",
+            &["elixir"],
+            vec!["IO.inspect(value)".into()],
+            vec!["IO.puts(value)".into()],
+        ),
+        Case::new(
+            "elixir-dbg-strict",
+            &["elixir"],
+            vec!["dbg(value)".into()],
+            vec!["inspect(value)".into()],
+        ),
+    ]
+}

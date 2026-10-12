@@ -23,7 +23,6 @@ pub struct WorkflowSchema {
     pub artifact_types: BTreeMap<String, ArtifactTypeSchema>,
     pub project_schema: Option<PathBuf>,
     pub project_schema_revision: Option<String>,
-    pub project_schema_identity: Option<crate::journal::FileIdentity>,
 }
 
 impl WorkflowSchema {
@@ -46,10 +45,6 @@ impl WorkflowSchema {
         merge_override(&mut schema, &value)?;
         schema.project_schema = Some(path);
         schema.project_schema_revision = Some(varde_workflow_core::occ::version(&bytes));
-        schema.project_schema_identity =
-            crate::journal::file_identity(&varde_workflow_core::memory::canonical_or_lexical(
-                schema.project_schema.as_deref().unwrap(),
-            ))?;
         Ok(schema)
     }
 
@@ -96,12 +91,13 @@ fn built_in() -> WorkflowSchema {
         "plan".to_string(),
         state_machine(
             "backlog",
-            &["active", "backlog", "blocked", "completed"],
-            &["completed"],
+            &["active", "backlog", "blocked", "cancelled", "completed"],
+            &["cancelled", "completed"],
             &[
                 ("backlog", &["active", "blocked"]),
                 ("active", &["blocked", "completed"]),
                 ("blocked", &["active"]),
+                ("cancelled", &[]),
                 ("completed", &[]),
             ],
         ),
@@ -124,7 +120,6 @@ fn built_in() -> WorkflowSchema {
         artifact_types,
         project_schema: None,
         project_schema_revision: None,
-        project_schema_identity: None,
     }
 }
 
@@ -256,7 +251,7 @@ fn yaml_strings(value: &YamlValue, field: &str) -> Result<BTreeSet<String>> {
 }
 
 fn project_root(artifact: &Path) -> Option<PathBuf> {
-    crate::review_checkpoints::repository_for(artifact).ok()
+    varde_workflow_core::memory::find_root(artifact)
 }
 
 fn key(name: &str) -> YamlValue {

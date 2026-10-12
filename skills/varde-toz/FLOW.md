@@ -1,7 +1,7 @@
 # varde-toz flow
 
 Generated for human readers; agents do not load this file. Regenerate
-with skill-flow.py --write from varde-agent-doc-authoring. Dotted edges
+with `varde doc flow --write`. Dotted edges
 are conditional loads; min tokens follow only solid edges. Thick edges
 are hand-offs to a later stage, outside min and max. Double-bordered
 nodes are skill modes run inline or agent dispatches. Min and max count
@@ -11,8 +11,8 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~842 tok; routes: Run a batch script)
-  - references/troubleshooting.md (~381 tok; routes: Run a batch script)
+- SKILL.md (~651 tok; routes: Run a batch script)
+  - references/troubleshooting.md (~383 tok; routes: Run a batch script)
 
 ```mermaid
 flowchart TD
@@ -23,14 +23,14 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  n0["references/troubleshooting.md (~381 tok)"]
+  n0["references/troubleshooting.md (~383 tok)"]
 ```
 
 ## Routes
 
 | Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |
 |---|---|---|---|---|---|---|---|
-| Run a batch script | ~842 | ~1223 | ~842 | ~1223 | - | 0 | references/troubleshooting.md |
+| Run a batch script | ~651 | ~1034 | ~651 | ~1034 | - | 0 | references/troubleshooting.md |
 
 ## Structure
 

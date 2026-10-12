@@ -10,6 +10,8 @@ session ID, or claim coverage beyond that evidence.
    and name the missing evidence that could change it.
 3. Give one bounded next check with its expected result. Answer in chat; do
    not save a diagnosis report or capture a friction item from this route.
+   For a proposed change, use the removal option, audit lens, and outcome tag
+   in [`options.md`](options.md).
 
 If the user then requests session-wide diagnosis or historical capture, switch
 to `references/diagnose.md` and perform its full evidence procedure.

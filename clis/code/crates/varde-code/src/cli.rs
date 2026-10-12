@@ -15,18 +15,18 @@ use clap::{Parser, Subcommand};
     long_about = "varde-code: native code-intelligence CLI (parse, index, query, scan).\n\
 \n\
 Typical flow:\n\
-  1. varde-code watch --ensure --repo <path> # persistent index coverage\n\
-  2. varde-code <query-mode> --json '{...}'      # read-only fresh-index query\n\
-  3. varde-code build --repo-root <path>        # explicit rebuild if needed\n\
-  4. varde-code scan --json '{\"repoRoot\":\"<path>\"}'  # run rule packs, exit non-zero above threshold\n\
+  1. varde setup watch --ensure --repo <path> # persistent index coverage\n\
+  2. varde map <query-mode> --json '{...}'     # read-only fresh-index query\n\
+  3. varde map build --repo-root <path>        # explicit rebuild if needed\n\
+  4. varde scan --json '{\"repoRoot\":\"<path>\"}'  # run rule packs, exit non-zero above threshold\n\
 \n\
 Scan rules (built-in + user + repo scope):\n\
-  varde-code rules_list --json '{\"repoRoot\":\"<path>\"}'   # see what would run, with override provenance\n\
-  varde-code rules_seed --json '{\"repoRoot\":\"<path>\"}'   # copy built-ins to .varde-code/rules/ for editing\n\
-  varde-code rules_remove --json '{\"repoRoot\":\"<path>\"}' # undo a seed (skips locally-edited files)\n\
-  Add --user to rules_seed/rules_remove to target ~/.config/varde-code/rules/ instead.\n\
+  varde scan rules list --json '{\"repoRoot\":\"<path>\"}'   # see what would run, with override provenance\n\
+  varde scan rules seed --json '{\"repoRoot\":\"<path>\"}'   # copy built-ins to .varde-code/rules/ for editing\n\
+  varde scan rules remove --json '{\"repoRoot\":\"<path>\"}' # undo a seed (skips locally-edited files)\n\
+  Add --user to varde scan rules seed/remove to target <varde config root>/code/rules/ (default ~/.config/varde/code/rules/) instead.\n\
 \n\
-Run `varde-code <subcommand> --help` for a subcommand's full input shape."
+Run `varde map <subcommand> --help` for a subcommand's full input shape."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -47,7 +47,8 @@ pub enum Command {
     /// Extract, resolve, and persist a repo's index so the query subcommands
     /// (symbols_in_file, find_pattern's DB-backed peers, etc.) can read it.
     /// Full rebuild every run — writes to
-    /// `~/.config/varde-code/repos/<name>-<hash>/index.db`.
+    /// `<varde config root>/code/repos/<name>-<hash>/index.db` (default:
+    /// `~/.config/varde/code/repos/<name>-<hash>/index.db`).
     Build {
         /// Path to the repo root to index.
         #[arg(long, alias = "repo-root")]
@@ -67,6 +68,7 @@ pub enum Command {
     #[command(name = "batch")]
     Batch {
         /// JSON object: { repoRoot, dbPath?, calls: [{ mode, ... }, ...] }
+        /// Example: {"repoRoot":".","calls":[{"mode":"get_symbol","name":"authenticate"},{"mode":"dependencies","filePath":"src/api.rs"}]}
         #[arg(long)]
         json: String,
     },
@@ -91,6 +93,7 @@ pub enum Command {
     #[command(name = "get_symbol")]
     GetSymbol {
         /// JSON object: { repoRoot, dbPath?, name, filePath?, kind?, includeBody? }
+        /// Example: {"repoRoot":".","name":"authenticate","filePath":"src/auth.rs","includeBody":true}
         #[arg(long)]
         json: String,
     },
@@ -99,6 +102,7 @@ pub enum Command {
     #[command(name = "dependencies")]
     Dependencies {
         /// JSON object: { repoRoot, dbPath?, filePath, direction?, maxDepth?, resultsLimit?, resultsOffset?, fullResults? }
+        /// Example: {"repoRoot":".","filePath":"src/api.rs","maxDepth":2}. maxDepth limits graph traversal depth.
         #[arg(long)]
         json: String,
     },
@@ -107,6 +111,7 @@ pub enum Command {
     #[command(name = "dependents")]
     Dependents {
         /// JSON object: { repoRoot, dbPath?, filePath, maxDepth?, resultsLimit?, resultsOffset?, fullResults? }
+        /// Example: {"repoRoot":".","filePath":"src/api.rs","maxDepth":2}. maxDepth limits graph traversal depth.
         #[arg(long)]
         json: String,
     },
@@ -223,6 +228,7 @@ pub enum Command {
     #[command(name = "find_pattern")]
     FindPattern {
         /// JSON object: { repoRoot?, path? (or filePath), pattern, language?, matchesLimit?, matchesOffset?, fullMatches? }. Relative path/filePath resolves against repoRoot; repoRoot alone searches the repo. Directories need language. Needs no index.
+        /// Examples: {"repoRoot":".","pattern":"console.log($ARG)","language":"typescript"}; {"repoRoot":".","path":"src/","pattern":"console.log($ARG)","language":"typescript"}; {"repoRoot":".","filePath":"src/main.ts","pattern":"console.log($ARG)"}. These search the repo, a directory, or one file. A single file can infer language from its extension. Call patterns: `<name>($$$ARGS)`; methods `$RECV.<name>($$$ARGS)`; qualified calls need the full path.
         #[arg(long)]
         json: String,
     },
@@ -242,6 +248,7 @@ pub enum Command {
         /// Symbols default to declaration kinds; includeOccurrences=true adds matching occurrence/control entities.
         /// Each symbol span contains persisted 1-based start_line and end_line values.
         /// fullResults bypasses token and result caps without changing symbol filtering; resultsOffset still applies.
+        /// Example: {"repoRoot":".","query":"authentication","includeOccurrences":true,"includeTests":true,"resultsOffset":0,"fullResults":false,"maxTokensEstimate":4000}. maxTokensEstimate estimates serialized success-envelope JSON bytes divided by four; it is not a tokenizer count.
         #[arg(long)]
         json: String,
     },
@@ -255,6 +262,7 @@ pub enum Command {
     #[command(name = "nav_map")]
     NavMap {
         /// JSON object: { repoRoot, dbPath? }
+        /// Example: {"repoRoot":"."}
         #[arg(long)]
         json: String,
         /// Output format: `json` (default) or `text`.
@@ -265,23 +273,35 @@ pub enum Command {
         with_project_knowledge: bool,
     },
     /// Scan built-in, user, and repository rules against a fresh read-only index.
-    /// On index_missing or index_stale, run `watch --ensure` and retry.
+    /// On index_missing or index_stale, run `varde setup watch --ensure --repo <repo-root>` and retry.
     /// Exit nonzero for incomplete analysis or policy-blocking findings.
     /// Inspect data.analysis.status and data.gate.status independently.
+    /// Example: `varde scan --json '{"repoRoot":"."}'`. Analysis completeness and policy gate status are independent; inspect both.
     #[command(name = "scan")]
     Scan {
         /// JSON object: { repoRoot, output?, severityThreshold?, gateRules?, fullFindings?, findingsLimit?, findingsOffset? }
-        /// Choose either severityThreshold or explicit gateRules.
+        /// Example: `varde scan --json '{"repoRoot":"."}'`. Choose either severityThreshold or explicit gateRules.
         #[arg(long)]
         json: String,
-        /// Apply rewrite templates after a complete scan.
+        /// Apply rewrite templates after a complete scan. Pattern rewrites use
+        /// captured `$VAR` (one node) and `$$$VAR` (multiple nodes); unknown
+        /// languages or unavailable captures are reported as per-file failures.
         /// Without this flag, source files remain unchanged.
         #[arg(long)]
         apply: bool,
-        /// With `--apply`: write to files with uncommitted git changes.
+        /// With `--apply`: write to files with uncommitted git changes. For setup, allow replacing overrides.
         /// Without it, such files are skipped as `skipped-dirty`.
         #[arg(long)]
         force: bool,
+    },
+    /// Prune index folders under the code config root whose recorded source
+    /// folder is gone. Dry run by default: nothing is deleted unless the JSON
+    /// input sets `apply: true`.
+    #[command(name = "prune")]
+    Prune {
+        /// JSON object: { apply?, unknownOlderThanDays? }
+        #[arg(long)]
+        json: String,
     },
     /// Test: run every rule's `[[rule.test]]` entries and report pass/fail.
     /// Self-contained — no DB, no prior `build`; exits non-zero when any
@@ -294,6 +314,10 @@ pub enum Command {
     },
     /// List the rules that would run for a repo (built-in + user + repo
     /// scope, with override provenance) — no DB required, never scans.
+    /// Example: `varde scan rules list --json '{"repoRoot":"."}'`.
+    /// Repo and user scopes override built-ins by rule id; a higher-scope
+    /// definition replaces the lower-scope definition. The repository scope
+    /// defaults to `.varde-code/rules/`; user rules use the Varde config root.
     /// Run this first to see what `scan` would use before seeding or
     /// customizing anything. (see `rules_list` help for inputs)
     #[command(name = "rules_list")]
@@ -304,13 +328,15 @@ pub enum Command {
     },
     /// Seed: materialize the built-in rule packs as editable TOML files in
     /// the repo (`.varde-code/rules/`, default) or user (`--user`,
-    /// `~/.config/varde-code/rules/`) scope, so they can be customized
+    /// `<varde config root>/code/rules/` (default `~/.config/varde/code/rules/`)
+    /// scope, so they can be customized
     /// directly instead of only overridden by id. Existing files are left
     /// untouched unless `--force`. Undo with `rules_remove` (same
-    /// `--user`/`--force` flags). (see `rules_seed` help)
+    /// `--user`/`--force` flags). The routed `--rule-id <id>` option selects
+    /// only the built-in pack containing that id. (see `rules_seed` help)
     #[command(name = "rules_seed")]
     RulesSeed {
-        /// JSON object: { repoRoot }
+        /// JSON object: { repoRoot, ruleId? }
         #[arg(long)]
         json: String,
         /// Seed into the user-scoped rules dir instead of the repo's.
@@ -337,17 +363,13 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Session-start hooks for supported agent harnesses (claude, codex,
-    /// opencode, pi) that shell out to `nav_map` at session start.
-    /// (see `hooks install`/`hooks remove`/`hooks list` help)
-    #[command(subcommand)]
-    Hooks(HooksCommand),
     /// Dump the slice freshness ledger for a repo (the `--why` view: what
     /// each derived slice was last built through and whether it's stale).
     /// Read-only — never builds or freshens. (see `slice_state` help for inputs)
     #[command(name = "slice_state")]
     SliceState {
         /// JSON object: { repoRoot }
+        /// Example: {"repoRoot":"."}. Inspect db and slices.{imports,edges,global}.{built_through_rev,stale}; then rebuild or query to refresh stale data. This command never builds or freshens slices.
         #[arg(long)]
         json: String,
     },
@@ -360,8 +382,8 @@ pub enum Command {
         #[arg(long = "repo")]
         repos: Vec<String>,
         /// Path to a watch.toml config (defaults to
-        /// `~/.config/varde-code/watch.toml` if present and no `--repo` was
-        /// given).
+        /// `<varde config root>/code/watch.toml` (default
+        /// `~/.config/varde/code/watch.toml`) if present and no `--repo` was given).
         #[arg(long)]
         config: Option<String>,
         /// Debounce window in milliseconds before an fs-event burst triggers
@@ -380,6 +402,9 @@ pub enum Command {
         /// a watcher.
         #[arg(long, conflicts_with = "stop_all")]
         stop: bool,
+        /// Stop one repo watcher, then remove that repo's `varde map` index.
+        #[arg(long, requires = "stop", conflicts_with_all = ["config", "list", "ensure", "stop_all"])]
+        remove_index: bool,
         /// Stop every running watcher instance and exit — does not start a
         /// watcher. Ignores `--repo`/`--config`.
         #[arg(long)]
@@ -387,64 +412,34 @@ pub enum Command {
     },
 }
 
-/// `hooks install`/`hooks remove`/`hooks list` subcommands. Flat-flag
-/// convention without a `--json` envelope.
-#[derive(Subcommand)]
-pub enum HooksCommand {
-    /// List the 4 supported agent hook targets (claude, codex, opencode,
-    /// pi) and the directory/file each installs to — no filesystem writes.
-    /// (see `hooks list` help for inputs)
-    #[command(name = "list")]
-    List,
-    /// Install session-start hooks for the given agents (default: all 4)
-    /// that shell out to `varde-code nav_map` at session start.
-    /// Existing entries are left untouched unless `--force`. Undo with
-    /// `hooks remove` (same `--agent`/`--dir`/`--force`).
-    /// (see `hooks install` help)
-    #[command(name = "install")]
-    Install {
-        /// Agent(s) to install for: `claude`, `codex`, `opencode`, `pi`.
-        /// Repeatable (`--agent claude --agent codex`) or comma-separated
-        /// (`--agent claude,codex`). Defaults to all 4.
-        #[arg(long = "agent", value_delimiter = ',')]
-        agent: Vec<String>,
-        /// Overwrite entries that already exist (default: leave them alone).
-        #[arg(long)]
-        force: bool,
-        /// Override the install target directory (primarily for testing).
-        /// Without it, each agent resolves its real per-OS default
-        /// (`~/.claude/`, `~/.codex/`, `~/.config/opencode/`,
-        /// `~/.pi/agent/extensions/`).
-        #[arg(long)]
-        dir: Option<String>,
-    },
-    /// Undo `hooks install`: remove previously installed session-start
-    /// hooks for the given agents (default: all 4). Whole-file targets
-    /// (opencode, pi) are deleted; merge targets (claude, codex) have only
-    /// this tool's injected entry removed, never the rest of the shared
-    /// config file. A target edited since install is skipped unless
-    /// `--force` (which discards those local edits).
-    /// (see `hooks remove` help)
-    #[command(name = "remove")]
-    Remove {
-        /// Agent(s) to remove for: `claude`, `codex`, `opencode`, `pi`.
-        /// Repeatable or comma-separated. Defaults to all 4.
-        #[arg(long = "agent", value_delimiter = ',')]
-        agent: Vec<String>,
-        /// Also remove entries that were locally modified.
-        #[arg(long)]
-        force: bool,
-        /// Override the install target directory (primarily for testing).
-        /// Without it, each agent resolves its real per-OS default.
-        #[arg(long)]
-        dir: Option<String>,
-    },
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Command, HooksCommand};
-    use clap::Parser;
+    use super::{Cli, Command};
+    use clap::{CommandFactory, Parser};
+
+    #[test]
+    fn query_help_keeps_examples_and_key_input_details() {
+        let command = Cli::command();
+        let help = |name: &str| {
+            command
+                .get_subcommands()
+                .find(|subcommand| subcommand.get_name() == name)
+                .expect("query subcommand exists")
+                .clone()
+                .render_long_help()
+                .to_string()
+        };
+        assert!(help("find_pattern").contains("Needs no index"));
+        assert!(help("find_pattern").contains("qualified calls need the full path"));
+        assert!(help("find_pattern").contains("$$$ARGS"));
+        assert!(help("context_pack").contains("includeOccurrences"));
+        assert!(help("get_symbol").contains("authenticate"));
+        assert!(help("dependencies").contains("maxDepth"));
+        assert!(help("dependents").contains("maxDepth"));
+        assert!(help("nav_map").contains("repoRoot"));
+        assert!(help("batch").contains("calls"));
+        assert!(help("slice_state").contains("freshness ledger"));
+    }
 
     #[test]
     fn build_accepts_force_flag() {
@@ -469,6 +464,17 @@ mod tests {
                 assert!(!force, "force defaults off");
             }
             _ => panic!("expected Command::Scan"),
+        }
+    }
+
+    #[test]
+    fn prune_accepts_json_argument() {
+        let json = r#"{"apply":true}"#;
+        let cli = Cli::try_parse_from(["varde-code", "prune", "--json", json])
+            .expect("prune arguments parse");
+        match cli.command {
+            Command::Prune { json: parsed } => assert_eq!(parsed, json),
+            _ => panic!("expected Command::Prune"),
         }
     }
 
@@ -583,112 +589,13 @@ mod tests {
             "injected command must not reference the non-existent `report` subcommand: {cmd}"
         );
         let subcommand = cmd
-            .strip_prefix("varde-code ")
+            .strip_prefix("varde map ")
             .and_then(|rest| rest.split_whitespace().next())
-            .expect("injected command starts with `varde-code <subcommand>`");
+            .expect("injected command starts with `varde map <subcommand>`");
         assert_eq!(subcommand, "nav_map", "injected command invokes nav_map");
         Cli::try_parse_from(["varde-code", subcommand, "--json", "{}"]).unwrap_or_else(|e| {
             panic!("injected subcommand {subcommand:?} must parse as a valid CLI subcommand: {e}")
         });
-    }
-
-    #[test]
-    fn hooks_install_defaults_to_empty_agent_list() {
-        let cli =
-            Cli::try_parse_from(["varde-code", "hooks", "install"]).expect("hooks install parses");
-        match cli.command {
-            Command::Hooks(HooksCommand::Install { agent, force, dir }) => {
-                assert!(
-                    agent.is_empty(),
-                    "no --agent means empty vec (caller defaults to all 4)"
-                );
-                assert!(!force);
-                assert!(dir.is_none());
-            }
-            _ => panic!("expected Command::Hooks(HooksCommand::Install)"),
-        }
-    }
-
-    #[test]
-    fn hooks_install_accepts_repeated_agent_flags() {
-        let cli = Cli::try_parse_from([
-            "varde-code",
-            "hooks",
-            "install",
-            "--agent",
-            "claude",
-            "--agent",
-            "codex",
-        ])
-        .expect("repeated --agent parses");
-        match cli.command {
-            Command::Hooks(HooksCommand::Install { agent, .. }) => {
-                assert_eq!(agent, vec!["claude".to_string(), "codex".to_string()]);
-            }
-            _ => panic!("expected Command::Hooks(HooksCommand::Install)"),
-        }
-    }
-
-    #[test]
-    fn hooks_install_accepts_comma_separated_agents() {
-        let cli =
-            Cli::try_parse_from(["varde-code", "hooks", "install", "--agent", "claude,codex"])
-                .expect("comma-separated --agent parses");
-        match cli.command {
-            Command::Hooks(HooksCommand::Install { agent, .. }) => {
-                assert_eq!(agent, vec!["claude".to_string(), "codex".to_string()]);
-            }
-            _ => panic!("expected Command::Hooks(HooksCommand::Install)"),
-        }
-    }
-
-    #[test]
-    fn hooks_install_accepts_force_and_dir() {
-        let cli = Cli::try_parse_from([
-            "varde-code",
-            "hooks",
-            "install",
-            "--force",
-            "--dir",
-            "/tmp/hooks-test",
-        ])
-        .expect("--force/--dir parse");
-        match cli.command {
-            Command::Hooks(HooksCommand::Install { force, dir, .. }) => {
-                assert!(force);
-                assert_eq!(dir.as_deref(), Some("/tmp/hooks-test"));
-            }
-            _ => panic!("expected Command::Hooks(HooksCommand::Install)"),
-        }
-    }
-
-    #[test]
-    fn hooks_remove_accepts_agent_force_dir() {
-        let cli = Cli::try_parse_from([
-            "varde-code",
-            "hooks",
-            "remove",
-            "--agent",
-            "pi",
-            "--force",
-            "--dir",
-            "/tmp/hooks-test",
-        ])
-        .expect("hooks remove parses");
-        match cli.command {
-            Command::Hooks(HooksCommand::Remove { agent, force, dir }) => {
-                assert_eq!(agent, vec!["pi".to_string()]);
-                assert!(force);
-                assert_eq!(dir.as_deref(), Some("/tmp/hooks-test"));
-            }
-            _ => panic!("expected Command::Hooks(HooksCommand::Remove)"),
-        }
-    }
-
-    #[test]
-    fn hooks_list_parses() {
-        let cli = Cli::try_parse_from(["varde-code", "hooks", "list"]).expect("hooks list parses");
-        assert!(matches!(cli.command, Command::Hooks(HooksCommand::List)));
     }
 
     #[test]
@@ -702,6 +609,33 @@ mod tests {
                 );
             }
             Ok(_) => panic!("missing required --json must fail"),
+        }
+    }
+
+    #[test]
+    fn watch_remove_index_accepts_stop_and_repo() {
+        let cli = Cli::try_parse_from([
+            "varde-code",
+            "watch",
+            "--stop",
+            "--remove-index",
+            "--repo",
+            "/tmp/example-repo",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Command::Watch {
+                repos,
+                stop,
+                remove_index,
+                ..
+            } => {
+                assert_eq!(repos, ["/tmp/example-repo"]);
+                assert!(stop);
+                assert!(remove_index);
+            }
+            _ => panic!("expected watch command"),
         }
     }
 }

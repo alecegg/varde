@@ -1,0 +1,86 @@
+# Error-swallowing rules for rust.
+# Severity evidence: error needs zero false positives across this repository and
+# at least three reference repositories per language; tighten on a false positive.
+#
+# Rust has no unchecked-return syntax, so the swallow shapes are explicit
+# discards: binding a call result to the wildcard pattern (`let _ = f(...)`) and
+# a bare `<expr>.ok();` statement, which turns a `Result` into an `Option` and
+# drops it.
+#
+# Both ship at `warning`. Measured on this repository (436 Rust files), fallow
+# (1128), oh-my-pi (669) and ast-grep (154), `let _ = $CALL(...)` returns 1479
+# hits, 1077 of which discard a declared error-carrying result (filesystem
+# cleanup, process/thread, I/O, channel and `OnceLock` results). The other 402
+# are structural false positives that tightening cannot fix: calls returning a
+# non-`Result` value (fallow's `generator.subschema_for::<T>()` schema
+# registration alone is 309, plus `visit_part_*` parser walkers,
+# `HashMap::insert`, `Iterator::next`, `ExitCode` printers and Win32/X11 FFI
+# bool results). Separating fallible from infallible calls needs type facts, so
+# the rule cannot claim `error` precision and ships at `warning`. `$EXPR.ok();`
+# discards a real `Result` on all 15 measured hits (ast-grep 7, oh-my-pi 1,
+# varde 7); it also ships at `warning` because `.ok()` is Rust's explicit
+# "ignore the error" idiom and because this repository's own hits are inline
+# test teardown (`#[cfg(test)]`, which `exclude_test_paths` cannot drop), so
+# `error` would add findings to this repository's default gate.
+#
+# An empty `if let Err(_) = expr {}` is a structural discard and is covered
+# below without type facts. Deciding whether arbitrary expressions are
+# `Result`s, or whether a non-empty Err arm handles the error, needs type and
+# control-flow facts and remains outside these pattern rules.
+#
+# Excluded shapes, pinned by fixtures:
+# - `let _ = <expr>.lock()` / `.try_lock()`: the discard drops a lock guard,
+#   which carries no error (the constraint on `$CALL` also covers a guard bound
+#   to the wildcard through a path such as `Mutex::lock`).
+# - `let _ = drop(<expr>);`: `drop` returns `()`, so there is no result to lose.
+# - `let _ = <expr>.expect(..)` / `.unwrap()`: these panic on the error path, so
+#   nothing is discarded silently (the unwrapped value, often `()`, is bound to
+#   the wildcard). This is the one false-positive class the corpus supported
+#   tightening (fallow's `run_dead_code(..).expect` chains).
+# Only one `let _ = ...lock()`-shaped discard appears across the four measured
+# repositories and its call is `tokio::time::timeout(...)`, not a bare guard, so
+# the lock and drop exclusions are fixture-level hygiene rather than
+# corpus-driven.
+#
+# `exclude_test_paths = true`: test teardown discards results deliberately
+# (`let _ = std::fs::remove_dir_all(&tmp)`), so test-path files are excluded to
+# keep the warning volume on production code. Inline `#[cfg(test)]` modules are
+# not path-detectable and still report.
+
+[[rule]]
+id = "error-swallow-rust-call"
+kind = "pattern"
+severity = "warning"
+name = "Discarded Rust call result"
+description = "A `let _ =` binding discards the result of a function or method call."
+message = "discarded call result: `let _ = f(...)` may hide an error"
+remediation = "handle or propagate the result, or make the discard explicit with `.ok()`, `drop()`, or a comment"
+pattern = "let _ = $CALL($$$ARGS);"
+languages = ["rust"]
+exclude_test_paths = true
+[rule.constraints]
+CALL = "!^(?:drop|[\\s\\S]*(?:\\.|::)(?:lock|try_lock|expect|unwrap)|(?:lock|try_lock))$"
+
+[[rule]]
+id = "error-swallow-rust-ok"
+kind = "pattern"
+severity = "warning"
+name = "Discarded Rust `.ok()` result"
+description = "A bare `.ok();` statement converts a `Result` to `Option` and drops the error."
+message = "discarded `.ok()` result: the error is dropped without handling"
+remediation = "match on the `Result`, log the error, or add a comment marking the discard intentional"
+pattern = "$EXPR.ok();"
+languages = ["rust"]
+exclude_test_paths = true
+
+[[rule]]
+id = "error-swallow-rust-empty-err"
+kind = "pattern"
+severity = "warning"
+name = "Ignored Rust error match"
+description = "An empty `if let Err(_)` arm explicitly selects and discards an error."
+message = "discarded error: the `Err(_)` branch is empty"
+remediation = "handle the error, propagate it, or document the intentional discard"
+pattern = "if let Err(_) = $EXPR {}"
+languages = ["rust"]
+exclude_test_paths = true

@@ -278,6 +278,13 @@ fn emit_variables(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut
             ctx.push(EntityKind::Variable, name, node);
         }
     }
+    if let Some(alternative) = node.field("alternative") {
+        ctx.push(
+            EntityKind::ControlFlow,
+            "else_branch".to_string(),
+            &alternative,
+        );
+    }
 }
 
 fn emit_parameters(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut ExtractCtx) {
@@ -347,16 +354,64 @@ fn visit_control_flow(
     ctx: &mut ExtractCtx,
 ) {
     match kind {
-        "if_expression"
-        | "for_expression"
-        | "while_expression"
-        | "loop_expression"
-        | "match_expression"
-        | "match_arm"
-        | "return_expression"
-        | "break_expression"
-        | "continue_expression" => {
+        "for_expression" | "while_expression" | "loop_expression" | "match_expression"
+        | "match_arm" | "return_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "break_expression" | "continue_expression" => {
+            let is_labeled = node.children().any(|child| child.kind() == "label");
+            let name = if is_labeled {
+                "labeled_jump".to_string()
+            } else {
+                node.kind().into_owned()
+            };
+            ctx.push(EntityKind::ControlFlow, name, node);
+        }
+        "if_expression" => {
+            let name = if node
+                .parent()
+                .is_some_and(|parent| parent.kind() == "else_clause")
+            {
+                "elseif_statement"
+            } else {
+                "if_expression"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            // Rust's if-expression span includes its complete else tail. End
+            // the structural event at the consequence so chained branches do
+            // not become structural parents of later branches.
+            if let Some(consequence) = node.field("consequence")
+                && let Some(event) = ctx.out.last_mut()
+            {
+                let span = crate::extract::span_of(&consequence);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
+            // Else-if decisions do not count as max_nesting parents in the
+            // new scorer, but the legacy extractor treated them as nested
+            // structural decisions. Preserve their full span as a nesting
+            // parent. A regular if remains the parent in its consequence, so
+            // it needs a marker only for its alternative tail.
+            if name == "elseif_statement" {
+                ctx.push(EntityKind::ControlFlow, "legacy_nesting".to_string(), node);
+            } else if let Some(alternative) =
+                node.children().find(|child| child.kind() == "else_clause")
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "legacy_nesting".to_string(),
+                    &alternative,
+                );
+            }
+        }
+        "else_clause" => {
+            if !node.children().any(|child| child.kind() == "if_expression") {
+                ctx.push(EntityKind::ControlFlow, "else_branch".to_string(), node);
+            }
+        }
+        "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
         }
         "binary_expression" => {
             if let Some(name) = boolean_operator_name(node) {
@@ -366,6 +421,13 @@ fn visit_control_flow(
 
         _ => {}
     }
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!')
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
 }
 
 /// Stable complexity name for Rust's short-circuit boolean operators.
@@ -692,4 +754,172 @@ fn accepts(value: i32, ready: bool, enabled: bool) -> bool {
             "entities: {entities:?}"
         );
     }
+
+    #[test]
+    fn else_tail_preserves_legacy_nesting_without_decision_score() {
+        let parsed = parse_source(
+            &SupportLang::Rust,
+            "fn f(a: bool, b: bool) { if a { } else if b { if a { } } }",
+        );
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::ControlFlow
+                    && entity.name == "legacy_nesting")
+                .count(),
+            2,
+            "entities: {entities:?}"
+        );
+        let metrics = crate::complexity::function_complexities(&entities);
+        let function = metrics.iter().find(|metric| metric.name == "f").unwrap();
+        assert_eq!(function.cyclomatic, 4, "metric: {function:?}");
+        assert_eq!(function.max_nesting, 2, "metric: {function:?}");
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    (
+        "match_expression",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+    ("legacy_nesting", crate::complexity::FlowRole::LegacyNesting),
+];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| node.kind() == "function_item")
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let parameters: Vec<_> = node
+                .field("parameters")
+                .map(|parameters| {
+                    parameters
+                        .children()
+                        .filter(|parameter| parameter.kind() == "parameter")
+                        .collect()
+                })
+                .unwrap_or_default();
+            let owner_type = node
+                .ancestors()
+                .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+                .and_then(|scope| type_scope_name(&scope));
+            let lexical_scope = node.ancestors().find(|ancestor| {
+                ancestor.kind() == "function_item"
+                    || TYPE_SCOPES.contains(&ancestor.kind().as_ref())
+            });
+            let unqualified_callable = lexical_scope
+                .as_ref()
+                .is_none_or(|scope| scope.kind() == "function_item");
+            let owner = match lexical_scope.as_ref() {
+                Some(scope) if scope.kind() == "function_item" => field_name(scope),
+                Some(scope) => type_scope_name(scope),
+                None => None,
+            };
+            Some(Callable {
+                owner,
+                owner_type,
+                unqualified_callable,
+                name: name_node.text().into_owned(),
+                required_args: u16::try_from(parameters.len()).unwrap_or(u16::MAX),
+                total_args: u16::try_from(parameters.len()).unwrap_or(u16::MAX),
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| ancestor.kind() == "function_item")
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier, qualifier_name) = match function.kind().as_ref() {
+            "identifier" => (function.text().into_owned(), Qualifier::None, None),
+            "generic_function" => {
+                let name = function
+                    .field("function")
+                    .map(|node| node.text().into_owned())
+                    .unwrap_or_else(|| function.text().into_owned());
+                (name, Qualifier::None, None)
+            }
+            "field_expression" => {
+                let (Some(method), Some(receiver)) =
+                    (function.field("field"), function.field("value"))
+                else {
+                    continue;
+                };
+                let receiver_name = receiver.text();
+                let owner = callables[caller].owner.as_deref();
+                let (qualifier, qualifier_name) = if receiver_name == "self" {
+                    (Qualifier::SelfLike, None)
+                } else if owner == Some(receiver_name.as_ref()) {
+                    (Qualifier::NamedType, Some(receiver_name.into_owned()))
+                } else {
+                    (Qualifier::Other, None)
+                };
+                (method.text().into_owned(), qualifier, qualifier_name)
+            }
+            "scoped_identifier" => {
+                let text = function.text();
+                let Some((owner, name)) = text.rsplit_once("::") else {
+                    continue;
+                };
+                if owner == "Self" {
+                    (name.to_string(), Qualifier::SelfLike, None)
+                } else if callables[caller].owner.as_deref() == Some(owner) {
+                    (
+                        name.to_string(),
+                        Qualifier::NamedType,
+                        Some(owner.to_string()),
+                    )
+                } else {
+                    (name.to_string(), Qualifier::Other, None)
+                }
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named())
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
 }

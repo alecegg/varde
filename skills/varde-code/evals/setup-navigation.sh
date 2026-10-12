@@ -67,4 +67,4 @@ pub fn refresh_metrics_cache(cache: &mut MetricsCache) {
 EOF
 
 # The index stays inside the runner-side fixture; no persistent watcher is started.
-varde-code build --repo-root "$repo_root" >/dev/null
+varde map build --repo-root "$repo_root" >/dev/null

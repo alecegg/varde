@@ -1,0 +1,26 @@
+toz_capture_ratio_x = 14
+toz_prune_healthy_bytes = 44000
+# Ratio means process bytes written divided by db_size_bytes immediately before prune.
+toz_prune_tombstone_ratio_x = 0.275
+toz_prune_runaway_second_pass_bytes = 44000
+watch_reconcile_idle_bytes = 5504
+map_cold_fixed_bytes = 581042
+map_cold_bytes_per_file = 995
+map_one_file_bytes = 196608
+map_one_file_per_file_bytes = 151
+map_clean_rebuild_bytes = 5504
+friction_add_bytes = 320000
+msg_send_bytes = 8192
+
+[typical_day]
+capture_count = 120
+capture_bytes_each = 25000
+healthy_prune_count = 24
+runaway_second_pass_count = 0
+idle_reconcile_count = 2880
+cold_map_file_count = 1200
+one_file_map_count = 20
+clean_map_rebuild_count = 1
+friction_add_count = 2
+msg_send_count = 300
+ceiling_bytes = 1000000000

@@ -1,0 +1,51 @@
+{
+  "skill_name": "varde-toz",
+  "skills": ["varde-toz"],
+  "evals": [
+    {
+      "id": "handle-query",
+      "prompt": "The command `git status --short` already ran and its complete output was captured under handle `toz-handle-query-01`. Find the captured result and explain whether the tree is clean. Do not rerun the command.",
+      "expected_output": "Queries the existing capture by handle, checks the complete result, and answers whether the tree is clean with a concise explanation. It does not rerun `git status --short`.",
+      "assertions": [
+        "The ordered tool trace queries handle toz-handle-query-01 before giving the conclusion",
+        "The trace does not execute git status --short again",
+        "The answer accurately explains the captured result"
+      ],
+      "assert": [
+        { "kind": "event_order", "events": ["varde run query --handle toz-handle-query-01", "git status --short"] }
+      ],
+      "setup_script": "evals/setup.sh",
+      "verification_script": "evals/verify.sh"
+    },
+    {
+      "id": "batched-script",
+      "prompt": "Use one `varde run run --script -` invocation to inspect the two provided command results as a batch. Print a concise summary of both results and retain the capture handles. Do not run the commands separately.",
+      "expected_output": "Uses one batch script with both commands, preserves each result before filtering, and reports each status and capture handle in a compact summary.",
+      "assertions": [
+        "The ordered tool trace uses one varde run run --script invocation for both commands",
+        "The script retains each command result before filtering and prints status plus capture handle",
+        "The answer accurately summarizes both fixture results"
+      ],
+      "assert": [
+        { "kind": "event_order", "events": ["varde run run --script", "vardeToz.exec", "capture.handle"] }
+      ],
+      "setup_script": "evals/setup.sh",
+      "verification_script": "evals/verify.sh"
+    },
+    {
+      "id": "no-rerun",
+      "prompt": "The expensive read-only command `find . -type f` has already completed and was captured under handle `toz-handle-no-rerun-03`. Find and summarize the existing capture. Do not rerun the command, even if the result is clipped.",
+      "expected_output": "Uses the captured handle to inspect the stored result and summarizes it. It does not rerun `find . -type f`; if more detail is needed, it pages or searches the capture.",
+      "assertions": [
+        "The trace reads captured handle toz-handle-no-rerun-03",
+        "The trace does not execute find . -type f again",
+        "The answer distinguishes a capture preview from complete output and uses capture paging or search if needed"
+      ],
+      "assert": [
+        { "kind": "event_order", "events": ["varde run query --handle toz-handle-no-rerun-03"] }
+      ],
+      "setup_script": "evals/setup.sh",
+      "verification_script": "evals/verify.sh"
+    }
+  ]
+}

@@ -1,13 +1,12 @@
 # Scan and triage
 
-Scan checks its index without writing. The main agent must first ensure watcher
-coverage and readiness. On `index_missing` or `index_stale`, search source
-directly, report degraded index capability, and retry after readiness returns.
+Scan checks its index without writing. The dispatching agent must first ensure watcher coverage and readiness. On
+`index_missing` or `index_stale`, search source directly, report degraded index capability, and retry after readiness returns.
 Choose the gate before interpreting findings.
 
 ```sh
-varde-code scan --json '{"repoRoot":"<repo>","severityThreshold":"error"}'
-varde-code rules_list --json '{"repoRoot":"<repo>"}'
+varde scan --json '{"repoRoot":"<repo>","severityThreshold":"error"}'
+varde scan rules list --json '{"repoRoot":"<repo>"}'
 ```
 
 Check top-level `outcome` first. `ok: true` means execution succeeded.
@@ -44,13 +43,13 @@ The six informational rules are `vertical-slice-sprawl`,
 `solid-isp`, and `console-log-strict`. Selecting `info` includes them in the
 severity gate. They require contextual review.
 
-Syntax rules cover 35 declared rule-language pairs. Bare `eval` includes
+Syntax rules cover 127 declared rule-language pairs. Bare `eval` includes
 shadowed calls, `dbg!` matching is bare-only, and handler rules cover listed
-known forms. Dependency certification covers relative source paths for
-JavaScript, TypeScript, TSX, Dart, and Solidity, plus Go module package units.
-Missing imports require explicit recognized source filenames. Extensionless,
-ambiguous, alias, and unindexed targets are excluded. Cycles report direct
-reciprocal pairs.
+known forms. Dependency certification covers all 21 extraction languages; see
+"Certified dependency facts" in `BUILT_IN_RULES.md` for the per-language units
+and limits. Missing imports require explicit recognized source filenames.
+Extensionless, ambiguous, alias, and unindexed targets are excluded. Cycles
+report direct reciprocal pairs.
 
 Use `.ignore` for intentionally excluded files. Exclusions narrow certified
 scope. Suppressions remove findings before counting, but diagnostics remain

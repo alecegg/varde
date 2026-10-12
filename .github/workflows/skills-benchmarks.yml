@@ -7,7 +7,10 @@ on:
       - "tools/**"
       - "agents/**"
       - "tests/**"
-      - "varde"
+      - "clis/**"
+      - "AGENTS.md"
+      - "README.md"
+      - "justfile"
       - ".github/workflows/skills-benchmarks.yml"
   push:
     paths:
@@ -15,7 +18,10 @@ on:
       - "tools/**"
       - "agents/**"
       - "tests/**"
-      - "varde"
+      - "clis/**"
+      - "AGENTS.md"
+      - "README.md"
+      - "justfile"
       - ".github/workflows/skills-benchmarks.yml"
 
 permissions:
@@ -34,8 +40,8 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           rustup toolchain install stable --profile minimal
-          cargo +stable build --locked --manifest-path clis/workflow/Cargo.toml --package varde-workflow --bin varde-workflow --target-dir clis/workflow/target
-          echo "$GITHUB_WORKSPACE/clis/workflow/target/debug" >> "$GITHUB_PATH"
+          cargo +stable build --locked --manifest-path clis/Cargo.toml --package varde --bin varde --target-dir clis/target
+          echo "$GITHUB_WORKSPACE/clis/target/debug" >> "$GITHUB_PATH"
       - uses: astral-sh/setup-uv@v7
       - name: Install ripgrep
         run: sudo apt-get install -y ripgrep
@@ -51,8 +57,8 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           rustup toolchain install stable --profile minimal
-          cargo +stable build --locked --manifest-path clis/workflow/Cargo.toml --package varde-workflow --bin varde-workflow --target-dir clis/workflow/target
-          echo "$GITHUB_WORKSPACE/clis/workflow/target/debug" >> "$GITHUB_PATH"
+          cargo +stable build --locked --manifest-path clis/Cargo.toml --package varde --bin varde --target-dir clis/target
+          echo "$GITHUB_WORKSPACE/clis/target/debug" >> "$GITHUB_PATH"
       - name: Install ripgrep
         run: sudo apt-get install -y ripgrep
       - name: Run root tests

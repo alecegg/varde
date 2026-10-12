@@ -145,6 +145,7 @@ mod tests {
         let redactor = Redactor::from_config(&Redact {
             builtin: false,
             patterns: vec!["private42".into()],
+            ..Default::default()
         })
         .unwrap();
         let actual = sanitize_text(

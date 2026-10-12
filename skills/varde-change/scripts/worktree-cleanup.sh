@@ -7,9 +7,10 @@ usage() {
 Usage: worktree-cleanup.sh [--discard] <id>
 
 Removes the registered worktree on branch worktree/<id> and deletes that
-branch. Normal cleanup requires a worktree with no uncommitted or ignored
-files whose branch is merged into the currently checked-out commit. Use
---discard only when deliberately abandoning its committed or local work.
+branch. Normal cleanup requires a worktree with no uncommitted files whose
+branch is merged into the currently checked-out commit. Ignored files of any
+name are listed and removed with the worktree. Use --discard only when
+deliberately abandoning its committed or local work.
 
 Exit codes:
   0  worktree and branch removed
@@ -22,16 +23,69 @@ fail() {
   exit 1
 }
 
+claude_probes=()
+claude_probe_count=0
+cleanup_claude_probes() {
+  local status=$?
+  local probe
+  local cleanup_failed=false
+  trap - EXIT
+  if [[ "$claude_probe_count" -gt 0 ]]; then
+    for probe in "${claude_probes[@]}"; do
+      if ! rm -f "$probe"; then
+        echo "error: could not remove .claude preflight probe ${probe}; rerun with escalated access" >&2
+        cleanup_failed=true
+      fi
+    done
+  fi
+  [[ "$cleanup_failed" != true ]] || exit 1
+  exit "$status"
+}
+
+preflight_claude_cleanup() {
+  local claude_path directory file probe
+
+  trap cleanup_claude_probes EXIT
+  while IFS= read -r -d '' claude_path; do
+    while IFS= read -r -d '' directory; do
+      probe="$(mktemp "${directory%/}/.varde-worktree-cleanup-probe.XXXXXX" 2>/dev/null)" ||
+        fail "cannot write to .claude directory ${directory}; rerun with escalated access"
+      claude_probes+=("$probe")
+      claude_probe_count=$((claude_probe_count + 1))
+      rm -f "$probe" ||
+        fail "cannot remove .claude preflight probe ${probe}; rerun with escalated access"
+    done < <(find -P "$claude_path" -type d -print0)
+
+    while IFS= read -r -d '' file; do
+      : >> "$file" || fail "cannot write to .claude file ${file}; rerun with escalated access"
+    done < <(find -P "$claude_path" -type f -print0)
+  done < <(find -P "$target_path" -type d -name .claude -print0)
+}
+
+preflight_git_admin_dir() {
+  local admin_dir admin_parent probe
+
+  admin_dir="$(git -C "$target_path" rev-parse --path-format=absolute --git-dir 2>/dev/null)" ||
+    fail "could not determine git admin dir for worktree ${id}"
+  admin_parent="$(dirname "$admin_dir")"
+  [[ -w "$admin_parent" ]] ||
+    fail "cannot write to git admin parent dir ${admin_parent}; refusing cleanup"
+  probe="$(mktemp "${admin_dir%/}/.varde-worktree-cleanup-probe.XXXXXX" 2>/dev/null)" ||
+    fail "cannot write to git admin dir ${admin_dir}; refusing cleanup"
+  rm -f "$probe" ||
+    fail "cannot remove git admin probe ${probe} in ${admin_dir}; refusing cleanup"
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
 
 discard=false
-if [[ "${1:-}" == "--discard" ]]; then
-  discard=true
-  shift
-fi
+ignored_entries=""
+case "${1:-}" in
+  --discard) discard=true; shift ;;
+esac
 
 if [[ $# -ne 1 || "$1" == -* ]]; then
   usage >&2
@@ -102,9 +156,12 @@ if [[ "$discard" != true ]]; then
     fail "registered worktree is unavailable: ${target_path}"
   [[ -z "$worktree_status" ]] || fail "worktree ${id} has uncommitted changes; use --discard only to abandon them"
 
-  ignored_status="$(git -C "$target_path" status --porcelain --untracked-files=all --ignored 2>/dev/null)" ||
+  ignored_status="$(git -C "$target_path" status --porcelain --ignored=matching --untracked-files=normal 2>/dev/null)" ||
     fail "could not inspect ignored files in worktree ${id}"
-  [[ -z "$ignored_status" ]] || fail "worktree ${id} has ignored files; use --discard only to abandon them"
+  while IFS= read -r line; do
+    [[ "$line" == "!! "* ]] || continue
+    ignored_entries+="${line#!! }"$'\n'
+  done <<< "$ignored_status"
 
   if git merge-base --is-ancestor "$branch_oid" HEAD; then
     :
@@ -115,6 +172,18 @@ if [[ "$discard" != true ]]; then
     fi
     fail "could not verify whether branch ${branch} is merged"
   fi
+fi
+
+preflight_git_admin_dir
+preflight_claude_cleanup
+
+if [[ -n "${ignored_entries:-}" ]]; then
+  echo "removing ignored files: ${ignored_entries//$'\n'/ }"
+fi
+
+printf -v repo_arg '%q' "$target_path"
+if ! varde setup watch --stop --remove-index --repo "$target_path"; then
+  echo "warning: watcher stop or index removal failed; retry with: varde setup watch --stop --remove-index --repo ${repo_arg}" >&2
 fi
 
 if [[ "$discard" == true ]]; then

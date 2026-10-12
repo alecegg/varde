@@ -48,7 +48,7 @@ rewrite = "console.info($MSG)"
 ## `scan --apply` / `--force`
 
 ```text
-varde-code scan --json '{repoRoot, apply?, force?}' [--apply] [--force]
+varde scan --json '{repoRoot, apply?, force?}' [--apply] [--force]
 ```
 
 - `--apply` (or JSON `apply: true`): mechanically apply every matching,

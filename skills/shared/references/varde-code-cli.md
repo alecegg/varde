@@ -1,3 +1,4 @@
 <!-- kind: reference -->
-Use the varde-code skill for indexed lookups. If unavailable, fall back to
-`Read`/`Grep`/`Glob`/`rg` and report degraded access; never build/install its CLI.
+Load `varde-code`: use your skill tool, or read `../../varde-code/SKILL.md`; use
+`varde map` for indexed lookups. If `varde` is missing, stop and report it;
+never build or install the CLI.

@@ -1,32 +1,20 @@
-# Capture an observed friction event
+# Capture observed friction
 
-Record only a problem that actually happened in this session. Do not log a
-predicted risk or a general lesson without an observed obstacle.
+- Capture only problems that happened; skip predicted risks and general lessons.
+- Record obstacles caused by:
+  - harnesses;
+  - workers or subagents;
+  - your own errors;
+  - project tooling.
+- Use `--global` for friction not tied to this repository.
 
-1. Search open items for a distinctive phrase from the event:
+- Keep friction in `<store dir>/friction.jsonl`, the source of truth; `learn.db` is a rebuildable cache.
+- Store it locally or in a private Git repository, where union merge combines entries.
+- Delete `learn.db` to rebuild it, and export Markdown only when needed.
 
-   ```sh
-   varde-learn friction list --status open --text "distinctive phrase" --json
-   ```
+- Search open items for a distinctive phrase and inspect likely matches: `varde learn friction list --status open --text "<phrase>" [--repository <ROOT>] --json`, then `friction show <ID> --json`. Use `--repository <ROOT>` to filter to a project.
 
-   Read likely matches with `varde-learn friction show <ID> --json`.
-   Append only for the same obstacle, not merely a related topic.
-2. Put the observed evidence on stdin. Append to a matching item by numeric ID:
+- Append evidence to a match, or create an item with `varde learn friction add --item <ID> | --source <S> --title <T> --text "<evidence>" --json`; check the similar-item hint before creating a duplicate.
 
-   ```sh
-   printf '%s\n' 'The repeated check failed because ...' | \
-     varde-learn friction add --item 42 --json
-   ```
-
-   Otherwise create an item with a concise title and the skill or tool that
-   exposed the obstacle. New items are scoped to the current repository; add
-   `--global` only for friction in a cross-project skill or tool:
-
-   ```sh
-   printf '%s\n' 'The check failed because ...' | \
-     varde-learn friction add --source varde-change --title "Missing path check" --target skills/example/SKILL.md --json
-   ```
-
-Keep the evidence specific: what command or action failed, what happened, and
-the immediate cost. The store records repository and Git context when
-available; do not invent it in the evidence text.
+- Keep evidence specific to the failed action, result, and immediate cost.
+- Include the user's stated reason when recording a correction.

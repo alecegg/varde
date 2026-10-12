@@ -39,7 +39,7 @@
     },
     {
       "id": 4,
-      "prompt": "I am a subagent and `varde-code context_pack` returns `index_stale`. What should I do to find the relevant source files?",
+      "prompt": "I am a subagent and `varde map context_pack` returns `index_stale`. What should I do to find the relevant source files?",
       "expected_output": "Use `Read`, `Grep`, `Glob`, or `rg` for this query and report degraded index access. Do not start a watcher or build an index; the parent owns watcher setup.",
       "assertions": [
         "Falls back to source tools after `index_stale`",
@@ -50,7 +50,7 @@
     {
       "id": 5,
       "prompt": "The parent prepared the auth/refresh fixture in `./project` and confirmed coverage and index readiness for that repoRoot. Query only; do not build an index or start a watcher. Read the sandbox-root `context-result.json`, recover matching source files after offset 20, then include matching occurrence/control rows for the auth refresh query.",
-      "expected_output": "Read `context-result.json` for its truncated envelope and `meta.toz.handle`, then inspect the capture with `varde-toz query --handle <H>` and read the rows after offset 20. Query `context_pack` with `includeOccurrences:true` to add matching occurrence/control rows. Do not describe the estimate as a model-token or global context guarantee.",
+      "expected_output": "Read `context-result.json` for its truncated envelope and `meta.toz.handle`, then inspect the capture with `varde run query --handle <H>` and read the rows after offset 20. Query `context_pack` with `includeOccurrences:true` to add matching occurrence/control rows. Do not describe the estimate as a model-token or global context guarantee.",
       "assertions": [
         "Reads context-result.json and inspects the Toz capture handle before paging",
         "Uses capture rows after offset 20 to recover matching files",
@@ -61,8 +61,8 @@
     },
     {
       "id": 6,
-      "prompt": "I am the main agent working in `/work/app`. My first `varde-code get_symbol` call for `TokenBucket` returned `index_stale`. What do I do next?",
-      "expected_output": "Run `varde-code watch --ensure --repo /work/app` once, then retry the same `get_symbol` query. Do not run `watch --list` as a readiness check first. If the sandbox denies `watch --ensure`, retry it once with escalation; if it still fails, use `find_pattern` or source tools and report degraded index access.",
+      "prompt": "I am the main agent working in `/work/app`. My first `varde map get_symbol` call for `TokenBucket` returned `index_stale`. What do I do next?",
+      "expected_output": "Run `varde setup watch --ensure --repo /work/app` once, then retry the same `get_symbol` query. Do not run `watch --list` as a readiness check first. If the sandbox denies `watch --ensure`, retry it once with escalation; if it still fails, use `find_pattern` or source tools and report degraded index access.",
       "assertions": [
         "Runs `watch --ensure` once for the repo after `index_stale`",
         "Retries the original `get_symbol` query after ensure succeeds",

@@ -10,29 +10,37 @@ Parallel execution is opt-in. Sequential execution remains the default.
 
 ## Eligibility
 
-A task wave is eligible only when every task is ready. Readiness requires all
-listed dependencies to be complete. Each task declares `modifies`, `creates`,
-`renames`, and `verification_resources`. Missing ownership keeps `auto`
-sequential. Overlapping paths or resources create separate waves. Unknown
-harness capacity uses two workers. A configured limit cannot exceed capacity.
+A task wave is eligible only when every task is ready. Readiness requires the
+task's `status: todo` and every listed `depends_on` task `done`. Each task
+declares `modifies`, `creates`, `renames`, and `verification_resources`.
+Overlapping `owns` patterns (glob intersection) create separate waves.
+Asynchronous dispatch stays within the configured per-orchestrator builder
+caps; a configured limit cannot exceed capacity.
 
 ## Wave lifecycle
 
-1. Resolve one dependency-ready wave.
-2. Create one isolated worktree per worker.
-3. Run workers concurrently on distinct branches.
-4. Merge worker commits into a temporary integration branch.
-5. Run the wave verification command there.
-6. Advance the target ref after verification passes.
+1. Resolve one dependency-ready wave with `varde plan execution-wave`.
+2. `scripts/worktree-wave.sh start` creates one worktree and branch per task.
+3. Run workers concurrently on distinct branches; each edits only its task's
+   paths.
+4. `scripts/worktree-wave.sh integrate --check <cmd>` audits each commit with
+   `check-task-ownership`, merges workers in task order, runs the combined
+   check once, and fast-forwards the plan branch.
+5. `scripts/worktree-wave.sh release` removes the task and integration
+   worktrees.
 
-The orchestrator alone writes plan state. Workers report commits, checks,
-owned paths, and worktree locations. Dependents wait for verified integration.
+The plan branch's owner alone writes plan state. Workers report commits,
+checks, owned paths, and worktree locations. Dependents wait for verified
+integration.
 
 ## Failure recovery
 
-Failed workers, merges, or verification leave the target ref unchanged.
-Recovery refs retain worker and integration commits. Diagnose those refs before
-retrying. Successful independent work may form a smaller later wave.
+A failed worker, merge, or combined check leaves the plan branch unchanged.
+`integrate` bisects a failure to the culprit task and exits 5 with
+`culprit=<task>`, `verified_prefix=<commit>`, and
+`untouched_remainder=<tasks>`; conflicts exit 3 naming the conflicting paths.
+Diagnose the culprit before retrying, then re-start or re-integrate the
+untouched remainder as a later wave.
 
 ## Compatibility
 

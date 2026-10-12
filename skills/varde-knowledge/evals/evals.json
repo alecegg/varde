@@ -52,11 +52,11 @@
     },
     {
       "id": 5,
-      "prompt": "At the end of a `varde-change build` run that finished all tasks with nothing left to do, does the closing step write a handoff note?",
-      "expected_output": "No. Per varde-knowledge's reflect.md, a handoff is written only when work remains for a future session. A run that completed all its work with no open thread produces no handoff note.",
+      "prompt": "At the end of a `varde-change build` run that finished all tasks with nothing left to do, does the closing step write session notes?",
+      "expected_output": "No. Per varde-knowledge's reflect.md, session notes are written only when work remains for a future session. A run that completed all its work with no open thread produces no session notes.",
       "assertions": [
-        "No handoff note is created when no work remains",
-        "The rule applied is 'handoff only if work remains', not 'always write a handoff at close'"
+        "No session notes are created when no work remains",
+        "The rule applied is 'session notes only if work remains', not 'always write notes at close'"
       ]
     },
     {
@@ -70,43 +70,43 @@
     },
     {
       "id": 8,
-      "prompt": "Create a handoff for a session whose actual cwd is /tmp/scratch-project, outside any Git repository. It links notes/error-envelope.md, whose raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md. Record the frontmatter and link snapshot.",
-      "expected_output": "The handoff keeps cwd: /tmp/scratch-project and explicitly records repo_root: none, branch: none, head_sha: none, and dirty: not-applicable. Its file link has path: . and a sha256:<64 lowercase hex> snapshot matching the raw bytes of the named fixture.",
+      "prompt": "Create session notes for a session whose actual cwd is /tmp/scratch-project, outside any Git repository. It links notes/error-envelope.md, whose raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md. Record the frontmatter and link snapshot.",
+      "expected_output": "The session notes keep cwd: /tmp/scratch-project and explicitly record repo_root: none, branch: none, head_sha: none, and dirty: not-applicable. Their file link has path: . and a sha256:<64 lowercase hex> snapshot matching the raw bytes of the named fixture.",
       "assertions": [
-        "The non-Git handoff explicitly records repo_root, branch, and head_sha as none, and dirty as not-applicable",
+        "The non-Git session notes explicitly record repo_root, branch, and head_sha as none, and dirty as not-applicable",
         "The actual session cwd remains /tmp/scratch-project rather than being replaced by a repository root",
         "The file link uses path: . and a SHA-256 hash of the raw fixture bytes"
       ],
       "files": [
-        "references/handoff-write.md",
-        "references/handoff-snapshot.md",
-        "evals/fixtures/handoffs/non-git-create.md",
+        "references/session-notes-write.md",
+        "references/session-notes-snapshot.md",
+        "evals/fixtures/session-notes/non-git-create.md",
         "evals/fixtures/knowledge/pattern/error-envelope.md"
       ],
       "verification_script": "evals/verify-knowledge-eval.sh"
     },
     {
       "id": 9,
-      "prompt": "Resume evals/fixtures/handoffs/non-git-resume.md. The current cwd is /tmp/scratch-project-moved. The first target exists and its raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md; the second target is missing. Report the cwd and link statuses, then summarize the handoff without acting.",
-      "expected_output": "The cwd is modified because it differs from the recorded /tmp/scratch-project. The error-envelope link is modified because its current raw-byte SHA-256 differs from the snapshot. The retired-plan link is missing. The agent summarizes the handoff and waits before acting.",
+      "prompt": "Resume evals/fixtures/session-notes/non-git-resume.md. The current cwd is /tmp/scratch-project-moved. The first target exists and its raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md; the second target is missing. Report the cwd and link statuses, then summarize the session notes without acting.",
+      "expected_output": "The cwd is modified because it differs from the recorded /tmp/scratch-project. The error-envelope link is modified because its current raw-byte SHA-256 differs from the snapshot. The retired-plan link is missing. The agent summarizes the session notes and waits before acting.",
       "assertions": [
         "A changed cwd is reported as modified context",
         "The existing link's raw-byte SHA-256 is recomputed and the changed link is marked modified",
         "The absent target is marked missing",
-        "The agent summarizes the handoff and waits before taking action"
+        "The agent summarizes the session notes and waits before taking action"
       ],
       "files": [
-        "references/handoff-resume.md",
-        "references/handoff-snapshot.md",
-        "evals/fixtures/handoffs/non-git-resume.md",
+        "references/session-notes-resume.md",
+        "references/session-notes-snapshot.md",
+        "evals/fixtures/session-notes/non-git-resume.md",
         "evals/fixtures/knowledge/pattern/error-envelope.md"
       ],
       "verification_script": "evals/verify-knowledge-eval.sh"
     },
     {
       "id": 10,
-      "prompt": "Write a short handoff for a routine unfinished task. Link the exact files needed next time; I did not request integrity snapshots.",
-      "expected_output": "Create the handoff in <working>/handoffs with absolute file targets and integrity: none for each default link. Do not hash every linked file or claim unchanged content. On resume, existing lightweight targets are unknown until re-read.",
+      "prompt": "Write short session notes for a routine unfinished task. Link the exact files needed next time; I did not request integrity snapshots.",
+      "expected_output": "Create notes in <working>/session-notes/<id>/notes.md with absolute file targets and integrity: none for each default link. Do not hash every linked file or claim unchanged content. On resume, existing lightweight targets are unknown until re-read.",
       "assertions": [
         "Default links use integrity: none without content_hashes",
         "Targets are explicit absolute paths and missing targets are reported",

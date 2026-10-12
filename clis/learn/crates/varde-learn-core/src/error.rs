@@ -20,9 +20,10 @@ pub enum LearnError {
     /// The requested friction item ID or slug does not exist.
     #[error("friction item `{identifier}` was not found")]
     StoreItemNotFound { identifier: String },
-    /// The store path is inside a Git repository and must be moved elsewhere.
+    /// The store path is inside a Git repository and its cache files are not
+    /// git-ignored there.
     #[error(
-        "refusing friction store at {path}: it is inside Git repository {repo_root}; set VARDE_LEARN_STORE or run `varde-workflow paths set --learn <dir>` to choose a global store directory"
+        "refusing friction store at {path}: it is inside Git repository {repo_root} and learn.db* is not git-ignored there; git-ignore learn.db* in the repository, or set VARDE_LEARN_STORE / run `varde setup paths set --learn <dir>` to choose a store outside the repository"
     )]
     StoreInsideGit {
         path: std::path::PathBuf,

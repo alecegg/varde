@@ -1,20 +1,20 @@
 # Change status
 
-Read-only: change no plan, task, or handoff. Show:
+Read-only: change no plan, task, or session note. Show:
 
-- **Plans:** every `plan.md` at any depth under `<working>/plans/` not
-  `completed`; date-prefixed ids newest first, others last; top 5 plus
-  remaining count. Columns Status | Plan | Tasks | Done (from `tasks/*.md`
-  frontmatter only); a group's children list under it. Empty:
-  `No plans in a non-terminal status.`
-- **Handoffs:** `<working>/handoffs/*/handoff.md` with `status: open`, newest
-  5 plus remaining count (Handoff | Description | Timestamp | Linked plan
-  status). Empty: `No open handoffs.`
-- **Next mode:** use `varde-workflow readiness <plan.md> --json`
-  blockers/actions when available. Recommend one mode as
+- **Plans:** run `varde plan status` and include its `**Progress**` block.
+- **Session notes:** list open `<working>/session-notes/*/notes.md` files, then
+  legacy `<working>/handoffs/*/handoff.md` files, newest first within each
+  group, up to 5 plus a remaining count. Empty: `No open session notes.`
+- **Next mode:** use `varde plan readiness <plan.md> --json` for blockers and
+  actions. Recommend one mode as
   `Recommended next mode: <mode>`, then stop; never run it:
-  - `plan`: unplanned work, or resume a draft per
-    `references/plan.md` (Resume a draft);
+  - `plan`: unplanned work or a draft to resume;
   - `build`: one ready plan;
-  - `orchestrate`: ready group children;
+  - `orchestrate`: ready plans in a plan set;
   - `verify`: aggregate evidence.
+
+Format replies with the compact progress layout: the `**Progress** HH:MM` block
+from `varde plan status` (or `**Progress** HH:MM: no change since last check.`
+when it matches the prior block ignoring time), one `Agents:` line, bold
+`**My work**`, and bold `**Needed from you**`.

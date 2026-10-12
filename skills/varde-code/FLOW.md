@@ -1,7 +1,7 @@
 # varde-code flow
 
 Generated for human readers; agents do not load this file. Regenerate
-with skill-flow.py --write from varde-agent-doc-authoring. Dotted edges
+with `varde doc flow --write`. Dotted edges
 are conditional loads; min tokens follow only solid edges. Thick edges
 are hand-offs to a later stage, outside min and max. Double-bordered
 nodes are skill modes run inline or agent dispatches. Min and max count
@@ -11,7 +11,7 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~851 tok; routes: -)
+- SKILL.md (~827 tok; routes: -)
 
 ```mermaid
 flowchart TD

@@ -1,0 +1,3931 @@
+=== agents/varde-builder/claude.md ===
+---
+name: varde-builder
+description: "Execute exactly one bounded implementation task with varde-change build. Apply persisted review findings using the varde-review skill fix workflow."
+model: "sonnet"
+tools: Read, Write, Edit, Grep, Glob, Bash, Skill
+skills: varde-change, varde-review
+---
+<!-- varde-generated-agent: agents/capabilities.json -->
+
+# Varde Builder Agent
+
+Use `varde-change build` for exactly one bounded implementation task.
+Use the loaded `varde-review` skill for persisted review findings. Its `fix` and `simplify` names select skill workflows; `varde-review` is not a shell executable and should not be checked with `command -v`.
+
+## Contract
+
+- Accept exactly one bounded implementation task.
+- Require its location, ownership, checks, and constraints before editing.
+- Spawn only `varde-explorer` (up to 2 at a time), and only if you have a spawn tool. Otherwise use the brief's explorer notes, then `varde-explore` for gaps. Do the task yourself; spawn no agent but `varde-explorer`.
+- Require the caller-supplied review subject and independent pre-edit approval, when the subject's tier requires it, while scope, assumptions, and verification still hold; low tier needs no pre-edit record. Before editing, run `varde work review check --subject <subject-id> --checkpoint start --json` for new work or `--checkpoint resume` for continuation; these checks in `references/build-execution.md` are your whole gate, so do not load `references/review-gates.md` or `references/review-gate-plan.md`. If evidence is missing, blocked, stale, or invalid, or the workflow CLI is unavailable, stop and return to the caller. Never author your own approval record or replace it with prose or a boolean. For material drift or required implementation review, return to the caller requesting the review, and continue only after the caller reports approval. Verified tasks may finish with aggregate implementation review pending on the plan, per the skill; plan completion waits for that review.
+- Do not plan, decompose, orchestrate, or create child tasks.
+- Mutate task state through `varde work` only in the owning approval checkout. In an isolated task worktree, use the caller-supplied subject, parent repository, worker path and binding ID for start/resume checks; return source commits and verification evidence without editing tracked or external task files. The parent owns their state updates after verified integration and binding release. Never use binding context to record parent approval or complete a parent.
+- Never mutate plan-wide state.
+- Return planning work to the Varde Planner Agent.
+- Return report-only review work to the Varde Reviewer Agent.
+
+## Execution rules
+
+- Follow the selected skill completely.
+- Run only lint and the assigned task's verification checks; the orchestrator issues reviews and full suites separately.
+- Preserve unmanaged files and unrelated changes.
+- Run the task checks before recording completion.
+- For plan reviews, route `varde-review fix` through `mode=build` with `plan_context`, `review_dir`, and `repoRoot`.
+- For standalone reviews, use `mode=standalone` with `review_dir` and `repoRoot`; omit `plan_context`.
+- Never ask the user to triage findings. Return blank or unresolved findings to the parent; the parent records `fix`, `dismiss`, or `action-item` decisions and dispatches further work.
+- For a parent-selected review fix, use `varde-change build` with a bounded task naming only the selected `finding_ids`; do not rerun fix mode over the whole review folder.
+- Do not bypass the review-fix triage workflow.
+
+## CLI policy
+
+- When working with Knowledge Bundles, consult generated root/type concept maps; refresh them with `varde work concept map --bundle <knowledge>` after Concept changes.
+- Use `varde map` for uncertain edit impact, relationships, and coverage.
+- Use `varde work` for task state and plan artifact mutations.
+- Confirm important CLI results against focused source reads.
+- Keep selection, commands, and fallback rules in the owning
+  skill references: `references/varde-code-cli.md` and
+  `references/varde-workflow-cli.md`.
+- If `varde` is unavailable, report degraded code-query capability and name the manual evidence used; if `varde` is missing, stop and report it.
+
+## Handoff
+
+Report observed session-friction evidence to the orchestrator. Do not write
+friction records or promote session observations to stored friction; the
+orchestrator owns capture. This does not restrict writes required by the
+assigned task.
+
+Report the active plan or review folder.
+List the bounded task, changed paths, verification, commits, and blockers.
+State whether merge approval remains required.
+=== agents/varde-reviewer/claude.md ===
+---
+name: varde-reviewer
+description: "Run a report-only structured review using the varde-review skill. Write findings only inside the active review folder."
+model: "opus"
+tools: Read, Write, Grep, Glob, Bash, Skill
+skills: varde-review
+---
+<!-- varde-generated-agent: agents/capabilities.json -->
+
+# Varde Reviewer Agent
+
+Use the loaded `varde-review` skill for every review request. `report` is a skill workflow, not a shell command; `varde-review` is not a shell executable.
+Produce persisted findings inside the active review folder. The sole additional write is your own caller-assigned gate evidence under `<working>/review-gates/<subject-id>/`.
+Never edit production source files.
+
+## Gate evidence
+
+For a caller-assigned pre-edit or implementation gate review, follow `references/review-gate-record.md` in the loaded skill; do not load `references/review-gates.md`. Run `varde work review inspect --subject <caller-subject-id> --phase <phase> --json`, complete the requested review, then author your own record using its fingerprints and your verdict. Write that record in the configured `<working>/review-gates/<subject-id>/` directory, outside source coverage. Submit it directly with `varde work review record --subject <caller-subject-id> --expected-version <inspect-version> --file <record.json> --json`; return the recorded subject and phase to the caller. An approval boolean or coordinator prose does not substitute. Do not initialize subjects, change contracts or scope, reset a baseline, or change plan/task status. Stop and report unavailable CLI or conflicting evidence. Gate-only requests need no review folder; ordinary code reviews also follow the report workflow below before recording evidence.
+
+## Workflow
+
+1. Resolve the requested review mode.
+2. When briefed with a chunk's file list by a report orchestrator, review only that chunk, return findings, and write nothing.
+3. Otherwise follow the varde-review report workflow completely: create the review folder before analysis, review every active category, write findings immediately to `review.md` in that folder, and return the review folder and summary.
+4. When the read is over budget, report back to the caller to split the review; never split it yourself.
+
+## Rules
+
+- Default to `CORRECTNESS`, `CODE`, and `ARCHITECTURE`.
+- A thorough or full review covers all categories in `references/report-categories.md`, filtered by relevance.
+- Use repository-relative finding locations.
+- Label findings carefully for later fixing.
+- Write only review artifacts inside the active review folder, plus your own gate evidence through the procedure above.
+- Do not modify production source files.
+- Route fixes to the Varde Builder Agent.
+- Spawn only `varde-explorer` (up to 2 at a time), and only if you have a spawn tool. Otherwise use the brief's explorer notes, then `varde-explore` for gaps.
+
+## CLI policy
+
+- When working with Knowledge Bundles, consult generated root/type concept maps; refresh them with `varde work concept map --bundle <knowledge>` after Concept changes.
+- Use `varde map` for impact and test coverage questions.
+- Keep known, trivial reads direct.
+- Confirm important CLI results against focused source reads.
+- Keep selection, commands, and fallback rules in the owning
+  skill reference: `references/varde-code-cli.md`.
+- If `varde` is unavailable, report degraded code-query capability
+  and name the manual evidence used.
+
+## Handoff
+
+Report findings by severity and label.
+Name the persisted review folder.
+Identify findings suitable for `varde-review fix`.
+=== skills/shared/MANIFEST ===
+scripts/risk-tier.py varde-agent-doc-authoring varde-change varde-docs varde-review
+references/varde-code-cli.md varde-change varde-docs varde-explore varde-review
+references/varde-workflow-cli.md varde-change varde-knowledge
+references/review-gates.md varde-agent-doc-authoring varde-change varde-docs varde-review
+references/review-gate-record.md varde-agent-doc-authoring varde-change varde-docs varde-review
+references/review-gate-plan.md varde-agent-doc-authoring varde-change varde-docs varde-review
+references/review-gate-worktree.md varde-agent-doc-authoring varde-change varde-docs varde-review
+=== skills/shared/references/review-gate-plan.md ===
+# Persisted plans and review-scope updates
+
+## 1. Initialize one aggregate subject
+
+Run `python3 <skill-dir>/scripts/risk-tier.py <scope-path>...` over the plan's
+full scope first, from the repository root, and keep its JSON output; missing or
+unreadable evidence defaults to high tier. Add every `tests_to_run` entry to
+the plan's acceptance checks, run by type (`.sh` with bash, `.py` with
+python3, `clis/<module>/` with its test command); module test commands still
+apply.
+
+`review check` treats a plan as high tier, whatever `data.subject.tier` says, if
+`## Open Questions` holds a `-` or `*` bullet, the frontmatter has a non-empty
+`shared_contracts` list, or the plan body has no `assert:` marker.
+
+```sh
+varde work review init --plan <plan.md> --repository <repo-root> --scope <path> --tier-evidence <risk-tier.json> --json
+```
+
+Tasks inherit the parent subject and approval; pass them the id and memory
+paths instead of initializing per-task approvals.
+
+## 2. Dispatch approved tasks
+
+Run the start/resume checkpoint before dispatching approved tasks. The
+readiness fields gate different work:
+
+- `readiness.data.planning_ready`: dependencies only; review blockers still
+  allow planning and work selection.
+- `readiness.data.implementation_ready`: adds review gates; must pass before
+  implementation. Low tier (`data.subject.tier`) with none of the §1 plan
+  triggers needs no pre-edit record to pass this gate.
+
+## 3. Conclude the plan
+
+Run `conclude`; it requires current final evidence and a passing complete
+checkpoint.
+
+## Contract or scope updates
+
+- Replace the contract with `review contract`, or add `--scope`/`--artifact`
+  coverage with `review expand` (`--tier-evidence` optional; omitted evidence
+  reverts a low-tier subject to high); run either at the inspected version.
+  Supplied low-tier evidence must cover the entire resulting scope, including
+  artifacts; incomplete coverage returns high.
+- Expansion snapshots only the added scope and never retroactively authorizes
+  changes outside it, but it always recomputes the subject's baseline id: a
+  pre-edit approval taken before an expand goes stale and needs a refresh.
+=== skills/shared/references/review-gate-record.md ===
+# Reviewer evidence record
+
+Reuse the pre-edit reviewer when still reachable in this session; otherwise
+use a fresh clean-context reviewer.
+
+1. Resolve code-answerable questions yourself.
+2. Inspect the subject at the current phase; copy `data.version` and
+   `data.record_template`:
+
+   ```sh
+   varde work review inspect --subject <subject-id> --phase <pre-edit|implementation> --json
+   ```
+
+3. `data.record_template` is `EvidenceRecord`'s exact shape, with
+   `schema_version`, for this phase. Fill every remaining placeholder from your
+   own assessment (`implementation_review_required` and `tier_confirmed` are
+   JSON booleans); never default approval or the final-review decision. Write
+   the filled record in the configured working store, outside source scope and
+   never as the CLI-owned `pre-edit.json`, `implementation.json`, or
+   `subject.json` — a report or coordinator-written approval is insufficient.
+   An implementation record requires `coverage: "entire-subject-change"`, a
+   non-empty `change_fingerprint`, and `tier_confirmed`.
+4. Submit it (a pre-edit verdict before any implementation edit):
+
+   ```sh
+   varde work review record --subject <subject-id> --expected-version <data.version> --file <reviewer-record.json> --json
+   ```
+
+Verdict rules:
+
+- Behavior changes default to a failing test before implementation unless you
+  approve a concrete alternative with its rationale and expected result.
+  Documentation and packaging use structural or smoke checks.
+- Set `implementation_review_required` true whenever `structural_risk` is
+  above low/none; the CLI rejects non-low risk marked false.
+
+Review every current subject change, including external artifacts, and record
+the inspected change fingerprint. `tier_confirmed` judges `data.subject.tier`
+(from `scripts/risk-tier.py`) against what you observed: `false` contradicts
+the computed tier and blocks `complete` on its own, regardless of verdict.
+
+## Low tier lightweight checks
+
+For low tier code routed here from `review-gates.md` §5, check:
+
+- the diff stays within the approved scope
+- verification results match the expected results
+- no behavior change beyond the approved outcome
+=== skills/shared/references/review-gate-worktree.md ===
+# Isolated execution review bindings
+
+Load before dispatch or edits in a checkout other than the exact approval
+checkout. A subject stays bound to that checkout; a shared Git directory or
+external `--artifact` scope never authorizes writes elsewhere.
+
+- **Bind:** register each task in another linked checkout with
+  `review bind-worktree` for its owned scope (and optional original task).
+  Unregistered, out-of-scope, or stale bindings stop execution.
+- **Worker checks:** start/resume `review check` needs `--repository
+  <approval-checkout>`, `--worktree <absolute-worker-path>`, and `--binding
+  <task-binding-id>` together. It honors the subject's tier the same as any
+  other checkpoint: low tier accepts a missing pre-edit record.
+- **Integration:** workers return source commits and evidence; parents own
+  task state after verified integration, then inspect and release bindings
+  (`review inspect-worktree`, `review release-worktree`) against the
+  integrated commits before cleanup (a scripted worktree wave does this in its
+  release step, after the parent commits bookkeeping). Read-only inspection
+  (`review inspect-worktree`) exposes stale or unavailable worker evidence.
+- **Completion:** parent completion and final review use the approval checkout
+  and combined current evidence; live bindings leave completion pending.
+  Current parent approval may archive stale integrated source only if the
+  original scope remains covered. Implementation review is always required at
+  completion, independent of tier.
+- **Abandonment:** if execution cannot finish, run `review abandon-worktree`
+  with the inspected version and a reason. It keeps source, branch, checkout,
+  and evidence and requires fresh final review. It cannot resume execution,
+  mark a task done, or conclude the parent.
+- **Bindings never** record approval or conclude a parent.
+
+Load `references/review-gate-record.md` only as an independent reviewer, never
+to approve your own execution.
+=== skills/shared/references/review-gates.md ===
+# Independent review gates
+
+Gate every implementation change (source, configuration, documentation,
+fixes, refactors, prototypes in source) through `varde-change`. Read-only
+investigation, workflow bookkeeping, and prototype files under `<working>`
+need no gate.
+
+Coordinators read this file; a builder with a caller-supplied subject runs
+only the checkpoints its brief names, and a gate reviewer follows
+`references/review-gate-record.md` instead.
+
+## 1. Mechanical edit exception
+
+An edit qualifies only if its entire diff preserves exact operational meaning
+and only corrects:
+
+- spelling
+- punctuation
+- whitespace
+- formatting
+
+Take the full gate for mixed or uncertain diffs and for changes to any of:
+
+- commands
+- paths
+- conditions
+- instruction meaning
+- output contracts
+- configuration
+- code
+- tests
+
+When using the exception:
+
+- Inspect the final diff and run targeted checks.
+- Report why it qualified and what passed.
+- Skill edits still get `varde-agent-doc-authoring` review, limited to its
+  length check and a diff inspection.
+- Existing review subjects keep all checkpoints.
+- Work that grows beyond the exception takes the full gate first.
+
+## 2. Initialize the subject
+
+Pick the branch first:
+
+- Persisted plan, or a contract/scope mutation: load
+  `references/review-gate-plan.md` before initialization or mutation, and
+  initialize there.
+- Different execution checkout: load `references/review-gate-worktree.md`
+  before dispatch or editing there; a subject binds its exact approval
+  checkout.
+
+For bounded work:
+
+1. Compute the risk tier: run
+   `python3 <skill-dir>/scripts/risk-tier.py <scope-path>...` from the
+   repository root and save its JSON output (it lists `paths` and
+   `tests_to_run`). Add every `tests_to_run` entry to the verification, run by
+   type (`.sh` with bash, `.py` with python3, files under `clis/<module>/` with
+   that module's test command); the list is a minimum, so module test commands
+   still apply.
+2. Create the subject and run the start check in one command:
+
+   ```sh
+   varde work review start-bounded --subject <safe-id> --repository <repo-root> --outcome <text> --scope <path> --verification <check> --tier-evidence <risk-tier.json> [--assumption <text>] --json
+   ```
+
+   Repeat `--scope`, `--verification` (prefix an automated check with
+   `assert:`), and `--assumption`. It writes the contract to
+   `<working>/review-contracts/<safe-id>.json`, records the repository HEAD as
+   the diff base, initializes the subject, and exits as `review check` does
+   (4 when blocked). For an external file, or a contract with `design`,
+   `open_choices`, or `shared_contracts`, use `review init --subject <safe-id>
+   --contract <contract.json> --artifact <absolute-file>` (no directories or
+   aliases) with a contract stored under `subjects/<safe-id>/` in the working
+   store, not in `review-gates/`.
+3. Missing, unreadable, or malformed `--tier-evidence` makes the subject high
+   tier. `review check` also forces high tier from the stored contract, even
+   when `data.subject.tier` reads low: a non-empty `open_choices`, a non-empty
+   `shared_contracts` key (shared contracts: workflow instructions, CLI
+   schemas), or no `assert:` marker in `verification`.
+
+## 3. Get the pre-edit verdict
+
+Low tier (`data.subject.tier` from `review inspect`) with none of the §2 step 3
+contract triggers skips this entire section: `review check` accepts a missing
+pre-edit record. High tier runs the steps below.
+
+1. Give an agent with a clean, independent context:
+   - subject id
+   - repository
+   - resolved `<working>` and `<knowledge>` paths
+   - outcome and scope
+   - assumptions and open questions
+   - verification with expected results
+   - structural risk
+2. The reviewer loads `references/review-gate-record.md` before writing
+   evidence in either phase and records its own verdict before any edit.
+
+Rules for the verdict:
+
+- Coordinators never enter reviewer records or substitute prose approval.
+- A finding is not approval of its fix.
+- Persist unresolved human choices; ask only when they block implementation,
+  and do not reopen decisions the user already made.
+- If no independent reviewer or required CLI operation is available, stop
+  implementation: no self-approval, hand-edited record, or manual fallback.
+
+## 4. Run checkpoints
+
+Run `varde work review check --subject <subject-id>` with:
+
+- `--checkpoint start --json` before edits
+- `--checkpoint resume --json` before resuming
+- `--checkpoint complete --json` before reporting completion. For a bounded
+  subject, rerun `risk-tier.py` on the changed paths and add `--tier-evidence
+  <new.json>` (not with `--worktree`).
+
+Proceed only when it passes:
+
+- exit 4: a gate blocker; resolve it or refresh evidence. At `complete` on a
+  bounded subject it also means a changed path (tracked diff since the base
+  plus untracked files) is outside scope, evidence is absent or its `paths`
+  omit a changed path, or evidence reports a higher tier. Widen scope with
+  `review expand` and fresh evidence, get a pre-edit verdict if the tier is now
+  high, then rerun `complete`.
+- exit 3: an OCC conflict; re-inspect and retry
+- exit 1: an infrastructure error, not a gate result
+
+Transitions and `conclude` enforce the same checks before writing.
+
+Material contract changes need a fresh independent verdict.
+
+## 5. Complete with final review
+
+Implementation review is always required, independent of tier.
+
+1. Finish source, docs, and verification.
+2. The reviewer inspects phase `implementation` and records evidence covering
+   the whole current subject change, including `tier_confirmed`.
+3. Run the complete checkpoint. Later edits to covered files need rerun checks
+   and refreshed evidence.
+
+Review agent documents with `varde-agent-doc-authoring`. High tier code uses
+`varde-review report`. Low tier code: a clean-context reviewer inspects the
+diff against the contract's outcome and verification and records via
+`references/review-gate-record.md`, with no `varde-review report`.
+Behavior-changing or risky review fixes need fresh independent approval;
+others need targeted verification. Do not recursively invoke unrelated
+reviews once findings and checks are resolved.
+=== skills/shared/references/varde-code-cli.md ===
+<!-- kind: reference -->
+Use the varde-code skill with `varde map` for indexed lookups. If `varde` is
+missing, fall back to `Read`/`Grep`/`Glob`/`rg` and report degraded access;
+never build or install the CLI.
+=== skills/shared/references/varde-workflow-cli.md ===
+<!-- kind: reference -->
+# `varde` workflow commands
+
+Varde skills require `varde`. It validates workflow state and provides
+concept search and maps. Use Write/Edit to write plans, tasks, handoffs, and
+notes.
+
+## Fallback rule
+
+- When `varde` is missing: stop every operation, reads included, and ask the
+  user to run `varde setup sync`. Never build or install the binary during
+  another workflow.
+- Sandbox denial: retry once with escalated access, command unchanged.
+- `ok: false` with a validation code is a result, not an outage; fix the cause
+  instead of routing around it.
+- If `concept search`, `concept map`, or a plan or task status read still
+  fails, use Read/Grep and name the lost capability once. Every other
+  command, including `review inspect`, stops and reports the failure.
+- Never replace approval with prose, hand-written evidence, or status edits.
+=== skills/shared/scripts/risk-tier.py ===
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+"""Compute a low/high risk tier for a review scope from code and skill-doc signals.
+
+Usage: risk-tier.py [--contract <file>] <scope-path>...
+
+Prints `{"tier": "low"|"high", "signals": [...], "evidence": {...},
+"paths": [...normalized, sorted scope paths...],
+"tests_to_run": [...]}` to stdout. `tests_to_run` is always present: the
+sorted repo-relative files under any `tests` directory (skipping `.git`,
+`target`, `node_modules`, `.varde`, and any `fixtures` path component) whose
+text names a scope path. A match is the repo-relative path, or the basename,
+or `<parent-dir>/<basename>` for generic basenames (SKILL.md, FLOW.md,
+README.md, AGENTS.md, CLAUDE.md, main.rs, lib.rs, mod.rs, __init__.py,
+index.*); basename matches count only at a path boundary (preceding character
+not in `[A-Za-z0-9._-]`). Tier is "high" when any of these trigger, by scope
+kind. `dependent_outside_scope` and `skill_reach_external` are recorded in
+`evidence` only and never raise the tier:
+
+- Missing scope paths, including intended new files, are accepted but raise
+  `scope_not_individually_classified` with the offending path as evidence.
+  Relative paths are checked from the current working directory; absolute
+  paths are checked directly.
+- Code scope (any path not classified as skill-doc): `varde map
+  blast_radius`, `nav_map`, and `clusters` per path. High when a scope file
+  is marked foundational/entrypoint by `nav_map`, or scope spans more than
+  one cluster.
+- Skill-doc scope (a path under `skills/<skill>/...` or `skills/shared/...`,
+  only when `skills/shared/MANIFEST` is a file; otherwise such paths are
+  code):
+  `skill-flow.py`'s reach, `skills/shared/MANIFEST`'s shared-file list,
+  and `skills/tests/vendored-copies.sh`'s partial-section pins. High when the
+  path is a file under `skills/shared/` or a skill's copy of one that
+  `skills/shared/MANIFEST` lists for that skill (signal `shared_file`); or a
+  byte-identical copy of a vendored-copies.sh-pinned file exists under
+  another skill's `references/` (signal `vendored_copy_exists`). Reach
+  leaving the owning skill (a route's `inline`, `unresolved`, or
+  `dispatches`, or a `handoffs` entry that is not one of the skill's own
+  files) is evidence `skill_reach_external` only. A bare directory scope
+  that cannot resolve to one skill (e.g. `skills` itself) expands to every
+  contained skill; if that finds none, or another scope path still can't be
+  resolved, signal `scope_not_individually_classified` instead of a silent
+  empty-signal low tier.
+- When a scope includes code paths and `varde` is missing, the index is
+  unavailable, or a `varde map` query fails, fall back to a `git grep` text check by
+  file stem. A hit outside scope is evidence `dependent_outside_scope`
+  (detail adds `"source": "text-fallback"`) only; high when more than one
+  code path is in scope (`multi_file_scope_unverified`); `git grep` itself failing keeps
+  `varde_code_unavailable` as a signal. Otherwise `varde_code_unavailable` is
+  recorded in evidence only and the scope stays low.
+
+`--contract` is accepted but unused here — contract-derived triggers
+(`open_choices`, `shared_contracts`, missing verification checks) are
+evaluated live by the CLI from the stored contract, not by this script.
+"""
+
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def add_signal(signals, evidence, name, detail):
+    if name not in signals:
+        signals.append(name)
+    evidence.setdefault(name, []).append(detail)
+
+
+def classify(path, has_manifest):
+    parts = Path(path).parts
+    return "skill" if has_manifest and parts and parts[0] == "skills" else "code"
+
+
+def run_varde_map(mode, payload):
+    """Return parsed `data`, or None if varde is missing or the call fails."""
+    if shutil.which("varde") is None:
+        return None
+    try:
+        proc = subprocess.run(
+            ["varde", "map", mode, "--json", json.dumps(payload)],
+            capture_output=True, text=True, timeout=120,
+        )
+        result = json.loads(proc.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return None
+    if proc.returncode != 0 or not result.get("ok"):
+        return None
+    return result.get("data")
+
+
+def code_signals(paths, repo_root, signals, evidence):
+    unavailable = False
+    scope = set(paths)
+
+    for path in paths:
+        dependents = run_varde_map("blast_radius", {"repoRoot": str(repo_root), "filePath": path})
+        if dependents is None:
+            unavailable = True
+            continue
+        outside = sorted(set(dependents) - scope)
+        if outside:
+            evidence.setdefault("dependent_outside_scope", []).append(
+                {"path": path, "dependents": outside[:5]})
+
+    nav = run_varde_map("nav_map", {"repoRoot": str(repo_root)})
+    if nav is None:
+        unavailable = True
+    else:
+        foundational = {f.get("file") for f in nav.get("foundational_files", [])}
+        hit = sorted(scope & foundational)
+        if hit:
+            add_signal(signals, evidence, "foundational_file", {"paths": hit})
+
+    clusters = run_varde_map("clusters", {"repoRoot": str(repo_root), "minSize": 1})
+    if clusters is None:
+        unavailable = True
+    else:
+        cluster_of = {f: c.get("id") for c in clusters.get("clusters", []) for f in c.get("files", [])}
+        ids = {cluster_of.get(p, f"unresolved:{p}") for p in paths}
+        if len(ids) > 1:
+            add_signal(signals, evidence, "multi_cluster_scope",
+                       {"paths": sorted(scope), "clusters": sorted(str(i) for i in ids)})
+
+    if unavailable:
+        text_fallback_signals(paths, repo_root, signals, evidence)
+
+
+def text_fallback_signals(code_paths, repo_root, signals, evidence):
+    """Fall back to a git grep text check when varde is unavailable.
+
+    For each code path, search tracked files for its stem (`Path(path).stem`)
+    with `git grep -l -w -F`, dropping hits that are themselves scope paths.
+    A hit outside scope is recorded as `dependent_outside_scope` in `evidence`
+    only (detail adds `"source": "text-fallback"`). More than one code path in scope signals
+    `multi_file_scope_unverified`. If `git grep` itself
+    fails (not a git checkout, git missing), `varde_code_unavailable` stays a
+    signal, matching the varde-unavailable behavior. Otherwise
+    `varde_code_unavailable` is recorded in `evidence` only, so a clean scope
+    stays low tier.
+    """
+    scope = set(code_paths)
+    for path in code_paths:
+        stem = Path(path).stem
+        try:
+            proc = subprocess.run(
+                ["git", "grep", "-l", "-w", "-F", "-e", stem],
+                cwd=repo_root, capture_output=True, text=True, timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            add_signal(signals, evidence, "varde_code_unavailable", {"paths": code_paths})
+            return
+        if proc.returncode not in (0, 1):
+            add_signal(signals, evidence, "varde_code_unavailable", {"paths": code_paths})
+            return
+        hits = sorted(set(proc.stdout.splitlines()) - scope)
+        if hits:
+            evidence.setdefault("dependent_outside_scope", []).append(
+                {"path": path, "dependents": hits[:5], "source": "text-fallback"})
+
+    if len(code_paths) > 1:
+        add_signal(signals, evidence, "multi_file_scope_unverified", {"paths": code_paths})
+
+    evidence.setdefault("varde_code_unavailable", []).append({"paths": code_paths})
+
+
+def skill_flow_data(skill_dir, skill_flow_script):
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-B", str(skill_flow_script), "--json", str(skill_dir)],
+            capture_output=True, text=True, timeout=120,
+        )
+        parsed = json.loads(proc.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return None
+    if proc.returncode != 0 or not parsed:
+        return None
+    return parsed[0]
+
+
+def reach_leaves_skill(flow, rel_path):
+    own_files = flow.get("tokens", {})
+    for route in flow.get("routes", []):
+        reached = rel_path == "SKILL.md" or rel_path in route.get("files", [])
+        if not reached:
+            continue
+        if route.get("inline") or route.get("unresolved") or route.get("dispatches"):
+            return True
+        if any(handoff not in own_files for handoff in route.get("handoffs", [])):
+            return True
+    return False
+
+
+def vendored_manifest_names(vendored_manifest):
+    if not vendored_manifest.is_file():
+        return set()
+    match = re.search(r"MANIFEST=\((.*?)\n\)", vendored_manifest.read_text(), re.S)
+    if not match:
+        return set()
+    names = set()
+    for entry in re.findall(r'"([^"]+)"', match.group(1)):
+        names.update(entry.split(":", 1)[0].split("|"))
+    return names
+
+
+def shared_manifest_skills(shared_manifest):
+    """Map each shared-file path to skill names for varde setup sync."""
+    mapping = {}
+    if not shared_manifest.is_file():
+        return mapping
+    for line in shared_manifest.read_text().splitlines():
+        rel, *skill_names = line.split()
+        if rel:
+            mapping[rel] = skill_names
+    return mapping
+
+
+def vendored_copy_elsewhere(target_file, name, skills_dir):
+    if not target_file.is_file():
+        return []
+    target_bytes = target_file.read_bytes()
+    matches = []
+    for candidate in skills_dir.glob(f"*/references/{name}"):
+        if candidate.resolve() == target_file.resolve():
+            continue
+        if candidate.is_file() and candidate.read_bytes() == target_bytes:
+            matches.append(str(candidate.relative_to(skills_dir)))
+    return matches
+
+
+SKIP_DIRS = {".git", "target", "node_modules", ".varde"}
+GENERIC_BASENAMES = {"SKILL.md", "FLOW.md", "README.md", "AGENTS.md", "CLAUDE.md",
+                     "main.rs", "lib.rs", "mod.rs", "__init__.py"}
+
+
+def is_generic(name):
+    return name in GENERIC_BASENAMES or re.fullmatch(r"index\..+", name) is not None
+
+
+def names_at_boundary(text, needle):
+    pattern = r"(?<![A-Za-z0-9._-])" + re.escape(needle)
+    return re.search(pattern, text) is not None
+
+
+def test_files(repo_root):
+    """Yield repo-relative files under any directory named `tests`."""
+    stack = [repo_root]
+    while stack:
+        current = stack.pop()
+        try:
+            children = sorted(current.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            rel_parts = child.relative_to(repo_root).parts
+            if child.is_symlink() or any(p in SKIP_DIRS or p == "fixtures" for p in rel_parts):
+                continue
+            if child.is_dir():
+                stack.append(child)
+            elif child.is_file() and "tests" in rel_parts[:-1]:
+                yield child
+
+
+def tests_naming_scope(paths, repo_root):
+    needles = []
+    for path in paths:
+        posix = Path(path).as_posix()
+        name = Path(path).name
+        if is_generic(name):
+            parent = Path(path).parent.name
+            base = f"{parent}/{name}" if parent else name
+        else:
+            base = name
+        needles.append((posix, base))
+    hits = set()
+    for candidate in test_files(repo_root):
+        try:
+            text = candidate.read_text(errors="replace")
+        except OSError:
+            continue
+        if any(names_at_boundary(text, full) or names_at_boundary(text, base)
+               for full, base in needles):
+            hits.add(candidate.relative_to(repo_root).as_posix())
+    return sorted(hits)
+
+
+def skill_relative(path):
+    parts = Path(path).parts
+    if len(parts) < 2 or parts[0] != "skills":
+        return None
+    return Path(*parts[1:])
+
+
+def skill_signals(paths, signals, evidence, skills_dir):
+    skill_flow_script = skills_dir / "varde-agent-doc-authoring" / "scripts" / "skill-flow.py"
+    tests_dir = skills_dir / "tests"
+    manifest_names = vendored_manifest_names(tests_dir / "vendored-copies.sh")
+    shared_files = shared_manifest_skills(skills_dir / "shared" / "MANIFEST")
+    flow_cache = {}
+
+    def evaluate(path, rel):
+        skill_name = rel.parts[0]
+        skill_dir = skills_dir / skill_name
+        within = rel.relative_to(skill_name).as_posix() if len(rel.parts) > 1 else "SKILL.md"
+        target_file = skills_dir / rel
+
+        if (skill_dir / "SKILL.md").is_file():
+            if skill_name not in flow_cache:
+                flow_cache[skill_name] = skill_flow_data(skill_dir, skill_flow_script)
+            flow = flow_cache[skill_name]
+            if flow and reach_leaves_skill(flow, within):
+                evidence.setdefault("skill_reach_external", []).append({"path": path})
+
+        consumers = shared_files.get(within, [])
+        if skill_name == "shared" or skill_name in consumers:
+            add_signal(signals, evidence, "shared_file", {"path": path, "skills": consumers})
+
+        name = target_file.name
+        if name in manifest_names:
+            copies = vendored_copy_elsewhere(target_file, name, skills_dir)
+            if copies:
+                add_signal(signals, evidence, "vendored_copy_exists", {"path": path, "copies": copies})
+
+    for path in paths:
+        rel = skill_relative(path)
+        if rel is not None:
+            evaluate(path, rel)
+            continue
+
+        # A directory that can't resolve to one skill (bare `skills`, today's
+        # only case, since `classify` already requires parts[0] == "skills")
+        # expands to every contained skill instead of silently producing no
+        # signals (friction 16).
+        contained = []
+        if skills_dir.is_dir():
+            contained = sorted(
+                child.name
+                for child in skills_dir.iterdir()
+                if child.is_dir() and (child / "SKILL.md").is_file()
+            )
+        if contained:
+            for skill_name in contained:
+                evaluate(f"skills/{skill_name}", Path(skill_name))
+        else:
+            add_signal(signals, evidence, "scope_not_individually_classified", {"path": path})
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--contract")
+    parser.add_argument("paths", nargs="+", metavar="scope-path")
+    args = parser.parse_args(argv)
+
+    repo_root = Path.cwd()
+    signals, evidence = [], {}
+
+    for path in args.paths:
+        if not (repo_root / path).exists():
+            add_signal(signals, evidence, "scope_not_individually_classified", {"path": path})
+
+    has_manifest = (repo_root / "skills" / "shared" / "MANIFEST").is_file()
+    code_paths = [p for p in args.paths if classify(p, has_manifest) == "code"]
+    skill_paths = [p for p in args.paths if classify(p, has_manifest) == "skill"]
+
+    if code_paths:
+        code_signals(code_paths, repo_root, signals, evidence)
+    if skill_paths:
+        skill_signals(skill_paths, signals, evidence, repo_root / "skills")
+
+    tier = "high" if signals else "low"
+    scope = sorted({Path(p).as_posix() for p in args.paths})
+    print(json.dumps({"tier": tier, "signals": signals, "evidence": evidence,
+                      "paths": scope,
+                      "tests_to_run": tests_naming_scope(args.paths, repo_root)}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+=== skills/varde-change/SKILL.md ===
+---
+name: varde-change
+description: "Plan, build, verify, or orchestrate a code change, list plans in flight, diagnose why something fails, or fix a named bug evidence-first. Not for explaining or reviewing code."
+---
+
+# Manage the change lifecycle
+
+Never ask the user which mode to use.
+
+Before implementation edits, apply `references/review-gates.md` and carry its
+verdict through completion, including skill and doc edits. A builder
+with a caller-supplied subject runs only the checks in
+`references/build-execution.md` instead.
+
+## Entry routing
+
+Explicit intent wins, in order: review → `varde-review report`; exploration →
+`varde-explore`; an explicit build request takes a build row below, even for a
+bug.
+
+## What the request needs
+
+| The request is | Read |
+|---|---|
+| "What's in flight?", or an empty invocation — show current work and what to do next | `references/status.md` |
+| Plan a new feature before building | `references/plan.md` |
+| Resume planning with no feature named | `references/plan.md` (Resume a draft) |
+| One task file assigned by an orchestrator (builder) | `references/build-execution.md` |
+| A settled single-outcome refactor | `references/build-micro-change.md`, then `references/build-posture-refactor.md` |
+| A settled single-outcome change that fits one task | `references/build-micro-change.md` |
+| A named plan, multiple dependent outcomes, or unresolved design | `references/build.md` |
+| Diagnose why something fails, without fixing it | `references/build-posture-debug.md` (`diagnose`) |
+| Fix a named bug or regression, no mode given | `references/build-posture-debug.md` (`fix`) |
+| Report evidence for finished work without changing anything | `references/verify.md` |
+| Run a group of related plans end to end, in dependency order | `references/orchestrate.md` |
+
+## Gotchas
+
+- Ask one topic per turn as an inline numbered menu with a recommendation;
+  wait for an explicit answer.
+- Resolve `<working>` and `<knowledge>` once with `varde work paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
+- A `varde` call that is denied, errors, or returns
+  `workflow_blocked`: load `references/varde-workflow-cli.md` for its fallback
+  rule and `references/workflow-state.md` for legal state moves.
+=== skills/varde-change/assets/PLAN-TEMPLATE.md ===
+<!-- kind: reference -->
+Frontmatter:
+
+```
+---
+status: backlog
+title: "<user's initial prompt>"
+type: plan
+depends_on: []       # optional; sibling plan dir names (a child's slug, never `<group>/<child>`) that must be `completed` first
+observed_specs: []   # optional; <knowledge>/specs/<domain>.md domains this plan touches
+---
+```
+
+Writing style: only `Problem` and `Solution` are prose (1-3 sentences). Every other section is structured spec — bullets, `key: value` lines, signatures, small tables — one fact per line. A bullet that needs a reason reads `<decision> — <reason>`.
+
+Body template:
+
+```
+## Problem
+
+What's broken, missing, or costly, and why now?
+
+## Solution
+
+What will be true after this plan that isn't now?
+
+## Non-goals
+
+- <item explicitly out of scope>
+
+## Constraints
+
+- <technical or product constraint>
+
+## Design
+
+### Tech choices
+
+(none) unless needed — `<choice> — <reason>`
+
+### Schema / data model
+
+(none) unless needed — fields/types or signatures
+
+### API / interface contracts
+
+(none) unless needed — one signature per line, edge cases as sub-bullets
+
+## Decisions so far
+
+<!-- one line per resolved question: `<question> → <answer>` -->
+
+## Open Questions
+
+<!-- answerable in chat or by editing here; if none, replace the bullet with plain text (not a bullet): n/a — <reason> -->
+- **<question>** — <why it matters or what it blocks>. Recommendation: <suggested answer — one-line reason>.
+
+## Assumptions
+
+<!-- guesses made instead of asking; confirm or correct in chat or here -->
+- <assumption> — affects: <plan split | AC | sequencing | design> — confidence: <low|medium|high>
+
+## Acceptance criteria
+
+<!-- plan-level definition of done -->
+- [ ] Given <precondition>
+      When <action>
+      Then <observable outcome>
+      (assert: <command or structural check> → <expected result>
+       | retrieve: <file(s) or grep to read> → context for judgment)
+
+## Progress
+
+<!-- one line per event; first line: subject: <review-subject-id> -->
+
+## Related
+
+<!-- knowledge this plan relies on: [title](/decision/x.md), /specs/, /pattern/, /definition/ -->
+```
+
+No `## Tasks`: build writes task files; task evidence lives in each task's
+Progress.
+=== skills/varde-change/assets/TASK-TEMPLATE.md ===
+<!-- kind: reference -->
+````
+---
+type: task
+status: todo
+depends_on: []
+modifies: []
+creates: []
+renames: []
+verification_resources: []
+# kind: research        # optional: a cited doc
+# posture: refactor      # optional: behavior-preserving restructuring; forces a worktree wave
+---
+
+<title>
+
+<!-- optional task-specific context the builder can't cheaply re-derive -->
+
+#### Test approach
+
+profile: <tdd|regression|characterization|smoke|not-applicable>
+rationale: <one-line reason for choosing this profile>
+
+#### Out of scope
+
+- <item>
+
+#### Verification
+
+- assert: <verification command or structural check> → <expected output>
+- retrieve: <file(s) or grep to read for context> → targeted context for judgment
+
+#### Progress
+
+<!-- task owner only (parent after integration for isolated workers): one line per event (attempt, finding,
+     verification, retry); end with `- evidence: <what ran, what it showed>` -->
+````
+=== skills/varde-change/references/build-execution.md ===
+# Execution Reference
+
+## Startup
+
+When dispatched with a brief, it is your plan context; do not read `plan.md`
+or the orchestrator's build reference.
+In your first turn, run the start or resume check below, the drift check, and
+any posture reference load together, and read your task file for reference
+only. Use the brief's orientation before searching.
+
+## Review checks
+
+These checks are your whole review gate; skip `references/review-gates.md`.
+The parent passes the plan subject id and resolved memory paths. Tasks inherit
+that subject and its approved verdict; never initialize or record approval
+yourself.
+
+1. Before the first edit, run:
+
+   ```sh
+   varde work review check --subject <subject-id> --checkpoint start --json
+   ```
+
+2. Before continuing interrupted work, run it with `--checkpoint resume`.
+3. On exit 3 (OCC conflict), rerun the check. On exit 4 (a typed blocker),
+   stop and return it to the caller.
+4. Material drift from the approved scope or verification returns to the
+   caller for a fresh verdict.
+
+A verified task may be `done` with the aggregate implementation review
+pending; the plan stays incomplete.
+
+## Separate execution checkout
+
+Every writing task uses a fresh execution worktree, including serial and
+inline tasks. Load `references/build-worktree.md` and add the caller-supplied
+binding to start/resume checks: `--repository <approval-checkout>`, `--worktree
+<absolute-worker-path>`, and `--binding <task-binding-id>` together. Stop if
+that context is missing or rejected.
+
+### First worker action
+
+Before source edits, run `python3 <absolute-helper> check` using the brief's
+absolute path to `scripts/worktree-permissions.py` and its repository, worktree,
+subject, and binding flags from the exact worker cwd in its actual sandbox. This includes the bound start check. Do not
+escalate a failed worker preflight; return its evidence so the caller can
+correct the launch permissions.
+
+## Task kind and posture
+
+| Task | Before the first edit |
+|---|---|
+| `kind: research` | Write the `creates` doc from primary sources outside the repo, citing each claim (URL, spec section, file:line); a decision ends with one recommendation. Then run Completion. |
+| `debug` posture | Load `references/build-posture-debug.md`; keep `debug_evidence` per its Evidence contract. |
+| `refactor` posture | Load `references/build-posture-refactor.md`. |
+
+## Drift check
+
+Before editing, check the task's `modifies`, `creates`, and both paths in each
+`renames` entry against the working tree. Uncommitted or unexpected changes,
+or an existing `creates` path, are drift. Note benign drift and proceed; drift
+that invalidates the task's assumptions is a blocker.
+
+## Testing
+
+Use the verification approach the independent pre-edit review approved (in
+your brief); record any alternative and its reason.
+Run lint and only the assigned task's `#### Verification` checks. The
+orchestrator handles reviews, full suites and generated-file refreshes.
+
+Profiles: `tdd`, `regression`, `characterization`, `smoke`, and
+`not-applicable` (run the named structural checks and say why).
+
+- Map each `#### Verification` check to a coverage area and write the test that
+  best expresses it. A check that resists any coverage means the task is
+  mis-scoped: mark it blocked and stop.
+- Take expected values from an independent source of truth (a known-good
+  literal, a worked example, the spec), never recomputed the way the code
+  does.
+- Outside `refactor` posture, leave refactoring to the review's SIMPLICITY
+  category.
+
+## While editing
+
+- Check a shared surface's dependents first.
+- Format owned files only.
+- Edit only owned paths in the supplied task worktree. Commit verified source
+  locally under the caller's explicit plan/bounded-change authorization.
+- A file you must write outside `modifies`/`creates`/`renames` is a blocker:
+  stop and report it rather than widening the task; a sibling builder may
+  own it.
+- A UI check needs a browser tool from your own tool list, else it is
+  `unavailable`; never infer rendering from HTTP or source. Log in only with
+  credentials the user supplied, and submit no form that changes real data.
+
+## Blockers
+
+For every posture, stop after two failed attempts at one approach and report the task `blocked`.
+
+| Execution | On a blocker |
+|---|---|
+| Any task worktree | Report `blocked`, the reason, and verification evidence without editing the task file; the parent records state and Progress at the approval checkout. |
+
+## Completion
+
+1. After source edits outside `<working>`/`<knowledge>`, run the project's
+   configured lint or scan tooling. Its findings are candidates, not a gate:
+   fix real issues; skip false positives and rules flagging correct code.
+2. Verify every `#### Verification` check: each `assert:` command must match
+   its stated expectation, and each `retrieve:` command's output must be read.
+3. Report completion evidence without editing task files; the orchestrator
+   records Progress and moves the task to `done` after ownership, integration,
+   and binding release.
+4. Commit only task source paths with the task ID in the message. Undo a
+   completed implementation task with `git revert`.
+5. Report the commit, owned paths, worktree path, checks, and obstacles. Give
+   short `git status --short` output; link logs instead of pasting full diffs
+   or verification output. Reproduce a failure called pre-existing at the
+   prerequisite commit and report that evidence.
+=== skills/varde-change/references/build-finish.md ===
+# Finish a built plan
+
+Enter finish after every task is done and nested children are completed.
+
+Run finish at the plan approval worktree after task source, bookkeeping, and
+binding releases are complete. Review and conclude there before offering
+integration into the user's target branch. Caller-owned children follow
+[Finish an isolated run](#finish-an-isolated-run).
+
+## 1. Finish edits and checks
+
+Finish all source and documentation edits through fresh bound writing-task
+worktrees before the final implementation review. Integrate their verified
+commits locally into the plan approval branch:
+
+1. Update a module changelog when it exists.
+2. When `plan.md` lists `observed_specs`, refresh the touched domains through
+   `varde-docs spec`; conclusion rejects stale specifications.
+3. Run every acceptance-criteria assert/retrieve check.
+4. Commit these edits by path, preserving unrelated edits.
+
+## 2. Review the implementation
+
+Review the completed change and record the risk decision per
+`references/review-gates.md`; choose the reviewer per
+`references/review-gates.md` §5. Implementation review is always required;
+dispatch the selected reviewer for one report-only pass with:
+
+- plan id;
+- subject id;
+- goal;
+- acceptance criteria;
+- completed tasks and verification evidence;
+- the execution location (checkout or worktree path);
+- the parent's resolved absolute `<working>` and `<knowledge>` paths.
+
+Tell the reviewer to use those paths without re-resolving. Then ask the
+reviewer to:
+
+- inspect phase `implementation`;
+- record full-subject evidence through `varde work review record`.
+
+If an independent reviewer is unavailable, leave required review pending.
+Commit a report folder if one is written and plan storage is tracked.
+
+## 3. Fix findings
+
+Confirm the review folder and its required finding fields (`varde-review`
+fix.md, Select the review), skipping its tree check; unrelated edits never stop
+a plan finish. When at least one finding is eligible (`varde-review` fix.md,
+Review-folder routes), dispatch one `builder` round of `varde-review fix
+mode=build` with `repoRoot`, the review folder, `plan_context`, and the
+parent's resolved absolute `<working>` and `<knowledge>` paths; the builder uses
+them without re-resolving and runs fix.md's Fix loop (builder role; no further
+dispatch, no triage). With none eligible, go straight to triage. A fresh report
+leaves every `Disposition` blank: its `auto-fix` findings go to the loop, the
+rest to triage.
+
+The parent receives deferred findings, presents one triage table in fix.md's
+format, and records the user's choices:
+
+- **Fix:** a bounded `varde-change build` task with its ID in `finding_ids`,
+  its approved solution, and the user's decision as evidence (fix.md Parent
+  workflow).
+- **Dismissal:** the parent records its reason.
+- **Action-item:** the finding is deferred; step 5 copies it to the standing
+  deferred review.
+
+Under orchestrate, return unresolved findings instead of pausing.
+
+Commit each applied code or agent-document fix's paths before step 4.
+
+## 4. Confirm acceptance criteria
+
+After fixes, rerun the affected assert or retrieve checks. Inspect retrieved
+evidence. Check only confirmed criteria; any unconfirmed criterion blocks
+completion.
+
+If step 3 changed any file, get refreshed implementation evidence before
+step 6: the re-review may cover only the fixes, but its record covers the
+entire subject change at the current fingerprint.
+
+## 5. Escalate deferred findings
+
+Before `conclude`, run `varde work escalate-deferred --plan-dir <plan-dir>
+--deferred-dir <working>/reviews/deferred` (absolute paths; safe to rerun) and
+report its lines. Fix malformed findings before retrying; recover an interrupted
+transaction with `varde work recover` before rerunning.
+
+## 6. Conclude
+
+1. Run the complete check and resolve every reported blocker; never conclude
+   from a stale or missing record:
+
+   ```sh
+   varde work review check --subject <subject-id> --checkpoint complete --json
+   ```
+
+2. Move the plan to `completed` with `varde work conclude <plan.md>
+   --json`. On failure, preserve its journal and recover before retrying.
+   After `conclude`, check post-conclusion actions with `conclusion-status`;
+   reset failed ones with `conclusion-retry`.
+3. Commit the plan's status change when plan storage is tracked.
+
+## 7. Record lessons
+
+Do this work only when the build hit obstacles or made durable decisions:
+
+- Record real obstacles through `varde-learn` and durable decisions through
+  `varde-knowledge`.
+- At a top-level boundary, run `varde-knowledge reflect` for durable notes and
+  a handoff; a run nested inside the varde-change orchestrator writes no
+  handoff.
+
+Always record all three outcomes in one call; `conclude` leaves them
+pending. Pass a result, or `none: <reason>` (such as `none: no obstacles or
+decisions`) for a skipped one:
+
+```sh
+varde work conclusion-action <plan.md> --reflection "<result|none: reason>" --friction "<result|none: reason>" --handoff "<result|none: reason>" --json
+```
+
+## 8. Offer finish choices
+
+Offer the applicable Finish choices below; under `varde-change orchestrate`,
+return facts only and leave target integration to the group owner.
+
+## Finish choices
+
+Give the clickable absolute plan worktree path, branch, base commit, short
+verification results, and remaining concerns. The user inspects the diff in
+IDE/Git tools; do not paste it. Under `varde-change orchestrate`, return those
+facts without a choice; the group owner presents one after all children finish.
+Otherwise offer the applicable choices:
+
+- **Merge:** only after the user's explicit target-integration approval, run
+  `scripts/worktree-merge.sh <plan-id>` from the recorded target checkout and
+  clean up only after success per `references/build-worktree.md`. A caller-owned
+  plan worktree returns this choice to its owner.
+- **Push and open PR** (hidden when `gh` is unavailable): only after this
+  explicit choice, require a clean committed branch and identify the intended
+  base and remote. Create a named branch first when on detached HEAD or a
+  default branch, push it, then run `gh pr create` with that base and head.
+  Keep the branch/worktree for further PR work.
+- **Keep as is.**
+
+## Finish an isolated run
+
+A caller-owned feature child concludes through its own exact-root gates in
+the feature approval checkout after its task bindings are released. Return
+commits, checks, and state to the group owner; local child integration is
+already authorized, and final user target integration belongs to that owner.
+
+A task whose subject belongs to another approval checkout returns verified
+source and its live binding to the parent, without a merge choice. The parent
+integrates and releases it before plan completion.
+=== skills/varde-change/references/build-micro-change.md ===
+# Build a bounded change
+
+Create no persisted plan/task files unless escalation to `references/build.md`
+needs them. Load `references/build-worktree.md` for the visible approval
+worktree, fresh writing-task worktree, clean prerequisites, and explicit local
+commit authorization; this applies to mechanical and bounded edits too.
+
+## Mechanical edits
+
+A new change whose entire diff meets the mechanical edit exception in
+`references/review-gates.md` follows its checks and reporting instead of the
+steps below. An existing review subject still requires its checkpoints.
+
+## 1. Gate the change
+
+Before editing:
+
+1. Run `risk-tier.py` on the scope, then `review start-bounded --subject
+   <safe-id> ...` per `references/review-gates.md` §2. It writes the contract,
+   initializes the subject, and runs the start check.
+
+2. Low tier with none of review-gates §2 step 3's contract triggers skips the
+   pre-edit verdict; otherwise obtain it. Begin only when the start check
+   passes (rerun `varde work review check --subject <subject-id>
+   --checkpoint start --json` after a verdict).
+3. Send a material contract or scope change through `review contract` or
+   `review expand` and a fresh verdict.
+
+## 2. Edit, verify, complete
+
+1. Run the contract's verification checks in the task worktree, commit only
+   verified owned paths, then integrate into the approval plan branch, record
+   evidence, and release its binding per `references/build-worktree.md`.
+2. Complete the independent implementation review, which is always required
+   (review-gates §5).
+3. Rerun `risk-tier.py` on the changed paths, then run
+   `review check --checkpoint complete --tier-evidence <new.json>` before
+   reporting completion. On exit 4, widen scope with `review expand` and fresh
+   evidence, get a pre-edit verdict if the tier is now high, and rerun it.
+4. Give the clickable approval worktree path, branch/base, and brief results;
+   the user reviews through IDE/Git tools. Keep it available and obtain separate
+   explicit approval before integrating into the user's target branch.
+
+## One standalone review finding
+
+1. Add its review folder, ID, concrete solution, and decision evidence to the
+   contract.
+2. Scope its `review.md` too (repeat `--artifact <absolute-file>` when
+   outside the repository).
+3. After the source fix passes verification, update only that finding's
+   `Disposition`, link the bounded subject in its decision note, and recompute
+   `review.md`'s `triage_status`.
+=== skills/varde-change/references/build-parallel.md ===
+# Isolated task wave
+
+Use the already-loaded worktree authorization, bindings, and visibility rules.
+Use this procedure for every writing task, including a one-task wave.
+
+- Run scripts from the clean plan approval checkout with bookkeeping committed;
+  linked plan worktrees are supported.
+- `scripts/worktree-wave.sh` retains refs on failure. Exit codes: 3 merge
+  conflict, 4 dirty/moved approval checkout, 5 unfinished task/failed check.
+
+
+## 1. Start
+
+```sh
+scripts/worktree-wave.sh start <wave-id> <subject-id> <task-id>... --scope <task-id>=<path>... [--task <task-id>=<abs-task-file>]...
+```
+
+1. Use a unique wave id and pass every declared write (both rename sides) as
+   `--scope`; each worker gets a fresh sibling worktree and binding at the clean
+   prerequisite commit.
+2. Dispatch workers with the printed context in the `build.md` brief. The task
+   id is the binding id; workers edit no task files.
+
+
+## 2. Collect results
+
+1. Wait for every result and check each commit's declared paths with
+   `varde work check-task-ownership` per `build.md`. Correct stray paths through
+   its bounded retry.
+2. If a worker fails or blocks, integrate none of that wave. Diagnose first;
+   successful independent work can enter a later, smaller wave.
+
+## 3. Verify integration
+
+```sh
+scripts/worktree-wave.sh integrate <wave-id> --check '<combined wave verification>'
+```
+
+1. Capture `verified_commit=` after checks pass in the sibling integration
+   checkout; the approval branch stays unchanged.
+2. On exit 3, resolve against each task's intent, verify and commit there, then
+   rerun; merged workers are skipped. Diagnose exits 4 or 5 before retrying.
+3. Keep task/plan bookkeeping in the approval checkout.
+
+
+## 4. Publish locally, record, and release
+
+```sh
+scripts/worktree-wave.sh publish <wave-id> --approved <exact-verified-commit>
+```
+
+Publish only the exact returned verified SHA to the recorded plan approval
+branch. This is local integration authorized by plan approval, not another
+human approval request. The user's target branch waits for final finish.
+
+1. Record task transitions and Progress from worker evidence in the plan
+   approval checkout, and commit tracked bookkeeping separately.
+2. Run `scripts/worktree-wave.sh release <wave-id>` after bookkeeping. It
+   releases bindings and cleans worker/integration refs, keeping the visible
+   plan worktree.
+
+A publish, bookkeeping, or release failure retains refs and reports the pending
+step; rerun that step without re-merging. A missing recorded worktree is a
+blocker, not something to recreate silently.
+=== skills/varde-change/references/build-posture-debug.md ===
+# Debug Posture
+
+## Debug mode
+
+Run in exactly one mode and name it to the user in plain words, such as
+"Diagnosing only; I won't change code":
+
+| Mode | Use for | Run |
+|---|---|---|
+| `diagnose` | diagnosis-only requests | Phases 1-4 and Phase 6 cleanup, then report the evidence |
+| `fix` | a requested bug fix or regression repair | all phases |
+
+In `diagnose`, production source is read-only: no fix, regression test, or
+commit, and instrumentation stays outside production source.
+
+## Evidence contract
+
+Report `debug_evidence` in chat in this field order; when a task file exists,
+also append it under its `#### Progress`:
+
+- `reproduction`: the deterministic command and observed symptom, or bounded
+  trace/source evidence with its origin, version or time, and reproduction
+  limit.
+- `hypotheses`, `experiments`, `cause`, `verification`.
+
+Required fields:
+
+- **`fix`:** `reproduction`, `hypotheses`, and `experiments` before any
+  production edit; a completed fix adds `cause` and `verification`.
+- **`diagnose`:** may leave `cause` uncertain; state the evidence limit.
+- **Missing field:** stop before mutation and report it; a passing smoke check
+  is no substitute.
+
+## When progress stops
+
+Standalone: no numeric budget. When progress is blocked or another fix
+attempt would repeat a failed approach, state what evidence, approach, or
+access must change before another fix, and report it alongside
+`debug_evidence`.
+
+## Phase 1 — Build a feedback loop
+
+When the failure runs locally, build one fast, deterministic pass/fail command
+that asserts the user's exact symptom, run it, and show its output. Use it for
+bisection, hypothesis testing, and instrumentation.
+
+- **Without local reproduction:** name the attempts and use a bounded trace
+  or versioned source path that supports the symptom, labeled
+  **unreproduced**, stating its origin and what it cannot establish, and
+  separating observation from what the code suggests.
+- **Without either:** stop and ask for the reproducing environment, an
+  artifact, or permission to add temporary instrumentation.
+
+## Phase 2 — Reproduce and minimize
+
+1. Confirm the loop produces the failure the **user** described, not a nearby
+   one.
+2. Minimize to the smallest red scenario; Phase 5's regression test uses it.
+
+## Phase 3 — Hypothesize
+
+1. State a falsifiable hypothesis before testing it.
+2. Add distinct alternatives when evidence does not isolate the cause or the
+   first test fails; rank them by supporting evidence.
+3. An untested hypothesis is not evidence for a fix.
+
+## Phase 4 — Instrument
+
+For `fix`, initialize the review gate after Phase 3 and before the first
+production edit (Phase 4 instrumentation in production source, or Phase 5);
+`diagnose` needs no gate.
+
+- Tag every debug log with a unique prefix (e.g. `[DEBUG-a4f2]`).
+
+## Phase 5 — Fix and regression test
+
+1. Write the regression test at a seam that exercises the bug as it occurs at
+   the call site; a single-caller test for a bug needing several callers gives
+   false confidence.
+2. Watch it fail, apply the fix, watch it pass.
+3. Rerun the Phase 1 loop against the original scenario.
+
+With no correct test seam, obtain pre-edit approval for an alternative that
+distinguishes fixed behavior from the defect, or stop and note the testability
+gap for the `refactor` posture. When the original scenario cannot run locally,
+use the independent verification approved in pre-edit review and report the
+original symptom as unverified until checked in its environment.
+
+## Phase 6 — Cleanup
+
+Before declaring done:
+
+- [ ] All `[DEBUG-...]` instrumentation removed (`grep` the prefix).
+- [ ] Throwaway prototypes deleted.
+- [ ] When committing, state the proven hypothesis in the commit message.
+
+With a task file, complete through `references/build-execution.md`
+Completion. A standalone `fix` finishes with the implementation review and
+complete checkpoint per `references/review-gates.md` §5; commit only when
+asked.
+=== skills/varde-change/references/build-posture-refactor.md ===
+# Refactor Posture
+
+Restructure code without changing observable behavior: for the same inputs, the
+same stdout, stderr, return code, side effects, and test results. Public APIs,
+error messages, log output, and wire formats stay unchanged.
+
+Reuse an unchanged approved plan verdict supplied by the caller.
+For a bounded refactor without a task file, use its contract scope and a stable
+change ID wherever this posture names task scope or ID.
+
+## Bootstrap
+
+1. Use `varde-knowledge` to find pattern notes matching the target paths or
+   names, and read only those.
+2. Select the explicit target, else the task's review findings (confirm each
+   still applies) or structural goal; if none, ask.
+3. Use the fresh task worktree and approved prerequisite commit supplied by
+   the caller per `references/build-worktree.md`; never reuse the plan checkout
+   for writing. Resolve dirty prerequisites through its authorized checkpoint
+   before proceeding. On resume, confirm the recorded task branch and path.
+4. Bind the scope before editing and pass the approval checkout and binding
+   context to start/resume checks. Task files are reference material; return
+   evidence for parent-owned state updates.
+5. Find each target file's covering tests (`tests_for_file`, naming convention,
+   or grep for test-directory imports) and read them in full. If none exist,
+   write a characterization test pinning current behavior before any
+   structural edit. Block only when the target cannot be exercised at all.
+
+## Cadence
+
+1. Run the full suite or scoped subset in the working location; record
+   pre-existing failures.
+2. For each attempt, record its paths, make one change, and verify it. Start
+   with no unstaged changes in the attempt's paths; do not stage an attempt
+   before it passes.
+3. On regression, restore only that attempt: run
+   `git restore --worktree -- <tracked-attempt-paths>` to return tracked files
+   to the last verified index checkpoint, then remove only attempt-created
+   untracked paths by their explicit names. Never run whole-tree `git clean`,
+   `git checkout`, or reset commands.
+4. After an attempt passes, stage its verified paths as a checkpoint. Later
+   rollback must preserve those staged steps.
+5. Before inlining a function, count its real callers (`varde map dependents`
+   or grep); more than one means it is not an inline target.
+6. Rename only when the rename is the change, never as a side effect of
+   another one.
+7. Commit verified owned source paths once in the task worktree. Use the task
+   or bounded change ID in the message and leave bookkeeping to the parent.
+
+## Verify
+
+Verify with the independently approved checks and any task
+`#### Verification` asserts, adding broad checks only when consumers, shared
+behavior, or coverage uncertainty justify them. Record how the checks
+establish behavior preservation.
+
+## Integrate
+
+Return the verified task commit and evidence to the plan owner for combined
+checks, local publication, bookkeeping, and binding release per
+`references/build-worktree.md`. Keep the task refs on a failure. The parent
+marks the task done only after those steps; a bounded owner completes its own
+review gate at the plan approval root before final target-integration choice.
+
+## Summary
+
+End with a `File | Change | Verification` table, or "No behavior-preserving
+changes found."
+=== skills/varde-change/references/build-recovery.md ===
+# Recover a resumed or blocked build
+
+## Resume
+
+Derive state from task commits and `#### Verification`, not from a log. A
+`done` task is proven only with a matching source commit; stop and report any
+`done` task without one. Rerun `#### Verification` for each `in_progress` task:
+
+- **Pass:** commit it if uncommitted, run the ownership check in `build.md`
+  Accept a result, then mark it `done`.
+- **Fail:** continue from the current diff.
+
+Then apply the [blocked-task choice](#blocked-task) to each `blocked` task
+before selecting a wave. The next ready task is the first `todo` task whose
+`depends_on` are all `done`.
+
+## Bounded retry
+
+1. Builders stop after two failed attempts and report the task `blocked`.
+2. Re-dispatch it once, attended or unattended, with the specific failure,
+   the current diff, its `#### Verification` checks, prior progress, and what
+   changed since the failed attempts; never rerun it blind.
+3. If that fails too, the task stays `blocked`; record the failure in
+   `#### Progress`, then apply the [blocked-task choice](#blocked-task).
+
+## Blocked task
+
+Unattended, stop and report the reason. Attended, show the reason and offer:
+
+- **Retry:** move the task to `in_progress` and re-dispatch it alone.
+- **Skip:** record the decision in `#### Progress`, leave it `blocked`, and run
+  only independent work. Dependents stay `todo` (`blocked_by_dep`); with no
+  ready work left, stop with the plan incomplete.
+- **Abort:** stop and print a partial summary.
+=== skills/varde-change/references/build-worktree.md ===
+# Worktree isolation
+
+## Plan approval and review location
+
+Use a stable, named plan worktree as the approval checkout and the user's IDE
+and Git review surface. Record its absolute path, branch, prerequisite commit,
+and eventual user target branch. Give a clickable path and brief check/status
+updates in chat; do not paste the cumulative diff.
+
+1. Allow reversible plan-worktree creation and subject initialization during
+   planning. Before local task/plan commits, obtain explicit plan approval or
+   specific checkpoint authorization; bounded changes need the same authority
+   without persisted plan/task files. Final target integration needs a separate
+   explicit choice.
+2. Allocate the plan worktree with `scripts/worktree-create.sh --plan <plan-id>
+   <explicit-known-commit>`; this leaves a dirty origin unchanged. Map tracked
+   plan/task files there and keep external files in their configured store.
+3. Before creating workers, include pending source prerequisites in a
+   user-authorized checkpoint on the plan branch, then require that checkout
+   clean. Never silently omit/discard them or commit them on the user's target;
+   record existing test failures at the prerequisite commit.
+4. Initialize and independently review the subject at this exact approval root.
+   Existing approval records from another checkout do not transfer. Expose the
+   plan worktree before implementation so the user can open it continuously.
+
+A caller-owned plan/feature checkout can be reused only after confirming its
+recorded path, branch, clean prerequisite state, and exact-root subject. The
+script's default `created=false` behavior is for that explicit ownership
+context; it never supplies a writing task's worktree.
+
+## Task isolation and integration
+
+1. Give every writer a fresh separate worktree; read-only explorers may share.
+   Independent tasks use the same clean prerequisite commit; dependent tasks
+   use the verified plan commit containing their prerequisites.
+2. Use `references/build-parallel.md` for waves, including one-task waves. For a
+   standalone bounded task, run `scripts/worktree-create.sh --fresh <task-id>
+   <prerequisite-commit>`, bind its scope below, and return verified commits to
+   the plan owner.
+3. Resume only the task's recorded worktree after checking its identity/state;
+   a linked plan checkout never substitutes for a fresh writing-task worktree.
+4. Complete combined checks, publish to the authorized local plan branch, record
+   bookkeeping, and release bindings. Retain the plan review worktree through
+   the final target-integration decision.
+
+For final approved integration, scripts (each has `--help`) are:
+
+1. `scripts/worktree-merge.sh <plan-id>` from the recorded user target checkout.
+2. `scripts/worktree-cleanup.sh <plan-id>` only after a successful merge.
+
+Merge exit 2 means nothing to merge (a failure when commits were expected),
+1 usage error, 3 conflict, 4 invalid refs, and 5 uncommitted changes. Keep refs
+on failure; never commit unfinished worker changes on its behalf.
+
+Resolve conflicts against the supplied task/plan intent and run verification
+before committing the merge. If intent needs a guess or verification fails,
+abort that merge and report the unresolved hunks.
+
+## Worker permission contract
+
+1. Supply the absolute path to `scripts/worktree-permissions.py` in the brief
+   and run `python3 <absolute-helper> describe --repository <approval-checkout>
+   --worktree <worker> --subject <subject-id> --binding <binding-id>` before
+   dispatch. The manifest resolves physical Git paths,
+   read-only approval evidence, and writable Git/lock locations; add
+   `--write <verification-dir>` only for an explicit external requirement.
+2. Use the same arguments with `codex-args --mode exec` for session launch
+   argv, or `--mode sandbox` for a model-free `/usr/bin/true` smoke command.
+   These use a session profile and literal filesystem table without changing
+   global configuration.
+3. Supply the exact physical cwd and permissions through a supported launcher.
+   If it lacks that capability, stop dispatch and report the limitation.
+4. Require `check` as the worker's first action in its actual sandbox and cwd,
+   without escalation. Failure stops source edits and returns evidence to the
+   caller for a corrected launch.
+
+The helper probes bound review access and disposable Git writes while
+preserving task state. Signing, hooks, and arbitrary external writes remain
+unverified; one unreachable probe commit remains for normal Git pruning,
+and cleanup failures fail the check.
+
+## Review authorization for isolated tasks
+
+Binding rules live in `references/review-gate-worktree.md`. Run every command
+below from the approval checkout, the exact repository that owns the subject,
+except the worker's own checks.
+
+### Register the worker
+
+Before dispatching a task into another checkout:
+
+```sh
+varde work review inspect --subject <subject-id> --phase pre-edit --json
+varde work review bind-worktree --subject <subject-id> --binding <task-binding-id> --expected-version <data.version> --worktree <absolute-worker-path> --scope <owned-path> [--scope <owned-path> ...] [--task <absolute-original-task.md>] --json
+```
+
+- Scope the binding to the task's declared writes, both rename sides. A
+  bounded refactor without a task file omits `--task` and uses its approved
+  bounded scope.
+- Put the approval checkout, worker path, subject ID, and binding ID in the
+  builder brief. The worker passes all three context flags at start and
+  resume:
+
+```sh
+varde work review check --subject <subject-id> --repository <approval-checkout> --worktree <absolute-worker-path> --binding <task-binding-id> --checkpoint start --json
+```
+
+### Release
+
+Capture worker evidence before merging. After the verified commit is
+integrated into the approval checkout, inspect again and release with its
+current version:
+
+```sh
+varde work review inspect-worktree --subject <subject-id> --binding <task-binding-id> --json
+varde work review release-worktree --subject <subject-id> --binding <task-binding-id> --expected-version <data.version> --commit <worker-commit> --json
+```
+
+- **Release fails:** keep the worktree and binding for recovery.
+- **Unintegrated task retained or pushed:** its binding stays live; report
+  verified source, pending plan completion, and the task worktree path. Write a
+  handoff with `varde-knowledge`.
+- A finished plan retained or pushed after all task bindings are released
+  remains reviewable; target-branch integration can still be pending.
+
+### Abandon
+
+If execution is abandoned or the checkout is unavailable, inspect, then
+archive the binding:
+
+```sh
+varde work review abandon-worktree --subject <subject-id> --binding <task-binding-id> --expected-version <data.version> --reason "<why execution stopped>" --json
+```
+
+Handle any retained source through a separately approved change.
+
+### Feature checkout
+
+An enclosing feature checkout can own the group and child plan subjects. Child
+writers still use fresh task worktrees; all local integration returns here:
+
+- Map tracked plan/task paths to that checkout's physical copies.
+- Keep external plans in their configured store.
+- Never substitute a main-checkout subject for a feature-checkout subject or
+  copy approval records.
+=== skills/varde-change/references/build.md ===
+# Build a plan or larger change
+
+## Boundaries
+
+- **Git scope:** the plan runner controls the sequence; source edits run in
+  separate task worktrees, including inline execution. Tasks commit only owned
+  paths. Local plan/task commits require the authorization in
+  `references/build-worktree.md`; integrating into the user's target branch
+  requires a separate explicit choice.
+- **Unattended failure:** a command failing unexpectedly after retry, a task
+  still blocked after its one re-dispatch (`references/build-recovery.md`), or
+  the plan entering `blocked` stops execution immediately. Leave
+  the working state as-is, report where and why, and merge or clean up nothing.
+
+## 1. Choose a starting action
+
+| The request is | Start |
+|---|---|
+| An ask to build an existing plan, with no plan named | Read the "Select a plan" section below, present the options, then run the selected plan. |
+| A named plan | Build it. |
+| An ad-hoc request with dependent outcomes | Create a minimal plan with a best-guess Problem/Solution and a few plan-level Given/When/Then acceptance criteria, confirm it once, decompose it, initialize its subject per `references/review-gate-plan.md` §1, then run it. |
+| An uncertain change | Hand off to `varde-change plan`. |
+
+Interactive builds pause for user choices. Unattended builds run a named plan
+without pauses, including work dispatched through the orchestrator. Read
+`references/varde-code-cli.md` only for discovery or relationship questions.
+
+## 2. Choose the execution location
+
+1. Load `references/build-worktree.md` and establish the visible plan worktree
+   as the owning approval checkout before implementation review checks.
+2. Run `git check-ignore -q <working>/plans/<plan-id>/plan.md` once: ignored
+   plan files stay local; tracked ones use their physical copies in the plan
+   worktree and enter scoped local commits.
+3. Take `execution=<serial|auto|inline>` for dispatch (default `auto`); each
+   writing task still gets a fresh worktree.
+
+## 3. Decompose and state a posture
+
+If the plan has no task files, decompose per
+`references/plan-decomposition.md`, which owns the pause rule and the
+`posture:` field. Take each task's posture from that field, else select it
+from its title, context, and `#### Out of scope` section; state it and pass
+it in the dispatch brief. Never add `posture:` to an approved task file.
+
+| Posture | Select when |
+|---|---|
+| plan-execution | Default |
+| debug | A known bug or regression is the only goal |
+| refactor | Behavior-preserving restructuring, the task's `#### Out of scope` section forbids behavior change, or complexity/readability review findings |
+
+## 4. Run tasks
+
+Read `references/build-execution.md` whenever `execution=inline` or no
+`varde-builder` agent is available; the task cycle still runs.
+
+1. Read each `tasks/<task-id>.md`; the `id` is the filename.
+2. Obtain any missing pre-edit verdict (Dispatch a builder, step 1), then
+   run the `start` (backlog or blocked) or `resume` check per Review
+   checkpoints below; then move the plan to `active` before the first task
+   only when it is `backlog`, or `blocked` once its blocker is resolved
+   (resume must not run `active` to `active`); commit that transition when
+   plan storage is tracked.
+3. Read `references/build-recovery.md` when the plan is `active` or any task is
+   not `todo`, and apply its resume rule before selecting a wave. A fresh `backlog` plan with all tasks `todo` skips it.
+4. Resolve and run task waves per the "Dispatch tasks" section below, repeating
+   until every task is `done` or `blocked`, or `next_wave` is empty.
+   Summarize `done` and `blocked` task IDs, omitting empty categories;
+   report remaining `todo` tasks as `blocked_by_dep`. Keep the plan active
+   and resumable while any task is not done.
+
+## 5. Finish
+
+When all tasks are done, follow `references/build-finish.md` unless the user
+asks to stop before this step.
+
+## Select a plan
+
+1. **List.** Run `scripts/select-plans.py --working <working>`; it keeps
+   only `planning_ready` plans (dependencies available) outside dependency
+   cycles, backlog first.
+   - `implementation_ready: false`: keep it selectable, report the blocker,
+     and do not dispatch implementation until its start or resume check passes.
+   - `degraded: true`: report the selector error, list `<working>/plans/`
+     for the user, and stop.
+2. **Report.** Report `excluded_by_dependency`. If `plans` is empty, say
+   `No backlog or active plans available. Nothing to run.` and stop.
+3. **Present.** Present each option as `<id> - <title>`.
+
+## Dispatch tasks
+
+Read `references/orchestration.md` for posture, cap, and briefs.
+
+### Check drift once
+
+Before the first wave, if files in the plan's scope changed since the plan
+was written (`git log --oneline -- <paths>`), re-check affected tasks before
+dispatch.
+
+### Choose the next wave
+
+1. Before each wave, run `varde work execution-wave --repo-root
+   <checkout> <plan-dir> --json` and report `data.blocked_by_dep`,
+   `data.reasons`, and `data.wave_mode`. Exit 3 is a dependency cycle, a
+   hard failure.
+2. Run any subset of `data.next_wave` together, never more: never combine tasks
+   from different resolver runs or pair tasks named in `data.conflicts`.
+
+### Choose a strategy
+
+| Strategy | Use when | Who executes |
+|---|---|---|
+| `parallel` | `execution=auto` (the default) and `next_wave` holds two or more tasks | one background builder per fresh task worktree |
+| `serial` | `execution=serial`, or auto with one task | one background builder at a time in a fresh task worktree |
+| `inline` | `execution=inline`, or no builder is available | the current agent, one fresh task worktree at a time |
+
+Announce each wave's strategy and task ids. Use
+`references/build-parallel.md` for wave isolation and integration, including a
+one-task serial or inline wave.
+
+### Task-file ownership
+
+The orchestrator alone edits plan/task state in the plan approval checkout.
+Builders read their supplied task context, edit only their bound source
+scope, and return evidence and commits from their task worktrees. Register
+bindings per `references/build-worktree.md` before dispatch.
+
+### Dispatch a builder
+
+Move a task whose `kind` is set to anything but `research` to `blocked`
+with reason `<kind> tasks are no longer supported; resolve the question in
+planning`.
+
+1. Obtain any missing pre-edit verdict per `references/review-gates.md`;
+   material drift returns to that gate.
+2. Move the task to `in_progress` (`varde work transition <task.md>
+   in_progress --json`; legal from `todo` or `blocked`). A corrective
+   re-dispatch of a task already `in_progress` skips this step.
+3. Brief the builder with:
+   - the task file path and posture (`plan-execution` | `debug` |
+     `refactor`);
+   - its `#### Verification` checks, `modifies`/`creates`/`renames` paths, and
+     `verification_resources`;
+   - the task's scope and `#### Out of scope` text and the plan context it
+     needs, quoted, so the builder never opens `plan.md`;
+   - the execution location and bounded context;
+   - the plan's review subject id and the resolved absolute `<working>` and
+     `<knowledge>` paths, used without re-resolving;
+   - the independent pre-edit verdict, approved verification approach, and any
+     pending aggregate implementation review;
+   - `references/build-execution.md`, read before its first tool call.
+
+After each wave, regenerate listed outputs through an owned writing-task
+worktree and integrate their verified commit before starting dependents.
+
+### Accept a result
+
+- When a builder returns `blocked` or reports a failed attempt, read
+  `references/build-recovery.md` and follow its retry and blocked-task rules.
+- Before accepting a completed implementation task, compare its commit with
+  the task's declared paths: `varde work check-task-ownership --task
+  <task.md> --commit <task-commit> --json`. When `data.status` is `stray` (exit 2), re-dispatch once
+  with `data.stray`, counting toward the bounded retry in
+  `references/build-recovery.md` (read it before that re-dispatch); `skipped`
+  needs no action. The corrective builder amends the task commit only when
+  `git rev-parse HEAD` in its execution branch equals that commit, else
+  reports `blocked`; rerun the ownership check on the new SHA it reports.
+  Accept the task only after the scope is corrected and its source is
+  verified and published to the plan branch.
+
+Accepting any task moves it to `done` and commits its task file when plan
+storage is tracked; release its binding before starting dependents.
+
+### Review checkpoints
+
+Tasks inherit the plan's subject; never initialize one per task. Check `start`
+before moving a backlog or blocked plan, or a task, into implementation, and
+`resume` before continuing an active plan or interrupted task:
+
+```sh
+varde work review check --subject <subject-id> --checkpoint start --json
+varde work review check --subject <subject-id> --checkpoint resume --json
+```
+
+- A typed review blocker holds implementation until reviewer evidence is
+  resolved or refreshed; it is not a dependency result.
+=== skills/varde-change/references/orchestrate.md ===
+# Orchestrate mode
+
+Run a group plan's children end to end. Children are nested `plan.md`s; id
+`<group-id>/<child-slug>`. The orchestrator never edits production source or
+dispatches tasks.
+
+## Route
+
+| The request is | Action |
+|---|---|
+| Names a group plan | Go to **Order children**. |
+| Requests a whole feature without naming a group | **Discover groups**. |
+| Names a plan without `shape: group` | Build plan `<id>` (`varde-change build`, named-plan route) and stop. |
+
+## Discover groups
+
+1. Read `<working>/plans/*/plan.md` frontmatter; keep `shape: group` plans with
+   at least one non-`completed` child.
+2. Present each as `<group-id> — <title>`. If none qualify, report
+   `No group plans with unbuilt children. Nothing to orchestrate.`
+3. Stop until the user selects one.
+
+## Order children
+
+1. Run `varde work readiness` on each child and order by
+   `data.planning_ready` and dependency blockers; leave review blockers to the
+   child build. `depends_on` holds sibling slugs only.
+2. Skip completed children; completed dependencies are satisfied.
+3. A missing dependency blocks its child; a cycle stops the feature. Report
+   blockers before any child runs.
+4. Establish or recover the visible group plan approval worktree per
+   [Feature worktree](#feature-worktree).
+
+## Feature worktree
+
+Use a stable group plan worktree regardless of plan storage location.
+
+1. Load `references/build-worktree.md` and use id `orchestrate-<group-id>` for
+   plan bootstrap and prerequisite checkpoints. Validate any caller-owned reused
+   path/branch before entering it; writing tasks require the clean plan commit.
+2. Map group, child, and task paths to their physical copies in the feature
+   checkout. Pass those explicit (mapped) paths and the resolved absolute
+   `<working>` and `<knowledge>` paths.
+
+That checkout is the owning approval repository for group and child subjects:
+initialize and independently review exact-root subjects there; never copy
+main-checkout approvals. Serial
+children finish their local gates and tracked state in that checkout, so
+completed dependencies unlock later children. Every child writing task uses a
+fresh separate task worktree; dependent tasks start from verified plan commits.
+Expose the group path, branch/base, and short status for IDE/Git review.
+
+## Approve and activate the group
+
+1. Read the group and every child contract. Confirm the group's aggregate
+   source scope, child IDs/dependencies/contracts, assumptions, and
+   acceptance/verification outside Progress match them. Material drift
+   updates that contract and needs fresh independent approval before any child
+   runs.
+2. Use the exact-root group subject initialized and approved at plan
+   finalization (id in Progress). A recovered different approval root needs its
+   own initialization and review; never copy or reset approvals. Each child
+   keeps its own subject and gates; group approval does not replace them.
+3. Run `review check --subject <group-subject-id> --checkpoint start --json`;
+   a blocker stops before child execution. Transition a backlog or blocked
+   group to active; an active group stays active.
+4. Commit the activation when plan storage is tracked.
+
+## Delegate children
+
+Run the remaining children sequentially in dependency order, waiting for each
+result: build plan `<compound-child-id>` (`varde-change build`, named-plan
+route) in the feature location. Give each child the resolved absolute
+`<working>` and `<knowledge>` paths; it uses them without re-resolving. Build
+owns single-plan execution and review in that approval checkout, with fresh
+worktrees for writers and local integration back to its authorized plan branch.
+It leaves final user target integration to the group owner.
+
+When a child blocks or fails, stop immediately: run no later child, merge
+nothing, leave commits and partial state as they are, and report the failed
+child, the reason, and the completed children.
+
+## Resume
+
+1. Recover any existing feature location, derive progress from child statuses,
+   and resume at the first non-`completed` child.
+2. On `worktree-create.sh` exit 3, inspect `git worktree list --porcelain`.
+   Reuse `.varde/worktrees/orchestrate-<group-id>` only when that path is
+   registered with branch `worktree/orchestrate-<group-id>`. A branch-only
+   collision or a missing or mismatched worktree stops recovery.
+3. Stop when statuses and commits disagree, such as a completed child without
+   commits.
+
+## Finish
+
+1. **Release nested bindings.** A live nested task binding must be integrated
+   and released at its owning approval checkout before group completion.
+2. **Review the group.** After all children are completed:
+   1. Verify the aggregate acceptance criteria and combined behavior.
+   2. Obtain an independent entire-group implementation review of
+      integration evidence only (group subject, aggregate contract and
+      criteria, child results, cross-child interfaces; no
+      child implementation details), recording current
+      entire-subject evidence per `references/review-gates.md`; child reviews
+      and the contract-drift check stand.
+   3. Route its findings through `varde-review` fix.md's Fix loop (build
+      mode, no combined triage table); make source, spec, and documentation
+      edits through bounded `varde-change` builds, then run checks and refresh
+      the group evidence.
+3. **Escalate deferred findings.** Run
+   `varde work escalate-deferred --plan-dir <group-plan-dir>
+   --deferred-dir <working>/reviews/deferred` (absolute paths; safe to rerun)
+   and report its lines. This copies group
+   action items (blank findings with an `**Escalated:** scope-creep` note)
+   to deferred review. Fix malformed findings before retrying; recover an
+   interrupted transaction with `varde work recover` before rerunning.
+4. **Conclude.** Run `varde work review check --subject
+   <group-subject-id> --checkpoint complete --json`, then `varde work
+   conclude <group-plan.md> --json`. Missing/stale approval or an incomplete
+   child blocks conclusion: preserve the active group and recovery refs, and
+   never mark it completed by a plain transition or activate it again. A
+   feature checkout owning the group subject may conclude against verified
+   local source; never conclude a main-checkout subject against unmerged
+   feature source.
+5. **Commit.** At the owning checkout, commit tracked group conclusion and
+   bookkeeping before offering Merge or Push, staging only this group's
+   verified paths and preserving unrelated edits.
+6. **Offer one choice.** Give the clickable group worktree path, branch/base,
+   short checks, and concerns for IDE/Git review, without pasting the diff.
+   Offer the group's applicable target-integration choices per
+   `references/build-finish.md`'s Finish choices, and execute only the
+   one the user makes.
+7. **Reflect.** Invoke `varde-knowledge reflect` as a session boundary (child
+   builds already recorded their own lessons); it writes a feature-level
+   handoff when anything is left for later.
+=== skills/varde-change/references/orchestration.md ===
+# Orchestration
+
+The main agent orchestrates and stays available to the user. Delegate bounded
+work to background `varde-*` agents.
+
+## Cap
+
+- At most `[orchestration] max_agents` subagents in flight (the installed
+  instruction block shows the active value). `varde-explorer` runs do not count.
+- `varde-explorer` never spawns.
+
+## Pre-explore
+
+Only OpenCode and Pi (which needs pi-subagents) let planners, builders, and
+reviewers spawn `varde-explorer` and nothing else; on other harnesses they
+spawn nothing.
+
+On other harnesses, before dispatching a planner, builder, or reviewer:
+
+1. Run up to 2 `varde-explorer` over the task's owned and affected areas.
+2. Put their notes in the brief.
+
+The subagent uses the `varde-explore` skill only for gaps.
+
+## Brief
+
+When `varde` is installed, run `varde setup watch --ensure --repo
+<repo-root>` before the first dispatch, retrying once with escalated access;
+sandboxed subagents cannot start it.
+
+### Writer launch
+
+Before dispatching a writer, resolve the permission manifest and launch
+contract in `references/build-worktree.md`. Supply its exact cwd and session
+permissions through a supported launcher; if unavailable, report the limit
+before launch. Require the worker's actual-sandbox preflight before edits.
+A parent-side probe cannot establish the worker's permissions.
+
+### Brief contents
+
+Each brief gives one bounded task and:
+
+- file ownership;
+- orientation: files and line ranges you read, key symbols, decisions made,
+  and exact check commands, seeded from `varde map context_pack` minus
+  unrelated hits;
+- resolved `<working>` and `<knowledge>` paths;
+- the spawn rule: explorers only, up to 2, or none;
+- "Do the work yourself; do not launch other subagents."
+
+## Results
+
+- Review each result before integrating it.
+- Builders run lint and their task checks. The orchestrator runs reviews and
+  full suites.
+=== skills/varde-change/references/plan-decomposition.md ===
+# Task decomposition
+
+Break a settled spec and its plan-level acceptance criteria (`plan.md`, or the
+minimal plan synthesized for ad-hoc work) into `tasks/<task-id>.md` files from
+`assets/TASK-TEMPLATE.md`. Run once while finalizing a plan, or at build for
+an ad-hoc plan without tasks; a single bounded outcome writes one task directly from that template instead
+(plan AC → its Verification), skipping the edge-case checks below.
+
+## 1. Check the edge cases
+
+Check these:
+
+| The goal | Decompose as |
+|---|---|
+| Names a shared symbol, type, or interface (with `varde map`, run `symbol_blast_radius` rather than guessing from package structure) | Wide refactor: expand, N migrate batches, contract, plus an integrate task if batches can't stay green |
+| Deletes a generated or intermediate file another task may read | Deletion: grep draft task bodies for the path, tests for hardcoded paths under the deleted dir, and dependents/importers of the deleted source |
+| Creates or renames a path another task body mentions | File pointer: grep draft task bodies for the new path and add `depends_on` |
+| Has an unsettled interface | Stop decomposing; in plan mode return to the plan growth loop, otherwise hand off to `varde-change plan` |
+
+Investigate codebase unknowns directly; `kind: research` is only for lasting
+external output. Add a doc task (writing `<knowledge>/reference/` or
+`<knowledge>/flows/`, depending on all implementation tasks) only when asked.
+
+## 2. Build the breakdown
+
+Require per task (no step count or named test function):
+
+- an observable outcome;
+- expected files touched, if known; otherwise say so and let the builder find
+  them;
+- dependencies and risks;
+- the `assert:`/`retrieve:` checks proving the slice works;
+- `#### Test approach`: one profile (`tdd`, `regression`,
+  `characterization`, `smoke`, or `not-applicable`) and a one-line rationale.
+
+Profile authority, highest first:
+
+1. Direct user instructions.
+2. Repository policy.
+3. The default: test-first for behavior changes.
+
+Name the directive in the rationale when one set the profile; any other
+choice (characterization for fragile legacy code, smoke for packaging) states
+its reason there.
+
+## 3. Declare ownership
+
+- Trace each changed behavior to its consuming tests and required helpers;
+  include their writes in ownership, including tests of interim behavior.
+- Limit pinned-text checks to tracked files that consume or assert the task
+  output. Matching text alone does not establish a dependency.
+- Declare every written path in `modifies`, `creates`, and `renames` (each
+  rename as `old/path -> new/path`).
+- Name every shared database, snapshot, or other external state the task or
+  its checks use or change in `verification_resources`.
+- The plan lists generated outputs and their generator commands; no task owns
+  them.
+- Use `[]` for an empty category; omit a field whose contents are unknown so
+  automatic scheduling stays serial.
+- A behavior-preserving restructuring task sets `posture: refactor` so
+  `varde work execution-wave` isolates it in a worktree.
+
+## 4. Check each task's size
+
+A task is the smallest execution-safe unit. Rewrite and re-check any task that
+fails one of these:
+
+- Exactly one public behavior or workflow rule changes, with one observable
+  outcome and no open choices.
+- It fits one builder; split on evidence (a run that blocked or hit its
+  context limit), not on an estimate.
+- A schema/persistence change names the file where the schema lives, found by
+  reading, not analogy.
+
+## 5. Present and record
+
+Check new or rewritten verification commands against the baseline before
+finalizing; record expected failures and generated writes in the task.
+
+1. Interactive: show the breakdown as a table and pause once for missing,
+   wrong-scoped, or badly split tasks. Unattended runs skip the pause.
+2. Write each task from `assets/TASK-TEMPLATE.md` in the plan's `tasks/`
+   directory, with populated `modifies`, `creates`, `depends_on`, and
+   `status: todo`. Task IDs are kebab-case with no date prefix, unique across
+   every plan's `tasks/*.md`. Readiness is computed live from `depends_on`,
+   never stored.
+=== skills/varde-change/references/plan.md ===
+# Plan
+
+## Resume a draft
+
+When asked to resume planning with no feature named:
+
+- **Find drafts.** A draft is a `plan.md` with `status: backlog` and an id
+  ending in `-draft` or `-draft-<n>`, or a live Open Questions bullet. Search
+  at any depth under `<working>/plans/`. Nested child plans count; their id is
+  their path, such as `<group-id>/<child-id>`.
+- **Ask.** List every draft as a numbered `title - plan id` list and ask which
+  to resume, then continue with [The growth loop](#the-growth-loop). If there
+  are none, wait for the user's idea and [start a plan](#start-a-plan).
+
+## Start a plan
+
+### First turn
+
+Include `varde map context_pack` with feature terms when available. In the
+same read-only discovery call, scan `<working>/reviews/deferred/`.
+
+1. Pick a temporary slug from the prompt and run
+   `scripts/plan-path.py draft --working <working> --slug <slug>`; it creates
+   and prints the draft directory, whose name is the plan id until
+   finalization. Create `plan.md` there from `assets/PLAN-TEMPLATE.md` with
+   Write/Edit, and set `title` to the initial prompt.
+2. Seed genuine best guesses immediately in the template's formats, including
+   Given/When/Then criteria and every unknown as an Open Question or Assumption.
+   List deferred findings with a blank `Disposition` and an in-scope `Location`
+   as Open Questions with their review date, deduplicating copies by `Source`
+   and original id. The user decides to include or defer; never add one
+   automatically.
+3. Tell the user the plan path and welcome direct edits. Ask the one highest-value question per
+   [Asking questions](#asking-questions), then wait.
+
+## The growth loop
+
+Each turn, research what the repo can answer. Load
+`references/varde-code-cli.md` only when `varde` is on PATH and scope or
+dependents are unknown.
+
+### Routing unknowns
+
+Route every unknown instead of blocking; impact beats confidence:
+
+- **Code or search can answer it:** research it; don't list it.
+- **Confident, and a wrong guess stays inside one Design subsection:**
+  `## Assumptions` with `confidence: high`; don't spend a turn.
+- **Needs something concrete** (an open UI shape, interaction feel, a state
+  model, or a layout tradeoff visible only once built): mark it
+  `[needs prototype]`, invoke `varde-prototype`, and resume with its answer.
+  Skip this when the UI shape is already settled.
+- **Everything else** (unsure, or touching the plan split, AC, an external
+  contract, or solution shape): `## Open Questions` with a recommendation, and
+  ask.
+
+**Push back.** Challenge the idea and propose a better, smaller shape when
+you see one:
+
+- If the scenario is speculative or an existing capability seems to cover it,
+  offer do-not-build ("This looks like [X] already covers it. Build anyway, or
+  is this a non-issue?").
+- Close as do-not-build only on explicit agreement, then discard the plan
+  directory.
+
+### Terminology and standards
+
+Once the seed makes the domain concrete, search `<knowledge>/` for the
+feature's specs, decisions, definitions, and patterns:
+
+- Link the ones that apply under `## Related`.
+- Put any that look stale into `## Open Questions` as one item.
+- Record a missing definition with `varde-knowledge`.
+- When `<knowledge>/specs/<domain>.md` covers code this plan changes, add the
+  domain to `observed_specs` and pass its spec file at Finalize step 3's
+  `review init` (`--scope`, or `--artifact <absolute-file>` outside the
+  repository); after init, add it with `review expand` and a fresh pre-edit
+  verdict.
+
+### Per-turn steps
+
+1. **Watch the doc.** Re-read `plan.md` and diff it against your last
+   snapshot. A change you did not make to `## Open Questions`,
+   `## Assumptions`, `## Design`, `## Non-goals`, or `## Constraints` is a
+   user edit that counts as an answer; process it with the chat message.
+2. **Resolve items.** Write each decision into its `## Design` subsection (or
+   Non-goals/Constraints) in the template's form, append
+   `<question> → <answer>` to `## Decisions so far`, remove the resolved
+   line, and add any unknowns the answer exposes. An accepted assumption moves
+   to the decision log too.
+3. **Ask** the highest-value Open Question per [Asking questions](#asking-questions),
+   solution-shape questions before spelling ones.
+
+Throughout:
+
+- **Single writer.** Only this session edits `plan.md`. Research subagents get
+  the resolved absolute `<working>` and `<knowledge>` paths, use them without
+  re-resolving storage, and return findings.
+
+### Exit criteria
+
+Each turn, route implicit assumptions in Design/AC per
+[Routing unknowns](#routing-unknowns). Run [Self-review](#self-review) when
+`## Open Questions` first has no live item, and again at Finalize. Finalize
+when `## Open Questions` has no live item and the final self-review finds
+nothing new.
+
+## External interface check
+
+If a touched surface has existing consumers (exported API, CLI flag, env var,
+CI config, shared type, or a file others read), flag it explicitly and find
+them with `dependents`/`blast_radius` from `varde map` and
+`references/varde-code-cli.md`, or grep otherwise. Record them in Design and
+AC.
+
+## Self-review
+
+When run, an empty `## Open Questions` is not done. Add an Open Question for
+each of these and continue:
+
+- placeholders (TBD, vague Design);
+- contradictions between decisions;
+- scope the Solution implies but Non-goals omits;
+- decisions admitting two implementations.
+
+When scope outside fenced code blocks adds a second case to a formerly
+single-case model, makes a required field optional, or turns a derived or
+fixed value into a choice, and `## Decisions so far` does not already resolve
+that shift, add one Open Question: promote the general model, or add it
+alongside the old one?
+
+## Acceptance criteria
+
+Criteria are plan-level: true after ship, however build slices it. Review the
+full set before the final completeness check:
+
+- **`assert:`** (preferred): a command, grep, or test whose pass/fail needs no
+  LLM judgment.
+- **`retrieve:`**: the file(s) or grep an LLM must read and judge, and what it
+  looks for. An agent grading text it just produced is biased, so first try to
+  restate it as `assert:` (command, exit code, file existence, non-empty
+  output). Keep it only for semantic judgment no command can give, such as
+  whether an error message explains the cause.
+- **Testable as written:** each criterion names a command or a file a reader
+  judges.
+
+## Finalize
+
+1. **Rename and validate.**
+   - Derive the slug from the plan's title or problem (lowercase, hyphenated)
+     without asking, and run
+     `scripts/plan-path.py finalize --draft <plan-dir> --slug <slug>`. It
+     renames the directory, keeping the draft's date, and prints the new path
+     and `ignored: true|false`; record `ignored`.
+   - Run `varde work validate <plan-dir>/plan.md --json` and fix
+     diagnostics before review.
+2. **Split or decompose before review.** For several independently shippable
+   changes, [split](#split-into-child-plans) first: the parent gets no tasks. Otherwise follow `references/plan-decomposition.md`.
+3. **Establish review location and review.** Establish the visible plan
+   worktree per `references/build-worktree.md` without committing before step
+   5's approval (unless a specific checkpoint is already authorized); map tracked
+   plan files there, retain external storage, and initialize the exact-root subject
+   (`review init --plan <plan.md>`, with `observed_specs` files) per
+   `references/review-gate-plan.md` §1 and `references/review-gates.md`.
+   Give an independent reviewer the plan/tasks, subject/scope, and resolved
+   `<working>`/`<knowledge>` paths to check splits, execution-wave independence,
+   context estimates, assumptions, human choices, criteria, and shippability.
+   It inspects `pre-edit` and writes its own `varde work review record`; keep
+   the subject id in plan Progress for build/resume.
+4. **Apply the review.** Apply findings and review every criterion per
+   [Acceptance criteria](#acceptance-criteria), investigating code-answerable
+   unknowns and returning human decisions to the interview. For several
+   changes, follow [Split into child plans](#split-into-child-plans) instead of
+   step 5. Revalidate after edits; a materially changed plan needs fresh
+   inspection and independent approval, otherwise the approved verdict carries
+   to build.
+5. Ask the **final completeness check**: unseen assumptions and changes from
+   steps 2-4, one line each, grouped by impact. Link the plan and approval
+   worktree, branch/base; explicitly request local plan/task commit
+   authorization while reserving target integration for separate approval.
+   Ask "Anything left to resolve before we finalize?" Wait for confirmation;
+   apply requested changes, revalidate/review, and repeat when needed.
+
+6. After confirmation, no more questions or content changes. The plan stays
+   `backlog` until build moves it to `active`.
+7. Reuse step 1's reported `ignored` value: ignored plans stay local;
+   otherwise commit only the plan directory on its authorized plan branch,
+   never the user's target branch.
+8. Announce that `Plan <plan-id> is ready; ask to build it.`
+
+### Split into child plans
+
+Use this at Finalize step 2, or step 4 when review finds several shippable
+changes; from step 4, first delete the parent's task files and note in
+Progress that its subject is abandoned.
+
+1. List candidate titles and dependency order. Ask whether any should be
+   combined or split differently, then wait.
+2. Establish one visible group plan worktree per
+   `references/build-worktree.md` as the exact approval root for parent and
+   children, before their finalization reviews. Create nested child plans at
+   `<working>/plans/<plan-id>/<child-slug>/plan.md`. The path gives each child
+   its compound id and group membership, so no `children:`/`parent:` fields
+   are needed. Finalize each child with Finalize step 1's validate only
+   (never `plan-path.py finalize`), then steps 2-8; build decomposes each
+   later.
+3. Keep the current plan as the group parent with `shape: group` in
+   frontmatter. Keep its goal, non-goals, constraints, and aggregate contract
+   outside Progress: source scope, child ids/dependencies/contracts,
+   assumptions, and aggregate acceptance/verification. Validate it, then
+   initialize its subject over the aggregate source scope (Finalize step 3's
+   `review init --plan`, with the owning approval repoRoot). Get independent
+   `pre-edit` approval of the combined contract in the same reviewer session
+   as the children's step 3 reviews, one record per subject; keep the subject
+   id in the parent's Progress. Commit the parent with its children only on
+   the authorized group plan branch when storage is tracked, then finish the
+   parent with Finalize steps 7-8 only.
+
+## Asking questions
+
+Up to three questions may share a turn when they are facets of one decision
+or share candidate solutions, such as naming sibling commands or edge cases of
+one input. Silence and surrounding context leave the decision open. Use this
+menu:
+
+```
+<Question>
+
+  1. <Option A>
+  2. <Option B>
+  3. Other - describe what you want
+
+Recommendation: <n> (<label>) - <one-sentence reason>.
+```
+=== skills/varde-change/references/status.md ===
+# Change status
+
+Read-only: change no plan, task, or handoff. Show:
+
+- **Plans:** every `plan.md` at any depth under `<working>/plans/` not
+  `completed`; date-prefixed ids newest first, others last; top 5 plus
+  remaining count. Columns Status | Plan | Tasks | Done (from `tasks/*.md`
+  frontmatter only); a group's children list under it. Empty:
+  `No plans in a non-terminal status.`
+- **Handoffs:** `<working>/handoffs/*/handoff.md` with `status: open`, newest
+  5 plus remaining count (Handoff | Description | Timestamp | Linked plan
+  status). Empty: `No open handoffs.`
+- **Next mode:** use `varde work readiness <plan.md> --json`
+  blockers/actions when available. Recommend one mode as
+  `Recommended next mode: <mode>`, then stop; never run it:
+  - `plan`: unplanned work, or resume a draft per
+    `references/plan.md` (Resume a draft);
+  - `build`: one ready plan;
+  - `orchestrate`: ready group children;
+  - `verify`: aggregate evidence.
+=== skills/varde-change/references/verify.md ===
+# Standalone verification
+
+Read-only: never fix, change status, or tick criteria.
+
+## Resolve the target
+
+| Request | Target |
+|---|---|
+| Plan identifier or slug | Matching `<working>/plans/<plan-id>/plan.md` |
+| Feature or group | Group plan and every nested child plan |
+| No target | Most recent completed date-prefixed plan; none: report that and stop |
+
+List ambiguous slug matches and ask once.
+State the resolved identifier and current status.
+
+## Verify
+
+1. Read `## Acceptance criteria`. Stop if missing, except for a group parent
+   without it: verify each child plan, then report the aggregate.
+2. Ignore checkbox state; a check is a claim, not evidence, and an unchecked
+   one is not an automatic failure.
+3. Read each adjacent `tasks/*.md` status and Progress evidence.
+   Do not re-grade task Verification blocks.
+4. Run every criterion's `assert:` command or structural check, exactly as
+   written — never silently substitute a different assertion, and run broad
+   project checks only when a criterion asks for one.
+   Compare its exact expected result.
+   Record exit codes or match counts.
+5. For every `retrieve:` clause, read only named files.
+   Compare the requested outcome and record its supporting line.
+6. Classify every criterion:
+   - `passed`: evidence matches expectations.
+   - `failed`: evidence exists but contradicts expectations.
+   - `unavailable`: evidence cannot be gathered — including a missing command
+     or a moved file.
+7. Report each criterion with its evidence.
+   Finish with outcome counts and plan status.
+
+A UI check needs a browser tool from your own tool list; harness tools do not
+appear on `PATH`. Without one, the check is `unavailable`, never passed; never
+infer rendering from an HTTP fetch or source. Log in only with
+credentials the user supplied, and submit no form that changes real data.
+
+Recommend `varde-change build` when fixes are needed.
+=== skills/varde-change/references/workflow-state.md ===
+# Workflow state
+
+An unknown status (`draft`, or a task in `backlog`) makes later CLI calls fail
+with `unknown status`.
+
+| Artifact | States | Initial | Legal moves |
+|---|---|---|---|
+| `plan` | `backlog`, `active`, `blocked`, `completed` | `backlog` | `backlog` to `active` or `blocked`; `active` to `blocked` or `completed`; `blocked` to `active`; `completed` is terminal |
+| `task` | `todo`, `in_progress`, `blocked`, `done` | `todo` | `todo` to `in_progress` or `blocked`; `in_progress` to `blocked` or `done`; `blocked` to `in_progress`; `done` is terminal |
+
+Change status through `transition`, never by editing `status` directly:
+
+```bash
+varde work readiness <plan.md> --json
+varde work transition <artifact.md> <state> --json
+varde work validate <artifact.md> --json
+```
+
+- A rejected transition (`workflow_blocked`) lists legal states and changes no
+  bytes.
+- `recover --root <project-root>` finishes an interrupted accepted transition.
+=== skills/varde-change/scripts/plan-path.py ===
+#!/usr/bin/env python3
+"""Allocate and finalize plan directory paths.
+
+  plan-path.py draft --working <dir> --slug <slug>
+  plan-path.py finalize --draft <plan-dir> --slug <slug>
+
+draft creates <working>/plans/<UTC-date>-<slug>-draft[-N]/ and prints it.
+finalize renames a draft to <draft-date>-<slug> and prints the new path and
+`ignored: true|false`. Ignored plans and plans outside a repo use a plain
+move; tracked drafts use `git mv`. An existing destination is refused.
+"""
+import argparse
+import datetime
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def git(cwd, *args):
+    return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
+
+
+def draft(working, slug):
+    plans = Path(working) / "plans"
+    base = f"{datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}-{slug}-draft"
+    target, n = plans / base, 1
+    while target.exists():
+        n += 1
+        target = plans / f"{base}-{n}"
+    target.mkdir(parents=True)
+    print(target)
+
+
+def finalize(draft_dir, slug):
+    src = Path(draft_dir).absolute()
+    date = re.match(r"\d{4}-\d{2}-\d{2}", src.name)
+    if not date:
+        sys.exit(f"draft name has no leading date: {src.name}")
+    dest = src.parent / f"{date.group()}-{slug}"
+    if dest.exists():
+        sys.exit(f"destination exists: {dest}")
+    in_repo = git(src, "rev-parse", "--is-inside-work-tree").returncode == 0
+    ignored = not in_repo or git(src, "check-ignore", "-q", str(dest / "plan.md")).returncode == 0
+    tracked = in_repo and not ignored and bool(git(src, "ls-files", str(src)).stdout.strip())
+    if tracked:
+        moved = git(src.parent, "mv", str(src), str(dest))
+        if moved.returncode:
+            sys.exit(moved.stderr.strip())
+    else:
+        shutil.move(str(src), str(dest))
+    print(dest)
+    print(f"ignored: {str(ignored).lower()}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+    d = sub.add_parser("draft")
+    d.add_argument("--working", required=True)
+    d.add_argument("--slug", required=True)
+    f = sub.add_parser("finalize")
+    f.add_argument("--draft", required=True)
+    f.add_argument("--slug", required=True)
+    args = parser.parse_args()
+    if args.command == "draft":
+        draft(args.working, args.slug)
+    else:
+        finalize(args.draft, args.slug)
+
+
+if __name__ == "__main__":
+    main()
+=== skills/varde-change/scripts/select-plans.py ===
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = []
+# ///
+"""List the plans `varde-change` build can select.
+
+Usage: select-plans.py --working DIR
+
+Reads every `plan.md` at any depth under DIR/plans. Skips `shape: group` plans
+and drafts (id ending `-draft` or `-draft-<digits>`, or a live bullet under `## Open Questions`).
+Keeps `backlog` and `active` plans. With `varde` on PATH it runs
+`varde work readiness <plan> --json` per plan and
+`varde work graph <plan> --json --all` per candidate. The graph covers one
+plan's `depends_on` closure, so every candidate is checked. The script excludes
+plans with an incomplete dependency or named by a `dependency_cycle` blocker,
+then puts backlog plans first and sorts each status group by id.
+
+Output (stdout, exit 0):
+  {plans: [{id, title, status, implementation_ready, blockers: [...]}],
+   excluded_by_dependency: N, cycles: [ids], degraded: bool,
+   degraded_plans: [ids]}
+
+`degraded` is true when `varde` is missing or a call failed;
+`degraded_plans` lists the affected ids. Those plans are filtered by their
+`depends_on` front matter instead: any dependency not `completed` excludes
+the plan. Failure prints {"error", "message"} and
+exits 1 (usage or unreadable working directory).
+"""
+import argparse
+import json
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def fail(name, message):
+    print(json.dumps({"error": name, "message": message}))
+    sys.exit(1)
+
+
+def parse_list(value, following):
+    """Parse an inline `[a, b]` or block `- a` YAML list of ids."""
+    value = value.strip()
+    if value.startswith("["):
+        items = value.strip("[]").split(",")
+    else:
+        items = []
+        for line in following:
+            if not re.match(r"\s*-\s", line) and line.strip():
+                break
+            if line.strip():
+                items.append(line.strip()[1:])
+    return [i.strip().strip("\"'") for i in items if i.strip().strip("\"'")]
+
+
+def read_plan(path):
+    """Return (id, title, status, shape, has_open_question, depends_on) or None."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    match = re.match(r"---\n(.*?)\n---", text, re.S)
+    if not match:
+        return None
+    front = {}
+    depends = []
+    lines = match.group(1).splitlines()
+    for number, line in enumerate(lines):
+        key, sep, value = line.partition(":")
+        if sep and not line.startswith((" ", "-")):
+            front[key.strip()] = value.strip().strip("\"'")
+            if key.strip() == "depends_on":
+                depends = parse_list(value, lines[number + 1:])
+    body = text[match.end():]
+    live = False
+    section = re.search(r"^## Open Questions\s*\n(.*?)(?=^## |\Z)", body, re.S | re.M)
+    if section:
+        live = bool(re.search(r"^\s*[-*] ", section.group(1), re.M))
+    return (front.get("id") or path.parent.name, front.get("title", ""),
+            front.get("status", ""), front.get("shape", ""), live, depends)
+
+
+def dependency_status(path, statuses):
+    """Status of a dependency plan.md, reading it when outside the scanned plans."""
+    path = path.resolve()
+    if path not in statuses:
+        try:
+            info = read_plan(path) if path.is_file() else None
+        except OSError:
+            info = None
+        statuses[path] = info[2] if info else None
+    return statuses[path]
+
+
+def workflow(args):
+    """Return the `data` object from a varde work command, or None."""
+    try:
+        done = subprocess.run(["varde", "work", *args, "--json"], capture_output=True,
+                              text=True, timeout=60)
+        if done.returncode != 0:
+            return None
+        return json.loads(done.stdout)["data"]
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        return None
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--working", required=True)
+    args = parser.parse_args()
+    plans_dir = Path(args.working) / "plans"
+    if not plans_dir.is_dir():
+        fail("working_missing", f"no plans directory at {plans_dir}")
+
+    candidates = []
+    statuses = {}
+    for path in sorted(plans_dir.rglob("plan.md")):
+        info = read_plan(path)
+        if not info:
+            continue
+        plan_id, title, status, shape, live, depends = info
+        statuses[path.resolve()] = status
+        if shape == "group" or re.search(r"-draft(-\d+)?$", plan_id) or live:
+            continue
+        if status in ("backlog", "active"):
+            candidates.append({"id": plan_id, "title": title, "status": status,
+                               "path": path, "depends": depends})
+
+    have_cli = shutil.which("varde") is not None
+    degraded_plans = set() if have_cli else {c["id"] for c in candidates}
+    cycles = []
+    excluded = 0
+    plans = []
+    if have_cli:
+        for plan in candidates:
+            graph = workflow(["graph", str(plan["path"]), "--all"])
+            if graph is None:
+                degraded_plans.add(plan["id"])
+                continue
+            for blocker in graph["blockers"]:
+                if blocker.get("code") == "dependency_cycle":
+                    for name in (blocker.get("artifact_id"), blocker.get("dependency")):
+                        if name and name not in cycles:
+                            cycles.append(name)
+    for plan in candidates:
+        ready, blockers = False, []
+        data = None
+        if plan["id"] not in degraded_plans:
+            data = workflow(["readiness", str(plan["path"])])
+            if data is None:
+                degraded_plans.add(plan["id"])
+        if data is None:
+            # Resolve like varde work: <plan_dir>/../<dep>/plan.md, no id fallback.
+            plan_dir = plan["path"].parent
+            if any(dependency_status(plan_dir.parent / d / "plan.md", statuses) != "completed"
+                   for d in plan["depends"]):
+                excluded += 1
+                continue
+        else:
+            blockers = list(data["blockers"])
+            blockers += (data.get("review") or {}).get("blockers", [])
+            ready = bool(data["implementation_ready"])
+            if not data["planning_ready"] or plan["id"] in cycles:
+                excluded += 1
+                continue
+        plans.append({"id": plan["id"], "title": plan["title"], "status": plan["status"],
+                      "implementation_ready": ready, "blockers": blockers})
+    plans.sort(key=lambda p: (p["status"] != "backlog", p["id"]))
+    print(json.dumps({"plans": plans, "excluded_by_dependency": excluded,
+                      "cycles": sorted(cycles), "degraded": bool(degraded_plans),
+                      "degraded_plans": sorted(degraded_plans)}, indent=2))
+
+
+if __name__ == "__main__":
+    main()
+=== skills/varde-change/scripts/worktree-cleanup.sh ===
+#!/usr/bin/env bash
+# Remove a registered worktree and its branch after merge or explicit discard.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: worktree-cleanup.sh [--discard] <id>
+
+Removes the registered worktree on branch worktree/<id> and deletes that
+branch. Normal cleanup requires a worktree with no uncommitted or ignored
+files whose branch is merged into the currently checked-out commit. Use
+--discard only when deliberately abandoning its committed or local work.
+
+Exit codes:
+  0  worktree and branch removed
+  1  usage error or cleanup could not be completed safely
+EOF
+}
+
+fail() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+discard=false
+if [[ "${1:-}" == "--discard" ]]; then
+  discard=true
+  shift
+fi
+
+if [[ $# -ne 1 || "$1" == -* ]]; then
+  usage >&2
+  exit 1
+fi
+
+id="$1"
+branch="worktree/${id}"
+branch_ref="refs/heads/${branch}"
+git check-ref-format "$branch_ref" >/dev/null 2>&1 || fail "invalid worktree id '${id}'"
+
+git rev-parse --path-format=absolute --git-common-dir >/dev/null 2>&1 ||
+  fail "not inside a Git worktree"
+git show-ref --verify --quiet "$branch_ref" || fail "branch ${branch} does not exist"
+branch_oid="$(git rev-parse --verify "$branch_ref")" || fail "could not resolve branch ${branch}"
+
+# Resolve by the branch recorded by Git, not by a path inferred from the
+# current checkout. The caller may be in the main checkout or any linked tree.
+registry="$(git worktree list --porcelain)" || fail "could not list registered worktrees"
+target_path=""
+record_path=""
+record_branch=""
+matches=0
+
+record_target_if_matching() {
+  if [[ -n "$record_path" && "$record_branch" == "$branch_ref" ]]; then
+    matches=$((matches + 1))
+    target_path="$record_path"
+  fi
+}
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  case "$line" in
+    "worktree "*)
+      record_target_if_matching
+      record_path="${line#worktree }"
+      record_branch=""
+      ;;
+    "branch "*)
+      record_branch="${line#branch }"
+      ;;
+    "")
+      record_target_if_matching
+      record_path=""
+      record_branch=""
+      ;;
+  esac
+done <<< "$registry"
+record_target_if_matching
+
+[[ "$matches" -eq 1 ]] || {
+  if [[ "$matches" -eq 0 ]]; then
+    fail "no registered worktree uses branch ${branch}"
+  fi
+  fail "multiple registered worktrees use branch ${branch}; refusing cleanup"
+}
+
+[[ -d "$target_path" ]] || fail "registered worktree path is unavailable: ${target_path}"
+target_realpath="$(cd "$target_path" && pwd -P)" ||
+  fail "registered worktree path is unavailable: ${target_path}"
+caller_realpath="$(pwd -P)"
+case "$caller_realpath/" in
+  "$target_realpath/"*) fail "cannot clean up the worktree that contains the current directory" ;;
+esac
+
+if [[ "$discard" != true ]]; then
+  worktree_status="$(git -C "$target_path" status --porcelain --untracked-files=all 2>/dev/null)" ||
+    fail "registered worktree is unavailable: ${target_path}"
+  [[ -z "$worktree_status" ]] || fail "worktree ${id} has uncommitted changes; use --discard only to abandon them"
+
+  ignored_status="$(git -C "$target_path" status --porcelain --untracked-files=all --ignored 2>/dev/null)" ||
+    fail "could not inspect ignored files in worktree ${id}"
+  [[ -z "$ignored_status" ]] || fail "worktree ${id} has ignored files; use --discard only to abandon them"
+
+  if git merge-base --is-ancestor "$branch_oid" HEAD; then
+    :
+  else
+    merge_status=$?
+    if [[ "$merge_status" -eq 1 ]]; then
+      fail "branch ${branch} is not merged into the currently checked-out commit; use --discard only to abandon it"
+    fi
+    fail "could not verify whether branch ${branch} is merged"
+  fi
+fi
+
+if [[ "$discard" == true ]]; then
+  git worktree remove --force "$target_path" || fail "could not discard worktree ${target_path}"
+else
+  git worktree remove "$target_path" || fail "could not remove clean worktree ${target_path}"
+fi
+
+remaining_registry="$(git worktree list --porcelain)" || fail "could not verify worktree removal"
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ "$line" == "worktree ${target_path}" ]]; then
+    fail "worktree ${target_path} remains registered after removal"
+  fi
+done <<< "$remaining_registry"
+
+git update-ref -d "$branch_ref" "$branch_oid" ||
+  fail "worktree was removed, but branch ${branch} changed after preflight or could not be deleted safely"
+
+if git show-ref --verify --quiet "$branch_ref"; then
+  fail "branch ${branch} remains after removal"
+else
+  show_ref_status=$?
+  [[ "$show_ref_status" -eq 1 ]] || fail "could not verify branch removal for ${branch}"
+fi
+
+if [[ "$discard" == true ]]; then
+  echo "discarded worktree and branch for ${id}"
+else
+  echo "removed worktree and branch for ${id}"
+fi
+=== skills/varde-change/scripts/worktree-create.sh ===
+#!/usr/bin/env bash
+# Create an isolated git worktree pinned to a fixed base SHA.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: worktree-create.sh [--fresh] <id> [base]
+       worktree-create.sh --plan <id> <explicit-base>
+
+Creates a worktree for <id> at <repo>/.varde/worktrees/<id>, branched from
+<base> (default: HEAD), pinned to that commit's resolved SHA. New worktrees
+require a clean, committed caller. --fresh allocates a sibling even inside
+a linked worktree; without it, a linked caller keeps ownership and is reused.
+--plan always creates a fresh plan worktree at an explicit committed base;
+it permits a dirty origin and leaves its branch, index and local files intact.
+
+Prints three lines on success:
+  path=<worktree-path>
+  branch=<branch>
+  created=<true|false>
+
+created=true  a fresh worktree was made and the caller OWNS it — the caller
+              must merge + cleanup when done.
+created=false the caller is already inside a linked worktree, so this is a
+              no-op that reuses it; the caller must NOT merge or cleanup
+              (whoever created the outer worktree owns that).
+
+Exit codes:
+  0  worktree created, or reused because already inside a linked worktree
+  1  usage error
+  2  <base> did not resolve to a commit
+  3  a worktree or branch for <id> already exists
+  4  caller is dirty, detached, or has no committed HEAD
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+fresh=false
+plan=false
+case "${1:-}" in
+  --fresh) fresh=true; shift ;;
+  --plan) fresh=true; plan=true; shift ;;
+esac
+if [[ $# -lt 1 || $# -gt 2 || "${1:-}" == -* || "${2:-}" == --plan || "${2:-}" == --fresh ]] ||
+   { [[ "$plan" == true ]] && [[ $# -ne 2 || -z "${2:-}" ]]; }; then
+  usage >&2
+  exit 1
+fi
+
+id="$1"
+base="${2:-HEAD}"
+
+base_sha="$(git rev-parse --verify "${base}^{commit}" 2>/dev/null)" || {
+  echo "error: base '${base}' did not resolve to a commit" >&2
+  exit 2
+}
+
+# Already inside a linked worktree? Then the caller is already isolated —
+# reuse it instead of nesting a second worktree. --git-dir and --git-common-dir
+# diverge only inside a linked worktree; they're identical in the main checkout.
+if [[ "$fresh" == false && "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]]; then
+  echo "note: already inside a linked worktree — reusing it, no new worktree created" >&2
+  echo "path=$(git rev-parse --show-toplevel)"
+  echo "branch=$(git rev-parse --abbrev-ref HEAD)"
+  echo "created=false"
+  exit 0
+fi
+
+repo_root="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+worktree_path="${repo_root}/.varde/worktrees/${id}"
+branch="worktree/${id}"
+
+if git worktree list --porcelain | grep -x "worktree ${worktree_path}" >/dev/null; then
+  echo "error: worktree already exists at ${worktree_path}" >&2
+  exit 3
+fi
+if git show-ref --verify --quiet "refs/heads/${branch}"; then
+  echo "error: branch ${branch} already exists" >&2
+  exit 3
+fi
+
+git check-ref-format "refs/heads/$branch" >/dev/null || { echo "error: invalid worktree id '${id}'" >&2; exit 1; }
+if [[ "$plan" == false ]] && {
+   [[ -n "$(git status --porcelain)" ]] ||
+   ! git symbolic-ref --quiet HEAD >/dev/null ||
+   ! git rev-parse --verify HEAD >/dev/null 2>&1;
+}; then
+  echo "error: caller must be clean and on a committed branch" >&2
+  exit 4
+fi
+mkdir -p "$(dirname "${worktree_path}")"
+# Keep the nested worktrees out of the main checkout's status without editing
+# any tracked .gitignore.
+exclude="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+mkdir -p "$(dirname "${exclude}")"
+grep -qx '/.varde/' "${exclude}" 2>/dev/null || echo '/.varde/' >> "${exclude}"
+git worktree add -b "${branch}" "${worktree_path}" "${base_sha}" >&2
+
+echo "path=${worktree_path}"
+echo "branch=${branch}"
+echo "created=true"
+=== skills/varde-change/scripts/worktree-merge.sh ===
+#!/usr/bin/env bash
+# Merge a worktree's branch back into the target branch.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: worktree-merge.sh <id> [into]
+
+Merges worktree/<id> into <into> (default: the branch currently checked out
+in this checkout). An explicit <into> must name that checked-out branch. Does
+NOT commit on the caller's behalf — the worktree must be clean.
+
+Exit codes:
+  0  merged cleanly, worktree/<id> is now in <into>
+  1  usage error
+  2  worktree/<id> has no commits ahead of its base — nothing to merge
+  3  merge conflict — resolve via references/build-worktree.md, then finish the
+     merge manually; do NOT run worktree-cleanup.sh until it's resolved
+  4  target rejected: branch/<id> is missing, <into> does not resolve, <into>
+     does not name the currently checked-out branch, or the merge failed for
+     a reason other than conflict
+  5  worktree/<id> has uncommitted changes — the task did not complete;
+     caller decides
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+  usage >&2
+  exit 1
+fi
+
+id="$1"
+branch="worktree/${id}"
+into="${2:-$(git rev-parse --abbrev-ref HEAD)}"
+current_ref="$(git symbolic-ref --quiet HEAD 2>/dev/null || true)"
+
+if [[ $# -eq 2 ]]; then
+  target_ref="$(git rev-parse --symbolic-full-name "${into}" 2>/dev/null || true)"
+  if [[ -z "${current_ref}" || ( "${into}" != "HEAD" && "${target_ref}" != "${current_ref}" ) ]]; then
+    echo "error: target ${into} is not the currently checked-out branch" >&2
+    exit 4
+  fi
+fi
+
+common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+repo_root="$(dirname "${common_git_dir}")"
+worktree_path="${repo_root}/.varde/worktrees/${id}"
+
+git rev-parse --verify --quiet "${branch}^{commit}" >/dev/null || { echo "error: branch ${branch} does not exist" >&2; exit 4; }
+git rev-parse --verify --quiet "${into}^{commit}" >/dev/null || { echo "error: target ${into} does not resolve" >&2; exit 4; }
+if [[ -d "${worktree_path}" ]] && [[ -n "$(git -C "${worktree_path}" status --porcelain)" ]]; then
+  echo "error: worktree/${id} has uncommitted changes — the task did not complete" >&2
+  exit 5
+fi
+
+merge_base="$(git merge-base "${into}" "${branch}")"
+if [[ "$(git rev-parse "${branch}")" == "${merge_base}" ]]; then
+  echo "error: ${branch} has no commits ahead of ${into} — nothing to merge" >&2
+  exit 2
+fi
+
+if git merge --no-ff --no-edit "${branch}"; then
+  echo "merged ${branch} into ${into}"
+  exit 0
+else
+  if ! git diff --name-only --diff-filter=U | grep . >/dev/null; then
+    echo "error: merge failed without conflicts" >&2
+    exit 4
+  fi
+  echo "conflict merging ${branch} into ${into} — see references/build-worktree.md" >&2
+  exit 3
+fi
+=== skills/varde-change/scripts/worktree-permissions.py ===
+#!/usr/bin/env python3
+"""Describe and probe a bound worker's session permissions, without global config."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import uuid
+
+
+def run(argv, cwd=None, env=None):
+    return subprocess.check_output(argv, cwd=cwd, env=env, text=True).strip()
+
+
+def git(root, *args, env=None):
+    return run(['git', '-C', str(root), *args], env=env)
+
+
+def git_path(root, *args):
+    return str((Path(root) / git(root, 'rev-parse', *args)).resolve())
+
+
+def describe(repository, worktree, subject, binding, extra):
+    repository = Path(repository).resolve(strict=True)
+    worktree = Path(worktree).resolve(strict=True)
+    for root in (repository, worktree):
+        if Path(git(root, 'rev-parse', '--show-toplevel')).resolve() != root:
+            raise RuntimeError(f'not an exact checkout root: {root}')
+    common = git_path(worktree, '--git-common-dir')
+    if git_path(repository, '--git-common-dir') != common:
+        raise RuntimeError('approval and worker belong to different Git repositories')
+    admin = git_path(worktree, '--absolute-git-dir')
+    approval_admin = git_path(repository, '--absolute-git-dir')
+    index = git_path(worktree, '--git-path', 'index')
+    objects = git_path(worktree, '--git-path', 'objects')
+    extras = [str(Path(p).resolve(strict=True)) for p in extra]
+    # ProjectLock::acquire uses root/.varde-workflow.lock for ordinary
+    # checkouts and acquire_worktree uses the linked Git admin instead.
+    approval_lock = str((Path(approval_admin) if (repository / '.git').is_file()
+                         else repository) / '.varde-workflow.lock')
+    writes = list(dict.fromkeys([str(worktree), approval_admin, admin, common,
+                                 objects, str(Path(index).parent), *extras]))
+    directory_probes = writes.copy()
+    writes = list(dict.fromkeys([*writes, approval_lock]))
+    return dict(approval_lock=approval_lock,
+                worker_lock=str(Path(admin) / '.varde-workflow.lock'),
+                directory_probes=directory_probes,
+                permission_reasons={'approval_lock': 'bound review lock',
+                                    'directory_probes': 'worker and structural Git/verification writes'},
+                repository=str(repository), worktree=str(worktree), subject=subject,
+                binding=binding, approval_git_admin=approval_admin,
+                worker_git_admin=admin, common_git=common, index=index,
+                objects=objects, writes=writes,
+                approval_evidence={'path': str(repository), 'access': 'read'},
+                working_store='read-only unless explicitly supplied with --write',
+                extra_verification_dirs=extras)
+
+
+def probe_directory(directory):
+    name = None
+    renamed = None
+    try:
+        fd, name = tempfile.mkstemp(prefix='varde-probe-', dir=directory)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(b'permission probe\n')
+        rename_fd, renamed = tempfile.mkstemp(prefix='varde-probe-', dir=directory)
+        os.close(rename_fd)
+        os.rename(name, renamed)
+        name = None
+    finally:
+        for filename in (name, renamed):
+            if filename and os.path.lexists(filename):
+                os.unlink(filename)
+
+
+def review_gate(manifest):
+    output = run(['varde', 'work', 'review', 'check', '--repository', manifest['repository'],
+         '--worktree', manifest['worktree'], '--subject', manifest['subject'],
+         '--binding', manifest['binding'], '--checkpoint', 'start', '--json'],
+        cwd=manifest['worktree'], env=dict(os.environ, GIT_OPTIONAL_LOCKS='0'))
+    result = json.loads(output)
+    if result.get('ok') is not True or result.get('data', {}).get('ready') is not True:
+        raise RuntimeError('bound start review check did not report ok and ready')
+
+
+def check(manifest, gate=review_gate):
+    worker = manifest['worktree']
+    if Path.cwd().resolve() != Path(worker):
+        raise RuntimeError('check must run in the exact physical worker cwd')
+    index = Path(manifest['index'])
+    original_index = index.read_bytes() if index.exists() else None
+    original_head = git(worker, 'rev-parse', 'HEAD')
+    original_branch = git(worker, 'rev-parse', '--abbrev-ref', 'HEAD')
+    original_status = git(worker, '--no-optional-locks', 'status', '--porcelain=v1', '--untracked-files=all')
+    gate(manifest)  # Real binding check before any write, never escalated here.
+    for directory in manifest['directory_probes']:
+        probe_directory(directory)
+    fd, temporary_index = tempfile.mkstemp(prefix='varde-probe-', dir=index.parent)
+    os.close(fd)
+    os.unlink(temporary_index)
+    env = dict(os.environ, GIT_INDEX_FILE=temporary_index,
+               GIT_AUTHOR_NAME='Varde permission probe',
+               GIT_AUTHOR_EMAIL='probe@example.invalid',
+               GIT_COMMITTER_NAME='Varde permission probe',
+               GIT_COMMITTER_EMAIL='probe@example.invalid')
+    ref = 'refs/varde-permission-probes/' + uuid.uuid4().hex
+    commit = None
+    ref_created = False
+    try:
+        git(worker, 'read-tree', 'HEAD', env=env)
+        tree = git(worker, 'write-tree', env=env)
+        commit = git(worker, '-c', 'commit.gpgsign=false', 'commit-tree', tree,
+                     '-p', original_head, '-m', 'Disposable permission probe ' + ref, env=env)
+        git(worker, 'update-ref', '--create-reflog', ref, commit, '')
+        ref_created = True
+        git(worker, 'update-ref', '-d', ref, commit)
+        ref_created = False
+    finally:
+        if commit:
+            print('probe commit retained for normal Git pruning after ref cleanup: ' + commit,
+                  file=sys.stderr)
+        # Attempt every cleanup even when one fails; never remove foreign files.
+        cleanup_errors = []
+        if ref_created:
+            try:
+                git(worker, 'update-ref', '-d', ref, commit)
+            except (OSError, subprocess.CalledProcessError) as error:
+                cleanup_errors.append(f'{ref}: {error}')
+        for candidate in (temporary_index, temporary_index + '.lock'):
+            try:
+                if os.path.lexists(candidate):
+                    os.unlink(candidate)
+            except OSError as error:
+                cleanup_errors.append(f'{candidate}: {error}')
+        if cleanup_errors:
+            raise RuntimeError('probe cleanup failed: ' + '; '.join(cleanup_errors))
+    if ((index.read_bytes() if index.exists() else None) != original_index
+            or git(worker, 'rev-parse', 'HEAD') != original_head
+            or git(worker, 'rev-parse', '--abbrev-ref', 'HEAD') != original_branch
+            or git(worker, '--no-optional-locks', 'status', '--porcelain=v1', '--untracked-files=all') != original_status):
+        raise RuntimeError('probe detected changed HEAD, branch, real index, or worktree status')
+    return dict(passed=True, unreachable_commit=commit,
+                limits='Structural access only; signing, hooks and arbitrary external writes remain unverified. The unreachable probe commit remains for normal Git pruning.')
+
+
+def codex_args(manifest, mode):
+    digest = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()[:16]
+    profile = 'varde_probe_' + digest
+    table = '{' + ','.join(json.dumps(p) + '="write"' for p in manifest['writes']) + '}'
+    overrides = ['-c', f'permissions.{profile}.extends=":workspace"',
+                 '-c', f'permissions.{profile}.filesystem={table}']
+    if mode == 'sandbox':
+        return ['codex', 'sandbox', *overrides, '-P', profile, '-C', manifest['worktree'], '/usr/bin/true']
+    return ['codex', 'exec', *overrides, '-c', 'default_permissions=' + json.dumps(profile),
+            '-C', manifest['worktree']]
+
+
+def sandbox_test(fixture_root):
+    """Exercise actual write denial/grant outside nested seatbelt, no model call."""
+    Path(fixture_root).mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='varde-permissions-', dir=fixture_root) as fixture:
+        parent = Path(fixture) / 'parent'
+        worker = Path(fixture) / 'worker'
+        git(fixture, 'init', str(parent))
+        git(parent, '-c', 'user.name=Probe', '-c', 'user.email=probe@example.invalid',
+            'commit', '--allow-empty', '-m', 'fixture')
+        git(parent, 'worktree', 'add', '-b', 'worker', str(worker))
+        m = describe(parent, worker, 'fixture', 'fixture', [])
+        Path(m['approval_lock']).touch()  # Binding provisions the exact lock.
+        # Full structural check within the child seatbelt; fixture has no
+        # approval subject. The production check always runs the real gate.
+        command = ['python3', '-B', '-c',
+                   'import importlib.util,json; s=importlib.util.spec_from_file_location("p",' +
+                   repr(str(Path(__file__).resolve())) +
+                   '); p=importlib.util.module_from_spec(s); s.loader.exec_module(p); '
+                   'print(json.dumps(p.check(json.loads(' + repr(json.dumps(m)) +
+                   '),gate=lambda m:open(m["approval_lock"],"r+b").close())))']
+        denied = subprocess.run(['codex', 'sandbox', '-c', 'permissions.varde_denial.extends=":workspace"',
+                                 '-c', 'permissions.varde_denial.filesystem={}', '-P', 'varde_denial',
+                                 '-C', str(worker), *command]).returncode
+        allowed = subprocess.run(codex_args(m, 'sandbox')[:-1] + command).returncode
+        if denied == 0 or allowed != 0:
+            raise RuntimeError(f'expected no-grant failure/grant success: {denied}/{allowed}')
+        print(json.dumps({'no_grant_exit': denied, 'grant_exit': allowed}))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('command', choices=['describe', 'check', 'codex-args', 'sandbox-test'])
+    parser.add_argument('--repository')
+    parser.add_argument('--worktree')
+    parser.add_argument('--subject')
+    parser.add_argument('--binding')
+    parser.add_argument('--write', action='append', default=[], metavar='EXTRA_VERIFICATION_DIR')
+    parser.add_argument('--mode', choices=['sandbox', 'exec'], default='sandbox')
+    parser.add_argument('--fixture-root')
+    args = parser.parse_args()
+    if args.command == 'sandbox-test':
+        sandbox_test(args.fixture_root)
+        return
+    if not all((args.repository, args.worktree, args.subject, args.binding)):
+        parser.error('--repository, --worktree, --subject and --binding are required')
+    manifest = describe(args.repository, args.worktree, args.subject, args.binding, args.write)
+    result = manifest
+    if args.command == 'check':
+        result = check(manifest)
+    elif args.command == 'codex-args':
+        result = codex_args(manifest, args.mode)
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f'worktree permissions failed: {error}', file=sys.stderr)
+        sys.exit(1)
+=== skills/varde-change/scripts/worktree-wave.sh ===
+#!/usr/bin/env bash
+# Run the deterministic steps of a worktree wave: start, integrate, publish, release.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF2'
+Usage:
+  worktree-wave.sh start <wave-id> <subject-id> <task-id>... \
+      --scope <task-id>=<path>... [--task <task-id>=<abs-task-file>]...
+  worktree-wave.sh integrate <wave-id> --check <command>
+  worktree-wave.sh publish <wave-id> --approved <verified-commit>
+  worktree-wave.sh release <wave-id>
+
+Run from the clean, committed approval checkout (which may be a linked plan
+worktree). The task id is also the binding id.
+
+start      Records the physical approval checkout, branch, HEAD and tasks;
+           creates fresh sibling workers and binds each to that checkout.
+           Rerun an unfinished start with the same arguments to recover.
+integrate  Merges workers in task-id order into a sibling integration tree,
+           checks the combined result and prints its worktree, branch, base
+           and verified_commit for IDE/Git review. Never moves the target.
+           An unchanged verified result needs no repeated check.
+publish    Requires explicit approval of the exact verified commit; validates
+           clean, unchanged integration and workers and a clean target at
+           the starting commit, then fast-forwards that target. Reruns are safe.
+release    After publication, releases bindings and cleans up recovery refs.
+           Record task transitions and commit bookkeeping before release.
+
+Exit codes:
+  0  success
+  1  usage error or pending provisioning/release/cleanup step
+  3  merge conflict; resolve and commit in the printed integration worktree,
+     then rerun integrate (conflict hunks stay in IDE/Git tools)
+  4  dirty, moved, stale, detached or missing checkout/ref; approval mismatch
+  5  failed task or combined check (recovery refs kept)
+
+EOF2
+}
+
+die() { echo "error: $1" >&2; exit "${2:-1}"; }
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELF="$(basename "$0")"
+
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { usage; exit 0; }
+[[ $# -ge 2 ]] || { usage >&2; exit 1; }
+cmd="$1" wave="$2"; shift 2
+git check-ref-format "refs/heads/worktree/${wave}-integration" || die "invalid wave id '${wave}'"
+
+common="$(git rev-parse --path-format=absolute --git-common-dir)"
+repo="$(dirname "$common")"
+state="$common/varde-waves/$wave"
+integration="${wave}-integration"
+iw="$repo/.varde/worktrees/$integration"
+
+state_all() { sed -n "s/^$1=//p" "$state"; }
+state_get() { state_all "$1" | tail -n 1; }
+branch_exists() { git show-ref --verify --quiet "refs/heads/$1"; }
+version_of() { python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["version"])'; }
+
+load_state() {
+  [[ -f "$state" ]] || die "no recorded wave '${wave}'; run start first"
+  approval="$(state_get approval)"
+  [[ "$(cd "$(git rev-parse --show-toplevel)" && pwd -P)" == "$approval" ]] || die "run from approval checkout ${approval}" 4
+  subject="$(state_get subject)" target="$(state_get target)" base="$(state_get base)" tasks="$(state_get tasks)"
+  [[ "$(git symbolic-ref --quiet --short HEAD)" == "$target" ]] || die "run from the target branch ${target}" 4
+}
+
+# Create (or reuse) one task's worker worktree, then bind it. Run in an `if`,
+# so each step returns explicitly.
+provision() {
+  local id="$1" out worker_path version bind=() s f
+  worker_path="$repo/.varde/worktrees/$id"
+  if ! branch_exists "worktree/$id"; then
+    out="$("$HERE/worktree-create.sh" --fresh "$id" "$base")" || return 1
+    worker_path="$(sed -n 's/^path=//p' <<<"$out")"
+  fi
+  [[ -d "$worker_path" && "$(git -C "$worker_path" symbolic-ref --quiet --short HEAD)" == "worktree/$id" && "$(git -C "$worker_path" rev-parse HEAD)" == "$base" && -z "$(git -C "$worker_path" status --porcelain)" ]] || {
+    echo "error: existing worker ${id} is not clean at the recorded base" >&2
+    return 1
+  }
+  version="$(varde work review inspect --subject "$subject" --phase pre-edit --json | version_of)" || return 1
+  for s in "${scopes[@]}"; do [[ "$s" == "${id}="* ]] && bind+=(--scope "${s#*=}"); done
+  for f in "${files[@]:-}"; do [[ "$f" == "${id}="* ]] && bind+=(--task "${f#*=}"); done
+  varde work review bind-worktree --subject "$subject" --binding "$id" \
+    --expected-version "$version" --worktree "$worker_path" "${bind[@]}" --json >/dev/null || return 1
+  echo "provisioned=$id" >> "$state"
+  echo "task=$id worktree=$worker_path branch=worktree/$id binding=$id subject=$subject repository=$approval"
+}
+
+start() {
+  local subject="${1:-}" ids=() scopes=() files=() id target base
+  [[ -n "$subject" ]] || { usage >&2; exit 1; }
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --scope) scopes+=("${2:?--scope needs task=path}"); shift 2 ;;
+      --task) files+=("${2:?--task needs task=file}"); shift 2 ;;
+      -*) usage >&2; exit 1 ;;
+      *) ids+=("$1"); shift ;;
+    esac
+  done
+  [[ ${#ids[@]} -gt 0 ]] || { usage >&2; exit 1; }
+  for id in "${ids[@]}"; do
+    printf '%s\n' "${scopes[@]:-}" | grep "^${id}=" >/dev/null || die "task ${id} needs --scope ${id}=<path>"
+  done
+
+  local sorted approval
+  approval="$(cd "$(git rev-parse --show-toplevel)" && pwd -P)"
+  sorted="$(printf '%s\n' "${ids[@]}" | sort | tr '\n' ' ' | sed 's/ $//')"
+  if [[ -f "$state" ]]; then
+    # Resume a partial start from the recorded state.
+    [[ "$(state_get subject)" == "$subject" && "$(state_get tasks)" == "$sorted" ]] \
+      || die "wave ${wave} was recorded with a different subject or task list"
+    [[ "$(state_get approval)" == "$approval" ]] || die "run from recorded approval checkout" 4
+    [[ -z "$(state_get started)" ]] || die "wave ${wave} already started"
+    target="$(state_get target)" base="$(state_get base)"
+    [[ "$(git symbolic-ref --quiet --short HEAD)" == "$target" && "$(git rev-parse HEAD)" == "$base" && -z "$(git status --porcelain)" ]] || die "approval checkout is dirty, moved or on another branch" 4
+  else
+    [[ -z "$(git status --porcelain)" ]] || die "target checkout is not clean" 4
+    target="$(git symbolic-ref --quiet --short HEAD)" || die "approval checkout must be on a branch" 4
+    base="$(git rev-parse --verify HEAD)" || die "approval checkout needs a committed HEAD" 4
+    mkdir -p "$(dirname "$state")"
+    printf 'subject=%s\napproval=%s\ntarget=%s\nbase=%s\ntasks=%s\n' "$subject" "$approval" "$target" "$base" "$sorted" > "$state"
+  fi
+
+  for id in "${ids[@]}"; do
+    if grep -qx "provisioned=$id" "$state"; then
+      echo "skip $id (already provisioned)"
+      continue
+    fi
+    if ! provision "$id"; then
+      {
+        echo "error: provisioning ${id} failed; wave state kept at ${state}"
+        echo "provisioned so far: $(sed -n 's/^provisioned=//p' "$state" | tr '\n' ' ')"
+        echo "next: fix the cause, then rerun the same '${SELF} start ${wave} ...' to resume"
+        echo "to abandon: release bindings, run worktree-cleanup.sh for each created task, then delete ${state}"
+      } >&2
+      exit 1
+    fi
+  done
+  echo "started=true" >> "$state"
+}
+
+# A verification record covers the exact integration tip and every worker tip.
+# Dirty trees and wrong branches cannot inherit a successful check.
+verification_snapshot() {
+  local id worker_path tip
+  [[ -d "$iw" && "$(git -C "$iw" symbolic-ref --quiet --short HEAD)" == "worktree/$integration" && -z "$(git -C "$iw" status --porcelain)" ]] || return 1
+  printf 'integration=%s\n' "$(git -C "$iw" rev-parse HEAD)"
+  for id in $tasks; do
+    worker_path="$repo/.varde/worktrees/$id"
+    [[ -d "$worker_path" && "$(git -C "$worker_path" symbolic-ref --quiet --short HEAD)" == "worktree/$id" && -z "$(git -C "$worker_path" status --porcelain)" ]] || return 1
+    tip="$(git -C "$worker_path" rev-parse HEAD)" || return 1
+    [[ "$tip" != "$base" ]] && git merge-base --is-ancestor "$base" "$tip" || return 1
+    git -C "$iw" merge-base --is-ancestor "$tip" HEAD || return 1
+    printf 'worker=%s=%s\n' "$id" "$tip"
+  done
+}
+
+review_location() {
+  echo "worktree=$iw"
+  echo "branch=worktree/$integration"
+  echo "base=$base"
+  echo "verified_commit=$(git -C "$iw" rev-parse HEAD)"
+  echo "pending: review in IDE/Git, then ${SELF} publish ${wave} --approved $(git -C "$iw" rev-parse HEAD)"
+}
+
+integrate() {
+  [[ $# == 2 && "${1:-}" == "--check" && -n "${2:-}" ]] || { usage >&2; exit 1; }
+  local check="$2" id tip rc=0 snapshot after
+  load_state
+  [[ -n "$(state_get started)" ]] || die "wave ${wave} did not finish start; rerun start to resume"
+  [[ -z "$(state_get published)" ]] || die "wave already published; record bookkeeping and release"
+  if branch_exists "worktree/$integration"; then
+    [[ -d "$iw" ]] || die "integration worktree ${iw} is missing; recover it before retrying" 4
+  else
+    "$HERE/worktree-create.sh" --fresh "$integration" "$base" >/dev/null
+  fi
+
+  if snapshot="$(verification_snapshot)" && [[ -f "$state.verified" && -f "$state.check" && "$(cat "$state.verified")" == "$snapshot" ]] && cmp -s "$state.check" <(printf '%s' "$check"); then
+    review_location
+    return
+  fi
+  rm -f "$state.verified" "$state.check"
+  if git -C "$iw" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+    die "merge in ${iw} is unresolved; resolve and commit there, then rerun integrate" 3
+  fi
+  [[ "$(git -C "$iw" symbolic-ref --quiet --short HEAD)" == "worktree/$integration" && -z "$(git -C "$iw" status --porcelain)" ]] || die "integration checkout is dirty or on another branch" 4
+  for id in $tasks; do
+    tip="$(git rev-parse --verify "worktree/$id^{commit}")" || die "branch worktree/${id} is missing" 4
+    [[ -d "$repo/.varde/worktrees/$id" && -z "$(git -C "$repo/.varde/worktrees/$id" status --porcelain)" ]] || die "task ${id} has uncommitted changes or a missing worktree" 5
+    [[ "$(git -C "$repo/.varde/worktrees/$id" symbolic-ref --quiet --short HEAD)" == "worktree/$id" ]] || die "worker ${id} is on another branch" 4
+    git merge-base --is-ancestor "$base" "$tip" || die "task ${id} no longer descends from the wave base" 4
+    if [[ "$tip" != "$base" ]] && git -C "$iw" merge-base --is-ancestor "$tip" HEAD; then
+      echo "skip $id (already integrated)"
+      continue
+    fi
+    rc=0
+    (cd "$iw" && "$HERE/worktree-merge.sh" "$id") || rc=$?
+    case "$rc" in
+      0) ;;
+      3) die "conflict merging ${id}; resolve and commit in ${iw}, then rerun integrate" 3 ;;
+      2|5) die "task ${id} failed (exit ${rc}); no merge was recorded for it" 5 ;;
+      *) die "merging ${id} failed (exit ${rc})" ;;
+    esac
+  done
+  snapshot="$(verification_snapshot)" || die "integration or worker changed before verification" 4
+  (cd "$iw" && bash -c "$check") || die "combined check failed; refs kept" 5
+  after="$(verification_snapshot)" || die "check changed integration or workers; refs kept" 4
+  [[ "$snapshot" == "$after" ]] || die "integration or worker tip changed during check; rerun integrate" 4
+  printf '%s' "$check" > "$state.check"
+  printf '%s\n' "$snapshot" > "$state.verified"
+  review_location
+}
+
+publish() {
+  [[ $# == 2 && "${1:-}" == --approved && -n "${2:-}" ]] || { usage >&2; exit 1; }
+  local approved="$2" snapshot tip
+  load_state
+  [[ -f "$state.verified" ]] || die "no successful combined check; run integrate first" 4
+  snapshot="$(verification_snapshot)" || die "integration or worker is dirty, moved or missing; refs kept" 4
+  [[ "$(cat "$state.verified")" == "$snapshot" ]] || die "verification is stale; rerun integrate" 4
+  tip="$(git -C "$iw" rev-parse HEAD)"
+  [[ "$approved" == "$tip" ]] || die "approval must name the exact verified commit ${tip}" 4
+  [[ -z "$(git status --porcelain)" ]] || die "approval checkout is dirty; refs kept" 4
+  if [[ "$(git rev-parse HEAD)" == "$tip" ]]; then
+    echo "target already contains the approved integration commit"
+  else
+    [[ "$(git rev-parse HEAD)" == "$base" ]] || die "target moved from ${base}; refs kept" 4
+    git merge --ff-only "$tip" || die "cannot fast-forward ${target}; refs kept" 4
+  fi
+  [[ "$(state_get published)" == "$tip" ]] || echo "published=$tip" >> "$state"
+  echo "published wave ${wave} into ${target} at ${tip}"
+  echo "pending: record task transitions, commit bookkeeping, then run: ${SELF} release ${wave}"
+}
+
+release() {
+  local id tip version pending=() released
+  load_state
+  [[ -n "$(state_get published)" ]] || die "wave is not published; review and publish before release"
+  git merge-base --is-ancestor "$(state_get published)" HEAD || die "published integration is not in target; refs kept" 4
+  released="$(state_all released)"
+  for id in $tasks; do
+    grep -qx "$id" <<<"$released" && continue
+    if ! tip="$(git rev-parse --verify "worktree/$id^{commit}" 2>/dev/null)"; then
+      pending+=("worktree/$id is missing; cannot release ${id}"); continue
+    fi
+    if ! git merge-base --is-ancestor "$tip" HEAD; then
+      pending+=("${id} is not integrated into ${target}; integrate first"); continue
+    fi
+    if version="$(varde work review inspect-worktree --subject "$subject" --binding "$id" --json | version_of)" &&
+       varde work review release-worktree --subject "$subject" --binding "$id" \
+         --expected-version "$version" --commit "$tip" --json >/dev/null; then
+      echo "released=$id" >> "$state"
+    else
+      pending+=("release binding ${id}")
+    fi
+  done
+  report_pending "${pending[@]:-}"
+
+  for id in $tasks "$integration"; do
+    branch_exists "worktree/$id" || continue
+    "$HERE/worktree-cleanup.sh" "$id" || pending+=("clean up worktree/${id}")
+  done
+  report_pending "${pending[@]:-}"
+  rm -f "$state" "$state.verified" "$state.check"
+  echo "released and cleaned up wave ${wave}"
+}
+
+report_pending() {
+  [[ -n "${1:-}" ]] || return 0
+  echo "pending (refs kept; fix, then rerun: ${SELF} release ${wave}):" >&2
+  printf '  - %s\n' "$@" >&2
+  exit 1
+}
+
+case "$cmd" in
+  start|integrate|publish|release) "$cmd" "$@" ;;
+  *) usage >&2; exit 1 ;;
+esac
+=== skills/varde-docs/SKILL.md ===
+---
+name: varde-docs
+description: "Refresh README.md, docs/*.md, and changelogs or release notes against current code, or regenerate domain specs from source. Not for agent instructions like SKILL.md or AGENTS.md."
+---
+
+# Maintain project documentation
+
+Before editing any file, apply `references/review-gates.md` unless a caller's
+approved gate already covers the edits, and carry its verdict to completion.
+
+## Choose the reference
+
+| Document type | Read |
+|---|---|
+| User-facing: README.md, `docs/*.md`, CHANGELOGs, release notes, or another document a reader opens directly (`refresh`) | `references/refresh.md` |
+| A generated domain specification under `<knowledge>/specs/` (`spec`) | `references/spec.md` |
+
+## Gotchas
+
+- Resolve `<working>` and `<knowledge>` once with `varde work paths --json`; retry once with escalated access, then ask; never guess. Outside a repo, use `mv`, not `git mv`.
+=== skills/varde-docs/references/refresh.md ===
+# Refresh user-facing documentation
+
+## Workflow
+
+1. **List the documents:**
+   - Given a named file, list only that file.
+   - Otherwise list `README.md`, `docs/*.md`, and existing CHANGELOG and release
+     notes of the current module (or the Git root outside a module).
+   - For a cross-module request, also list each named or touched module's
+     documents.
+2. When mapping docs to source is unclear and `varde` is on PATH, load
+   `references/varde-code-cli.md`;
+   `varde map context_pack --json '{"repoRoot":"<repo>","query":"<doc subject>"}'`
+   maps each doc to source; use `get_symbol`/`batch` for exact bodies and
+   related lookups.
+3. **Edit each document** one at a time, or with up to three delegates for
+   independent documents, given absolute `<working>`/`<knowledge>` paths:
+   1. Read it in full, then the source its subject describes and any spec
+      under `<knowledge>/specs/` for that area.
+   2. Compare with source facts (stale paths, removed or renamed operations,
+      contradicted invariants, source concepts missing from the doc), keeping
+      hand-written sections the source does not contradict.
+4. **Apply or propose:** for a direct refresh, apply source-grounded changes
+   in place and show a per-document summary and diff; for a proposal, review,
+   or preview request, show the diff without writing. Ask the user only for
+   unresolved factual or product choices.
+5. **Verify edited documents** against their source. Repair source-path
+   references within scope when the correct path is established and verify
+   again; report paths whose replacement remains uncertain.
+6. **Record lessons:** real obstacles through `varde-learn`; skip otherwise.
+
+## Constraints
+
+- Curate release notes from completed changes; don't infer a release from a
+  draft plan.
+- Diagrams in Mermaid only.
+=== skills/varde-docs/references/spec-format.md ===
+<!-- kind: reference -->
+# Specification document format
+
+## Frontmatter and provenance
+
+```yaml
+type: spec
+id: specs/<domain>
+domain: <domain>
+source_roots:
+  - <repo-relative source file or directory>
+covered_paths:
+  - <repo-relative nonignored file beneath a source root>
+source_hash: <aggregate over sources>
+sources:
+  - path: <repo-relative source path>
+    hash: <git hash-object --no-filters <path>>
+```
+
+- `sources`: exactly the repo-relative files whose contents supplied generated
+  output in this run, dropping paths not read this time. Each `hash` is the
+  current blob hash, so working-tree edits register.
+- `source_roots`: the domain boundary as repo-relative files and directories,
+  without globs, excluding generated specs and other output so a spec never
+  covers itself.
+- `covered_paths`: the byte-sorted, unique inventory of existing nonignored
+  files beneath those roots, contributing or not, including a file root
+  itself. Build it from `git ls-files --cached --others --exclude-standard -z`
+  at the repository root, discarding deleted paths.
+
+### Computing `source_hash`
+
+Run this from the repository root, passing the document's `sources` paths;
+`varde work` validates specs with this exact aggregate:
+
+```bash
+python3 <skill-dir>/scripts/source-hash.py -- <source-path>...
+```
+
+## Generated block
+
+Every domain document has exactly one generated block, opening immediately
+after the frontmatter:
+
+```html
+<!-- varde-spec:generated:start -->
+...
+<!-- varde-spec:generated:end -->
+```
+
+- Regenerate body content only between the sentinels.
+- Preserve everything after the closing sentinel (the hand-authored
+  `## Notes` tail) byte-identically, including whitespace and trailing
+  newlines. Start a new document's tail as an empty `## Notes`.
+- Treat a missing, duplicated, reversed, or unpaired sentinel as
+  generated-boundary drift: leave the document unchanged and report it.
+
+## Document content
+
+Skeleton: `## Summary` / `## Overview` / `## Scope Boundary`
+(owns|does-not-own) / `## Key Operations` / `## Key Types` / `## Invariants` /
+`## Acceptance Criteria` / `## Flow: <name>`.
+
+- Add an error-path table only when the flow has non-trivial failure handling
+  (retries, partial writes, user-visible errors).
+- Add flow-level GWT acceptance criteria only for behavior the domain-level
+  Acceptance Criteria section does not already cover.
+- The architecture document has only Overview, Components (each deployed or
+  packaged unit and the domain spec owning its code), Wiring, Dependency
+  Constraints, and Invariants; flows live in domain documents.
+
+## Acceptance criteria
+
+- Form: `Given <condition>, When <event>, Then <observable result>.`
+- With `varde` available, run `varde map tests_for_file` on the domain's
+  sources and note
+  covering tests beside the list ("Verified by: `tests/foo.test.ts`"); omit
+  the note when none exist.
+
+## Index
+
+`<knowledge>/specs/index.md`:
+
+- links every domain document by its frontmatter domain, including
+  architecture, and preserves hand-authored entries;
+- has one frontmatter field, `source_commit: <git rev-parse HEAD at the end of
+  this run>`, which scopes the next inventory;
+- is rendered deterministically after domain generation and written only when
+  its bytes differ.
+=== skills/varde-docs/references/spec.md ===
+# Regenerate domain specifications
+
+Generate one reviewable specification per domain, plus architecture and index
+documents. Ground every spec only in source read directly in this run, within
+the domain's boundary.
+
+## Workflow
+
+1. **Find domains needing updates** per Find domains below.
+2. **Generate domain documents** per `references/spec-format.md`, one at a
+   time by default. With `varde` on PATH, load
+   `references/varde-code-cli.md`, and batch discovery and relationship queries
+   per domain; use `get_symbol`/`batch` for exact bodies and related lookups.
+3. **Check the architecture document** per Architecture below.
+4. **Delete orphans:** each domain document in the flat specs root
+   (`specs/<slug>` maps to `<knowledge>/specs/<slug>.md`) whose code you have
+   confirmed no longer exists, never the architecture document.
+5. **Render the index** after domain generation, per
+   `references/spec-format.md`.
+6. **Verify.** Compare each generated spec with the source it describes:
+   - writes stay under `<knowledge>/specs/`;
+   - spot-check operations, types, and invariants, and mark unverified areas
+     degraded;
+   - recompute provenance; a mismatch means regenerate once, then report any remaining mismatch;
+   - links resolve;
+   - with `varde` on PATH, run `varde work lint --bundle
+     <knowledge>` and report findings; lint does not block;
+   - once changed specifications pass, refresh the verified inventory with
+     `varde doc spec inventory --repository <repo-root> --knowledge
+     <knowledge> --working <working> --refresh --json` when available, and
+     report a refresh failure rather than claim a cache hit.
+7. **Report the summary:** the Domain/Written/Failed/Skipped table, then:
+   - the architecture decision and any extra write
+   - orphans
+   - overlapping and unmatched/unclassified paths
+   - broken links
+   - drift
+   - degraded checks
+8. **Record lessons:** real obstacles through `varde-learn`; skip otherwise.
+
+### Delegating domains
+
+Delegate only domains with independent source and output paths, to at most
+three active builders that each write one document under
+`<knowledge>/specs/`. Brief each with:
+
+- Resolved absolute `<working>` and `<knowledge>` paths, used without
+  re-resolving.
+- Whether `varde` is on PATH.
+- Domain, changed files, output path, and `spec-format.md`.
+
+## Find domains needing updates
+
+| Status | Condition |
+|---|---|
+| missing | No document. |
+| stale | `source_roots` or `covered_paths` is missing (legacy), or a fresh recompute changes any entry hash, the aggregate, or the covered-path inventory. |
+| `reuse` (up to date) | Otherwise; skip unless the user asked to force-regenerate. |
+
+1. Run `varde doc spec inventory --repository <repo-root> --knowledge
+   <knowledge> --working <working> --json` and reuse its per-domain statuses
+   and its `overlapping`, `unmatched`, and `unclassified_paths` inventory. If it is
+   unavailable or fails, stop spec mode and report it.
+2. Group the inventory's `missing` source directories into domains: one per
+   workspace member/package, else one per top-level source directory with its
+   own entry point. On a first run (no `index.md`), state the list.
+3. Settle architecture and path classification per the sections below.
+
+No missing or stale domain skips only workflow step 2; continue with steps
+3-8.
+
+### Architecture
+
+- If no sources are found, skip and say so. Never infer architecture from
+  folder layout alone.
+- Otherwise, leave the document byte-identical unless it needs a refresh.
+
+Architecture sources are the files declaring deployed units, their wiring, and
+package/workspace structure (infrastructure-as-code, deployment config,
+workspace manifests), including new declaration files outside old roots, plus
+every entrypoint or handler read to map units to domains. Recompute their
+provenance and covered paths like a domain's.
+
+Refresh architecture only when it is missing or stale, its declaration set
+changed, or a domain was added or removed.
+Write `<knowledge>/specs/architecture.md` with `domain: architecture` per
+`references/spec-format.md`, and list it in the index.
+
+| Inventory `architecture_status` | Action |
+|---|---|
+| `none` | Inspect `architecture_candidates` first; a candidate can be a deployment or workspace declaration the inventory cannot identify by filename. |
+| `inspect` | Read each `architecture_inspect_paths` entry. Refresh architecture if it affects deployed units or wiring; otherwise acknowledge it with `varde doc spec inventory --repository <repo-root> --knowledge <knowledge> --working <working> --acknowledge-architecture-path <path> --json` (repeatable; binds the current content hash and expires when that content changes). |
+
+### Unclassified and overlapping paths
+
+Report these on every run, including scoped runs:
+
+- current source candidates (workspace members, source directories,
+  entrypoints, deployment declarations) outside all domain `source_roots`;
+- candidates covered by more than one domain root;
+- architecture overlap with domains, without changing a domain boundary.
+
+Inspect each `unclassified_paths` entry before classifying it as a new domain
+source, an architecture declaration, or unrelated; an unrecognized extension
+does not make it unrelated.
+
+## Scoped runs
+
+Given specific domains (e.g. plan `observed_specs`):
+
+- Regenerate only those domain documents; skip full domain discovery and
+  workflow step 4.
+- Still read other domain roots for overlap and `unclassified_paths`
+  classification.
+- Still refresh a stale architecture document; "only <domain>" limits domain
+  documents. Only an explicit user ban on architecture edits leaves it stale;
+  report that.
+- Report whether architecture was written or left unchanged.
+=== skills/varde-docs/scripts/source-hash.py ===
+#!/usr/bin/env python3
+"""Print the spec source_hash for the given paths.
+
+Run from the repository root: source-hash.py -- <path>...
+"""
+import os
+import subprocess
+import sys
+
+
+def git_hash(args, data=None):
+    result = subprocess.run(
+        ["git", "hash-object", *args], input=data, capture_output=True
+    )
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr.decode(errors="replace"))
+        sys.exit(1)
+    return result.stdout.strip()
+
+
+def main(argv):
+    paths = argv[1:]
+    if paths[:1] == ["--"]:
+        paths = paths[1:]
+    if not paths:
+        sys.stderr.write("usage: source-hash.py -- <path>...\n")
+        return 2
+    joined = b"".join(
+        path + git_hash(["--no-filters", "--", os.fsdecode(path)])
+        for path in sorted(os.fsencode(p) for p in paths)
+    )
+    sys.stdout.write(git_hash(["--stdin"], joined).decode() + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
+=== skills/varde-flow-gaps/SKILL.md ===
+---
+name: varde-flow-gaps
+description: Synthetic skill for flow parity tests. Not a real skill.
+---
+
+# Flow gaps
+
+| Request | Read |
+|---|---|
+| Plan the work | `references/alpha.md` |
+| Check the work | `references/beta.md` |
+=== skills/varde-flow-gaps/references/alpha.md ===
+# Alpha
+
+Read `references/beta.md` next. If the plan is unclear, read `references/ghost.md`.
+=== skills/varde-flow-gaps/references/beta.md ===
+# Beta
+
+Read `references/alpha.md` again when the check fails.
+=== skills/varde-flow-gaps/references/orphan.md ===
+# Orphan
+
+Nothing points here.

@@ -12,7 +12,7 @@ related:
 Rule packs carry inline self-tests as `[[rule.test]]` array-of-tables
 entries, sibling to `id`/`pattern`/`query`/`rewrite` on each rule. Test
 entries are inert to `scan` — never consumed by `run_pattern_rules` or
-`run_sql_rules` — and are read only by the dedicated `varde-code test`
+`run_sql_rules` — and are read only by the dedicated `varde scan test`
 subcommand.
 
 ## `[[test]]` field table
@@ -55,10 +55,10 @@ explicit `ORDER BY`.
   pipeline, run the rule's `query` against the resulting database, and
   compare the result rows against `expect_rows` as described above.
 
-## `varde-code test` CLI
+## `varde scan test` CLI
 
 ```text
-varde-code test --json '{"rulesDir"?: string}'
+varde scan test --json '{"rulesDir"?: string}'
 ```
 
 - `rulesDir` is optional. When given, it scopes discovery to the TOML pack
@@ -102,7 +102,7 @@ varde-code test --json '{"rulesDir"?: string}'
 
 ### Exit code
 
-`varde-code test` exits `0` if and only if `summary.failed == 0`. It exits
+`varde scan test` exits `0` if and only if `summary.failed == 0`. It exits
 non-zero when any test case fails, and also when the invocation itself
 fails — malformed input JSON or an invalid `rulesDir` — so a CI gate can
 treat any non-zero exit as "tests did not pass" without inspecting the

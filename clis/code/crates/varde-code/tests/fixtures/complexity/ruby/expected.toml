@@ -1,0 +1,287 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 3
+cyclomatic = 3
+matrix = "if-else-if-else"
+rule = "spec:176-179, 491-518; if +1, elsif +1, else +1; both branches raise nesting for their contents"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:491-518; root if +1, elsif +1, branch-body if at root nesting +2"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:176-179, 491-518; unless +1, else +1, and nested if +2"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer if +1, nested if +2"
+
+[[case]]
+callable = "loops"
+cognitive = 11
+cyclomatic = 4
+matrix = "loops"
+rule = "spec:491-518; for +1, while +2, until +3, and the loop block's if +5 after three loop levels plus its callable boundary"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 3
+matrix = "switch-once"
+rule = "spec:196-205, 491-501; case adds one decision-container point; when arms add none"
+
+[[case]]
+callable = "ternary"
+cognitive = 1
+cyclomatic = 2
+matrix = "ternary"
+rule = "spec:491-518; Ruby conditional expression adds one"
+
+[[case]]
+callable = "catch_once"
+cognitive = 1
+cyclomatic = 3
+matrix = "catch-once"
+rule = "spec:190-203, 491-501; rescue clause adds one regardless of exception types; ensure adds zero"
+
+[[case]]
+callable = "try_finally_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "try-finally-zero"
+rule = "spec:190-203; begin and ensure add no points"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; unless +1 and early return +0"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229; one same-operator && run +1"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229; && and || are separate runs, each +1"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256; outer && run +1, negation breaks a second && run +1"
+
+[[case]]
+callable = "logical_run_across_lambda"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-across-lambda"
+rule = "spec:207-229, 267-291; outer && and lambda-body && are distinct runs"
+
+[[case]]
+callable = "null_coalescing_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "null-coalescing-zero"
+rule = "spec:160-168; Ruby ||= and safe-navigation &. are shorthand analogues and add zero"
+
+[[case]]
+callable = "lambda_nesting"
+cognitive = 4
+cyclomatic = 1
+matrix = "lambda-nesting"
+rule = "spec:267-291, 491-518; nested lambda and Proc block each raise nesting, so their ifs add +2 apiece"
+
+[[case]]
+callable = "named_nested_function"
+cognitive = 2
+cyclomatic = 1
+matrix = "named-nested-function"
+rule = "spec:267-291, 491-518; nested method raises nesting, so inner if adds +2 to outer method"
+
+[[case]]
+callable = "class_in_method"
+cognitive = 4
+cyclomatic = 1
+matrix = "class-in-method"
+rule = "spec:267-291, 491-518; local-class and singleton-class methods each raise their if to +2"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "condition-nesting"
+rule = "spec:491-518; if +1 and conditional expression inside its condition +2 by the plan's condition nesting interpretation"
+
+[[case]]
+callable = "compensating_usage_callback"
+cognitive = 2
+cyclomatic = 1
+matrix = "compensating-usage-callback"
+rule = "spec:267-291, 502-518; top-level call is ordinary Ruby code and its block is nested; block if adds +2"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-501; modifier if +1 and direct recursion +1"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-501; if +1 and both self-calls share one recursion point"
+
+[[case]]
+callable = "recursion_qualified_self"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-qualified-self"
+rule = "spec:230-237, 491-501; modifier if +1 and explicit self call +1"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 1
+cyclomatic = 2
+matrix = "recursion-other-receiver"
+rule = "spec:230-237, 491-501; modifier if +1, call on other receiver is not recursion"
+
+[[case]]
+callable = "recursion_in_closure"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-in-closure"
+rule = "spec:230-237, 267-291; recursive call in nested lambda marks outer method once"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237, 491-501; modifier if +1 and member of same-file method cycle +1"
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 2
+cyclomatic = 2
+rule = "spec:230-237; second method in same-file cycle receives its own +1 recursion point"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237, 491-501; modifier if +1; absent peer in the one-file fixture gives no recursion point"
+
+[[case]]
+callable = "spec_example_small"
+cognitive = 1
+cyclomatic = 4
+matrix = "spec-example-small"
+rule = "spec:316-327, 196-205; Ruby case analogue combines four arms into one cognitive increment"
+
+[[case]]
+callable = "nested_inner"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; nested method's own if is at its callable root"
+
+[[case]]
+callable = "read"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; local-class method's own if is at its callable root"
+
+[[case]]
+callable = "<anonymous>@43:13"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; loop block's if is at its callable root"
+
+[[case]]
+callable = "<anonymous>@107:13"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:207-229, 267-291; lambda's own && run adds one"
+
+[[case]]
+callable = "<anonymous>@116:11"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; lambda's own if is at its callable root"
+
+[[case]]
+callable = "<anonymous>@158:10"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; callback block's if is at its callable root"
+
+[[case]]
+callable = "<anonymous>@181:7"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:230-237, 267-291; recursion in this closure is attributed to its enclosing method"
+
+[[case]]
+callable = "singleton_read"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; singleton-class method's own if is at its callable root"
+
+[[case]]
+callable = "<anonymous>@117:11"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-501; Proc block's own if is at its callable root"
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "Ruby has no JavaScript-style declarative outer-function exception or Python decorator exception; the spec limits compensating usage to those forms (spec:415-490)."
+
+[["n/a"]]
+matrix_id = "goto-or-labeled-jump"
+reason = "Ruby grammar has no goto statement or label target syntax; bare labels are hash-key syntax, not jump targets (spec:238-243)."
+
+[["n/a"]]
+matrix_id = "multi-level-break"
+reason = "Ruby break and next have no label or numeric nesting-depth argument; break's optional value is an expression, not a level (spec:238-243)."
+
+[["n/a"]]
+matrix_id = "recursion-overload-delegate"
+reason = "Ruby does not overload methods by signature; redefining a method replaces its binding rather than selecting an arity overload."
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "Ruby has no preprocessor conditional directives."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Ruby has no C preprocessor or extern-C linkage region."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "Ruby has no comprehension or query-clause syntax; Enumerable calls and blocks are ordinary calls and nested callables."
+
+[["n/a"]]
+matrix_id = "spec-example-large"
+reason = "The large worked-example matrix is defined only for Java, JavaScript, and C#; the spec has no Ruby large example (spec:328-339)."

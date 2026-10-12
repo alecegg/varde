@@ -51,18 +51,13 @@ pub enum Command {
     Purge(PurgeArgs),
     /// Redact legacy capture and fetch-cache metadata in place
     MigrateMetadata,
-    /// Check the install: store, FTS5, cache, plugins, conflicting plugins
+    /// Check the install: store, FTS5, cache, conflicting plugins
     Doctor,
     /// Inspect output profiles loaded from built-in, user, and project scopes
     Profile(ProfileArgs),
     /// Record a metadata-only harness outcome
     #[command(hide = true)]
     Event(EventArgs),
-    /// Install (or refresh) a harness integration
-    Install(InstallArgs),
-    /// Remove a harness integration (reverses `install`, leaving other tools' entries alone)
-    #[command(hide = true)]
-    Uninstall(UninstallArgs),
     /// Print the session-start usage note (used by harness hooks)
     #[command(hide = true)]
     Note(NoteArgs),
@@ -99,31 +94,10 @@ pub struct RawArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct InstallArgs {
-    /// Which harness: claude-code | pi | opencode | codex
-    pub harness: String,
-    /// Target directory (default: the harness's standard location)
-    #[arg(long)]
-    pub dir: Option<PathBuf>,
-    /// Print the files instead of writing them
-    #[arg(long)]
-    pub print: bool,
-    /// Install the shim for this harness version (default: probe `<harness> --version`)
-    #[arg(long, value_name = "X.Y.Z")]
-    pub for_version: Option<String>,
-    /// Replace files even when they look hand-edited
-    #[arg(long)]
-    pub force: bool,
-}
-
-#[derive(Args, Debug)]
 pub struct NoteArgs {
     /// Emit in the hook JSON format for this harness (claude-code); plain text otherwise
     #[arg(long)]
     pub harness: Option<String>,
-    /// Emit the static instruction block for varde-workflow to include
-    #[arg(long)]
-    pub block: bool,
 }
 
 #[derive(Args, Debug)]
@@ -141,6 +115,25 @@ pub struct EventArgs {
 }
 
 #[derive(Args, Debug)]
+#[command(after_long_help = r#"Example:
+  varde run run --script - <<'JS'
+  const result = vardeToz.exec({argv: ['/bin/ls', '-la']});
+  print(result.exitCode, result.capture.preview || result.stdout);
+  JS
+
+Use --code '<js>' for an inline script. Scripts can call print(),
+console.log(), and console.error(). The vardeToz API provides exec({argv | shell,
+cwd?, env?, timeoutMs?, capture?, raw?}), eachLine(fn) or eachLine(stream, fn),
+text() or text(stream), and handle metadata (handle, label, bytes, lines,
+exitCode, stream). Use eachLine for large captures; text has a size limit.
+
+Command output up to the capture threshold (maximum 64 KiB) is complete in
+stdout/stderr with capture.state "inline". Larger output has a preview and
+capture.handle. capture: true forces retention; raw: true retains raw bytes;
+never-capture rules override both. Script print output appears inline until its
+output limit, then the normal preview and handle are returned. Pass --handle H
+to analyze an existing capture; --stream stderr selects its stderr stream, and
+--partial permits reading an unfinished capture."#)]
 pub struct RunArgs {
     /// Run a QuickJS batch script from a file, or `-` for stdin.
     #[arg(long, required_unless_present = "code", conflicts_with = "code")]
@@ -193,6 +186,20 @@ pub struct SearchArgs {
 }
 
 #[derive(Args, Debug)]
+#[command(after_long_help = r#"Examples:
+  varde run query --handle H "error" "failed"   Search within one capture
+  varde run query "connection refused"           Search this project
+  varde run query --handle H --chunk 7            Read one 0-based chunk
+  varde run query --handle H --lines 120:160      Read a 1-based inclusive line range
+  varde run query --list                          List recent captures
+  varde run query --raw RAW-H --stream stdout     Write retained raw bytes
+
+Search and retrieved text is normalized and redacted. A matching output profile
+may replace the preview with a table of contents, head, or script summary;
+--records reads extracted records from a script profile. Raw retrieval requires
+a raw-retained handle, returns exact unredacted bytes, and raw handles expire.
+Widen searches with --global or include superseded captures with --all; --source
+filters by label or source. Capture hooks skip commands starting with varde run."#)]
 pub struct QueryArgs {
     /// Search terms. Omit to retrieve a capture with --handle.
     pub queries: Vec<String>,
@@ -354,11 +361,48 @@ pub struct PurgeArgs {
     pub older_than: Option<String>,
 }
 
-#[derive(Args, Debug)]
-pub struct UninstallArgs {
-    /// Which harness: claude-code | pi | opencode | codex
-    pub harness: String,
-    /// Directory it was installed into (default: the harness's standard location)
-    #[arg(long)]
-    pub dir: Option<PathBuf>,
+#[cfg(test)]
+mod help_tests {
+    use super::Cli;
+    use clap::CommandFactory;
+
+    fn subcommand_help(name: &str) -> String {
+        let mut command = Cli::command();
+        command
+            .find_subcommand_mut(name)
+            .expect("command should exist")
+            .render_long_help()
+            .to_string()
+    }
+
+    #[test]
+    fn query_long_help_documents_retrieval_and_hook_behavior() {
+        let help = subcommand_help("query");
+        for phrase in [
+            "--chunk 7",
+            "--lines 120:160",
+            "--raw RAW-H --stream stdout",
+            "normalized and redacted",
+            "output profile",
+            "hooks skip commands starting with varde run",
+        ] {
+            assert!(help.contains(phrase), "missing {phrase:?} in:\n{help}");
+        }
+    }
+
+    #[test]
+    fn run_long_help_documents_script_api_and_capture_output() {
+        let help = subcommand_help("run");
+        for phrase in [
+            "vardeToz.exec",
+            "eachLine",
+            "text()",
+            "capture.state \"inline\"",
+            "--handle H",
+            "--stream stderr",
+            "--partial",
+        ] {
+            assert!(help.contains(phrase), "missing {phrase:?} in:\n{help}");
+        }
+    }
 }

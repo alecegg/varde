@@ -12,4 +12,6 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 thiserror = "2"
 dirs = "6"
+varde-core.workspace = true
 toml = "0.8"
+toml_edit = "0.22"

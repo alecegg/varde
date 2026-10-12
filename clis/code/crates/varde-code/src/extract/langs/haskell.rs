@@ -185,12 +185,16 @@ fn visit_part_1(
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Function, name.clone(), node);
             if has_guarded_matches(node) {
-                ctx.push(EntityKind::ControlFlow, "cond".to_string(), node);
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "haskell_guard_container".to_string(),
+                    node,
+                );
             }
             if has_sibling_function_clause(node, &name) {
                 ctx.push(
                     EntityKind::ControlFlow,
-                    "unknown_multi_clause_grouping".to_string(),
+                    "haskell_multi_clause_grouping".to_string(),
                     node,
                 );
             }
@@ -302,8 +306,53 @@ fn visit_part_4(
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
         }
         // ---- control flow (all expressions in Haskell) ----
-        "conditional" | "case" | "let_in" => {
-            ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        "conditional" => {
+            let else_if = is_else_if_conditional(node);
+            if else_if
+                || node
+                    .field("else")
+                    .is_some_and(|else_arm| else_arm.kind() == "conditional")
+            {
+                // Keep the pre-change conditional's nesting span after its
+                // cognitive event is clipped to the then arm / retyped as else-if.
+                ctx.push(EntityKind::ControlFlow, "legacy_nesting".to_string(), node);
+            }
+            let name = if else_if {
+                "elseif_statement"
+            } else {
+                "conditional"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            // An `if` expression's span includes its `else` expression. Clip
+            // every decision at the then arm so chained alternatives remain
+            // sibling hybrid branches and nested else bodies use their own
+            // `else_branch` event for depth.
+            if let (Some(then_arm), Some(event)) = (node.field("then"), ctx.out.last_mut()) {
+                let span = crate::extract::span_of(&then_arm);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
+            if let Some(else_arm) = node.field("else")
+                && else_arm.kind() != "conditional"
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &else_arm,
+                );
+            }
+        }
+        "case" => {
+            let name = if case_has_alternatives(node) {
+                "case"
+            } else {
+                "case_inner"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+        }
+        "let_in" => {
+            ctx.push(EntityKind::ControlFlow, "let_in".to_string(), node);
         }
         "alternative" => {
             ctx.push(EntityKind::ControlFlow, "case_item".to_string(), node);
@@ -323,8 +372,20 @@ fn visit_part_5(
             ctx.push(EntityKind::ControlFlow, "case_item".to_string(), node);
         }
         "guards" => {
-            for _ in 1..node.field_children("guard").count() {
-                ctx.push(EntityKind::ControlFlow, "logical_and".to_string(), node);
+            let guards: Vec<_> = node.field_children("guard").collect();
+            for guard in &guards {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "cognitive_decision".to_string(),
+                    guard,
+                );
+            }
+            for _ in 1..guards.len() {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "haskell_guard_legacy".to_string(),
+                    node,
+                );
             }
         }
         "infix" => {
@@ -345,6 +406,10 @@ fn visit_apply(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ex
         return;
     };
     let callee = callee_name(&head);
+
+    if callee == "not" && node.field("argument").is_some_and(contains_logical_infix) {
+        ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+    }
 
     // `error "msg"` / `throwIO e` -> Throw (not a plain Call).
     if THROW_FUNCTIONS.contains(&callee.as_str()) {
@@ -367,6 +432,11 @@ fn visit_apply(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>, ctx: &mut Ex
     ctx.push(EntityKind::Call, callee, node);
 }
 
+fn contains_logical_infix(node: ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.dfs()
+        .any(|candidate| candidate.kind() == "infix" && boolean_operator_name(&candidate).is_some())
+}
+
 fn is_apply_function_of_parent(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
     node.parent().is_some_and(|parent| {
         parent.kind() == "apply"
@@ -379,6 +449,19 @@ fn is_apply_function_of_parent(node: &ast_grep_core::Node<'_, StrDoc<SupportLang
 fn has_guarded_matches(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
     node.field_children("match")
         .any(|matched| matched.field("guards").is_some())
+}
+
+fn is_else_if_conditional(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.parent().is_some_and(|parent| {
+        parent.kind() == "conditional"
+            && parent
+                .field("else")
+                .is_some_and(|else_arm| else_arm.node_id() == node.node_id())
+    })
+}
+
+fn case_has_alternatives(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.dfs().any(|child| child.kind() == "alternative")
 }
 
 fn has_sibling_function_clause(
@@ -617,7 +700,7 @@ mod tests {
             "classify :: Int -> String\nclassify n\n  | n < 0 = \"neg\"\n  | otherwise = branch\n  where branch = case n of\n                   0 -> \"zero\"\n                   _ -> if n > 10 then \"big\" else \"pos\"\n",
         );
         assert!(
-            find(&es, EntityKind::ControlFlow, "cond").is_some(),
+            find(&es, EntityKind::ControlFlow, "haskell_guard_container").is_some(),
             "{es:?}"
         );
         assert!(
@@ -664,7 +747,14 @@ mod tests {
 
         assert!(flow_names.contains(&"logical_and"), "events: {es:?}");
         assert!(flow_names.contains(&"logical_or"), "events: {es:?}");
-        assert!(flow_names.contains(&"cond"), "events: {es:?}");
+        assert!(
+            flow_names.contains(&"haskell_guard_container"),
+            "events: {es:?}"
+        );
+        assert!(
+            flow_names.contains(&"haskell_guard_legacy"),
+            "events: {es:?}"
+        );
         assert_eq!(
             flow_names
                 .iter()
@@ -699,7 +789,7 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_function_clause_grouping_lowers_confidence() {
+    fn function_clause_grouping_keeps_high_confidence() {
         let es = entities("choose :: Int -> Int\nchoose 0 = 0\nchoose value = value\n");
         let metrics: Vec<_> = crate::complexity::function_complexities(&es)
             .into_iter()
@@ -709,8 +799,211 @@ mod tests {
         assert_eq!(metrics.len(), 2, "metrics: {metrics:?}");
         assert!(
             metrics.iter().all(|metric| {
-                metric.confidence == crate::complexity::ComplexityConfidence::Low
+                metric.confidence == crate::complexity::ComplexityConfidence::High
             })
         );
     }
+
+    #[test]
+    fn conformance_fixture_preserves_prechange_legacy_metrics() {
+        let source = include_str!("../../../tests/fixtures/complexity/haskell/conformance.hs");
+        let parsed = crate::parse::parse_source(&SupportLang::Haskell, source);
+        assert!(!parsed.has_error());
+        let entities = crate::extract::extract(&parsed, 0).entities;
+        let actual: Vec<_> = crate::complexity::function_complexities(&entities)
+            .into_iter()
+            .map(|metric| (metric.name, metric.cyclomatic, metric.max_nesting))
+            .collect();
+        let expected = [
+            ("if_else_if_else", 3, 1),
+            ("else_if_body_nesting", 4, 2),
+            ("else_body_nesting", 4, 2),
+            ("nested_if_nesting", 3, 1),
+            ("switch_once", 4, 1),
+            ("catch_once", 2, 0),
+            ("try_finally_zero", 1, 0),
+            ("logical_run_same", 3, 0),
+            ("logical_run_mixed", 3, 0),
+            ("logical_negated_run", 3, 0),
+            ("logical_run_across_lambda", 2, 0),
+            ("lambda_nesting", 1, 0),
+            ("condition_nesting", 3, 1),
+            ("comprehension_or_query", 2, 0),
+            ("named_nested_function", 1, 0),
+            ("outer", 1, 0),
+            ("local", 1, 0),
+            ("let_local_function", 1, 0),
+            ("local", 1, 0),
+            ("guard_alternatives", 4, 0),
+            ("recursion_direct", 2, 0),
+            ("recursion_two_calls", 2, 0),
+            ("recursion_qualified_self", 2, 0),
+            ("recursion_other_receiver", 2, 0),
+            ("recursion_in_closure", 1, 0),
+            ("recursion_same_file_cycle_a", 1, 0),
+            ("recursion_same_file_cycle_b", 1, 0),
+            ("recursion_cross_file_zero", 1, 0),
+            ("multi_clause_recursion", 1, 0),
+            ("multi_clause_recursion", 1, 0),
+            ("preproc_conditional", 2, 0),
+            ("spec_example_small", 4, 2),
+            ("<anonymous>@30:43", 2, 0),
+            ("<anonymous>@32:25", 2, 0),
+            ("<anonymous>@59:13", 2, 0),
+            ("<anonymous>@79:10", 2, 0),
+        ];
+        assert_eq!(
+            actual,
+            expected.map(|(name, cyclomatic, nesting)| { (name.to_string(), cyclomatic, nesting) })
+        );
+        assert_eq!(
+            1 + entities
+                .iter()
+                .filter(|entity| crate::complexity::counts_toward_file_complexity(entity))
+                .count(),
+            48
+        );
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    ("case_inner", crate::complexity::FlowRole::LegacyNesting),
+    (
+        "haskell_multi_clause_grouping",
+        crate::complexity::FlowRole::Ignored,
+    ),
+    (
+        "haskell_guard_legacy",
+        crate::complexity::FlowRole::LegacyOnly,
+    ),
+    (
+        "haskell_guard_container",
+        crate::complexity::FlowRole::LegacyNesting,
+    ),
+];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let module = module_name(root.text().as_ref());
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| node.kind() == "function")
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let name = name_node.text().into_owned();
+            let arguments = node
+                .field("patterns")
+                .map(|patterns| patterns.children().filter(|child| child.is_named()).count())
+                .unwrap_or(0);
+            let parent_function = node
+                .ancestors()
+                .find(|ancestor| ancestor.kind() == "function");
+            let owner = parent_function.and_then(|parent| field_name(&parent));
+            Some(Callable {
+                owner,
+                owner_type: None,
+                unqualified_callable: true,
+                name,
+                required_args: u16::try_from(arguments).unwrap_or(u16::MAX),
+                total_args: u16::try_from(arguments).unwrap_or(u16::MAX),
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "apply") {
+        if call.parent().is_some_and(|parent| {
+            parent.kind() == "apply"
+                && parent
+                    .field("function")
+                    .is_some_and(|function| function.node_id() == call.node_id())
+        }) {
+            continue;
+        }
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| ancestor.kind() == "function")
+        else {
+            continue;
+        };
+        let Some(caller) = declarations
+            .iter()
+            .position(|declaration| declaration.node_id() == caller_node.node_id())
+        else {
+            continue;
+        };
+        let (head, argument_count) = application_head(&call);
+        let Some(head) = head else {
+            continue;
+        };
+        let (name, qualifier) = match head.kind().as_ref() {
+            "variable" => (head.text().into_owned(), Qualifier::None),
+            "qualified" => {
+                let qualified_name = head.text();
+                let pieces: Vec<_> = qualified_name.split('.').collect();
+                let Some((qualifier, name)) = pieces.split_last().map(|(name, rest)| (rest, *name))
+                else {
+                    continue;
+                };
+                let qualifier = if qualifier.join(".") == module {
+                    Qualifier::SelfLike
+                } else {
+                    Qualifier::Other
+                };
+                (name.to_string(), qualifier)
+            }
+            _ => continue,
+        };
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name: None,
+        });
+    }
+    (callables, references)
+}
+
+fn application_head<'t>(
+    node: &ast_grep_core::Node<'t, StrDoc<SupportLang>>,
+) -> (Option<ast_grep_core::Node<'t, StrDoc<SupportLang>>>, usize) {
+    let mut current = node.clone();
+    let mut arguments = 0;
+    while current.kind() == "apply" {
+        arguments += 1;
+        let Some(function) = current.field("function") else {
+            return (None, arguments);
+        };
+        current = function;
+    }
+    (Some(current), arguments)
+}
+
+fn module_name(source: &str) -> String {
+    source
+        .lines()
+        .find_map(|line| {
+            let line = line.trim();
+            let rest = line.strip_prefix("module ")?;
+            rest.split(|character: char| character.is_whitespace() || character == '(')
+                .next()
+                .filter(|name| !name.is_empty())
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| "Main".to_string())
 }

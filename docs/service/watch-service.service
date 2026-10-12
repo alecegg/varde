@@ -1,0 +1,6 @@
+[Unit]
+Description=Check varde plan state once
+
+[Service]
+Type=oneshot
+ExecStart=/path/to/varde plan watch --once --repo /path/to/repository

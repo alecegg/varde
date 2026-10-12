@@ -160,6 +160,9 @@ fn visit_part_1(
             if let Some(name) = module_attribute_name(node) {
                 ctx.push(EntityKind::Variable, name, node);
             }
+            if matches!(operator_text(node).as_deref(), Some("not" | "!")) {
+                ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+            }
         }
         // `a = 1`, `{b, c} = {2, 3}` -> Variable per bound identifier. Other
         // binary operators (`+`, `<-`, `>`, ...) are ignored here.
@@ -175,7 +178,11 @@ fn visit_part_1(
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
             if operator_text(node).as_deref() == Some("when") {
-                ctx.push(EntityKind::ControlFlow, "guard_statement".to_string(), node);
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "elixir_guard_statement".to_string(),
+                    node,
+                );
             }
         }
         _ => return false,
@@ -199,9 +206,52 @@ fn visit_part_2(
             }
             StabContext::DecisionArm => {
                 ctx.push(EntityKind::ControlFlow, "case_item".to_string(), node);
+                if enclosing_control_flow(node).as_deref() == Some("cond") {
+                    // `cond` is a sequence of guarded alternatives. Keep the
+                    // existing case_item for cyclomatic compatibility and add
+                    // a cognitive-only hybrid event for each condition.
+                    ctx.push(
+                        EntityKind::ControlFlow,
+                        "cognitive_decision".to_string(),
+                        node,
+                    );
+                    // The pre-change scorer treated case_item as a nesting
+                    // parent. Preserve that effect for a nested decision in
+                    // this cond alternative without changing legacy counts.
+                    ctx.push(EntityKind::ControlFlow, "legacy_nesting".to_string(), node);
+                } else if enclosing_control_flow(node).as_deref() == Some("receive") {
+                    ctx.push(
+                        EntityKind::ControlFlow,
+                        "cognitive_decision".to_string(),
+                        node,
+                    );
+                }
             }
             StabContext::Other => {}
         },
+        "else_block" => {
+            if let Some(control) = enclosing_control_flow(node)
+                && matches!(control.as_str(), "if" | "unless" | "with")
+                && !else_block_is_elseif(node)
+            {
+                // `else` is a hybrid branch but does not raise the nesting of
+                // its body. The grammar exposes the whole else block, so trim
+                // the event span to its four-character keyword.
+                ctx.push(EntityKind::ControlFlow, "else_branch".to_string(), node);
+                if let Some(flow) = ctx.out.last_mut() {
+                    flow.span.end_byte = flow.span.start_byte.saturating_add(4);
+                    flow.span.end_col = flow.span.start_col.saturating_add(4);
+                }
+            }
+        }
+        "keyword" if node.text().trim_start().starts_with("else:") => {
+            if matches!(
+                enclosing_control_flow(node).as_deref(),
+                Some("if" | "unless")
+            ) {
+                ctx.push(EntityKind::ControlFlow, "else_branch".to_string(), node);
+            }
+        }
         // Literals.
         "integer" | "float" | "string" | "atom" | "boolean" | "nil" | "char" | "charlist" => {
             ctx.push(EntityKind::Literal, node.text().into_owned(), node);
@@ -247,6 +297,56 @@ fn direct_stab_clause_count(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>)
     node.children()
         .filter(|child| child.kind() == "stab_clause")
         .count()
+}
+
+fn enclosing_control_flow(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| ancestor.kind() == "call")
+        .and_then(|call| {
+            call.field("target")
+                .map(|target| target.text().into_owned())
+        })
+}
+
+/// Whether this `else` belongs to an `if`/`unless` whose only body expression
+/// is another conditional. Such a nested conditional is an `else if` branch.
+fn else_block_is_elseif(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(parent_call) = node
+        .parent()
+        .filter(|parent| parent.kind() == "do_block")
+        .and_then(|block| block.parent())
+        .filter(|parent| parent.kind() == "call")
+    else {
+        return false;
+    };
+    let Some(target) = parent_call.field("target") else {
+        return false;
+    };
+    if !matches!(target.text().as_ref(), "if" | "unless") {
+        return false;
+    }
+    node.children()
+        .find(|child| child.is_named())
+        .filter(|first| first.kind() == "call")
+        .and_then(|first| first.field("target"))
+        .is_some_and(|target| matches!(target.text().as_ref(), "if" | "unless"))
+}
+
+fn is_elseif_call(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    if node.kind() != "call"
+        || !node
+            .field("target")
+            .is_some_and(|target| matches!(target.text().as_ref(), "if" | "unless"))
+    {
+        return false;
+    }
+    node.ancestors().any(|ancestor| {
+        ancestor.kind() == "else_block"
+            && else_block_is_elseif(&ancestor)
+            && ancestor
+                .children()
+                .any(|child| crate::extract::span_of(&child) == crate::extract::span_of(node))
+    })
 }
 
 fn operator_text(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
@@ -334,7 +434,23 @@ fn visit_named_call(
         }
         NamedCallKind::Throw => ctx.push(EntityKind::Throw, first_arg_or_empty(node), node),
         NamedCallKind::Route => push_route_or_call(node, ctx, callee),
-        NamedCallKind::ControlFlow => ctx.push(EntityKind::ControlFlow, callee, node),
+        NamedCallKind::ControlFlow => {
+            let is_elseif = is_elseif_call(node);
+            let name = if is_elseif {
+                "elseif_statement".to_string()
+            } else {
+                match callee.as_str() {
+                    "cond" => "elixir_cond".to_string(),
+                    "for" => "elixir_comprehension".to_string(),
+                    "receive" => "elixir_receive".to_string(),
+                    _ => callee,
+                }
+            };
+            ctx.push(EntityKind::ControlFlow, name, node);
+            if is_elseif {
+                ctx.push(EntityKind::ControlFlow, "legacy_nesting".to_string(), node);
+            }
+        }
         NamedCallKind::Call => ctx.push(EntityKind::Call, callee, node),
     }
 }
@@ -359,7 +475,7 @@ fn push_function_definition(
     if has_sibling_function_clause(node, &name) {
         ctx.push(
             EntityKind::ControlFlow,
-            "unknown_multi_clause_grouping".to_string(),
+            "elixir_unknown_multi_clause_grouping".to_string(),
             node,
         );
     }
@@ -819,7 +935,7 @@ mod tests {
         assert_eq!(
             flow_names
                 .iter()
-                .filter(|name| **name == "guard_statement")
+                .filter(|name| **name == "elixir_guard_statement")
                 .count(),
             3,
             "events: {es:?}"
@@ -841,9 +957,87 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_function_clause_grouping_lowers_confidence() {
+    fn plain_else_and_else_if_are_distinct_hybrid_events() {
         let es = entities(
-            "defmodule M do\n  def choose(0), do: :zero\n  def choose(value), do: value\nend\n",
+            "defmodule M do\n  def f(a, b) do\n    if a do\n      :a\n    else\n      if b do\n        :b\n      else\n        :other\n      end\n    end\n  end\nend\n",
+        );
+        let names: Vec<_> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+        assert_eq!(names.iter().filter(|name| **name == "if").count(), 1);
+        assert_eq!(
+            names
+                .iter()
+                .filter(|name| **name == "elseif_statement")
+                .count(),
+            1
+        );
+        assert_eq!(
+            names.iter().filter(|name| **name == "else_branch").count(),
+            1
+        );
+        let elseif = es
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::ControlFlow && entity.name == "elseif_statement"
+            })
+            .unwrap();
+        let legacy_nesting = es
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::ControlFlow && entity.name == "legacy_nesting"
+            })
+            .unwrap();
+        assert_eq!(legacy_nesting.span, elseif.span);
+        let metric = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .unwrap();
+        assert_eq!(metric.cognitive, 3);
+        assert_eq!(metric.max_nesting, 1);
+    }
+
+    #[test]
+    fn cond_alternative_preserves_legacy_nesting_for_nested_if() {
+        let es = entities(
+            "defmodule M do\n  def f(value) do\n    cond do\n      value == :first -> :one\n      value == :second -> if(value, do: :nested)\n      true -> :other\n    end\n  end\nend\n",
+        );
+        let metric = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .unwrap();
+
+        assert_eq!(metric.max_nesting, 1);
+        assert!(es.iter().any(|entity| {
+            entity.kind == EntityKind::ControlFlow
+                && entity.name == "legacy_nesting"
+                && entity.span.start_line == 5
+        }));
+    }
+
+    #[test]
+    fn legacy_guard_keeps_prechange_nesting_but_scores_no_cognitive_point() {
+        let es = entities(
+            "defmodule M do\n  def f(flag, value) do\n    if flag do\n      case value do\n        n when n > 0 -> n\n        _ -> 0\n      end\n    end\n  end\nend\n",
+        );
+        let metric = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .unwrap();
+        assert_eq!(metric.cognitive, 3);
+        assert_eq!(metric.max_nesting, 2);
+        assert_eq!(
+            crate::complexity::control_flow_role("elixir_guard_statement"),
+            crate::complexity::FlowRole::LegacyOnly
+        );
+    }
+
+    #[test]
+    fn each_recursive_function_clause_gets_its_own_marker() {
+        let es = entities(
+            "defmodule M do\n  def choose(0), do: choose(1)\n  def choose(value), do: choose(value - 1)\nend\n",
         );
         let metrics: Vec<_> = crate::complexity::function_complexities(&es)
             .into_iter()
@@ -851,10 +1045,175 @@ mod tests {
             .collect();
 
         assert_eq!(metrics.len(), 2, "metrics: {metrics:?}");
-        assert!(
-            metrics.iter().all(|metric| {
-                metric.confidence == crate::complexity::ComplexityConfidence::Low
-            })
+        assert!(metrics.iter().all(|metric| {
+            metric.confidence == crate::complexity::ComplexityConfidence::High
+                && metric.cognitive == 1
+        }));
+        assert_eq!(
+            es.iter()
+                .filter(|entity| entity.kind == EntityKind::ControlFlow
+                    && entity.name == "recursive_call")
+                .count(),
+            2,
+            "each clause receives its own recursion marker: {es:?}"
         );
     }
+
+    #[test]
+    fn multi_clause_legacy_rows_are_ignored_without_losing_file_complexity() {
+        let es = entities(
+            "defmodule M do\n  def choose(0), do: :zero\n  def choose(value), do: value\nend\n",
+        );
+        let legacy_rows: Vec<_> = es
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::ControlFlow
+                    && entity.name == "elixir_unknown_multi_clause_grouping"
+            })
+            .collect();
+
+        assert_eq!(legacy_rows.len(), 2, "entities: {es:?}");
+        assert!(legacy_rows.iter().all(|entity| {
+            crate::complexity::control_flow_role(&entity.name)
+                == crate::complexity::FlowRole::Ignored
+                && crate::complexity::counts_toward_file_complexity(entity)
+        }));
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    ("elixir_cond", crate::complexity::FlowRole::Ignored),
+    (
+        "elixir_comprehension",
+        crate::complexity::FlowRole::LegacyOnly,
+    ),
+    (
+        "elixir_guard_statement",
+        crate::complexity::FlowRole::LegacyOnly,
+    ),
+    ("elixir_receive", crate::complexity::FlowRole::Else),
+    (
+        "elixir_unknown_multi_clause_grouping",
+        crate::complexity::FlowRole::Ignored,
+    ),
+];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| {
+            node.kind() == "call"
+                && node
+                    .field("target")
+                    .is_some_and(|target| FUNCTION_DEFS.contains(&target.text().as_ref()))
+        })
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let (name, head) = function_head(node)?;
+            let owner_type = enclosing_module_name(node);
+            let parameters: Vec<_> = head
+                .as_ref()
+                .and_then(arguments)
+                .map(|args| args.children().filter(|child| child.is_named()).collect())
+                .unwrap_or_default();
+            let total_args = u16::try_from(parameters.len()).unwrap_or(u16::MAX);
+            let required_args = u16::try_from(
+                parameters
+                    .iter()
+                    .filter(|parameter| {
+                        !parameter
+                            .field("operator")
+                            .is_some_and(|operator| operator.text() == "\\\\")
+                            && !parameter.text().contains("\\\\")
+                    })
+                    .count(),
+            )
+            .unwrap_or(u16::MAX);
+            let name_node = head
+                .as_ref()
+                .and_then(|head| head.field("target"))
+                .or_else(|| first_arg(node))?;
+            Some(Callable {
+                owner: owner_type.clone(),
+                owner_type,
+                unqualified_callable: true,
+                name,
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call") {
+        let Some(caller_node) = call.ancestors().find(|ancestor| {
+            ancestor.kind() == "call"
+                && ancestor
+                    .field("target")
+                    .is_some_and(|target| FUNCTION_DEFS.contains(&target.text().as_ref()))
+        }) else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(target) = call.field("target") else {
+            continue;
+        };
+        let head_span = function_head(&caller_node)
+            .and_then(|(_, head)| head)
+            .map(|head| crate::extract::span_of(&head));
+        if head_span.is_some_and(|span| {
+            span.start_byte <= crate::extract::span_of(&call).start_byte
+                && crate::extract::span_of(&call).end_byte <= span.end_byte
+        }) {
+            continue;
+        }
+        let (name, qualifier, qualifier_name) = if target.kind() == "dot" {
+            let Some(name) = dot_member(&target) else {
+                continue;
+            };
+            let qualifier = target
+                .field("left")
+                .map(|left| left.text().into_owned())
+                .unwrap_or_default();
+            if matches!(qualifier.as_str(), "__MODULE__")
+                || callables[caller].owner_type.as_deref() == Some(&qualifier)
+            {
+                (name, Qualifier::SelfLike, None)
+            } else {
+                (name, Qualifier::Other, None)
+            }
+        } else if target.kind() == "identifier" {
+            (target.text().into_owned(), Qualifier::None, None)
+        } else {
+            continue;
+        };
+        let argument_count = arguments(&call)
+            .map(|args| args.children().filter(|child| child.is_named()).count())
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
 }

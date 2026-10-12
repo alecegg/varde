@@ -3,7 +3,7 @@
 1. Read the complete item and its occurrence history:
 
    ```sh
-   varde-learn friction show <ID> --json
+   varde learn friction show <ID> --json
    ```
 2. For each Git occurrence, use its recorded `repo_root` and `head_sha`.
    Confirm the root with `git -C <repo_root> rev-parse --show-toplevel` and
@@ -17,11 +17,12 @@
 4. State which occurrences the evidence covers and whether `resolved` or
    `archived` fits. An explicit user request to reconcile or update the item
    authorizes an evidence-supported, unambiguous status. Ask when evidence is
-   missing, more than one status fits, or the action is destructive.
+   missing, more than one status fits, or the action is destructive; preserve
+   the user's stated reason for a correction.
 5. When authorized and supported, record the reason through the CLI:
 
    ```sh
-   varde-learn friction set-status 42 resolved --reason "The current check now verifies the required path." --json
+   varde learn friction set-status 42 resolved --reason "The current check now verifies the required path." --json
    ```
 
 Do not edit exported Markdown or the SQLite database directly.

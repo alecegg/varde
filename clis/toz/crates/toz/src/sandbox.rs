@@ -185,7 +185,7 @@ pub(crate) fn sandboxed_command(
         Ok(command)
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    anyhow::bail!("toz sandbox is unsupported on this platform")
+    anyhow::bail!("Toz sandbox is unsupported on this platform")
 }
 
 fn valid_env_name(name: &str) -> bool {

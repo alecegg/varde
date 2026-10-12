@@ -3,6 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Prefer this checkout's binary for CLI help coverage, with PATH as fallback.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+if [ -x "$REPO_ROOT/clis/target/debug/varde" ]; then
+  export VARDE_BIN="$REPO_ROOT/clis/target/debug/varde"
+fi
+
 # Every test runs; none is registered by hand. A hand-kept list is how most of
 # this suite went unrun while two of its tests rotted.
 failed=()
@@ -15,6 +21,8 @@ for test_script in "$SCRIPT_DIR"/*.sh; do
   fi
   "$test_script" || failed+=("$(basename "$test_script")")
 done
+"$SCRIPT_DIR/help-coverage.sh" || failed+=("help-coverage.sh")
+bash "$SCRIPT_DIR/help-coverage.sh" --self-test || failed+=("help-coverage.sh --self-test")
 "$SCRIPT_DIR/../check-refs.sh" || failed+=("check-refs.sh")
 if [ "${#failed[@]}" -gt 0 ]; then
   echo "FAIL: ${failed[*]}" >&2

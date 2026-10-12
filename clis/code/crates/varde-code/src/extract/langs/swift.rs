@@ -25,8 +25,10 @@
 //! - Catch/Throw: `catch_block` -> Catch (named after the bound error, if
 //!   any); `control_transfer_statement` containing a `throw_keyword` -> Throw
 //!   (named after the thrown expression).
-//! - ControlFlow: if/for/while/repeat-while/switch/guard/do and the
-//!   return/break/continue/fallthrough `control_transfer_statement`s.
+//! - ControlFlow: if/for/while/repeat-while/switch/guard/do, plain else
+//!   branches, logical sequences and ternaries. Labeled break/continue are
+//!   complexity-only jumps; ordinary transfers remain legacy control rows.
+//!   Return/break/continue/fallthrough parse as `control_transfer_statement`.
 //! - Route: Vapor DSL shape `app.get("/path") { ... }` — a call whose callee
 //!   is a member access on app/router with an HTTP verb and a string-literal
 //!   first argument. Narrow, fixture-driven.
@@ -250,6 +252,9 @@ fn visit_part_4(
                 .map(|n| n.text().into_owned())
                 .unwrap_or_default();
             ctx.push(EntityKind::Call, name.clone(), node);
+            if is_negated_logical_sequence(node) {
+                ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+            }
             if let Some((method, path)) = route_of(node) {
                 ctx.out.push(Entity {
                     kind: EntityKind::Route,
@@ -367,6 +372,15 @@ fn visit_control_transfer(
         ctx.push(EntityKind::Throw, thrown_name(node), node);
         return;
     }
+    let transfer = node.text();
+    if (transfer.trim_start().starts_with("break") || transfer.trim_start().starts_with("continue"))
+        && node
+            .children()
+            .any(|child| child.kind() == "simple_identifier")
+    {
+        ctx.push(EntityKind::ControlFlow, "labeled_jump".to_string(), node);
+        return;
+    }
     ctx.push(
         EntityKind::ControlFlow,
         transfer_name(node.text().as_ref()).to_string(),
@@ -396,6 +410,55 @@ fn transfer_name(text: &str) -> &'static str {
     .unwrap_or("control_transfer_statement")
 }
 
+fn is_else_if_statement(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    if parent.kind() != "if_statement" {
+        return false;
+    }
+    let mut after_else = false;
+    for child in parent.children() {
+        if child.kind() == "else" {
+            after_else = true;
+        } else if after_else {
+            return child.range() == node.range();
+        }
+    }
+    false
+}
+
+fn else_alternative<'a>(
+    node: &ast_grep_core::Node<'a, StrDoc<SupportLang>>,
+) -> Option<ast_grep_core::Node<'a, StrDoc<SupportLang>>> {
+    let parent = node.parent()?;
+    if parent.kind() != "if_statement" {
+        return None;
+    }
+    let mut after_else = false;
+    for child in parent.children() {
+        if child.range() == node.range() {
+            after_else = true;
+            continue;
+        }
+        if after_else && child.is_named() {
+            return Some(child);
+        }
+    }
+    None
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.kind() == "call_expression"
+        && node.children().any(|child| child.kind() == "bang")
+        && node.dfs().skip(1).any(|child| {
+            matches!(
+                child.kind().as_ref(),
+                "conjunction_expression" | "disjunction_expression"
+            )
+        })
+}
+
 fn visit_part_7(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
     kind: &str,
@@ -404,15 +467,27 @@ fn visit_part_7(
     match kind {
         // ---- control flow ----
         "if_statement" => {
-            let name = if node
-                .parent()
-                .is_some_and(|parent| parent.kind() == "if_statement")
-            {
+            let name = if is_else_if_statement(node) {
                 "elseif_statement"
             } else {
                 "if_statement"
             };
             ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            // The Swift grammar includes an entire `else` tail in the if span.
+            // Clip the event at its consequence so chained branches do not
+            // become nesting parents of later branches.
+            if let Some(else_keyword) = node.children().find(|child| child.kind() == "else")
+                && let Some(consequence) = node
+                    .children()
+                    .take_while(|child| child.range() != else_keyword.range())
+                    .last()
+                && let Some(event) = ctx.out.last_mut()
+            {
+                let span = crate::extract::span_of(&consequence);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
         }
         "for_statement"
         | "while_statement"
@@ -425,6 +500,27 @@ fn visit_part_7(
         }
         "switch_entry" => {
             ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+        }
+        "else" => {
+            if let Some(alternative) = else_alternative(node)
+                && alternative.kind() != "if_statement"
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &alternative,
+                );
+                if let (Some(parent), Some(event)) = (node.parent(), ctx.out.last_mut()) {
+                    let start = crate::extract::span_of(node);
+                    let end = crate::extract::span_of(&parent);
+                    event.span.start_byte = start.start_byte;
+                    event.span.start_line = start.start_line;
+                    event.span.start_col = start.start_col;
+                    event.span.end_byte = end.end_byte;
+                    event.span.end_line = end.end_line;
+                    event.span.end_col = end.end_col;
+                }
+            }
         }
         "conjunction_expression" => {
             ctx.push(EntityKind::ControlFlow, "logical_and".to_string(), node);
@@ -764,5 +860,180 @@ mod tests {
             .find(|metric| metric.name == "outer")
             .expect("outer metric");
         assert_eq!(outer.cyclomatic, 10, "metric: {outer:?}");
+    }
+
+    #[test]
+    fn complexity_else_events_cover_swift_branches() {
+        let source = "func f(_ a: Bool, _ b: Bool, _ c: Bool) { if a {} else if b {} else if c {} else { if a {} } }";
+        let parsed = parse_source(&SupportLang::Swift, source);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flows: Vec<_> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| {
+                (
+                    entity.name.as_str(),
+                    entity.span.start_byte,
+                    entity.span.end_byte,
+                )
+            })
+            .collect();
+        let metric = crate::complexity::function_complexities(&entities)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .expect("f metric");
+        assert_eq!(metric.cognitive, 6, "flows: {flows:?}");
+    }
+
+    #[test]
+    fn negated_logical_sequence_starts_a_new_run() {
+        let source = "func f(_ a: Bool, _ b: Bool, _ c: Bool) { if a && !(b && c) {} }";
+        let parsed = parse_source(&SupportLang::Swift, source);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let flows: Vec<_> = entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| {
+                (
+                    entity.name.as_str(),
+                    entity.span.start_byte,
+                    entity.span.end_byte,
+                )
+            })
+            .collect();
+        let metric = crate::complexity::function_complexities(&entities)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .expect("f metric");
+        assert_eq!(metric.cognitive, 3, "flows: {flows:?}");
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| node.kind() == "function_declaration")
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let parameters: Vec<_> = node
+                .children()
+                .filter(|child| child.kind() == "parameter")
+                .collect();
+            let defaults = node.field_children("default_value").count();
+            let required = parameters.len().saturating_sub(defaults);
+            let owner_type = node
+                .ancestors()
+                .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+                .and_then(|scope| field_name(&scope));
+            let lexical_function = node
+                .ancestors()
+                .find(|ancestor| ancestor.kind() == "function_declaration");
+            let owner = lexical_function
+                .as_ref()
+                .and_then(field_name)
+                .or_else(|| owner_type.clone());
+            let in_type = owner_type.is_some();
+            Some(Callable {
+                owner,
+                owner_type,
+                unqualified_callable: lexical_function.is_some() || !in_type,
+                name: name_node.text().into_owned(),
+                required_args: u16::try_from(required).unwrap_or(u16::MAX),
+                total_args: u16::try_from(parameters.len()).unwrap_or(u16::MAX),
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| ancestor.kind() == "function_declaration")
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables
+            .iter()
+            .position(|callable| callable.span == caller_span)
+        else {
+            continue;
+        };
+        let Some(callee) = call.children().find(|child| child.kind() != "call_suffix") else {
+            continue;
+        };
+        let (name, qualifier, qualifier_name) = match callee.kind().as_ref() {
+            "simple_identifier" => (callee.text().into_owned(), Qualifier::None, None),
+            "navigation_expression" => {
+                let Some(name) = member_name(&callee) else {
+                    continue;
+                };
+                let base = callee
+                    .field("target")
+                    .and_then(swift_base_identifier)
+                    .unwrap_or_default();
+                let caller_owner = callables[caller].owner_type.as_deref();
+                if matches!(base.as_str(), "self" | "Self") {
+                    (name, Qualifier::SelfLike, None)
+                } else if caller_owner == Some(base.as_str()) {
+                    (name, Qualifier::NamedType, Some(base))
+                } else {
+                    (name, Qualifier::Other, Some(base))
+                }
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .children()
+            .find(|child| child.kind() == "call_suffix")
+            .and_then(|suffix| {
+                suffix
+                    .children()
+                    .find(|child| child.kind() == "value_arguments")
+            })
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|argument| argument.kind() == "value_argument")
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
+}
+
+fn swift_base_identifier(node: ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    match node.kind().as_ref() {
+        "simple_identifier" | "type_identifier" | "self_expression" | "super_expression" => {
+            Some(node.text().into_owned())
+        }
+        "navigation_expression" => node.field("target").and_then(swift_base_identifier),
+        _ => None,
     }
 }

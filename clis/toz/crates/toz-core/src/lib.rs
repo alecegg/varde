@@ -18,6 +18,9 @@ pub mod strategies;
 pub mod streaming;
 pub mod terms;
 
+#[cfg(test)]
+mod test_support;
+
 /// Short stable content fingerprint. Used for install manifests and script supersession keys.
 pub fn content_hash(bytes: &[u8]) -> String {
     blake3::hash(bytes).to_hex()[..32].to_string()

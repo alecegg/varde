@@ -1,6 +1,6 @@
 ---
 type: pattern
-description: Before porting a native varde-code scan rule to TOML or SQL, check that every entity.data field it reads is actually persisted.
+description: Before porting a native code-scanner rule to TOML or SQL, check that every entity.data field it reads is actually persisted.
 generated: { by: claude/opus-5-5, at: 2026-09-24T07:48:31Z }
 paths:
   - clis/code/crates/varde-code/src/rules/
@@ -13,7 +13,7 @@ rule to TOML or SQL.
 
 - Native rules can read `entity.data.<field>` values the persisted schema never
   populates. A task scoped as "just port this rule to SQL" finds the gap only
-  when the executor reads the native source mid-task, forcing a mid-run stop.
+  when the builder reads the native source mid-task, forcing a mid-run stop.
 - Read each rule's implementation and list every `entity.data.<field>` it
   accesses.
 - Check each field against the persisted schema by reading the db or schema

@@ -1,56 +1,48 @@
 # AGENTS.md — varde monorepo
 
-This repo combines four previously separate projects into one working tree. It is a **monorepo with convention-based module boundaries**, not a unified build.
+This repository contains reusable skills, agents, and Rust CLI crates in one workspace at `clis/Cargo.toml`.
 
 ## Module convention
 
-The `skills/` and `agents/` folders and each workspace under `clis/` are self-contained modules:
+The `skills/` and `agents/` folders are self-contained modules. The `clis/` folders group crates in that workspace:
 
 - `skills/` — the `varde-*` skills (markdown + shell tooling).
 - `agents/` — installable subagent definitions, one variant per harness (markdown + shell tooling).
-- `clis/code/` — the `varde-code` Rust CLI (its own Cargo workspace).
-- `clis/workflow/` — the `varde-workflow` CLI and `varde-workflow-core` library (its own Cargo workspace).
-- `clis/toz/` — the `varde-toz` (tool-output-zone) Rust CLI (its own Cargo workspace).
-- `clis/learn/` — the `varde-learn` Rust CLI for skill trigger/output evals and global friction storage (its own Cargo workspace).
+- `clis/code/` — the `varde-code` module crate.
+- `clis/workflow/` — the `varde-workflow` and `varde-workflow-core` module crates.
+- `clis/toz/` — the `varde-toz` (tool-output-zone) and `varde-toz-core` module crates.
+- `clis/doc/` — the `varde-doc` module crate for agent-doc lint, frontmatter, and flow checks.
+- `clis/learn/` — the `varde-learn` and `varde-learn-core` module crates for skill evaluations and friction storage.
+- `clis/varde-core/` and `clis/varde-contracts/` — shared crates used by the module crates.
+- `clis/varde/` — the application crate and installed `varde` CLI.
 
 Rules that keep the modules independent:
 
-1. **No cross-folder source or dependency imports.** `clis/code/`, `clis/workflow/`, `clis/toz/`, and `clis/learn/` are separate Cargo workspaces and must stay that way — do not add a root or `clis/Cargo.toml`, and do not add path dependencies from one folder into another. The skills reach the CLIs only through the installed binaries on `PATH`, never by relative path into a sibling folder.
-   - Each skill under `skills/` owns its own flat `references/` directory and is self-contained; `install.sh` copies one skill directory at a time. Guidance a skill needs is written into that skill, never imported from a sibling folder. Exception: files listed in `skills/shared/MANIFEST` have one source under `skills/shared/`, and `install.sh` copies them into every skill the manifest names, so an installed skill still stands alone.
-   - `skills/check-refs.sh` guards this: it installs into a temp dir and fails on any pointer that would not resolve on a user's machine.
-2. **Build and test within a folder.** `cd clis/code && cargo test`, `cd clis/workflow && cargo test`, `cd clis/toz && cargo test`, `cd clis/learn && cargo test`, `cd skills && ./install.sh`, `cd agents && ./install.sh`. Run `just test` from the root for every module's tests; the root `justfile` is the only cross-module test entry point, and its recipes only run each module's own test command. `varde sync` is the only root wiring entry point. It only wires supported harnesses through module installers.
-3. **Names keep the `varde-` prefix.** Folders are short (`clis/code/`, `clis/workflow/`, `skills/`, `agents/`, `clis/toz/`), but package names, CLI names, and skill names retain their full `varde-*` identity where applicable (`varde-toz` also installs `toz` as a compatibility alias). Plugin identities use the same prefix; module-specific environment variables use `VARDE_<MODULE>_*`. Legacy names may remain as compatibility inputs, with canonical names taking precedence.
-4. **Each folder owns its own docs.** Per-folder `README.md` and `AGENTS.md`/`CLAUDE.md` govern work inside that folder. The root `memory-bank/knowledge/` is the sole committed knowledge bundle. When working in a folder, follow its local instructions.
-5. **Knowledge is durable.** Commit `memory-bank/knowledge/` content. Keep
-   the configured working store for plans and reviews local. Friction belongs
-   to the user's global `varde-learn` SQLite store; keep the live database
-   outside Git. Review Markdown exports for private evidence before sharing or
-   committing them. Personal knowledge belongs outside this repository.
-   Working and knowledge paths can be redirected per user with
-   `varde-workflow paths set`; the setting lives in
-   `~/.config/varde/config.toml`, never in the repo.
+1. **Keep shared code and dependencies within the workspace rules.** Check `cd clis && cargo test -p varde --test dependency_rules`: `varde-core` has no `varde-*` dependency, `varde-contracts` depends only on it, module crates may depend on those shared crates and their own family’s `-core` crate when present, and only app `varde` depends on module crates. Skills call the installed `varde` binary, never sibling builds; do not import source or add path dependencies across module families.
+   - Skills own flat `references/` folders. The CLI embeds shared guidance from `skills/shared/` in its skill bundle. `skills/check-refs.sh` checks installed pointers.
+2. **Build, test, install, and sync through the owning entry points.** Run `cd clis && cargo test --workspace --locked`, `cd skills && ./check-refs.sh`, and `cd agents && ./generate.py --check`; run `just test` at the root for all repository checks. Install with `cd clis && cargo install --path varde --locked --force --target-dir target`. Use `varde setup sync` to wire supported harnesses.
+3. **Keep canonical names:** use `varde-` for package, skill, and plugin identities, and run commands through `varde`. The legacy binary names (`toz`, `varde-toz`, `varde-code`, `varde-workflow`, `varde-learn`) are retired; `tests/old-binary-names.sh` enforces this. Name module variables `VARDE_<MODULE>_*`, with canonical names taking precedence.
+4. **Follow local docs and keep knowledge durable.** Folder-level `README.md`, `AGENTS.md`, and `CLAUDE.md` files govern their modules. Commit `memory-bank/knowledge/`; keep plans and reviews in the configured work store. The friction log may live in a private Git repo so it can be shared and merged; its SQLite cache stays git-ignored. Review Markdown exports for private evidence and keep personal knowledge outside the repository. Use `varde setup paths set` to redirect stores; settings live in `~/.config/varde/config.toml`.
 
 ## CLI updates after a plan
 
-For each GitHub release, all four CLI package `version` fields must match the
-release tag, without its leading `v` in Cargo (for example, tag `v1.4.0` uses
-package version `1.4.0`).
+For each GitHub release, the workspace package version in `clis/Cargo.toml`
+must match the release tag without its leading `v` (for example, tag `v1.4.0`
+uses package version `1.4.0`).
 
-After a plan changes any CLI module, run its required checks, then rebuild and
-install every affected binary from this checkout before reporting completion.
-Run the matching command inside the module directory:
+After a plan changes a CLI module, run its required checks, then rebuild and
+install this checkout's single `varde` binary:
 
-| Module | Install command |
-|---|---|
-| `clis/code/` | `cargo install --path crates/varde-code --locked --force --target-dir target` |
-| `clis/workflow/` | `cargo install --path varde-workflow --locked --force --target-dir target` |
-| `clis/toz/` | `cargo install --path crates/toz --locked --force --target-dir target` |
-| `clis/learn/` | `cargo install --path crates/varde-learn --locked --force --target-dir target` |
+```bash
+cargo install --path varde --locked --force --target-dir target
+```
 
-Verify that `command -v <binary>` selects the installed executable, run its
-`--help`, and check any CLI flags changed by the plan. Use `--force` even when
-the package version is unchanged. If installation or verification fails,
-report the failure and the remaining update before claiming completion.
+Install only after the plan has merged, from the checkout that merged it; before then, put `clis/target/debug` first on `PATH` because `cargo install` replaces the binary other sessions call.
+
+Verify that `command -v varde` selects this binary, run `varde --help`, and check
+any CLI flags changed by the plan before reporting completion. Use `--force`
+even when the package version is unchanged. If installation or verification
+fails, report the failure and the remaining update.
 A change to review fingerprint inputs makes in-flight approvals stale, so re-record them after installing.
 
 ## Sandbox and shell
@@ -62,20 +54,9 @@ escalated access, unchanged; if that is denied or fails, use the plain Read/Grep
 path and say which capability was lost. Degrading is fine; degrading silently is
 what costs the next session.
 
-The uv and zsh gotchas below remain in legacy `working/friction` Markdown.
-Their fixes stay here; new friction is recorded through the global
+The zsh gotcha below remains in legacy `working/friction` Markdown.
+Its fix stays here; new friction is recorded through the global
 `varde-learn` store.
-
-**`uv` cannot reach its managed Python.** `uv run` tries to read
-`~/.local/share/uv/python` and fails with `Operation not permitted`, which stops
-`skills/varde-agent-doc-authoring/scripts/validate-frontmatter.py`. The fix is
-to use the interpreter already on `PATH` rather than escalating:
-
-```bash
-UV_PYTHON_PREFERENCE=only-system uv run scripts/validate-frontmatter.py <skill-dir>
-```
-
-`UV_CACHE_DIR` does not help — the cache is not what is blocked.
 
 **`path` is a reserved array in zsh.** Assigning it in a loop (`for path in ...`)
 rewrites `$PATH`, and every later command in that shell resolves to nothing. Name

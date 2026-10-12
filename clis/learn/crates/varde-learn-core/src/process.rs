@@ -181,7 +181,26 @@ fn wait_with_deadline(
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => pipe = None,
                 Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    let wait =
+                        POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now()));
+                    let mut fd = libc::pollfd {
+                        fd: input.as_raw_fd(),
+                        events: libc::POLLOUT,
+                        revents: 0,
+                    };
+                    // SAFETY: fd references the live stdin pipe, and poll receives
+                    // one valid pollfd. Readiness is only a hint; writes stay nonblocking.
+                    if unsafe { libc::poll(&mut fd, 1, wait.as_millis() as libc::c_int) } == -1 {
+                        let err = std::io::Error::last_os_error();
+                        if err.kind() != std::io::ErrorKind::Interrupted {
+                            return Err(LearnError::Usage(format!(
+                                "failed to poll stdin pipe: {err}"
+                            )));
+                        }
+                    }
+                    continue;
+                }
                 Err(err) => return Err(LearnError::Usage(format!("failed to write stdin: {err}"))),
             }
         }

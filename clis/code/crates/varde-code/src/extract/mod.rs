@@ -7,6 +7,8 @@
 pub mod entity;
 pub mod langs;
 pub mod minhash;
+pub mod preproc;
+pub mod recursion;
 pub mod symbol;
 
 use crate::model::{Entity, EntityKind, Symbol};
@@ -45,6 +47,20 @@ pub fn extract(parsed: &ParsedFile, file_id: u32) -> ExtractResult {
     };
     walk(&root, &mut ctx, false, false, 0);
     drop_blank_named(&mut result);
+    result
+        .entities
+        .extend(recursion::extract(parsed.lang, &root, file_id));
+    let source = root.text();
+    let (enabled, haskell_cpp) = match parsed.lang {
+        SupportLang::C | SupportLang::Cpp | SupportLang::CSharp | SupportLang::Swift => {
+            (true, false)
+        }
+        SupportLang::Haskell => (true, true),
+        _ => (false, false),
+    };
+    let mut preproc_entities = preproc::scan(&source, file_id, enabled, haskell_cpp);
+    preproc::attribute_top_level_regions(&mut preproc_entities, &result.entities);
+    result.entities.extend(preproc_entities);
     result
 }
 

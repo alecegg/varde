@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Compare varde-code find_pattern vs ast-grep run for one pattern/repo/lang.
+# Compare `varde map find_pattern` vs ast-grep run for one pattern/repo/lang.
 #
 # Usage: find_pattern.sh <label> <path> <pattern> <ast-grep-lang> <varde-lang>
 #
 # Prints one TSV line:
 #   label  varde_cold_ms  varde_warm_ms  astgrep_ms  varde_matches  astgrep_matches
 #
-# varde-code find_pattern has no persisted index, so "cold" is just first-touch
+# `varde map find_pattern` has no persisted index, so "cold" is just first-touch
 # (page cache not warmed for this repo this session) — same command as warm,
 # run once before the min-of-3 warm loop, matching BENCHMARK.md's convention.
 set -euo pipefail
@@ -17,7 +17,7 @@ label="$1" path="$2" pattern="$3" ag_lang="$4" varde_lang="$5"
 
 varde_json="{\"path\":\"$path\",\"pattern\":$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$pattern"),\"language\":\"$varde_lang\"}"
 
-varde_cmd=("$BIN" find_pattern --json "$varde_json")
+varde_cmd=("${MAP[@]}" find_pattern --json "$varde_json")
 astgrep_cmd=(ast-grep run -p "$pattern" -l "$ag_lang" "$path" --json=compact)
 
 varde_cold=$(time_ms "${varde_cmd[@]}")

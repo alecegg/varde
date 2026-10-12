@@ -26,6 +26,7 @@ use crate::extract::field_name;
 use crate::extract::langs::{
     boolean_operator_name, first_arg_text, push_type_ref, strip_generic_args,
 };
+use crate::extract::span_of;
 use crate::model::{Entity, EntityKind};
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
@@ -46,6 +47,9 @@ pub const FUNCTION_SCOPES: &[&str] = &[
     "constructor_declaration",
     "local_function_statement",
     "accessor_declaration",
+    "operator_declaration",
+    "conversion_operator_declaration",
+    "destructor_declaration",
 ];
 
 /// Entity kinds the fixtures must produce.
@@ -127,7 +131,12 @@ fn visit_part_1(
             }
         }
         // ---- structural ----
-        "method_declaration" | "constructor_declaration" | "local_function_statement" => {
+        "method_declaration"
+        | "constructor_declaration"
+        | "local_function_statement"
+        | "operator_declaration"
+        | "conversion_operator_declaration"
+        | "destructor_declaration" => {
             ctx.push(
                 EntityKind::Function,
                 function_scope_name(node).unwrap_or_default(),
@@ -420,6 +429,28 @@ fn visit_part_7(
                 "if_statement"
             };
             ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            // C#'s `if_statement` span includes the entire chained `else`
+            // tail. End the event at its consequence so an earlier `if` in
+            // an else-if chain does not add a second nesting level to later
+            // branches; each branch already has its own event.
+            if let Some(consequence) = node.field("consequence")
+                && let Some(event) = ctx.out.last_mut()
+            {
+                event.span.end_byte = span_of(&consequence).end_byte;
+                event.span.end_line = span_of(&consequence).end_line;
+                event.span.end_col = span_of(&consequence).end_col;
+            }
+            if !is_else_if(node)
+                && let Some(else_token) = node.children().find(|child| child.kind() == "else")
+            {
+                ctx.push(EntityKind::ControlFlow, "legacy_nesting".to_string(), node);
+                if let Some(marker) = ctx.out.last_mut() {
+                    let alternative_start = span_of(&else_token);
+                    marker.span.start_byte = alternative_start.start_byte;
+                    marker.span.start_line = alternative_start.start_line;
+                    marker.span.start_col = alternative_start.start_col;
+                }
+            }
         }
         "binary_expression" => {
             if let Some(name) = boolean_operator_name(node) {
@@ -446,7 +477,42 @@ fn visit_part_8(
             ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
         }
         "when_clause" | "catch_filter_clause" => {
-            ctx.push(EntityKind::ControlFlow, "guard_statement".to_string(), node);
+            ctx.push(EntityKind::ControlFlow, "guard_clause".to_string(), node);
+        }
+        "goto_statement" => {
+            ctx.push(EntityKind::ControlFlow, "goto_jump".to_string(), node);
+        }
+        "else" => {
+            if let Some(alternative) = else_alternative(node)
+                && alternative.kind() != "if_statement"
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &alternative,
+                );
+            }
+        }
+        "and_pattern" => {
+            if !has_same_pattern_parent(node, "and_pattern") {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "pattern_logical_and".to_string(),
+                    node,
+                );
+            }
+        }
+        "or_pattern" => {
+            if !has_same_pattern_parent(node, "or_pattern") {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "pattern_logical_or".to_string(),
+                    node,
+                );
+            }
+        }
+        "prefix_unary_expression" | "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
         }
         "for_statement"
         | "foreach_statement"
@@ -517,10 +583,43 @@ fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
     let Some(parent) = node.parent() else {
         return false;
     };
-    parent.kind() == "if_statement"
-        && parent
-            .field("alternative")
-            .is_some_and(|alternative| alternative.range() == node.range())
+    if parent.kind() != "if_statement" {
+        return false;
+    }
+    let mut after_else = false;
+    for child in parent.children() {
+        if child.kind() == "else" {
+            after_else = true;
+        } else if after_else {
+            return child.range() == node.range();
+        }
+    }
+    false
+}
+
+fn else_alternative<'a>(
+    node: &ast_grep_core::Node<'a, StrDoc<SupportLang>>,
+) -> Option<ast_grep_core::Node<'a, StrDoc<SupportLang>>> {
+    let parent = node.parent()?;
+    if parent.kind() != "if_statement" {
+        return None;
+    }
+    let mut after_else = false;
+    for child in parent.children() {
+        if after_else {
+            return Some(child);
+        }
+        after_else = child.range() == node.range();
+    }
+    None
+}
+
+fn has_same_pattern_parent(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    pattern_kind: &str,
+) -> bool {
+    node.parent()
+        .is_some_and(|parent| parent.kind() == pattern_kind)
 }
 
 /// Count labels sharing one C# switch section body.
@@ -537,6 +636,21 @@ fn switch_section_arm_count(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>)
 /// declared property, event, or indexer owner prevents unrelated accessors
 /// from sharing the same diagnostic label and enclosing-function tag.
 pub fn function_scope_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    match node.kind().as_ref() {
+        "operator_declaration" => {
+            return node
+                .field("operator")
+                .map(|operator| format!("operator{}", operator.text()));
+        }
+        "conversion_operator_declaration" => {
+            let modifier = node
+                .children()
+                .find(|child| matches!(child.kind().as_ref(), "implicit" | "explicit"))?;
+            let ty = node.field("type")?;
+            return Some(format!("{} operator {}", modifier.text(), ty.text()));
+        }
+        _ => {}
+    }
     if is_expression_bodied_property(node) {
         let name = field_name(node).unwrap_or_else(|| "this".to_string());
         return Some(format!("{name}.get"));
@@ -554,6 +668,13 @@ pub fn function_scope_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) 
         }
     });
     (!owner_name.is_empty()).then(|| format!("{owner_name}.{operation}"))
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!')
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
 }
 
 /// Whether `node` is a property whose getter is an arrow-expression body.
@@ -1000,6 +1121,7 @@ class Demo {
             _ => 2
         };
     }
+
 }
 "#;
         let parsed = parse_source(&SupportLang::CSharp, src);
@@ -1047,7 +1169,7 @@ class Demo {
         assert_eq!(
             control_flow
                 .iter()
-                .filter(|name| **name == "guard_statement")
+                .filter(|name| **name == "guard_clause")
                 .count(),
             2
         );
@@ -1066,4 +1188,167 @@ class Demo {
             1
         );
     }
+
+    #[test]
+    fn if_alternatives_preserve_legacy_nesting_without_changing_other_metrics() {
+        let src = "class C { void F(bool a, bool b, bool c) { if (a) { if (b) { } } else if (b) { if (c) { } } else { if (a) { } } } }";
+        let parsed = parse_source(&SupportLang::CSharp, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let markers: Vec<_> = entities
+            .iter()
+            .filter(|entity| entity.name == "legacy_nesting")
+            .collect();
+
+        assert_eq!(markers.len(), 1, "entities: {entities:?}");
+        assert!(markers.iter().all(|marker| {
+            src[marker.span.start_byte as usize..marker.span.end_byte as usize].starts_with("else")
+        }));
+        let metrics = crate::complexity::function_complexities(&entities);
+        let metric = metrics.iter().find(|metric| metric.name == "F").unwrap();
+        assert_eq!(metric.cyclomatic, 6, "metric: {metric:?}");
+        assert_eq!(metric.max_nesting, 1, "metric: {metric:?}");
+        assert_eq!(crate::complexity::cyclomatic_for_entities(&entities), 6);
+    }
+}
+
+/// C# switch containers add a cognitive point and nesting; their case arms
+/// carry the legacy cyclomatic branches. Pattern combinators use an Else-role
+/// override because their cognitive point does not affect legacy cyclomatic.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    (
+        "switch_statement",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+    (
+        "switch_expression",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+    ("pattern_logical_and", crate::complexity::FlowRole::Else),
+    ("pattern_logical_or", crate::complexity::FlowRole::Else),
+];
+
+/// Collect callable declarations and same-file invocation references for the
+/// shared class-scoped recursion resolver.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| is_function_scope(node, &node.kind()))
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name = function_scope_name(node)?;
+            let params = node.field("parameters");
+            let parameters: Vec<_> = params
+                .map(|list| {
+                    list.children()
+                        .filter(|child| child.kind() == "parameter")
+                        .collect()
+                })
+                .unwrap_or_default();
+            let total_args = u16::try_from(parameters.len()).unwrap_or(u16::MAX);
+            let required_args = u16::try_from(
+                parameters
+                    .iter()
+                    .filter(|parameter| !parameter.text().contains('='))
+                    .count(),
+            )
+            .unwrap_or(u16::MAX);
+            let owner_type = enclosing_type_name(node);
+            let name_node = match node.kind().as_ref() {
+                "operator_declaration" => node.field("operator"),
+                _ => node.field("name"),
+            };
+            Some(Callable {
+                owner: owner_type.clone(),
+                owner_type,
+                unqualified_callable: false,
+                name,
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: name_node
+                    .as_ref()
+                    .map(crate::extract::span_of)
+                    .unwrap_or_else(|| crate::extract::span_of(node)),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root
+        .dfs()
+        .filter(|node| node.kind() == "invocation_expression")
+    {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| is_function_scope(ancestor, &ancestor.kind()))
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier, qualifier_name) = match function.kind().as_ref() {
+            "identifier" | "generic_name" => {
+                (strip_generic_args(&function.text()), Qualifier::None, None)
+            }
+            "member_access_expression" => {
+                let Some(method) = function.field("name") else {
+                    continue;
+                };
+                let Some(receiver) = function.field("expression") else {
+                    continue;
+                };
+                let method_name = strip_generic_args(&method.text());
+                let receiver_text = receiver.text();
+                let owner = callables[caller].owner.as_deref();
+                let (qualifier, qualifier_name) = if receiver_text == "this" {
+                    (Qualifier::SelfLike, None)
+                } else if owner == Some(receiver_text.as_ref()) {
+                    (Qualifier::NamedType, Some(receiver_text.into_owned()))
+                } else {
+                    (Qualifier::Other, None)
+                };
+                (method_name, qualifier, qualifier_name)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.kind() == "argument")
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
+}
+
+fn enclosing_type_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+        .and_then(|ancestor| field_name(&ancestor))
 }

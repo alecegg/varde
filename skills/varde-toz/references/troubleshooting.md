@@ -2,8 +2,8 @@
 
 ## Sandbox
 
-- **No `[sandbox]` section in the toz config root's `config.toml`**
-  (`varde-toz doctor --json` shows the root): `run` inherits the launching shell's
+- **No `[sandbox]` section in the configuration root's `config.toml`**
+  (`varde setup doctor --json` shows the root): `run` inherits the launching shell's
   permissions, so `vardeToz.exec()` can launch arbitrary commands; a harness
   sandbox still covers them.
 - **`[sandbox]` present in that file** (unless `enabled = false`): Seatbelt (macOS) or
@@ -16,7 +16,7 @@
 - **macOS `sandbox_apply: Operation not permitted`:** retry with host sandbox
   escalation when available.
 - **Missing handle, failed retrieval, or apparent truncation:** run
-  `varde-toz doctor --json` and report the command, handle, expected result,
+  `varde setup doctor --json` and report the command, handle, expected result,
   and actual result. Share tool output only when needed to reproduce it.
 - **Store access error:**
   1. Retry the same command with harness escalation when available.

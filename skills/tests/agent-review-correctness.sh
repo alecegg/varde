@@ -7,13 +7,13 @@ from pathlib import Path
 skills=Path(sys.argv[1])
 report=(skills/'varde-review/references/report.md').read_text()
 assert 'Explicit code area' in report and 'review-scope.sh area' in report
-assert 'every scoped file' in report
-handoff=(skills/'varde-knowledge/references/handoff-resume.md').read_text()
-handoff_write=(skills/'varde-knowledge/references/handoff-write.md').read_text()
-assert 'unknown' in handoff
-assert 'external target' in handoff
-assert 'explicit relevant file links' in handoff_write
-assert 'target independently' in handoff and 'target independently' in handoff_write
+assert 'for area scopes, review listed files' in report
+session_notes_resume=(skills/'varde-knowledge/references/session-notes-resume.md').read_text()
+session_notes_write=(skills/'varde-knowledge/references/session-notes-write.md').read_text()
+assert 'unknown' in session_notes_resume
+assert 'external target' in session_notes_resume
+assert 'explicit relevant file links' in session_notes_write
+assert 'target independently' in session_notes_resume and 'target independently' in session_notes_write
 # Exercise the documented comparison with handoff storage outside the repo.
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)/'repo'; root.mkdir(); external=Path(tmp)/'working'; external.mkdir()
@@ -38,9 +38,9 @@ with tempfile.TemporaryDirectory() as tmp:
  assert git('ls-files','--','target.md').strip()==b'target.md'
 refresh=(skills/'varde-docs/references/refresh.md').read_text()
 inventory=refresh.split('2. Many')[0]
-assert 'varde-workflow paths' not in inventory
+assert 'varde setup paths' not in inventory
 # Memory paths resolve once in SKILL.md, never mid-workflow.
-assert 'varde-workflow paths' not in refresh
+assert 'varde setup paths' not in refresh
 assert 'Resolve `<working>` and `<knowledge>` once' in (skills/'varde-docs/SKILL.md').read_text()
 print('PASS: clean area, external handoff comparisons and first-use routing')
 PY

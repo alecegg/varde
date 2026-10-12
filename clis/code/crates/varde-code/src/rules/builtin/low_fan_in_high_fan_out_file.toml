@@ -2,7 +2,7 @@
 id = "low-fan-in-high-fan-out-file"
 kind = "sql"
 verification = "dependency-facts"
-severity = "error"
+severity = "warning"
 name = "Certified dependency breadth budget"
 description = "Counts distinct certified target units per source file and distinct importing files per source unit. Calls and duplicate imports do not inflate counts."
 message = "file imports {fan_out} certified dependency units with {fan_in} certified importing files"

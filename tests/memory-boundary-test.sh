@@ -30,6 +30,7 @@ knowledge_hash() {
 
 assert_trackable memory-bank/knowledge/reference/example.md
 assert_trackable memory-bank/config/type-config/plan.md
+assert_trackable memory-bank/config/type-config/session-notes.md
 assert_ignored memory-bank/working/plans/example/plan.md
 assert_ignored memory-bank/working/friction/example.md
 
@@ -40,11 +41,11 @@ after="$(knowledge_hash)"
 
 # Resolve an isolated working store. A fresh checkout's default working path
 # need not exist until the first write, so do not require it to pre-exist.
-configured="$(cd "$ROOT_DIR" && VARDE_WORKING_DIR="$TEMP_WORKING" varde-workflow paths --json |
+configured="$(cd "$ROOT_DIR" && VARDE_WORKING_DIR="$TEMP_WORKING" varde setup paths --json |
   python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["working"])')"
 [ "$configured" = "$TEMP_WORKING" ] || fail "configured working store did not resolve to the fixture"
 
-if find "$ROOT_DIR/clis/code" "$ROOT_DIR/clis/workflow" "$ROOT_DIR/skills" "$ROOT_DIR/agents" "$ROOT_DIR/clis/toz" "$ROOT_DIR/clis/learn" \
+if find "$ROOT_DIR/clis" "$ROOT_DIR/skills" "$ROOT_DIR/agents" \
   -name memory-bank -type d -print | grep -q .; then
   fail "module memory-bank remains"
 fi

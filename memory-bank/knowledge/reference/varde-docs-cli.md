@@ -14,17 +14,11 @@ body. `create` does not require a `type` field, but once a concept has one,
 
 ## Global
 
-```text
-Usage: varde-workflow <COMMAND>
+Excerpt of `varde knowledge --help` (concept and lint commands):
 
-Commands:
+```text
   concept  Manage Concepts within a Knowledge Bundle
   lint     Lint a Knowledge Bundle for structural health issues
-  help     Print this message or the help of the given subcommand(s)
-
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
 ```
 
 - Every command takes an explicit, required `--bundle <PATH>` flag naming
@@ -42,7 +36,7 @@ bundle when the slug already exists or the document is invalid. When
 positional `<SLUG>` is given instead, the document is read from stdin.
 
 ```text
-Usage: varde-workflow concept create [OPTIONS] --bundle <BUNDLE> [SLUG]
+Usage: varde knowledge concept create [OPTIONS] --bundle <BUNDLE> [SLUG]
 
 Arguments:
   [SLUG]  Concept slug, e.g. `my-concept`; the document is read from stdin
@@ -65,7 +59,7 @@ git-derived `created`/`updated` metadata (see
 with a not-found error when no `<slug>.md` exists in the bundle.
 
 ```text
-Usage: varde-workflow concept show [OPTIONS] --bundle <BUNDLE> <SLUG>
+Usage: varde knowledge concept show [OPTIONS] --bundle <BUNDLE> <SLUG>
 
 Arguments:
   <SLUG>  Concept slug, e.g. `my-concept`
@@ -93,7 +87,7 @@ must equal `--expected-version <VERSION>` (the version last read, e.g. from
 is left unchanged. The new document is read from `--file` or stdin.
 
 ```text
-Usage: varde-workflow concept update [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG>
+Usage: varde knowledge concept update [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG>
 
 Arguments:
   <SLUG>  Concept slug, e.g. `my-concept`
@@ -123,11 +117,11 @@ Concepts with `status: deprecated` are excluded by default; pass
 semantics). An empty bundle prints `no concepts in bundle` and exits 0.
 
 ```text
-Usage: varde-workflow concept list [OPTIONS]
+Usage: varde knowledge concept list [OPTIONS]
 
 Options:
       --bundle <BUNDLE>
-          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde-workflow paths`) when omitted
+          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde setup paths`) when omitted
       --include-deprecated
           Include `status: deprecated` Concepts in the listing
       --json
@@ -145,7 +139,7 @@ non-zero with a not-found error when the slug does not exist. Not
 version-guarded — no `--expected-version` is required.
 
 ```text
-Usage: varde-workflow concept delete [OPTIONS] --bundle <BUNDLE> <SLUG>
+Usage: varde knowledge concept delete [OPTIONS] --bundle <BUNDLE> <SLUG>
 
 Arguments:
   <SLUG>  Concept slug, e.g. `my-concept`
@@ -167,12 +161,12 @@ deprecate/undeprecate commands are removed). The write is OCC-guarded:
 write is rejected as a conflict and the file is left untouched. `status`
 accepts only `draft | stable | deprecated`; `type` must be non-empty;
 the structured §5/§10 fields (`sources`, `verified`, `generated`,
-`stale_after`, `runtime`, `executor`, `attester`) reject bare-scalar
+`stale_after`, `runtime`, `builder`, `attester`) reject bare-scalar
 writes; any other key passes through unvalidated. See
 `knowledge/reference/frontmatter-field-set-and-search`.
 
 ```text
-Usage: varde-workflow concept set-field [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG> <KEY> <VALUE>
+Usage: varde knowledge concept set-field [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG> <KEY> <VALUE>
 
 Arguments:
   <SLUG>   Concept slug, e.g. `my-concept`
@@ -202,13 +196,13 @@ substring/fuzzy/full-text search. See
 `knowledge/reference/frontmatter-field-set-and-search`.
 
 ```text
-Usage: varde-workflow concept search [OPTIONS]
+Usage: varde knowledge concept search [OPTIONS]
 
 Options:
       --field <KEY=VALUE>
           Exact-value frontmatter filter `key=value`, repeatable; results must match every filter (AND semantics). Values match strings, the canonical form of other scalars, or any element of a sequence (e.g. `tags`)
       --bundle <BUNDLE>
-          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde-workflow paths`) when omitted
+          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde setup paths`) when omitted
       --json
           Machine-readable JSON output
   -h, --help
@@ -230,7 +224,7 @@ entries. Report-only: never modifies the bundle. See
 scope, and exit-code contract.
 
 ```text
-Usage: varde-workflow lint [OPTIONS] --bundle <BUNDLE>
+Usage: varde knowledge lint [OPTIONS] --bundle <BUNDLE>
 
 Options:
       --bundle <BUNDLE>  Knowledge Bundle root directory (holds the Concept `.md` files)

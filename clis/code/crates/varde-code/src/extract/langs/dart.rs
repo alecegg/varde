@@ -45,8 +45,8 @@
 //! - `throw_expression` -> Throw, named after the thrown expression (the callee
 //!   of `throw E(...)`, else the thrown text); `rethrow_statement` -> Throw
 //!   named "rethrow".
-//! - `catch_clause` (`catch (e)` / `on T catch (e)`) -> Catch, named after the
-//!   bound exception identifier.
+//! - `catch_clause` -> legacy Catch plus a body-spanning cognitive-only marker;
+//!   type-only `on T { ... }` uses only the cognitive marker.
 //! - ControlFlow: `if_statement`, `for_statement`, `while_statement`,
 //!   `switch_statement`, `return_statement`, `break_statement`,
 //!   `continue_statement`, `try_statement`.
@@ -246,7 +246,28 @@ fn visit_part_4(
             ctx.push(EntityKind::Throw, "rethrow".to_string(), node);
         }
         "catch_clause" => {
-            ctx.push(EntityKind::Catch, catch_var(node), node);
+            ctx.push(EntityKind::Catch, "legacy_catch_clause".to_string(), node);
+            ctx.push(
+                EntityKind::ControlFlow,
+                "cognitive_decision".to_string(),
+                node,
+            );
+            extend_last_span_to(ctx, following_handler_block_end(node));
+        }
+        "type"
+            if node
+                .parent()
+                .is_some_and(|parent| parent.kind() == "try_statement") =>
+        {
+            if on_clause_has_catch_clause(node) {
+                return true;
+            }
+            ctx.push(
+                EntityKind::ControlFlow,
+                "cognitive_decision".to_string(),
+                node,
+            );
+            extend_last_span_to(ctx, on_clause_block_end(node));
         }
         _ => return false,
     }
@@ -267,16 +288,36 @@ fn visit_part_5(
                 "if_statement"
             };
             ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            if name == "elseif_statement"
+                && let Some(consequence) = node.field("consequence")
+            {
+                shrink_last_span_to_point(ctx, crate::extract::span_of(&consequence));
+            }
+            if let Some(alternative) = node.field("alternative")
+                && alternative.kind() != "if_statement"
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &alternative,
+                );
+                shrink_last_span_to_point(ctx, crate::extract::span_of(&alternative));
+            }
         }
         "for_statement"
         | "while_statement"
         | "switch_statement"
         | "conditional_expression"
         | "return_statement"
-        | "break_statement"
-        | "continue_statement"
         | "try_statement" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "switch_expression" => {
+            ctx.push(
+                EntityKind::ControlFlow,
+                "cognitive_decision".to_string(),
+                node,
+            );
         }
         "do_statement" => {
             ctx.push(
@@ -287,6 +328,13 @@ fn visit_part_5(
         }
         "switch_statement_case" | "switch_statement_default" => {
             ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
+        }
+        "break_statement" | "continue_statement" if has_jump_label(node) => {
+            ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+            ctx.push(EntityKind::ControlFlow, "labeled_jump".to_string(), node);
+        }
+        "break_statement" | "continue_statement" => {
+            ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
         }
         _ => return false,
     }
@@ -299,6 +347,9 @@ fn visit_part_6(
     ctx: &mut ExtractCtx,
 ) -> bool {
     match kind {
+        "unary_expression" if node.text().trim_start().starts_with('!') => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+        }
         "logical_and_expression" => {
             ctx.push(EntityKind::ControlFlow, "logical_and".to_string(), node);
         }
@@ -321,6 +372,102 @@ fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
     parent
         .field("alternative")
         .is_some_and(|alternative| alternative.range() == node.range())
+}
+
+fn has_jump_label(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.children().any(|child| child.kind() == "identifier")
+}
+
+/// An `on T catch (e)` clause has one `catch_clause`; the type node alone only
+/// needs to represent the `on T { ... }` form.
+fn on_clause_has_catch_clause(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+    let mut after_type = false;
+    for sibling in parent.children() {
+        if sibling.range() == node.range() {
+            after_type = true;
+            continue;
+        }
+        if !after_type {
+            continue;
+        }
+        match sibling.kind().as_ref() {
+            "catch_clause" => return true,
+            "block" | "type" | "finally_clause" => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn on_clause_block_end(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<crate::model::Span> {
+    let parent = node.parent()?;
+    let mut after_type = false;
+    for sibling in parent.children() {
+        if sibling.range() == node.range() {
+            after_type = true;
+            continue;
+        }
+        if !after_type {
+            continue;
+        }
+        match sibling.kind().as_ref() {
+            "block" => return Some(crate::extract::span_of(&sibling)),
+            "catch_clause" | "type" | "finally_clause" => return None,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn following_handler_block_end(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<crate::model::Span> {
+    let parent = node.parent()?;
+    let mut after_clause = false;
+    for sibling in parent.children() {
+        if sibling.range() == node.range() {
+            after_clause = true;
+            continue;
+        }
+        if !after_clause {
+            continue;
+        }
+        match sibling.kind().as_ref() {
+            "block" => return Some(crate::extract::span_of(&sibling)),
+            "catch_clause" | "type" | "finally_clause" => return None,
+            _ => {}
+        }
+    }
+    None
+}
+
+fn extend_last_span_to(ctx: &mut ExtractCtx, end: Option<crate::model::Span>) {
+    if let Some(end) = end
+        && let Some(entity) = ctx.out.last_mut()
+    {
+        entity.span.end_byte = end.end_byte;
+        entity.span.end_line = end.end_line;
+        entity.span.end_col = end.end_col;
+    }
+}
+
+/// Hybrid `else` markers must not make their branch bodies appear one level
+/// deeper. Store a zero-width marker at the branch boundary while retaining
+/// the full declaration span for callable attribution.
+fn shrink_last_span_to_point(ctx: &mut ExtractCtx, point: crate::model::Span) {
+    if let Some(entity) = ctx.out.last_mut() {
+        entity.span.start_byte = point.start_byte;
+        entity.span.end_byte = point.start_byte;
+        entity.span.start_line = point.start_line;
+        entity.span.start_col = point.start_col;
+        entity.span.end_line = point.start_line;
+        entity.span.end_col = point.start_col;
+    }
 }
 
 /// Emit Extends (the `superclass`'s extended `type`) + Implements (each mixin
@@ -380,15 +527,6 @@ fn thrown_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> String {
         return call_name(&value);
     }
     value.text().into_owned()
-}
-
-/// Exception variable bound by a `catch_clause` (`catch (e)` -> "e"). The bound
-/// identifier is the clause's first `identifier` child.
-fn catch_var(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> String {
-    node.children()
-        .find(|c| c.kind() == "identifier")
-        .map(|c| c.text().into_owned())
-        .unwrap_or_default()
 }
 
 /// Callable declarations own their signature through the `signature` field.
@@ -571,8 +709,17 @@ mod tests {
             "{es:?}"
         );
         assert!(find(&es, EntityKind::Throw, "rethrow").is_some(), "{es:?}");
-        assert!(find(&es, EntityKind::Catch, "e").is_some(), "{es:?}");
-        assert!(find(&es, EntityKind::Catch, "err").is_some(), "{es:?}");
+        assert!(
+            find(&es, EntityKind::Catch, "legacy_catch_clause").is_some(),
+            "{es:?}"
+        );
+        assert_eq!(
+            es.iter()
+                .filter(|entity| entity.kind == EntityKind::Catch)
+                .count(),
+            2,
+            "{es:?}"
+        );
         assert!(
             find(&es, EntityKind::ControlFlow, "try_statement").is_some(),
             "{es:?}"
@@ -662,7 +809,10 @@ mod tests {
             flow_names.contains(&"conditional_expression"),
             "entities: {es:?}"
         );
-        assert!(find(&es, EntityKind::Catch, "error").is_some(), "{es:?}");
+        assert!(
+            find(&es, EntityKind::Catch, "legacy_catch_clause").is_some(),
+            "{es:?}"
+        );
         assert!(
             es.iter()
                 .any(|entity| entity.kind == EntityKind::CallableBoundary),
@@ -681,4 +831,267 @@ mod tests {
         assert_eq!(outer.cyclomatic, 10, "metric: {outer:?}; entities: {es:?}");
         assert_eq!(local.cyclomatic, 2, "metric: {local:?}");
     }
+
+    #[test]
+    fn recursion_matcher_finds_class_method_self_calls() {
+        let source = "class C { int f(int n) { if (n > 0) return f(n - 1); return 0; } }";
+        let parsed = crate::parse::parse_source(&SupportLang::Dart, source);
+        let root = parsed.root.root();
+        let (callables, references) = match_callees(&root);
+        assert_eq!(callables.len(), 1);
+        assert_eq!(callables[0].name, "f");
+        assert_eq!(callables[0].required_args, 1);
+        assert!(callables[0].span.end_byte > callables[0].name_span.end_byte);
+        assert_eq!(references.len(), 1);
+        let markers = crate::extract::recursion::resolve(&callables, &references, true);
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].name, "recursive_call");
+    }
+
+    #[test]
+    fn recursion_inside_closure_belongs_to_enclosing_method() {
+        let source = "class C { int f(int n) { final recurse = () { return f(n - 1); }; return n > 0 ? recurse() : 0; } }";
+        let parsed = crate::parse::parse_source(&SupportLang::Dart, source);
+        let root = parsed.root.root();
+        let (callables, references) = match_callees(&root);
+        let markers = crate::extract::recursion::resolve(&callables, &references, true);
+        assert_eq!(markers.len(), 1, "{callables:#?}\n{references:#?}");
+        assert_eq!(markers[0].name, "recursive_call");
+    }
+
+    #[test]
+    fn collection_control_flow_keeps_legacy_metrics_without_cognitive_points() {
+        let es = entities(
+            "int f(List<int> values, bool enabled) => [if (enabled) for (final value in values) value].length;",
+        );
+        let flows: Vec<_> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+        assert!(flows.is_empty(), "entities: {es:?}");
+        let metric = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .expect("function metric");
+        assert_eq!(metric.cognitive, 0, "metric: {metric:?}");
+        assert_eq!(metric.cyclomatic, 1, "metric: {metric:?}");
+        assert_eq!(metric.max_nesting, 0, "metric: {metric:?}");
+    }
+
+    #[test]
+    fn on_only_and_on_catch_handlers_each_span_their_body() {
+        let es = entities(
+            "int f(int n) { try { if (n > 0) throw StateError('x'); } on StateError { if (n == 1) return 1; } on FormatException catch (error) { if (n == 2) return 2; } return 0; }",
+        );
+        let catches: Vec<_> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Catch)
+            .collect();
+        assert_eq!(catches.len(), 1, "entities: {es:?}");
+        assert!(
+            catches
+                .iter()
+                .all(|entity| entity.name == "legacy_catch_clause")
+        );
+        let cognitive_handlers = es
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::ControlFlow && entity.name == "cognitive_decision"
+            })
+            .count();
+        assert_eq!(cognitive_handlers, 2, "entities: {es:?}");
+        let metrics = crate::complexity::function_complexities(&es);
+        let metric = metrics.iter().find(|metric| metric.name == "f").unwrap();
+        assert_eq!(metric.cognitive, 7, "metric: {metric:?}");
+        assert_eq!(metric.cyclomatic, 5, "metric: {metric:?}");
+        assert_eq!(metric.max_nesting, 0, "metric: {metric:?}");
+    }
+
+    #[test]
+    fn cognitive_only_dart_constructs_preserve_legacy_file_complexity() {
+        let source = "int f(int x, List<int> values) { final y = switch (x) { 1 => 1, _ => 0 }; try { throw StateError('x'); } on StateError { } on FormatException catch (e) { } return [if (x > 0) for (final value in values) value].length + y; }";
+        let es = entities(source);
+        let legacy_count = es
+            .iter()
+            .filter(|entity| crate::complexity::counts_toward_file_complexity(entity))
+            .count();
+        let legacy_names: Vec<_> = es
+            .iter()
+            .filter(|entity| crate::complexity::counts_toward_file_complexity(entity))
+            .map(|entity| entity.name.as_str())
+            .collect();
+        assert_eq!(
+            legacy_count, 2,
+            "legacy names: {legacy_names:?}; entities: {es:?}"
+        );
+        assert_eq!(
+            crate::complexity::cyclomatic_for_entities(&es),
+            3,
+            "legacy names: {legacy_names:?}; entities: {es:?}"
+        );
+        assert!(es.iter().any(|entity| {
+            entity.kind == EntityKind::ControlFlow && entity.name == "cognitive_decision"
+        }));
+        assert!(!es.iter().any(|entity| {
+            entity.name == "comprehension_if" || entity.name == "comprehension_for"
+        }));
+
+        let fixture = entities(include_str!(
+            "../../../tests/fixtures/complexity/dart/conformance.dart"
+        ));
+        let fixture_legacy_count = fixture
+            .iter()
+            .filter(|entity| crate::complexity::counts_toward_file_complexity(entity))
+            .count();
+        assert_eq!(fixture_legacy_count, 99);
+        assert_eq!(crate::complexity::cyclomatic_for_entities(&fixture), 100);
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    const DECLARATIONS: &[&str] = &[
+        "function_declaration",
+        "local_function_declaration",
+        "getter_declaration",
+        "setter_declaration",
+        "method_declaration",
+    ];
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| DECLARATIONS.contains(&node.kind().as_ref()))
+        .filter(|node| enclosing_type_name(node).is_some())
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name = callable_name(node)?;
+            let owner = enclosing_type_name(node)?;
+            let signature = node.field("signature").or_else(|| {
+                node.children()
+                    .find(|child| child.kind() == "function_signature")
+            });
+            let name_node = signature.as_ref().and_then(|signature| {
+                signature
+                    .dfs()
+                    .find(|candidate| candidate.kind() == "identifier" && candidate.text() == name)
+            });
+            let params = signature.as_ref().and_then(|signature| {
+                signature
+                    .dfs()
+                    .find(|candidate| candidate.kind() == "formal_parameter_list")
+            });
+            let (required_args, total_args) =
+                params.as_ref().map(parameter_arity).unwrap_or_default();
+            Some(Callable {
+                owner: Some(owner.clone()),
+                owner_type: Some(owner),
+                unqualified_callable: false,
+                name,
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: name_node
+                    .as_ref()
+                    .map(crate::extract::span_of)
+                    .unwrap_or_else(|| crate::extract::span_of(node)),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call.ancestors().find(|ancestor| {
+            DECLARATIONS.contains(&ancestor.kind().as_ref())
+                && enclosing_type_name(ancestor).is_some()
+        }) else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier, qualifier_name) = if function.kind() == "member_expression" {
+            let Some(method) = function.field("property") else {
+                continue;
+            };
+            let Some(receiver) = function.field("object") else {
+                continue;
+            };
+            let receiver_name = receiver.text();
+            let owner = callables[caller].owner.as_deref();
+            let (qualifier, qualifier_name) = if receiver_name == "this" {
+                (Qualifier::SelfLike, None)
+            } else if owner == Some(receiver_name.as_ref()) {
+                (Qualifier::NamedType, Some(receiver_name.into_owned()))
+            } else {
+                (Qualifier::Other, None)
+            };
+            (method.text().into_owned(), qualifier, qualifier_name)
+        } else if function.kind() == "identifier" {
+            (function.text().into_owned(), Qualifier::None, None)
+        } else {
+            continue;
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named() && child.kind() != "comment")
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+
+    (callables, references)
+}
+
+fn enclosing_type_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+        .and_then(|scope| field_name(&scope))
+}
+
+fn parameter_arity(params: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> (u16, u16) {
+    let formal_parameters: Vec<_> = params
+        .dfs()
+        .filter(|child| child.kind() == "formal_parameter")
+        .collect();
+    let required = formal_parameters
+        .iter()
+        .filter(|parameter| {
+            parameter.parent().is_some_and(|parent| {
+                parent.kind() == "formal_parameter_list"
+                    || parameter.text().trim_start().starts_with("required ")
+            })
+        })
+        .count();
+    (
+        u16::try_from(required).unwrap_or(u16::MAX),
+        u16::try_from(formal_parameters.len()).unwrap_or(u16::MAX),
+    )
 }

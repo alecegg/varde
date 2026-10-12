@@ -163,7 +163,7 @@ WHERE class_methods > 0 AND CAST(empty_stubs AS REAL) / class_methods > threshol
 [[rule]]
 id = "fat-interface"
 kind = "sql"
-severity = "error"
+severity = "warning"
 name = "Type method budget"
 description = "A uniquely identified same-file type owns more direct indexed methods than its configured budget."
 message = "'{class_name}' declares {member_count} methods, exceeding threshold of {threshold}"
@@ -206,7 +206,7 @@ WHERE member_count > threshold
 [[rule]]
 id = "too-many-interfaces"
 kind = "sql"
-severity = "error"
+severity = "warning"
 name = "Implemented contract budget"
 description = "A class exceeds its budget of resolved same-file interfaces declaring indexed methods."
 message = "class '{class_name}' implements {implements_count} interfaces, exceeding threshold of {threshold}"
@@ -246,7 +246,7 @@ HAVING implements_count > :max_interfaces
 [[rule]]
 id = "deep-inheritance"
 kind = "sql"
-severity = "error"
+severity = "warning"
 name = "Inheritance depth budget"
 description = "A same-file class's resolved inheritance depth exceeds a configured threshold. The measured depth is a lower bound because traversal is bounded."
 message = "class '{class_name}' has inheritance depth of at least {chain_depth}, exceeding threshold of {threshold}"

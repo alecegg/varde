@@ -503,29 +503,20 @@ pub(crate) fn schema_version(conn: &rusqlite::Connection) -> Result<i64> {
 /// incremental gate rebuilds after any upgrade or recompile with no version
 /// discipline required.
 ///
-/// Composed from the crate version plus the running executable's size + mtime
-/// (a recompile or reinstall changes at least one). It is deterministic within
-/// a single binary — a build then an incremental build by the *same* binary
-/// hash identically, so no spurious rebuild — and differs across binaries,
-/// which is exactly when a rebuild is wanted. If the executable can't be
-/// resolved, it degrades to the crate version alone (still catches releases).
+/// Composed from the crate version plus `VARDE_CODE_BUILD_ID`, a hash of this
+/// crate's sources computed by `build.rs`. Every binary that embeds the same
+/// extractor therefore shares one fingerprint (a build then an incremental
+/// build by any of them hash identically, so no spurious rebuild), and a binary
+/// built from different extractor source differs, which is exactly when a
+/// rebuild is wanted.
 /// Hashed with the same FNV-1a as `slice::head_fingerprint` so it fits the
 /// integer-valued `slice_meta` store.
 pub fn build_version_fingerprint() -> i64 {
-    let exe_fp = std::env::current_exe()
-        .ok()
-        .and_then(|path| std::fs::metadata(path).ok())
-        .map(|meta| {
-            let mtime = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_nanos())
-                .unwrap_or(0);
-            format!("{mtime}:{}", meta.len())
-        })
-        .unwrap_or_default();
-    let fingerprint = format!("{}:{exe_fp}", env!("CARGO_PKG_VERSION"));
+    let fingerprint = format!(
+        "{}:{}",
+        env!("CARGO_PKG_VERSION"),
+        env!("VARDE_CODE_BUILD_ID")
+    );
 
     // FNV-1a, matching `slice::head_fingerprint` (kept local to avoid a
     // db -> slice layering dependency).
@@ -545,6 +536,28 @@ pub fn build_version_fingerprint() -> i64 {
 pub(crate) fn create_indexes(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(INDEX_DDL)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod build_fingerprint_tests {
+    use super::*;
+
+    #[test]
+    fn fingerprint_is_the_embedded_build_identity_not_a_sibling_executable() {
+        let id = env!("VARDE_CODE_BUILD_ID");
+        assert_eq!(id.len(), 16, "build id is a 64-bit hex hash: {id}");
+        assert!(id.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(build_version_fingerprint(), build_version_fingerprint());
+    }
+
+    #[test]
+    fn build_id_covers_lockfile() {
+        let inputs: Vec<&str> = env!("VARDE_CODE_BUILD_INPUTS").split(',').collect();
+        assert!(
+            inputs.iter().any(|root| root.ends_with("Cargo.lock")),
+            "build id inputs omit the workspace lockfile: {inputs:?}"
+        );
+    }
 }
 
 #[cfg(test)]

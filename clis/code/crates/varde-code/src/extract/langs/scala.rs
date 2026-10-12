@@ -241,6 +241,26 @@ fn visit_part_4(
                 "if_expression"
             };
             ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            // The grammar spans an if through its alternative. Truncate the
+            // decision to its consequence so each else branch has one nesting
+            // level, rather than inheriting every earlier condition.
+            if let Some(consequence) = node.field("consequence")
+                && let Some(event) = ctx.out.last_mut()
+            {
+                let span = crate::extract::span_of(&consequence);
+                event.span.end_byte = span.end_byte;
+                event.span.end_line = span.end_line;
+                event.span.end_col = span.end_col;
+            }
+            if let Some(alternative) = node.field("alternative")
+                && alternative.kind() != "if_expression"
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &alternative,
+                );
+            }
         }
         _ => return false,
     }
@@ -253,6 +273,15 @@ fn visit_part_5(
     ctx: &mut ExtractCtx,
 ) -> bool {
     match kind {
+        "for_expression" if is_for_comprehension(node) => {
+            // Preserve the legacy cyclomatic event while treating the Scala
+            // yield form as shorthand for cognitive complexity.
+            ctx.push(
+                EntityKind::ControlFlow,
+                "for_comprehension".to_string(),
+                node,
+            );
+        }
         "while_expression" | "for_expression" | "match_expression" | "try_expression"
         | "return_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
@@ -268,7 +297,12 @@ fn visit_part_5(
             ctx.push(EntityKind::ControlFlow, "match_arm".to_string(), node);
         }
         "guard" => {
-            ctx.push(EntityKind::ControlFlow, "guards".to_string(), node);
+            let name = if is_for_comprehension(node) {
+                "comprehension_guard"
+            } else {
+                "guards"
+            };
+            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
         }
         _ => return false,
     }
@@ -285,6 +319,9 @@ fn visit_part_6(
             if let Some(name) = boolean_operator_name(node) {
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
+        }
+        "prefix_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
         }
         // ---- annotations ----
         // `@Controller` / `@cask.get("/x")` -> a Decorator entity owned by the
@@ -329,6 +366,27 @@ fn is_else_if(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
     parent
         .field("alternative")
         .is_some_and(|alternative| alternative.range() == node.range())
+}
+
+/// Scala uses one `for_expression` node for loops and yield comprehensions.
+/// Only the latter is shorthand; its generators and guards add no cognitive
+/// increment, though logical operators in their expressions remain visible.
+fn is_for_comprehension(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.ancestors()
+        .chain(std::iter::once(node.clone()))
+        .find(|ancestor| ancestor.kind() == "for_expression")
+        .is_some_and(|comprehension| {
+            comprehension
+                .children()
+                .any(|child| child.kind() == "yield")
+        })
+}
+
+fn is_negated_logical_sequence(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.text().trim_start().starts_with('!')
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "infix_expression" && boolean_operator_name(&child).is_some()
+        })
 }
 
 /// Stable complexity name for short-circuit boolean operators.
@@ -668,7 +726,207 @@ mod tests {
             .find(|metric| metric.name == "f")
             .expect("f metric");
         assert_eq!(function.cyclomatic, 9, "metric: {function:?}");
-        assert_eq!(function.cognitive, 8, "metric: {function:?}");
+        assert_eq!(function.cognitive, 10, "metric: {function:?}");
         assert_eq!(function.max_nesting, 1, "metric: {function:?}");
     }
+
+    #[test]
+    fn comprehension_shorthand_else_and_negation_keep_their_roles() {
+        let es = entities(
+            "object O { def f(xs: List[Int], a: Boolean, b: Boolean, c: Boolean) = for { x <- xs if a && b; y <- xs if b || c } yield x + y }\n",
+        );
+        let names: Vec<_> = es
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::ControlFlow)
+            .map(|entity| entity.name.as_str())
+            .collect();
+        assert!(names.contains(&"for_comprehension"), "entities: {es:?}");
+        assert!(names.contains(&"comprehension_guard"), "entities: {es:?}");
+        assert!(!names.contains(&"for_expression"), "entities: {es:?}");
+
+        let metric = crate::complexity::function_complexities(&es)
+            .into_iter()
+            .find(|metric| metric.name == "f")
+            .expect("f metric");
+        assert_eq!(metric.cognitive, 2, "metric: {metric:?}");
+        assert_eq!(metric.cyclomatic, 6, "metric: {metric:?}");
+        // The installed pre-change varde reports max_nesting = 1 for this
+        // comprehension; LegacyOnly events preserve that metric.
+        assert_eq!(metric.max_nesting, 1, "metric: {metric:?}");
+
+        let loop_with_yield_text = entities(
+            "object O { def loop(xs: List[Int]): Unit = for (x <- xs) { println(\"yield\") } }\n",
+        );
+        assert!(
+            find(
+                &loop_with_yield_text,
+                EntityKind::ControlFlow,
+                "for_expression"
+            )
+            .is_some(),
+            "entities: {loop_with_yield_text:?}"
+        );
+        assert!(
+            find(
+                &loop_with_yield_text,
+                EntityKind::ControlFlow,
+                "for_comprehension"
+            )
+            .is_none(),
+            "entities: {loop_with_yield_text:?}"
+        );
+
+        let else_and_negation = entities(
+            "object O { def g(a: Boolean, b: Boolean, c: Boolean) = { if (a) () else (); a && !(b && c) } }\n",
+        );
+        assert!(
+            find(&else_and_negation, EntityKind::ControlFlow, "else_branch").is_some(),
+            "entities: {else_and_negation:?}"
+        );
+        assert!(
+            find(
+                &else_and_negation,
+                EntityKind::ControlFlow,
+                "negation_break"
+            )
+            .is_some(),
+            "entities: {else_and_negation:?}"
+        );
+    }
+}
+
+/// Preserve legacy for/guard cyclomatic events while keeping them out of the
+/// cognitive score. `negation_break` only separates logical runs.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    ("for_comprehension", crate::complexity::FlowRole::LegacyOnly),
+    (
+        "comprehension_guard",
+        crate::complexity::FlowRole::LegacyOnly,
+    ),
+    ("negation_break", crate::complexity::FlowRole::Ignored),
+];
+
+/// Collect named callables and same-file call references for Scala's
+/// class/object/trait-scoped recursion resolver.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| FUNCTION_SCOPES.contains(&node.kind().as_ref()))
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let parameter_lists: Vec<_> = node
+                .children()
+                .filter(|child| child.kind() == "parameters")
+                .collect();
+            let parameters: Vec<_> = parameter_lists
+                .iter()
+                .flat_map(|list| list.children().collect::<Vec<_>>())
+                .filter(|child| child.kind() == "parameter")
+                .collect();
+            let variadic = parameters.iter().any(|parameter| {
+                parameter
+                    .dfs()
+                    .any(|part| part.kind() == "repeated_parameter_type")
+            });
+            let total_args = if variadic {
+                u16::MAX
+            } else {
+                u16::try_from(parameters.len()).unwrap_or(u16::MAX)
+            };
+            let required_args = u16::try_from(
+                parameters
+                    .iter()
+                    .filter(|parameter| parameter.field("default_value").is_none())
+                    .count(),
+            )
+            .unwrap_or(u16::MAX);
+            let owner_type = node
+                .ancestors()
+                .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+                .and_then(|ancestor| field_name(&ancestor));
+            let owner = node
+                .ancestors()
+                .find(|ancestor| {
+                    FUNCTION_SCOPES.contains(&ancestor.kind().as_ref())
+                        || TYPE_SCOPES.contains(&ancestor.kind().as_ref())
+                })
+                .and_then(|ancestor| field_name(&ancestor));
+            Some(Callable {
+                owner,
+                owner_type,
+                unqualified_callable: false,
+                name: name_node.text().into_owned(),
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| FUNCTION_SCOPES.contains(&ancestor.kind().as_ref()))
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let name = if function.kind() == "field_expression" {
+            function
+                .field("field")
+                .map(|field| field.text().into_owned())
+                .unwrap_or_default()
+        } else {
+            function.text().into_owned()
+        };
+        let (qualifier, qualifier_name) = match function
+            .field("value")
+            .map(|receiver| receiver.text().into_owned())
+        {
+            None => (Qualifier::None, None),
+            Some(receiver) if receiver == "this" => (Qualifier::SelfLike, None),
+            Some(receiver)
+                if callables[caller].owner_type.as_deref() == Some(receiver.as_str()) =>
+            {
+                (Qualifier::NamedType, Some(receiver))
+            }
+            Some(_) => (Qualifier::Other, None),
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named())
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
 }

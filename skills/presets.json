@@ -1,0 +1,33 @@
+{
+  "learn": {
+    "skills": ["varde-learn"]
+  },
+  "toz": {
+    "skills": ["varde-toz"]
+  },
+  "docs": {
+    "skills": ["varde-docs", "varde-agent-doc-authoring"]
+  },
+  "knowledge": {
+    "skills": ["varde-knowledge"]
+  },
+  "scan": {
+    "skills": ["varde-code", "varde-scan", "varde-customize"]
+  },
+  "workflow": {
+    "skills": [
+      "varde-change",
+      "varde-review",
+      "varde-explore",
+      "varde-knowledge",
+      "varde-docs",
+      "varde-prototype",
+      "varde-agent-doc-authoring",
+      "varde-code",
+      "varde-toz"
+    ]
+  },
+  "full": {
+    "skills": []
+  }
+}

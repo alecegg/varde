@@ -27,6 +27,9 @@ pub enum TopCommand {
     /// trigger only when a completed command_execution contains the
     /// absolute `--skill-path`. Do not rely on the Codex proxy for prompts
     /// that ask to inspect the skill file itself.
+    ///
+    /// Output evaluation cost scales with harness calls per eval: runs × evals × 2
+    /// when baseline comparison is enabled, plus judging calls.
     Eval {
         #[command(subcommand)]
         command: EvalCommand,
@@ -47,12 +50,48 @@ pub enum TopCommand {
 pub enum DiagnoseCommand {
     /// Inspect one local session or page a frozen evidence bundle.
     Inspect(DiagnoseInspectArgs),
-    /// Record one verified historical incident from a frozen evidence bundle.
+    /// List recent sessions for a repository and group linked workers.
+    List(DiagnoseListArgs),
+    /// Record one verified historical incident from a frozen evidence bundle; capture only evidence verified against its source.
     Capture(DiagnoseCaptureArgs),
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum DiagnoseListHarness {
+    Codex,
+    Claude,
+    Opencode,
+    All,
+}
+
 #[derive(Debug, Args)]
-#[command(override_usage = "varde-learn diagnose capture [OPTIONS] --json")]
+#[command(
+    override_usage = "varde learn diagnose list --harness <codex|claude|opencode|all> --repository <ROOT> [OPTIONS] --json"
+)]
+pub struct DiagnoseListArgs {
+    /// Native session source to scan.
+    #[arg(long, value_enum)]
+    pub harness: DiagnoseListHarness,
+
+    /// Repository root used to filter session working directories.
+    #[arg(long, alias = "repo", value_name = "ROOT")]
+    pub repository: PathBuf,
+
+    /// Maximum top-level sessions to return (1 to 10).
+    #[arg(long, default_value_t = 5, value_parser = clap::value_parser!(u8).range(1..=10))]
+    pub limit: u8,
+
+    /// Return the selected root session and its linked workers.
+    #[arg(long)]
+    pub run: Option<String>,
+
+    /// Print the shared machine-readable output envelope.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+#[command(override_usage = "varde learn diagnose capture [OPTIONS] --json")]
 #[command(group(clap::ArgGroup::new("capture_input").required(true).multiple(false).args(["file", "snapshot"])))]
 pub struct DiagnoseCaptureArgs {
     /// Strict JSON file describing one incident and its frozen source anchor.
@@ -158,7 +197,7 @@ pub struct DiagnoseInspectArgs {
 pub enum AdoptionCommand {
     /// Record an applied change and promote its friction items.
     Record(AdoptionRecordArgs),
-    /// List recorded adoptions with a later occurrence.
+    /// List recorded adoptions with a later occurrence; empty output means none are recorded, and `meta.skipped_invalid_timestamps` lists omitted dates.
     Recurrence(AdoptionRecurrenceArgs),
 }
 
@@ -213,6 +252,8 @@ pub enum FrictionCommand {
     /// List friction items with optional filters.
     List(FrictionListArgs),
     /// Add a friction item or append an occurrence.
+    ///
+    /// search with `friction list --text` first to avoid duplicates.
     Add(FrictionAddArgs),
     /// Show an item and its occurrences and status history.
     Show(FrictionShowArgs),
@@ -226,7 +267,7 @@ pub enum FrictionCommand {
 
 #[derive(Debug, Args)]
 pub struct FrictionListArgs {
-    /// Filter by open, resolved, promoted, or archived.
+    /// Filter by open (needs action), resolved (fixed), promoted (adopted), or archived (inactive).
     #[arg(long)]
     pub status: Option<String>,
 
@@ -235,14 +276,14 @@ pub struct FrictionListArgs {
     pub source: Option<String>,
 
     /// Filter items scoped to this repository root.
-    #[arg(long, value_name = "ROOT")]
-    pub repo: Option<PathBuf>,
+    #[arg(long, alias = "repo", value_name = "ROOT")]
+    pub repository: Option<PathBuf>,
 
     /// Filter global items with no repository scope.
     #[arg(long)]
     pub global: bool,
 
-    /// Case-insensitive literal substring of a title or occurrence evidence.
+    /// Case-insensitive literal substring of a title or occurrence evidence; use this search before adding a potentially duplicate item.
     #[arg(long)]
     pub text: Option<String>,
 
@@ -282,7 +323,7 @@ pub struct FrictionSetStatusArgs {
     /// Numeric friction item ID.
     pub id: i64,
 
-    /// New status: open, resolved, promoted, or archived.
+    /// New status: open (needs action), resolved (fixed), promoted (adopted), or archived (inactive).
     pub status: String,
 
     /// Reason recorded with the status transition.
@@ -310,8 +351,8 @@ pub struct FrictionImportArgs {
     pub directory: PathBuf,
 
     /// Repository root to associate with imported legacy occurrences.
-    #[arg(long, value_name = "ROOT")]
-    pub repo: PathBuf,
+    #[arg(long, alias = "repo", value_name = "ROOT")]
+    pub repository: PathBuf,
 
     /// Validate and report without creating or changing the friction store.
     #[arg(long)]
@@ -352,6 +393,10 @@ pub struct FrictionAddArgs {
     #[arg(long)]
     pub target: Option<String>,
 
+    /// Occurrence evidence; read from stdin when omitted.
+    #[arg(long, value_name = "EVIDENCE")]
+    pub text: Option<String>,
+
     /// Print the shared machine-readable output envelope.
     #[arg(long)]
     pub json: bool,
@@ -362,7 +407,27 @@ pub enum EvalCommand {
     /// Measure a skill description's trigger accuracy against queries.
     Trigger(TriggerArgs),
     /// Measure skill-guided output quality against baseline runs.
+    ///
+    /// Cost scales with runs × evals × 2 plus judging calls when baseline is enabled.
     Output(OutputArgs),
+    /// Check whether declared mutations make a skill's evals fail.
+    ///
+    /// calibrate before trusting an eval's sensitivity.
+    Calibrate(CalibrateArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct CalibrateArgs {
+    /// Directory containing the skill and evals/mutations.json.
+    pub skill_dir: PathBuf,
+
+    /// Harness used for evaluated sessions and judging.
+    #[arg(long, value_enum, default_value = "codex")]
+    pub harness: OutputHarness,
+
+    /// Print the machine-readable output envelope.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

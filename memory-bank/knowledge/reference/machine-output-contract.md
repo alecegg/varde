@@ -1,3 +1,10 @@
+---
+type: reference
+status: active
+title: "Machine output contract"
+description: Stable JSON envelope and scan-result semantics for varde-code commands.
+---
+
 # Machine-output contract
 
 ## Scope
@@ -174,8 +181,8 @@ items after a successful capture; an explicit `resultsLimit`, `matchesLimit`, or
 `findingsLimit` still sets the page size. A failed capture, missing `toz`,
 or `VARDE_CODE_TOZ=0` leaves the prior 100-item default unchanged.
 
-Retrieve a range with `toz query --handle <H> --lines 101:200` (one-based,
-inclusive), or search with `toz query --handle <H> "<term>"`. The next-page
+Retrieve a range with `varde run query --handle <H> --lines 101:200` (one-based,
+inclusive), or search with `varde run query --handle <H> "<term>"`. The next-page
 commands appear as `toz_read` and `toz_search` in
 `data.guide.truncated.<list>` for object payloads and
 `meta.pagination.<list>` for array payloads. Existing offset pagination and

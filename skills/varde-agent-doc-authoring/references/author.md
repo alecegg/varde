@@ -9,11 +9,4 @@
    - failures or near-misses and their fixes;
    - conventions a newcomer gets wrong;
    - steps done by hand or often forgotten.
-3. After frontmatter edits, run
-   `uv run scripts/validate-frontmatter.py <skill-dir>` (in a sandbox, prefix
-   `UV_PYTHON_PREFERENCE=only-system`).
-4. Final pass on the changed files, short of the full review in
-   `references/review.md`:
-   - run `scripts/check-length.py` (criteria: Scripts and length checks);
-   - after any edit to a skill's files, run
-     `scripts/skill-flow.py --write <skill-dir>` to refresh its FLOW.md.
+3. Run `varde doc lint <skill-dir-or-file>`, `varde doc frontmatter <skill-dir>`, and `varde doc flow --write <skill-dir>` on the changed skill.

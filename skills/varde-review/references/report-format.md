@@ -5,27 +5,41 @@
 | Case | Path |
 |---|---|
 | Standalone (no plan id passed) | `<working>/reviews/<YYYY-MM-DD>-<slug>/` |
-| Nested (review runs for a plan build, a plan id was passed) | `<working>/plans/<plan-id>/<review-id>/`, where `<review-id>` = `review-<YYYY-MM-DD>` (append `-2`, `-3`, ... on a same-day collision in that plan folder) |
+| Nested (review runs for a plan build, a plan id was passed) | `<plan-dir>/review.md` (one per plan; a re-check rewrites its header and appends `## Re-check`) |
 
-`review.md` frontmatter: `type: review`, date, branch, target, `status`
-(`in_progress` until roll-up, then `complete`), categories[], triage_status;
-body `## Categories` table (Category | Status [`complete` or `skipped`] |
-Findings).
+A review is one `review.md`: the report header, a `## Categories` checklist
+table (Category | Status [`complete` or `skipped`] | Findings), then the
+findings. There are no per-category files.
+Identifiers are category-local, `<CATEGORY>-<NNN>` from 001, never reused after
+dismissal. The standing `deferred/` review keeps one `<CATEGORY>.md` per
+category.
 
-One file per category, `<CATEGORY>.md`; identifiers are category-local,
-`<CATEGORY>-<NNN>` from 001, never reused after dismissal.
+## Report header
+
+```markdown
+---
+type: review
+verdict: approved | changes-requested
+reviewer: <agent role and session id>
+base: <full sha of the fixed commit>
+head: <full sha of the reviewed HEAD>
+---
+```
+
+`varde plan conclude` exits 0 only when the merged commit equals `head` and the
+verdict is `approved`. A fixes-only re-check rewrites the header and appends a
+`## Re-check` section.
 
 ## Finding format
 
-Each issue is a level-two markdown section inside a category file. The
+Each issue is a level-two markdown section in `review.md`. The
 heading contains a category-local identifier and a short title.
 
 ```markdown
 ## [CORRECTNESS-001] Missing validation
 
 **Severity:** high
-**Label:** triage
-**Disposition:** blank
+**Status:** open
 **Location:** `src/auth/token.ts:42`
 
 ### Summary
@@ -61,32 +75,26 @@ source and keep the reported concern distinct from a verified code defect.
 | Field | Allowed values |
 |---|---|
 | Severity | `critical`, `high`, `medium`, `low`, `info` |
-| Label | `auto-fix` or `triage` |
-| Disposition | `blank`, `fix`, `dismiss`, `action-item`, `escalated` |
+| Status | `open`, `fixed`, `deferred`, `asked` |
 
-Use `blank` until a human chooses an outcome.
+A new finding starts `open`.
 
 ### Optional fields
 
 | Field | Allowed values or shape | Meaning |
 |---|---|---|
 | Violates | `[<title>](/specs/<x>.md)` or a `/decision/`, `/pattern/` link | The knowledge note this finding breaks. Only when one exists; its rationale guides the fix. |
-| Escalated | `spec-conflict — <reason>`, `scope-creep — <reason>`, or `human-only — <category>` | Set only by the build-mode escalation gate in fix mode. Absent otherwise. |
 
 ### Field rules
 
-- Keep exact bold field names, lowercase severity, and `###` Summary/Solutions
-  headings; fix mode reads them literally.
-- `Location` is repository-relative, with a line number when stable; a CI
-  finding without a local file may use its check URL, and a visual finding
-  without known source may use a screenshot path relative to its review folder.
-  `Summary`
-  describes observed behavior; each solution stands alone and hides no
-  acceptance criteria.
-- Triage edits only `Disposition`, optionally adding a decision note below the
-  solutions; identifier, severity, label, location, summary, and solutions stay
-  intact, except that the build-mode escalation gate (`fix-pass.md`) relabels a
-  rejected finding `triage`. A visual fix may append before/after verification
-  evidence below the solutions without changing those fields.
-- `escalated` marks a source finding copied into the standing deferred review;
-  the copy keeps `Disposition: blank` for future triage.
+- Keep exact bold field names, lowercase severity, and `### Summary`/`### Solutions`;
+  fix mode reads them literally.
+- Use repository-relative `Location` with a stable line. CI without a local
+  file may use its check URL; visual findings without known source may use a
+  review-relative screenshot path. `Summary` states observed behavior; each
+  solution stands alone without hiding acceptance criteria.
+- Fix mode changes only `Status` (optionally adding a decision note below
+  Solutions); a visual fix may append before/after evidence. Other fields stay
+  intact.
+- A finding appended to the standing `deferred/` review keeps
+  `Status: deferred`.

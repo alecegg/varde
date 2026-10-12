@@ -13,13 +13,6 @@ pub fn run(args: UpdateArgs) -> Result<()> {
         Ok(v) => v,
         Err(err) => return report_error(&CliError(err.to_string()), args.json),
     };
-    let guard = match crate::review_checkpoints::begin_crud(&args.bundle, &args.slug) {
-        Ok(guard) => guard,
-        Err(error) => return crate::review_checkpoints::report_anyhow(&error, args.json),
-    };
-    if let Err(error) = crate::review_checkpoints::authorize_crud(&guard, &bytes, args.json) {
-        return crate::review_checkpoints::report_anyhow(&error, args.json);
-    }
     finish(
         update(&args.bundle, &args.slug, &args.expected_version, &bytes),
         args.json,

@@ -22,7 +22,7 @@ use toz_core::streaming;
 use toz_core::{Config, Project, Store};
 
 const MAX_FRAME: usize = 20 * 1024 * 1024;
-const PREVIEW_BYTES: u64 = 64 * 1024;
+pub(crate) const PREVIEW_BYTES: u64 = 64 * 1024;
 
 pub(crate) struct Launch<'a> {
     pub scratch: &'a Path,
@@ -42,7 +42,7 @@ pub(crate) fn run_script(
     write_script_inputs(scratch, src)?;
     let initial = script_initial(source, meta, limits, scratch);
     let mut command = worker_command(project, scratch, policy)?;
-    let mut child = command.spawn().context("starting toz worker")?;
+    let mut child = command.spawn().context("starting Toz worker")?;
     let result = run_parent_protocol(cfg, project, scratch, initial, &mut child);
     if result.is_err() {
         let _ = child.kill();
@@ -149,7 +149,7 @@ fn run_parent_protocol(
     };
     drop(protocol);
     let status = child.wait()?;
-    ensure!(status.success(), "toz worker exited with {status}");
+    ensure!(status.success(), "Toz worker exited with {status}");
     Ok(result)
 }
 
@@ -254,6 +254,7 @@ fn read_command_preview(
     Ok((out, err, truncated))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn capture_worker_output(
     cfg: &Config,
     project: &Project,

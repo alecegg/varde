@@ -31,7 +31,11 @@ use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
 
 /// Node kinds that introduce a named function scope.
-pub const TYPE_SCOPES: &[&str] = &["class_declaration", "interface_declaration"];
+pub const TYPE_SCOPES: &[&str] = &[
+    "class_declaration",
+    "interface_declaration",
+    "record_declaration",
+];
 pub const FUNCTION_SCOPES: &[&str] = &[
     "method_declaration",
     "constructor_declaration",
@@ -266,7 +270,20 @@ fn visit_part_4(
             } else {
                 "if_statement"
             };
-            ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            if let Some(consequence) = node.field("consequence") {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), &consequence);
+            } else {
+                ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            }
+            if let Some(alternative) = node.field("alternative")
+                && alternative.kind() != "if_statement"
+            {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "else_branch".to_string(),
+                    &alternative,
+                );
+            }
         }
         _ => return false,
     }
@@ -284,23 +301,35 @@ fn visit_part_5(
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
         }
+        "unary_expression" => {
+            if node.text().trim_start().starts_with('!') {
+                ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+            }
+        }
         "switch_label" => {
             ctx.push(EntityKind::ControlFlow, "case_statement".to_string(), node);
         }
         "guard" => {
             ctx.push(EntityKind::ControlFlow, "guard_statement".to_string(), node);
         }
-        "for_statement"
+        "switch_statement"
+        | "switch_expression"
+        | "for_statement"
         | "enhanced_for_statement"
         | "while_statement"
-        | "switch_expression"
         | "return_statement"
-        | "break_statement"
-        | "continue_statement"
         | "try_statement"
         | "try_with_resources_statement"
         | "ternary_expression" => {
             ctx.push(EntityKind::ControlFlow, node.kind().into_owned(), node);
+        }
+        "break_statement" | "continue_statement" => {
+            let name = if jump_has_label(node) {
+                "labeled_jump".to_string()
+            } else {
+                node.kind().into_owned()
+            };
+            ctx.push(EntityKind::ControlFlow, name, node);
         }
         _ => return false,
     }
@@ -550,6 +579,10 @@ pub fn function_scope_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) 
     })
 }
 
+fn jump_has_label(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.children().any(|child| child.kind() == "identifier")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -666,7 +699,8 @@ mod tests {
         let src = r#"
 class Demo {
     int f(int x, boolean a, boolean b, boolean c) {
-        if (a && b || c) { x++; } else if (b) { x--; }
+        if (a && b || c) { x++; } else if (b) { x--; } else { x = 0; }
+        if (!(a && c)) { x++; }
         do { x++; } while (a);
         try { work(); } catch (RuntimeException error) { recover(error); }
         Runnable callback = () -> deferred();
@@ -692,12 +726,19 @@ class Demo {
                 .iter()
                 .filter(|name| **name == "if_statement")
                 .count(),
-            1
+            2
         );
         assert_eq!(
             control_flow
                 .iter()
                 .filter(|name| **name == "elseif_statement")
+                .count(),
+            1
+        );
+        assert_eq!(
+            control_flow
+                .iter()
+                .filter(|name| **name == "else_branch")
                 .count(),
             1
         );
@@ -707,6 +748,10 @@ class Demo {
         );
         assert!(
             control_flow.contains(&"logical_or"),
+            "events: {control_flow:?}"
+        );
+        assert!(
+            control_flow.contains(&"negation_break"),
             "events: {control_flow:?}"
         );
         assert!(
@@ -758,4 +803,171 @@ class Demo {
             "entities: {entities:?}"
         );
     }
+
+    #[test]
+    fn labeled_break_and_continue_emit_labeled_jump_events() {
+        let src = r#"
+class Demo {
+    void f(boolean stop) {
+        OUT: for (;;) {
+            for (;;) {
+                if (stop) break OUT;
+                continue OUT;
+            }
+        }
+    }
+}
+"#;
+        let parsed = parse_source(&SupportLang::Java, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        assert_eq!(
+            entities
+                .iter()
+                .filter(|entity| entity.kind == EntityKind::ControlFlow
+                    && entity.name == "labeled_jump")
+                .count(),
+            2,
+            "entities: {entities:?}"
+        );
+    }
+
+    #[test]
+    fn switch_statements_and_expressions_are_decision_containers() {
+        let src = r#"
+class Demo {
+    int f(int value) {
+        switch (value) { case 0: return 0; default: return 1; }
+        return switch (value) { case 2 -> 2; default -> 3; };
+    }
+}
+"#;
+        let parsed = parse_source(&SupportLang::Java, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let switches: Vec<_> = entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::ControlFlow
+                    && matches!(
+                        entity.name.as_str(),
+                        "switch_statement" | "switch_expression"
+                    )
+            })
+            .collect();
+        assert_eq!(switches.len(), 2, "switch events: {switches:?}");
+        assert!(switches.iter().all(|entity| {
+            crate::complexity::flow_role(entity)
+                == Some(crate::complexity::FlowRole::DecisionContainer)
+        }));
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    (
+        "switch_statement",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+    (
+        "switch_expression",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+];
+
+/// Shared recursion matcher hook; populated by this language task.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| FUNCTION_SCOPES.contains(&node.kind().as_ref()))
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name = function_scope_name(node)?;
+            let parameters = node.field("parameters");
+            let parameters: Vec<_> = parameters
+                .map(|list| {
+                    list.children()
+                        .filter(|child| child.kind() == "formal_parameter")
+                        .collect()
+                })
+                .unwrap_or_default();
+            let arity = u16::try_from(parameters.len()).unwrap_or(u16::MAX);
+            let owner = enclosing_type_name(node);
+            let name_span = node
+                .field("name")
+                .as_ref()
+                .map(crate::extract::span_of)
+                .unwrap_or_else(|| crate::extract::span_of(node));
+            Some(Callable {
+                owner: owner.clone(),
+                owner_type: owner,
+                unqualified_callable: false,
+                name,
+                required_args: arity,
+                total_args: arity,
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span,
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "method_invocation") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| FUNCTION_SCOPES.contains(&ancestor.kind().as_ref()))
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(method) = call.field("name") else {
+            continue;
+        };
+        let (qualifier, qualifier_name) = match call.field("object") {
+            None => (Qualifier::None, None),
+            Some(receiver) if receiver.text() == "this" => (Qualifier::SelfLike, None),
+            Some(receiver)
+                if callables[caller].owner.as_deref() == Some(receiver.text().as_ref()) =>
+            {
+                (Qualifier::NamedType, Some(receiver.text().into_owned()))
+            }
+            Some(_) => (Qualifier::Other, None),
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named() && child.kind() != "line_comment")
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name: method.text().into_owned(),
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name,
+        });
+    }
+    (callables, references)
+}
+
+fn enclosing_type_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| TYPE_SCOPES.contains(&ancestor.kind().as_ref()))
+        .and_then(|ancestor| field_name(&ancestor))
 }

@@ -236,26 +236,21 @@ pub struct DiscoveredFile {
 }
 
 /// User-scope rule directory, resolved per call so tests can override it:
-/// `VARDE_CODE_USER_RULES_DIR` when set, else `$HOME/.config/varde-code/rules/`
-/// (the same HOME-based convention `db::path::repo_db_path` uses).
+/// `VARDE_CODE_USER_RULES_DIR` or `VARDE_USER_RULES_DIR` when set, else the
+/// rules directory under the resolved varde-code config root.
 pub fn user_rules_dir() -> PathBuf {
     match std::env::var_os("VARDE_CODE_USER_RULES_DIR")
         .or_else(|| std::env::var_os("VARDE_USER_RULES_DIR"))
     {
         Some(dir) => PathBuf::from(dir),
-        None => {
-            let home = std::env::var_os("HOME").unwrap_or_else(|| "~".into());
-            PathBuf::from(home)
-                .join(".config")
-                .join("varde-code")
-                .join("rules")
-        }
+        None => crate::db::path::config_dir().join("rules"),
     }
 }
 
 /// Discover rule-pack TOML files in both scopes.
 ///
-/// User scope: `~/.config/varde-code/rules/`. Repo scope:
+/// User scope: the resolved code config root's `rules/` directory, with the
+/// legacy directory used until its migration marker exists. Repo scope:
 /// `<repo_root>/.varde-code/rules/`. A missing directory in either scope is
 /// not an error — it contributes zero files. Ordering is deterministic:
 /// user scope first, then repo scope, each sorted by path, so the merge
@@ -346,6 +341,52 @@ pub enum RuleOrigin {
     Builtin,
     Override,
     Custom,
+}
+
+/// The source that supplied the active rule's severity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuleSeveritySource {
+    Builtin,
+    UserRule,
+    RepoRule,
+    UserOverride,
+    RepoOverride,
+}
+
+impl RuleSeveritySource {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Builtin => "builtin",
+            Self::UserRule => "user-rule",
+            Self::RepoRule => "repo-rule",
+            Self::UserOverride => "user-override",
+            Self::RepoOverride => "repo-override",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OrphanedOverride {
+    pub rule_id: String,
+    pub severity: String,
+    pub source: String,
+    pub file: String,
+}
+
+pub(crate) struct RuleListDetails {
+    pub origins: HashMap<String, RuleOrigin>,
+    pub severity_sources: HashMap<String, RuleSeveritySource>,
+    pub drifted: std::collections::HashSet<String>,
+    pub orphaned_overrides: Vec<OrphanedOverride>,
+    pub disabled_rules: Vec<DisabledRule>,
+    pub definition_files: HashMap<String, String>,
+    pub definition_scopes: HashMap<String, RuleScope>,
+}
+
+pub(crate) struct DisabledRule {
+    pub rule: Rule,
+    pub severity_source: RuleSeveritySource,
 }
 
 /// Validate the kind-specific required fields of a deserialized rule.
@@ -718,7 +759,106 @@ const BUILTIN_RULE_PACKS: &[(&str, &str)] = &[
         "<builtin>/dependency_boundary.toml",
         include_str!("builtin/dependency_boundary.toml"),
     ),
+    (
+        "<builtin>/hardcoded_credential_rust.toml",
+        include_str!("builtin/hardcoded_credential_rust.toml"),
+    ),
+    (
+        "<builtin>/hardcoded_credential_go.toml",
+        include_str!("builtin/hardcoded_credential_go.toml"),
+    ),
+    (
+        "<builtin>/hardcoded_credential_jvm_dotnet.toml",
+        include_str!("builtin/hardcoded_credential_jvm_dotnet.toml"),
+    ),
+    (
+        "<builtin>/hardcoded_credential_native_apple.toml",
+        include_str!("builtin/hardcoded_credential_native_apple.toml"),
+    ),
+    (
+        "<builtin>/hardcoded_credential_native_apple_class.toml",
+        include_str!("builtin/hardcoded_credential_native_apple_class.toml"),
+    ),
+    (
+        "<builtin>/hardcoded_credential_scripting.toml",
+        include_str!("builtin/hardcoded_credential_scripting.toml"),
+    ),
+    (
+        "<builtin>/hardcoded_credential_other.toml",
+        include_str!("builtin/hardcoded_credential_other.toml"),
+    ),
+    (
+        "<builtin>/error_swallow_rust.toml",
+        include_str!("builtin/error_swallow_rust.toml"),
+    ),
+    (
+        "<builtin>/error_swallow_go.toml",
+        include_str!("builtin/error_swallow_go.toml"),
+    ),
+    (
+        "<builtin>/error_swallow_c_scala_solidity.toml",
+        include_str!("builtin/error_swallow_c_scala_solidity.toml"),
+    ),
+    (
+        "<builtin>/error_swallow_lua_bash.toml",
+        include_str!("builtin/error_swallow_lua_bash.toml"),
+    ),
+    (
+        "<builtin>/error_swallow_elixir_haskell.toml",
+        include_str!("builtin/error_swallow_elixir_haskell.toml"),
+    ),
 ];
+
+fn rule_tables(contents: &str) -> Option<HashMap<String, toml::Value>> {
+    let document: toml::Value = toml::from_str(contents).ok()?;
+    let entries = document.get("rule")?.as_array()?;
+    Some(
+        entries
+            .iter()
+            .filter_map(|entry| {
+                let table = entry.as_table()?;
+                Some((table.get("id")?.as_str()?.to_owned(), entry.clone()))
+            })
+            .collect(),
+    )
+}
+
+fn first_rule_files(loaded: &[LoadedRule]) -> HashMap<String, String> {
+    let mut files = HashMap::new();
+    for loaded_rule in loaded {
+        files
+            .entry(loaded_rule.rule.id.clone())
+            .or_insert_with(|| loaded_rule.file.clone());
+    }
+    files
+}
+
+fn seed_drifted(rule_id: &str, file: &str) -> bool {
+    let Some((builtin_label, builtin_contents)) = builtin_rule_pack_for(rule_id) else {
+        return false;
+    };
+    let Some(file_name) = builtin_label.rsplit('/').next() else {
+        return false;
+    };
+    let path = Path::new(file);
+    if path.file_name().and_then(|name| name.to_str()) != Some(file_name) {
+        return false;
+    }
+    let Ok(seeded_contents) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Some(seeded) =
+        rule_tables(&seeded_contents).and_then(|tables| tables.get(rule_id).cloned())
+    else {
+        return false;
+    };
+    let Some(builtin) =
+        rule_tables(builtin_contents).and_then(|tables| tables.get(rule_id).cloned())
+    else {
+        return false;
+    };
+    seeded != builtin
+}
 
 /// Parse every built-in rule pack. Diagnostics here would indicate a bug in
 /// a shipped pack (never a user-input error), but are still surfaced rather
@@ -756,9 +896,44 @@ pub struct SeedResult {
 /// Existing files are left untouched unless `force` is true — safe to
 /// re-run after adding a new built-in pack without clobbering local edits.
 pub fn seed_builtin_rules(target_dir: &Path, force: bool) -> std::io::Result<Vec<SeedResult>> {
+    seed_builtin_rules_for(target_dir, force, None)
+}
+
+/// Write all built-in packs, or just the pack containing `rule_id`.
+///
+/// The optional id is validated against the shipped rules. With an id, the
+/// returned results contain only its pack, so `force` cannot refresh other
+/// files as a side effect.
+pub fn seed_builtin_rules_for(
+    target_dir: &Path,
+    force: bool,
+    rule_id: Option<&str>,
+) -> std::io::Result<Vec<SeedResult>> {
+    let selected_label = if let Some(rule_id) = rule_id {
+        Some(
+            builtin_rule_pack_for(rule_id)
+                .map(|(label, _)| label)
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("unknown built-in rule id: {rule_id}"),
+                    )
+                })?,
+        )
+    } else {
+        None
+    };
     std::fs::create_dir_all(target_dir)?;
-    let mut results = Vec::with_capacity(BUILTIN_RULE_PACKS.len());
+    let capacity = if selected_label.is_some() {
+        1
+    } else {
+        BUILTIN_RULE_PACKS.len()
+    };
+    let mut results = Vec::with_capacity(capacity);
     for (label, contents) in BUILTIN_RULE_PACKS {
+        if selected_label.is_some_and(|selected| selected != *label) {
+            continue;
+        }
         let file_name = label
             .rsplit('/')
             .next()
@@ -784,6 +959,13 @@ pub fn seed_builtin_rules(target_dir: &Path, force: bool) -> std::io::Result<Vec
         });
     }
     Ok(results)
+}
+
+/// Return the embedded built-in pack containing `rule_id`.
+pub fn builtin_rule_pack_for(rule_id: &str) -> Option<(&'static str, &'static str)> {
+    BUILTIN_RULE_PACKS.iter().copied().find(|(_, contents)| {
+        rule_tables(contents).is_some_and(|rules| rules.contains_key(rule_id))
+    })
 }
 
 /// Outcome of removing a single seeded built-in pack file from `target_dir`.
@@ -841,7 +1023,8 @@ pub fn unseed_builtin_rules(target_dir: &Path, force: bool) -> std::io::Result<V
 /// Discover, parse, validate, and merge every rule pack for `repo_root`.
 ///
 /// Runs the full pipeline: discovery (user scope from
-/// `VARDE_CODE_USER_RULES_DIR`/`~/.config/varde-code/rules/`, repo scope from
+/// `VARDE_CODE_USER_RULES_DIR`/`VARDE_USER_RULES_DIR` or the resolved
+/// varde-code config root, repo scope from
 /// `<repo_root>/.varde-code/rules/`) → per-file parse/validate → merge by id
 /// (repo wins cross-scope, first-loaded wins same-scope). Every diagnostic
 /// from each stage is accumulated into the returned list. Never fails: a
@@ -856,10 +1039,186 @@ pub fn load_rules(repo_root: &Path) -> (Vec<Rule>, Vec<Diagnostic>) {
     (rules, diagnostics)
 }
 
+#[derive(Debug, Clone, Copy)]
+enum RuleSeverityOverride {
+    Severity(Severity),
+    Off,
+}
+
+impl RuleSeverityOverride {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Severity(Severity::Error) => "error",
+            Self::Severity(Severity::Warning) => "warning",
+            Self::Severity(Severity::Info) => "info",
+            Self::Off => "off",
+        }
+    }
+}
+
+fn user_overrides_file() -> PathBuf {
+    std::env::var_os("VARDE_CODE_USER_OVERRIDES_FILE")
+        .or_else(|| std::env::var_os("VARDE_USER_OVERRIDES_FILE"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| crate::db::path::config_dir().join("overrides.toml"))
+}
+
+fn load_overrides_file(path: &Path) -> (HashMap<String, RuleSeverityOverride>, Vec<Diagnostic>) {
+    let contents = match std::fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return (HashMap::new(), Vec::new());
+        }
+        Err(error) => {
+            return (
+                HashMap::new(),
+                vec![Diagnostic {
+                    rule_id: None,
+                    file: path.display().to_string(),
+                    reason: format!("unable to read overrides file: {error}"),
+                }],
+            );
+        }
+    };
+
+    let document: toml::Value = match toml::from_str(&contents) {
+        Ok(document) => document,
+        Err(error) => {
+            return (
+                HashMap::new(),
+                vec![Diagnostic {
+                    rule_id: None,
+                    file: path.display().to_string(),
+                    reason: format!("invalid TOML overrides file: {error}"),
+                }],
+            );
+        }
+    };
+    let Some(entries) = document.get("rules").and_then(toml::Value::as_table) else {
+        if document.as_table().is_some_and(|table| table.is_empty()) {
+            return (HashMap::new(), Vec::new());
+        }
+        return (
+            HashMap::new(),
+            vec![Diagnostic {
+                rule_id: None,
+                file: path.display().to_string(),
+                reason: "expected a `[rules]` table".to_string(),
+            }],
+        );
+    };
+
+    let mut overrides = HashMap::new();
+    let mut diagnostics = Vec::new();
+    for (rule_id, entry) in entries {
+        let Some(raw_severity) = entry
+            .as_table()
+            .and_then(|entry| entry.get("severity"))
+            .and_then(toml::Value::as_str)
+        else {
+            diagnostics.push(Diagnostic {
+                rule_id: Some(rule_id.clone()),
+                file: path.display().to_string(),
+                reason: "override must include a string `severity`".to_string(),
+            });
+            continue;
+        };
+
+        let override_value = if raw_severity.eq_ignore_ascii_case("off") {
+            RuleSeverityOverride::Off
+        } else if let Some(severity) = Severity::from_name(raw_severity) {
+            RuleSeverityOverride::Severity(severity)
+        } else {
+            diagnostics.push(Diagnostic {
+                rule_id: Some(rule_id.clone()),
+                file: path.display().to_string(),
+                reason: format!(
+                    "invalid severity `{raw_severity}`; expected error, warning, info, or off"
+                ),
+            });
+            continue;
+        };
+        overrides.insert(rule_id.clone(), override_value);
+    }
+
+    (overrides, diagnostics)
+}
+
+fn orphaned_overrides(
+    known_rule_ids: &std::collections::HashSet<String>,
+    user: &HashMap<String, RuleSeverityOverride>,
+    user_path: &Path,
+    repo: &HashMap<String, RuleSeverityOverride>,
+    repo_path: &Path,
+) -> Vec<OrphanedOverride> {
+    let mut orphaned = Vec::new();
+    for (source, path, overrides) in [
+        (RuleSeveritySource::UserOverride, user_path, user),
+        (RuleSeveritySource::RepoOverride, repo_path, repo),
+    ] {
+        for (rule_id, severity) in overrides {
+            if !known_rule_ids.contains(rule_id) {
+                orphaned.push(OrphanedOverride {
+                    rule_id: rule_id.clone(),
+                    severity: severity.as_str().to_owned(),
+                    source: source.as_str().to_owned(),
+                    file: path.display().to_string(),
+                });
+            }
+        }
+    }
+    orphaned.sort_by(|left, right| {
+        (&left.rule_id, &left.source, &left.file).cmp(&(&right.rule_id, &right.source, &right.file))
+    });
+    orphaned
+}
+
+fn apply_rule_overrides(
+    rules: &mut Vec<Rule>,
+    user: &HashMap<String, RuleSeverityOverride>,
+    repo: &HashMap<String, RuleSeverityOverride>,
+) -> (HashMap<String, RuleSeveritySource>, Vec<DisabledRule>) {
+    let mut applied = HashMap::new();
+    let mut disabled = Vec::new();
+    rules.retain_mut(|rule| {
+        let (override_value, source) = if let Some(value) = repo.get(&rule.id) {
+            (Some(value), RuleSeveritySource::RepoOverride)
+        } else if let Some(value) = user.get(&rule.id) {
+            (Some(value), RuleSeveritySource::UserOverride)
+        } else {
+            (None, RuleSeveritySource::Builtin)
+        };
+        match override_value {
+            Some(RuleSeverityOverride::Off) => {
+                applied.insert(rule.id.clone(), source);
+                disabled.push(DisabledRule {
+                    rule: rule.clone(),
+                    severity_source: source,
+                });
+                false
+            }
+            Some(RuleSeverityOverride::Severity(severity)) => {
+                rule.severity = *severity;
+                applied.insert(rule.id.clone(), source);
+                true
+            }
+            None => true,
+        }
+    });
+    (applied, disabled)
+}
+
 /// Load active rules and retain each rule's merged origin.
 pub(crate) fn load_rules_with_origins(
     repo_root: &Path,
 ) -> (Vec<Rule>, Vec<Diagnostic>, HashMap<String, RuleOrigin>) {
+    let (rules, diagnostics, details) = load_rules_with_details(repo_root);
+    (rules, diagnostics, details.origins)
+}
+
+pub(crate) fn load_rules_with_details(
+    repo_root: &Path,
+) -> (Vec<Rule>, Vec<Diagnostic>, RuleListDetails) {
     let user_dir = user_rules_dir();
     let (files, mut diagnostics) = discover_with_diagnostics(repo_root, Some(&user_dir));
 
@@ -874,6 +1233,8 @@ pub(crate) fn load_rules_with_origins(
         }
     }
 
+    let user_files = first_rule_files(&user_loaded);
+    let repo_files = first_rule_files(&repo_loaded);
     let (mut rules, merge_diags) = merge(user_loaded, repo_loaded);
     diagnostics.extend(merge_diags);
 
@@ -894,14 +1255,72 @@ pub(crate) fn load_rules_with_origins(
             (rule.id.clone(), origin)
         })
         .collect();
+    let mut severity_sources = HashMap::new();
+    let mut definition_files = HashMap::new();
+    let mut definition_scopes = HashMap::new();
+    for rule in &rules {
+        if let Some(file) = repo_files.get(&rule.id) {
+            severity_sources.insert(rule.id.clone(), RuleSeveritySource::RepoRule);
+            definition_files.insert(rule.id.clone(), file.clone());
+            definition_scopes.insert(rule.id.clone(), RuleScope::Repo);
+        } else if let Some(file) = user_files.get(&rule.id) {
+            severity_sources.insert(rule.id.clone(), RuleSeveritySource::UserRule);
+            definition_files.insert(rule.id.clone(), file.clone());
+            definition_scopes.insert(rule.id.clone(), RuleScope::User);
+        }
+    }
     let mut seen: std::collections::HashSet<String> = rules.iter().map(|r| r.id.clone()).collect();
     for LoadedRule { rule, .. } in builtin {
         if seen.insert(rule.id.clone()) {
             origins.insert(rule.id.clone(), RuleOrigin::Builtin);
+            severity_sources.insert(rule.id.clone(), RuleSeveritySource::Builtin);
             rules.push(rule);
         }
     }
-    (rules, diagnostics, origins)
+
+    let user_override_path = user_overrides_file();
+    let repo_override_path = repo_root.join(".varde-code/overrides.toml");
+    let (user_overrides, user_override_diagnostics) = load_overrides_file(&user_override_path);
+    diagnostics.extend(user_override_diagnostics);
+    let (repo_overrides, repo_override_diagnostics) = load_overrides_file(&repo_override_path);
+    diagnostics.extend(repo_override_diagnostics);
+    let known_rule_ids: std::collections::HashSet<String> =
+        rules.iter().map(|rule| rule.id.clone()).collect();
+    let orphaned_overrides = orphaned_overrides(
+        &known_rule_ids,
+        &user_overrides,
+        &user_override_path,
+        &repo_overrides,
+        &repo_override_path,
+    );
+    let (applied_overrides, disabled_rules) =
+        apply_rule_overrides(&mut rules, &user_overrides, &repo_overrides);
+    for (rule_id, source) in applied_overrides {
+        origins.insert(rule_id.clone(), RuleOrigin::Override);
+        severity_sources.insert(rule_id, source);
+    }
+    let active_ids: std::collections::HashSet<&str> =
+        rules.iter().map(|rule| rule.id.as_str()).collect();
+    origins.retain(|rule_id, _| active_ids.contains(rule_id.as_str()));
+    severity_sources.retain(|rule_id, _| active_ids.contains(rule_id.as_str()));
+    let drifted = definition_files
+        .iter()
+        .filter_map(|(rule_id, file)| seed_drifted(rule_id, file).then(|| rule_id.clone()))
+        .collect();
+
+    (
+        rules,
+        diagnostics,
+        RuleListDetails {
+            origins,
+            severity_sources,
+            drifted,
+            orphaned_overrides,
+            disabled_rules,
+            definition_files,
+            definition_scopes,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -2064,7 +2483,7 @@ pattern = "x"
             .find(|r| r.id == "file-complexity-hotspot")
             .expect("file-complexity-hotspot shipped");
         assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Error);
+        assert_eq!(rule.severity, Severity::Warning);
         assert!(rule.query.as_deref().unwrap_or("").contains("complexity"));
         assert!(
             !rule.query.as_deref().unwrap_or("").contains("churn"),
@@ -2074,7 +2493,22 @@ pattern = "x"
         assert_eq!(thresholds.get("max_complexity"), Some(&50.0));
         assert_eq!(thresholds.get("min_complexity_per_function"), Some(&7.0));
         assert!(!rule.query.as_deref().unwrap().contains("LIMIT"));
-        assert_eq!(thresholds.get("current_metric_version"), Some(&2.0));
+        assert_eq!(thresholds.get("current_metric_version"), Some(&3.0));
+    }
+
+    #[test]
+    fn function_metric_version_sites_agree() {
+        let rules = builtin_rules();
+        let rule = rules
+            .iter()
+            .find(|r| r.id == "file-complexity-hotspot")
+            .expect("file-complexity-hotspot shipped");
+        assert_eq!(
+            rule.thresholds
+                .as_ref()
+                .and_then(|thresholds| thresholds.get("current_metric_version")),
+            Some(&(crate::persist::FUNCTION_METRIC_VERSION as f64))
+        );
     }
 
     #[test]
@@ -2085,7 +2519,7 @@ pattern = "x"
             .find(|r| r.id == "function-complexity-gate")
             .expect("function-complexity-gate shipped");
         assert_eq!(gate.kind, RuleKind::Sql);
-        assert_eq!(gate.severity, Severity::Error);
+        assert_eq!(gate.severity, Severity::Warning);
         let query = gate.query.as_deref().unwrap_or("");
         assert!(query.contains("function_metrics"));
         assert!(query.contains("fm.confidence = 'high'"));
@@ -2141,7 +2575,7 @@ pattern = "x"
             .find(|r| r.id == "duplicate-code-clone")
             .expect("duplicate-code-clone shipped");
         assert_eq!(rule.kind, RuleKind::Sql);
-        assert_eq!(rule.severity, Severity::Error);
+        assert_eq!(rule.severity, Severity::Warning);
         let query = rule.query.as_deref().unwrap_or("");
         assert!(query.contains("e.kind = 0"), "selects function candidates");
         assert!(query.contains("start_byte"), "returns source spans");
@@ -2171,11 +2605,12 @@ pattern = "x"
 
         let dbg = by_id("debug-macro-strict");
         assert_eq!(dbg.kind, RuleKind::Pattern);
-        assert_eq!(dbg.severity, Severity::Error);
+        assert_eq!(dbg.severity, Severity::Warning);
         assert_eq!(dbg.pattern.as_deref(), Some("dbg!($$$ARGS)"));
         assert_eq!(dbg.languages.as_deref(), Some(&["rust".to_string()][..]));
 
         let dstmt = by_id("debug-statement-strict");
+        assert_eq!(dstmt.severity, Severity::Warning);
         assert_eq!(dstmt.pattern.as_deref(), Some("debugger;"));
         assert_eq!(
             dstmt.languages.as_deref(),
@@ -2212,14 +2647,14 @@ pattern = "x"
 
     #[test]
     fn certified_dependency_rules_declare_native_verification() {
-        for id in [
-            "low-fan-in-high-fan-out-file",
-            "circular-import",
-            "unresolved-local-import",
+        for (id, severity) in [
+            ("low-fan-in-high-fan-out-file", Severity::Warning),
+            ("circular-import", Severity::Error),
+            ("unresolved-local-import", Severity::Error),
         ] {
             let rule = builtin_rules().into_iter().find(|r| r.id == id).unwrap();
             assert_eq!(rule.kind, RuleKind::Sql);
-            assert_eq!(rule.severity, Severity::Error);
+            assert_eq!(rule.severity, severity);
             assert_eq!(rule.verification, Some(Verification::DependencyFacts));
         }
     }
@@ -2230,6 +2665,7 @@ pattern = "x"
             .into_iter()
             .find(|r| r.id == "dependency-boundary")
             .unwrap();
+        assert_eq!(rule.severity, Severity::Error);
         assert_eq!(boundary_configured(&rule), Ok(false));
         for (source, target, valid) in [
             ("src/core", "src/data", true),

@@ -1,19 +1,15 @@
-//! Shared scaffold for session-start hook install targets.
+//! Removal of the session-start hooks the old per-feature code installer wrote, kept for
+//! `varde setup sync` migration. Installing moved to `varde setup hooks install`.
 //!
-//! Supports two installation kinds: whole-file writes
-//! (`HookKind::WriteFile`) and merges into a
-//! shared config file the user may already have unrelated content in
-//! (`HookKind::MergeInto`, new — JSON via `serde_json` or TOML via
-//! `toml-edit`, which preserves the user's comments/formatting unlike plain
-//! `toml`).
-//!
-//! This module intentionally defines no concrete [`HookTarget`]s yet — the
-//! sibling tasks (Claude Code, Codex, opencode, Pi) each add one to
-//! [`HOOK_TARGETS`]. Only the shared merge/diff helpers are exercised by
-//! this task's tests.
+//! Two kinds of target: whole-file writes (`HookKind::WriteFile`, matched against the
+//! embedded asset and earlier releases) and merges into a shared config file
+//! (`HookKind::MergeInto`: JSON via `serde_json`, TOML via `toml_edit`, which keeps the
+//! user's comments and formatting). Removal touches only this tool's own entry and skips
+//! one the user edited unless forced.
 
 use std::io;
 use std::path::{Path, PathBuf};
+use varde_core::json_order;
 
 /// Stable marker identifying an entry this tool injected, used both to
 /// merge idempotently and to scope `remove`'s diff check to just this
@@ -60,7 +56,10 @@ pub const CLAUDE_AGENT: &str = "claude";
 /// The command injected into Claude Code's `SessionStart` hook. `$(pwd)` is
 /// resolved by the shell at hook-run time (not baked in statically), so the
 /// `repoRoot` always reflects the session's actual working directory.
-pub const CLAUDE_SESSION_START_COMMAND: &str = "varde-code nav_map --json \"{\\\"repoRoot\\\":\\\"$(pwd)\\\"}\" --format text --with-project-knowledge";
+pub const CLAUDE_SESSION_START_COMMAND: &str = "varde map nav_map --json \"{\\\"repoRoot\\\":\\\"$(pwd)\\\"}\" --format text --with-project-knowledge";
+
+/// Earlier session-start command, retained for removal.
+pub const LEGACY_SESSION_START_COMMAND: &str = "varde-code nav_map --json \"{\\\"repoRoot\\\":\\\"$(pwd)\\\"}\" --format text --with-project-knowledge";
 
 /// Bare agent name for the Codex CLI hook target.
 pub const CODEX_AGENT: &str = "codex";
@@ -72,39 +71,98 @@ pub const CODEX_SESSION_START_COMMAND: &str = CLAUDE_SESSION_START_COMMAND;
 /// Bare agent name for the opencode hook target.
 pub const OPENCODE_AGENT: &str = "opencode";
 
-/// The embedded opencode plugin JS, written verbatim to
-/// `~/.config/opencode/plugin/varde-code-nav-map.js` (user-level default).
-/// Shells out to `varde-code nav_map` via opencode's `$` executor on
-/// `session.start` and injects the result into session context. Best-effort
-/// per opencode's documented plugin API — see the plan's Assumptions
-/// section; no live opencode install was available to verify against.
+/// The opencode plugin JS the retired installer wrote to
+/// `~/.config/opencode/plugin/varde-code-nav-map.js`, kept to recognize an unedited file.
 pub const OPENCODE_PLUGIN_JS: &str = include_str!("../assets/hooks/opencode-plugin.js");
 
 /// Bare agent name for the Pi coding agent hook target.
 pub const PI_AGENT: &str = "pi";
 
-/// The embedded Pi native extension JS, written verbatim to
-/// `~/.pi/agent/extensions/pi-extension.js` (user-level default). Shells
-/// out to `varde-code nav_map` on Pi's `session_start` event and
-/// returns `{ systemPrompt: ... }` to inject the result into session
-/// context. Uses Pi's native first-party `ExtensionAPI` factory function
-/// directly (`export default function(pi) {...}`) — no third-party
-/// `pi-hooks` compat shim. Best-effort per Pi's documented extension API —
-/// see the plan's Assumptions section; no live Pi install was available to
-/// verify against.
+/// Exact asset bytes shipped in v1.3.0 and v1.4.0, retained for hook migration.
+pub const LEGACY_OPENCODE_PLUGIN_V1_4: &str = r#"// Injected by varde-code (see `varde-code hooks install --agent opencode`).
+//
+// opencode plugin: on session start, shells out to `varde-code nav_map`
+// and injects the result into the session as context so the
+// coding agent starts oriented in the repo. Follows opencode's documented
+// plugin function shape: an async function receiving the plugin context
+// (`project`, `client`, `$`, `directory`, `worktree`) and returning an
+// object of hook handlers.
+//
+// Best-effort: written against opencode's documented plugin API without a
+// live opencode install to verify against (see the session-start-hooks
+// plan's Assumptions section). If opencode's actual hook name or context
+// injection mechanism differs, this may need a follow-up update.
+export const VardeCodeNavMap = async ({ $, directory }) => {
+  return {
+    event: async ({ event }) => {
+      if (event.type !== "session.start") return;
+
+      let navMap;
+      try {
+        navMap = await $`varde-code nav_map --json ${JSON.stringify({
+          repoRoot: directory,
+        })} --format text`.cwd(directory).text();
+      } catch (err) {
+        // Best-effort: never block session start on a nav_map failure.
+        console.error("varde-code nav_map hook failed:", err);
+        return;
+      }
+
+      if (!navMap || !navMap.trim()) return;
+
+      await event.client?.session?.messages?.append?.({
+        role: "system",
+        content: navMap,
+      });
+    },
+  };
+};
+"#;
+
+/// Exact asset bytes shipped in v1.3.0 and v1.4.0, retained for hook migration.
+pub const LEGACY_PI_EXTENSION_V1_4: &str = r#"// Injected by varde-code (see `varde-code hooks install --agent pi`).
+//
+// Pi extension: on session start, shells out to `varde-code nav_map`
+// and returns the result as the session's system prompt so the coding agent
+// starts oriented in the repo. Follows Pi's native, first-party
+// `ExtensionAPI` factory function shape: `export default function(pi) {...}`
+// which registers event handlers via `pi.on(...)`. No third-party
+// `pi-hooks` compat shim is used.
+//
+// Best-effort: written against Pi's documented `ExtensionAPI` without a
+// live Pi install to verify against (see the session-start-hooks plan's
+// Assumptions section). If Pi's actual event name or return-value shape
+// differs, this may need a follow-up update.
+import { execFileSync } from "node:child_process";
+
+export default function (pi) {
+  pi.on("session_start", async (event, ctx) => {
+    let navMap = "";
+    try {
+      const cwd = (ctx && (ctx.cwd || ctx.directory)) || process.cwd();
+      navMap = execFileSync(
+        "varde-code",
+        ["nav_map", "--json", JSON.stringify({ repoRoot: cwd }), "--format", "text"],
+        { cwd, encoding: "utf8" }
+      );
+    } catch (err) {
+      // Best-effort: never block session start on a nav_map failure.
+      console.error("varde-code nav_map hook failed:", err);
+      navMap = "";
+    }
+
+    return { systemPrompt: navMap };
+  });
+}
+"#;
+
+/// The Pi extension JS the retired installer wrote to `~/.pi/agent/extensions/pi-extension.js`,
+/// kept to recognize an unedited file.
 pub const PI_EXTENSION_JS: &str = include_str!("../assets/hooks/pi-extension.js");
 
-/// Concrete per-agent hook targets. Claude Code merges a `SessionStart`
-/// entry into `settings.json` (callers resolve the user-level default path
-/// `~/.claude/settings.json`; `target_dir` passed to [`install_hooks`] is
-/// just the directory containing it). Codex merges a `SessionStart` entry
-/// into `config.toml` (user-level default `~/.codex/config.toml` — chosen
-/// over project-local `.codex/config.toml` because of a known upstream
-/// reliability bug with project-local Codex hooks; see the plan's
-/// Assumptions section). opencode writes a whole-file plugin JS (user-level
-/// default `~/.config/opencode/plugin/`), reusing the scaffold's generic
-/// `WriteFile` install/remove logic (same whole-file-diff protection as
-/// whole-file diff protection. Sibling task adds Pi.
+/// The per-agent hook targets the retired installer wrote: Claude Code merges a
+/// `SessionStart` entry into `settings.json`, Codex a `[hooks.session_start]` table into
+/// `config.toml`; opencode and Pi get a whole-file plugin or extension.
 pub const HOOK_TARGETS: &[HookTarget] = &[
     HookTarget {
         agent: CLAUDE_AGENT,
@@ -124,17 +182,6 @@ pub const HOOK_TARGETS: &[HookTarget] = &[
     },
 ];
 
-/// Outcome of installing a single hook target.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstallResult {
-    pub agent: String,
-    pub path: PathBuf,
-    pub written: bool,
-    /// `true` when the target already had this tool's entry/file and
-    /// `force` was false, so it was left untouched.
-    pub skipped_existing: bool,
-}
-
 /// Outcome of removing a single previously installed hook target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoveResult {
@@ -145,28 +192,6 @@ pub struct RemoveResult {
     /// whole file) no longer matches what this tool would have written
     /// (locally edited) and `force` was false, so it was left alone.
     pub skipped_modified: bool,
-}
-
-/// Install every target in `targets` under `target_dir`. Existing entries
-/// are left untouched unless `force` is true.
-pub fn install_hooks(
-    target_dir: &Path,
-    targets: &[HookTarget],
-    force: bool,
-) -> io::Result<Vec<InstallResult>> {
-    let mut results = Vec::new();
-    for target in targets {
-        let result = match target.kind {
-            HookKind::WriteFile(rel_path, contents) => {
-                install_write_file(target_dir, target.agent, rel_path, contents, force)?
-            }
-            HookKind::MergeInto(rel_path, strategy) => {
-                install_merge(target_dir, target.agent, rel_path, strategy, force)?
-            }
-        };
-        results.push(result);
-    }
-    Ok(results)
 }
 
 /// Remove every target in `targets` under `target_dir`. A target edited
@@ -207,35 +232,6 @@ fn safe_join(target_dir: &Path, rel_path: RelPath) -> PathBuf {
     target_dir.join(rel_path)
 }
 
-fn install_write_file(
-    target_dir: &Path,
-    agent: &str,
-    rel_path: RelPath,
-    contents: &str,
-    force: bool,
-) -> io::Result<InstallResult> {
-    let path = safe_join(target_dir, rel_path);
-    let exists = path.exists();
-    if exists && !force {
-        return Ok(InstallResult {
-            agent: agent.to_string(),
-            path,
-            written: false,
-            skipped_existing: true,
-        });
-    }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(&path, contents)?;
-    Ok(InstallResult {
-        agent: agent.to_string(),
-        path,
-        written: true,
-        skipped_existing: false,
-    })
-}
-
 fn remove_write_file(
     target_dir: &Path,
     agent: &str,
@@ -248,7 +244,7 @@ fn remove_write_file(
         return Ok(None);
     }
     let on_disk = std::fs::read_to_string(&path)?;
-    let modified = on_disk != contents;
+    let modified = on_disk != contents && !is_legacy_asset_contents(agent, contents, &on_disk);
     if modified && !force {
         return Ok(Some(RemoveResult {
             agent: agent.to_string(),
@@ -266,94 +262,35 @@ fn remove_write_file(
     }))
 }
 
-fn install_merge(
-    target_dir: &Path,
-    agent: &str,
-    rel_path: RelPath,
-    strategy: MergeStrategy,
-    force: bool,
-) -> io::Result<InstallResult> {
-    let path = safe_join(target_dir, rel_path);
-    match strategy {
-        MergeStrategy::Json => install_json_merge(path, agent, force),
-        MergeStrategy::Toml => install_toml_merge(path, agent, force),
-    }
-}
-
-fn install_json_merge(path: PathBuf, agent: &str, force: bool) -> io::Result<InstallResult> {
-    let mut doc = if path.exists() {
-        let text = std::fs::read_to_string(&path)?;
-        serde_json::from_str::<serde_json::Value>(&text).map_err(io::Error::from)?
-    } else {
-        serde_json::Value::Object(Default::default())
+fn legacy_asset_contents(agent: &str, contents: &str) -> Option<String> {
+    let mut legacy_command = LEGACY_SESSION_START_COMMAND.split_whitespace();
+    let executable = legacy_command.next()?;
+    let nav_map = legacy_command.next()?;
+    let legacy = match agent {
+        OPENCODE_AGENT => contents.replace("varde map nav_map", &format!("{executable} {nav_map}")),
+        PI_AGENT => contents
+            .replace("varde map nav_map", &format!("{executable} {nav_map}"))
+            .replace(
+                "\"varde\",\n        [\n          \"map\",\n          \"nav_map\",",
+                &format!("\"{executable}\",\n        [\n          \"{nav_map}\","),
+            ),
+        _ => return None,
     };
-    let already_present = if agent == CLAUDE_AGENT {
-        claude_session_start_entry_index(&doc).is_some()
-    } else {
-        json_marker_present(&doc)
+    (legacy != contents).then_some(legacy)
+}
+
+fn is_legacy_asset_contents(agent: &str, contents: &str, on_disk: &str) -> bool {
+    let Some(legacy) = legacy_asset_contents(agent, contents) else {
+        return false;
     };
-    if already_present && !force {
-        return Ok(skipped_install(agent, path));
+    if legacy == on_disk {
+        return true;
     }
-    if agent == CLAUDE_AGENT {
-        claude_install_session_start(&mut doc);
-    } else {
-        json_merge_marker(&mut doc);
-    }
-    ensure_parent(&path)?;
-    let text = serde_json::to_string_pretty(&doc).map_err(io::Error::from)?;
-    std::fs::write(&path, text)?;
-    Ok(completed_install(agent, path))
-}
 
-fn install_toml_merge(path: PathBuf, agent: &str, force: bool) -> io::Result<InstallResult> {
-    let mut doc = if path.exists() {
-        let text = std::fs::read_to_string(&path)?;
-        text.parse::<toml_edit::DocumentMut>()
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
-    } else {
-        toml_edit::DocumentMut::new()
-    };
-    let already_present = if agent == CODEX_AGENT {
-        codex_session_start_present(&doc)
-    } else {
-        toml_marker_present(&doc)
-    };
-    if already_present && !force {
-        return Ok(skipped_install(agent, path));
-    }
-    if agent == CODEX_AGENT {
-        codex_install_session_start(&mut doc);
-    } else {
-        toml_merge_marker(&mut doc);
-    }
-    ensure_parent(&path)?;
-    std::fs::write(&path, doc.to_string())?;
-    Ok(completed_install(agent, path))
-}
-
-fn ensure_parent(path: &Path) -> io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    Ok(())
-}
-
-fn skipped_install(agent: &str, path: PathBuf) -> InstallResult {
-    InstallResult {
-        agent: agent.to_string(),
-        path,
-        written: false,
-        skipped_existing: true,
-    }
-}
-
-fn completed_install(agent: &str, path: PathBuf) -> InstallResult {
-    InstallResult {
-        agent: agent.to_string(),
-        path,
-        written: true,
-        skipped_existing: false,
+    match agent {
+        OPENCODE_AGENT => on_disk == LEGACY_OPENCODE_PLUGIN_V1_4,
+        PI_AGENT => on_disk == LEGACY_PI_EXTENSION_V1_4,
+        _ => false,
     }
 }
 
@@ -394,13 +331,23 @@ fn remove_json_merge(path: PathBuf, agent: &str, force: bool) -> io::Result<Opti
     if modified && !force {
         return Ok(Some(skipped_remove(agent, path)));
     }
-    if agent == CLAUDE_AGENT {
-        claude_remove_session_start(&mut doc);
+    let updated = if agent == CLAUDE_AGENT {
+        let commands = claude_session_start_commands(&doc);
+        json_order::remove_matching_commands_with_options(
+            &text,
+            "SessionStart",
+            |command| commands.iter().any(|owned| owned == command),
+            json_order::RemoveOptions {
+                prune_empty_hooks: true,
+            },
+        )
+        .map_err(io::Error::from)?
+        .0
     } else {
         json_remove_marker(&mut doc);
-    }
-    let text = serde_json::to_string_pretty(&doc).map_err(io::Error::from)?;
-    std::fs::write(&path, text)?;
+        serde_json::to_string_pretty(&doc).map_err(io::Error::from)?
+    };
+    std::fs::write(&path, updated)?;
     Ok(Some(completed_remove(agent, path)))
 }
 
@@ -460,17 +407,11 @@ fn completed_remove(agent: &str, path: PathBuf) -> RemoveResult {
 // tool's own entry, never the whole `settings.json` file or the whole
 // `SessionStart` array.
 
-/// The exact `SessionStart` array entry this tool injects.
-fn claude_session_start_entry() -> serde_json::Value {
+/// The `SessionStart` array entry the retired installer injected for `command`.
+fn claude_session_start_entry_value(command: &str) -> serde_json::Value {
     serde_json::json!({
         "matcher": "",
-        "hooks": [
-            {
-                "type": "command",
-                "command": CLAUDE_SESSION_START_COMMAND,
-                MARKER_KEY: MARKER_VALUE,
-            }
-        ]
+        "hooks": [{ "type": "command", "command": command, MARKER_KEY: MARKER_VALUE }],
     })
 }
 
@@ -489,83 +430,46 @@ fn claude_session_start_entry_index(doc: &serde_json::Value) -> Option<usize> {
         })
 }
 
+fn claude_session_start_commands(doc: &serde_json::Value) -> Vec<String> {
+    let Some(index) = claude_session_start_entry_index(doc) else {
+        return Vec::new();
+    };
+    doc.get("hooks")
+        .and_then(|hooks| hooks.get("SessionStart"))
+        .and_then(|entries| entries.get(index))
+        .and_then(|entry| entry.get("hooks"))
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|hook| hook.get("command")?.as_str().map(str::to_owned))
+        .collect()
+}
+
 /// `true` when this tool's entry exists but no longer matches what this
 /// tool would have written (i.e. the user edited it locally).
 fn claude_session_start_modified(doc: &serde_json::Value) -> bool {
     match claude_session_start_entry_index(doc) {
-        Some(idx) => doc["hooks"]["SessionStart"][idx] != claude_session_start_entry(),
+        Some(idx) => {
+            let entry = &doc["hooks"]["SessionStart"][idx];
+            entry != &claude_session_start_entry_value(CLAUDE_SESSION_START_COMMAND)
+                && !is_legacy_session_start_entry(entry)
+        }
         None => false,
     }
 }
 
-/// Insert (or replace, if already present and `force`d) this tool's
-/// `SessionStart` entry into `doc`, leaving all other keys untouched.
-fn claude_install_session_start(doc: &mut serde_json::Value) {
-    if !doc.is_object() {
-        *doc = serde_json::Value::Object(Default::default());
+fn is_legacy_session_start_entry(entry: &serde_json::Value) -> bool {
+    if entry == &claude_session_start_entry_value(LEGACY_SESSION_START_COMMAND) {
+        return true;
     }
-    let hooks = doc
-        .as_object_mut()
-        .expect("object")
-        .entry("hooks")
-        .or_insert_with(|| serde_json::Value::Object(Default::default()));
-    if !hooks.is_object() {
-        *hooks = serde_json::Value::Object(Default::default());
-    }
-    let session_start = hooks
-        .as_object_mut()
-        .expect("object")
-        .entry("SessionStart")
-        .or_insert_with(|| serde_json::Value::Array(Vec::new()));
-    if !session_start.is_array() {
-        *session_start = serde_json::Value::Array(Vec::new());
-    }
-    let array = session_start.as_array_mut().expect("array");
-    match array.iter().position(|entry| {
-        entry
-            .get("hooks")
-            .and_then(|h| h.as_array())
-            .map(|hooks| hooks.iter().any(|h| h.get(MARKER_KEY).is_some()))
-            .unwrap_or(false)
-    }) {
-        Some(idx) => array[idx] = claude_session_start_entry(),
-        None => array.push(claude_session_start_entry()),
-    }
+    pre_1_5_legacy_session_start_command()
+        .is_some_and(|command| entry == &claude_session_start_entry_value(&command))
 }
 
-/// Remove this tool's `SessionStart` entry from `doc`, pruning the
-/// now-empty `SessionStart`/`hooks` containers if this was the only entry,
-/// but never touching unrelated sibling keys.
-fn claude_remove_session_start(doc: &mut serde_json::Value) {
-    let Some(idx) = claude_session_start_entry_index(doc) else {
-        return;
-    };
-    if let Some(array) = doc
-        .get_mut("hooks")
-        .and_then(|h| h.get_mut("SessionStart"))
-        .and_then(|s| s.as_array_mut())
-    {
-        array.remove(idx);
-    }
-    let session_start_empty = doc
-        .get("hooks")
-        .and_then(|h| h.get("SessionStart"))
-        .and_then(|s| s.as_array())
-        .map(|a| a.is_empty())
-        .unwrap_or(false);
-    if session_start_empty
-        && let Some(hooks_obj) = doc.get_mut("hooks").and_then(|h| h.as_object_mut())
-    {
-        hooks_obj.remove("SessionStart");
-    }
-    let hooks_empty = doc
-        .get("hooks")
-        .and_then(|h| h.as_object())
-        .map(|o| o.is_empty())
-        .unwrap_or(false);
-    if hooks_empty && let Some(obj) = doc.as_object_mut() {
-        obj.remove("hooks");
-    }
+fn pre_1_5_legacy_session_start_command() -> Option<String> {
+    LEGACY_SESSION_START_COMMAND
+        .strip_suffix(" --with-project-knowledge")
+        .map(str::to_owned)
 }
 
 // --- Codex `[hooks.session_start]` merge/diff helpers (toml_edit) -----
@@ -595,31 +499,13 @@ fn codex_session_start_modified(doc: &toml_edit::DocumentMut) -> bool {
     };
     let command = table.get("command").and_then(|v| v.as_str());
     let marker = table.get(MARKER_KEY).and_then(|v| v.as_str());
-    command != Some(CODEX_SESSION_START_COMMAND) || marker != Some(MARKER_VALUE)
+    !command.is_some_and(is_supported_session_start_command) || marker != Some(MARKER_VALUE)
 }
 
-/// Insert (or replace, if already present and `force`d) this tool's
-/// `[hooks.session_start]` table into `doc`, leaving all other keys/tables
-/// (including `hooks.*` siblings) untouched.
-fn codex_install_session_start(doc: &mut toml_edit::DocumentMut) {
-    if doc.get("hooks").is_none() || !doc["hooks"].is_table_like() {
-        doc["hooks"] = toml_edit::Item::Table(toml_edit::Table::new());
-    }
-    let hooks = doc["hooks"].as_table_like_mut().expect("table");
-    if hooks.get("session_start").is_none() || !hooks.get("session_start").unwrap().is_table_like()
-    {
-        hooks.insert(
-            "session_start",
-            toml_edit::Item::Table(toml_edit::Table::new()),
-        );
-    }
-    let session_start = hooks
-        .get_mut("session_start")
-        .expect("just inserted")
-        .as_table_like_mut()
-        .expect("table");
-    session_start.insert("command", toml_edit::value(CODEX_SESSION_START_COMMAND));
-    session_start.insert(MARKER_KEY, toml_edit::value(MARKER_VALUE));
+fn is_supported_session_start_command(command: &str) -> bool {
+    command == CODEX_SESSION_START_COMMAND
+        || command == LEGACY_SESSION_START_COMMAND
+        || pre_1_5_legacy_session_start_command().as_deref() == Some(command)
 }
 
 /// Remove this tool's `[hooks.session_start]` table from `doc`, pruning the
@@ -637,31 +523,6 @@ fn codex_remove_session_start(doc: &mut toml_edit::DocumentMut) {
 }
 
 // --- JSON merge/diff helpers -----------------------------------------
-
-/// The canonical injected entry, keyed by [`MARKER_KEY`]/[`MARKER_VALUE`].
-/// Sibling tasks that need richer per-agent payloads can extend this by
-/// merging additional keys alongside the marker; this scaffold only
-/// establishes marker identity.
-fn marker_object() -> serde_json::Map<String, serde_json::Value> {
-    let mut map = serde_json::Map::new();
-    map.insert(
-        MARKER_KEY.to_string(),
-        serde_json::Value::String(MARKER_VALUE.to_string()),
-    );
-    map
-}
-
-/// Merge the injected marker entry into `doc`'s top-level object without
-/// touching any other keys.
-fn json_merge_marker(doc: &mut serde_json::Value) {
-    if !doc.is_object() {
-        *doc = serde_json::Value::Object(Default::default());
-    }
-    let obj = doc.as_object_mut().expect("object");
-    for (k, v) in marker_object() {
-        obj.insert(k, v);
-    }
-}
 
 fn json_marker_present(doc: &serde_json::Value) -> bool {
     doc.get(MARKER_KEY).is_some()
@@ -683,10 +544,6 @@ fn json_remove_marker(doc: &mut serde_json::Value) {
 }
 
 // --- TOML merge/diff helpers (toml_edit, format-preserving) -----------
-
-fn toml_merge_marker(doc: &mut toml_edit::DocumentMut) {
-    doc[MARKER_KEY] = toml_edit::value(MARKER_VALUE);
-}
 
 fn toml_marker_present(doc: &toml_edit::DocumentMut) -> bool {
     doc.get(MARKER_KEY).is_some()
@@ -715,376 +572,152 @@ mod tests {
         dir
     }
 
-    #[test]
-    fn json_merge_creates_file_with_only_injected_entry() {
-        let dir = tempdir("json-empty");
-        let targets = &[HookTarget {
-            agent: "test-json",
-            kind: HookKind::MergeInto("settings.json", MergeStrategy::Json),
-        }];
-
-        let installed = install_hooks(&dir, targets, false).expect("install succeeds");
-        assert_eq!(installed.len(), 1);
-        assert!(installed[0].written && !installed[0].skipped_existing);
-
-        let text = fs::read_to_string(dir.join("settings.json")).expect("file exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
-        assert_eq!(doc.as_object().expect("object").len(), 1);
-        assert_eq!(doc[MARKER_KEY], MARKER_VALUE);
+    fn write(path: &Path, text: &str) {
+        fs::create_dir_all(path.parent().unwrap()).expect("parent creates");
+        fs::write(path, text).expect("fixture writes");
     }
 
-    #[test]
-    fn json_merge_preserves_unrelated_keys() {
-        let dir = tempdir("json-preserve");
-        let path = dir.join("settings.json");
-        fs::write(&path, r#"{"unrelated": {"nested": true}, "otherKey": 42}"#)
-            .expect("seed writes");
-
-        let targets = &[HookTarget {
-            agent: "test-json",
-            kind: HookKind::MergeInto("settings.json", MergeStrategy::Json),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let text = fs::read_to_string(&path).expect("file exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
-        assert_eq!(doc["unrelated"]["nested"], true);
-        assert_eq!(doc["otherKey"], 42);
-        assert_eq!(doc[MARKER_KEY], MARKER_VALUE);
+    fn target(agent: &'static str, kind: HookKind) -> [HookTarget; 1] {
+        [HookTarget { agent, kind }]
     }
 
-    #[test]
-    fn toml_merge_creates_file_with_only_injected_entry() {
-        let dir = tempdir("toml-empty");
-        let targets = &[HookTarget {
-            agent: "test-toml",
-            kind: HookKind::MergeInto("config.toml", MergeStrategy::Toml),
-        }];
-
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let text = fs::read_to_string(dir.join("config.toml")).expect("file exists");
-        let doc = text.parse::<toml_edit::DocumentMut>().expect("valid toml");
-        assert_eq!(doc[MARKER_KEY].as_str(), Some(MARKER_VALUE));
+    fn json_target() -> [HookTarget; 1] {
+        target(
+            "test-json",
+            HookKind::MergeInto("settings.json", MergeStrategy::Json),
+        )
     }
 
-    #[test]
-    fn toml_merge_preserves_unrelated_content_and_comments() {
-        let dir = tempdir("toml-preserve");
-        let path = dir.join("config.toml");
-        let seed = "# a user comment\nunrelated_key = \"keep me\"\n\n[some_table]\nfoo = 1\n";
-        fs::write(&path, seed).expect("seed writes");
-
-        let targets = &[HookTarget {
-            agent: "test-toml",
-            kind: HookKind::MergeInto("config.toml", MergeStrategy::Toml),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let text = fs::read_to_string(&path).expect("file exists");
-        assert!(
-            text.contains("# a user comment"),
-            "comment preserved:\n{text}"
-        );
-        assert!(
-            text.contains("unrelated_key = \"keep me\""),
-            "unrelated key preserved:\n{text}"
-        );
-        assert!(text.contains("[some_table]"), "table preserved:\n{text}");
-        assert!(text.contains("foo = 1"), "table content preserved:\n{text}");
-
-        let doc = text.parse::<toml_edit::DocumentMut>().expect("valid toml");
-        assert_eq!(doc[MARKER_KEY].as_str(), Some(MARKER_VALUE));
+    fn claude_entry(command: &str) -> serde_json::Value {
+        claude_session_start_entry_value(command)
     }
 
-    #[test]
-    fn merge_install_is_idempotent_without_force() {
-        let dir = tempdir("json-idempotent");
-        let targets = &[HookTarget {
-            agent: "test-json",
-            kind: HookKind::MergeInto("settings.json", MergeStrategy::Json),
-        }];
-        install_hooks(&dir, targets, false).expect("first install succeeds");
-        let second = install_hooks(&dir, targets, false).expect("second install succeeds");
-        assert!(!second[0].written && second[0].skipped_existing);
+    fn claude_settings(command: &str) -> String {
+        serde_json::json!({ "hooks": { "SessionStart": [claude_entry(command)] } }).to_string()
+    }
+
+    fn codex_config(command: &str) -> String {
+        format!(
+            "[hooks.session_start]\ncommand = {}\n{MARKER_KEY} = {}\n",
+            toml_edit::value(command),
+            toml_edit::value(MARKER_VALUE),
+        )
     }
 
     #[test]
     fn json_remove_scoped_diff_skips_locally_modified_entry_unless_forced() {
         let dir = tempdir("json-remove-modified");
         let path = dir.join("settings.json");
-        let targets = &[HookTarget {
-            agent: "test-json",
-            kind: HookKind::MergeInto("settings.json", MergeStrategy::Json),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        // Simulate the user locally editing the injected marker value, while
-        // also adding unrelated content elsewhere in the same file.
-        fs::write(
+        let targets = json_target();
+        write(
             &path,
-            format!(r#"{{"{MARKER_KEY}": "user-changed", "unrelatedKey": "user-added"}}"#),
-        )
-        .expect("edit writes");
+            &format!(r#"{{"{MARKER_KEY}": "user-changed", "unrelatedKey": "user-added"}}"#),
+        );
 
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
+        let removed = remove_hooks(&dir, &targets, false).expect("remove succeeds");
         assert_eq!(removed.len(), 1);
         assert!(!removed[0].removed && removed[0].skipped_modified);
-
-        // The unrelated edit made alongside the modified marker must never
-        // be touched or flagged by the scoped diff.
-        let text = fs::read_to_string(&path).expect("file still exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
-        assert_eq!(doc["unrelatedKey"], "user-added");
+        let doc: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(doc[MARKER_KEY], "user-changed");
 
-        let forced = remove_hooks(&dir, targets, true).expect("forced remove succeeds");
+        let forced = remove_hooks(&dir, &targets, true).expect("forced remove succeeds");
         assert!(forced[0].removed && !forced[0].skipped_modified);
-        let text = fs::read_to_string(&path).expect("file still exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
+        let doc: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(doc.get(MARKER_KEY).is_none());
-        assert_eq!(
-            doc["unrelatedKey"], "user-added",
-            "unrelated content untouched by forced remove"
-        );
+        assert_eq!(doc["unrelatedKey"], "user-added");
     }
 
     #[test]
-    fn json_remove_untouched_when_marker_unmodified() {
+    fn json_remove_drops_only_the_marker_when_unmodified() {
         let dir = tempdir("json-remove-clean");
         let path = dir.join("settings.json");
-        let targets = &[HookTarget {
-            agent: "test-json",
-            kind: HookKind::MergeInto("settings.json", MergeStrategy::Json),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
+        write(
+            &path,
+            &format!(r#"{{"{MARKER_KEY}": "{MARKER_VALUE}", "keep": 1}}"#),
+        );
 
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
+        let removed = remove_hooks(&dir, &json_target(), false).expect("remove succeeds");
         assert!(removed[0].removed && !removed[0].skipped_modified);
-        let text = fs::read_to_string(&path).expect("file still exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
+        let doc: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert!(doc.get(MARKER_KEY).is_none());
+        assert_eq!(doc["keep"], 1);
     }
 
     #[test]
     fn toml_remove_scoped_diff_skips_locally_modified_entry_unless_forced() {
         let dir = tempdir("toml-remove-modified");
         let path = dir.join("config.toml");
-        let targets = &[HookTarget {
-            agent: "test-toml",
-            kind: HookKind::MergeInto("config.toml", MergeStrategy::Toml),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let seeded = fs::read_to_string(&path).expect("file exists");
-        let with_local_edit = seeded.replace(
-            &format!("{MARKER_KEY} = \"{MARKER_VALUE}\""),
-            &format!("{MARKER_KEY} = \"user-changed\""),
+        let targets = target(
+            "test-toml",
+            HookKind::MergeInto("config.toml", MergeStrategy::Toml),
         );
-        let with_unrelated = format!("{with_local_edit}\nunrelated_key = \"kept\"\n");
-        fs::write(&path, &with_unrelated).expect("edit writes");
-
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
-        assert!(!removed[0].removed && removed[0].skipped_modified);
-
-        let text = fs::read_to_string(&path).expect("file still exists");
-        assert!(text.contains("unrelated_key = \"kept\""));
-        assert!(text.contains("user-changed"));
-
-        let forced = remove_hooks(&dir, targets, true).expect("forced remove succeeds");
-        assert!(forced[0].removed && !forced[0].skipped_modified);
-        let text = fs::read_to_string(&path).expect("file still exists");
-        assert!(!text.contains(MARKER_KEY));
-        assert!(
-            text.contains("unrelated_key = \"kept\""),
-            "unrelated content untouched by forced remove"
-        );
-    }
-
-    #[test]
-    fn write_file_kind_round_trips_like_skills() {
-        let dir = tempdir("writefile-roundtrip");
-        let targets = &[HookTarget {
-            agent: "test-writefile",
-            kind: HookKind::WriteFile("plugin.js", "// injected plugin\n"),
-        }];
-
-        let installed = install_hooks(&dir, targets, false).expect("install succeeds");
-        assert!(installed[0].written && !installed[0].skipped_existing);
-        assert_eq!(
-            fs::read_to_string(dir.join("plugin.js")).unwrap(),
-            "// injected plugin\n"
-        );
-
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
-        assert!(removed[0].removed && !removed[0].skipped_modified);
-        assert!(!dir.join("plugin.js").exists());
-    }
-
-    #[test]
-    fn write_file_remove_skips_locally_modified_unless_forced() {
-        let dir = tempdir("writefile-modified");
-        let path = dir.join("plugin.js");
-        let targets = &[HookTarget {
-            agent: "test-writefile",
-            kind: HookKind::WriteFile("plugin.js", "// injected plugin\n"),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-        fs::write(&path, "// user customized\n").expect("edit writes");
-
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
-        assert!(!removed[0].removed && removed[0].skipped_modified);
-        assert!(path.exists());
-
-        let forced = remove_hooks(&dir, targets, true).expect("forced remove succeeds");
-        assert!(forced[0].removed && !forced[0].skipped_modified);
-        assert!(!path.exists());
-    }
-
-    #[test]
-    fn claude_install_creates_settings_with_session_start_hook() {
-        let dir = tempdir("claude-install-empty");
-        let installed = install_hooks(&dir, HOOK_TARGETS, false).expect("install succeeds");
-        assert_eq!(installed.len(), HOOK_TARGETS.len());
-        assert!(installed[0].written && !installed[0].skipped_existing);
-
-        let text = fs::read_to_string(dir.join("settings.json")).expect("file exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
-        let command = doc["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-            .as_str()
-            .expect("command string");
-        assert!(
-            command.contains("varde-code nav_map"),
-            "command invokes nav_map: {command}"
-        );
-        assert_eq!(
-            doc["hooks"]["SessionStart"][0]["hooks"][0][MARKER_KEY],
-            MARKER_VALUE
-        );
-    }
-
-    #[test]
-    fn claude_install_preserves_unrelated_keys() {
-        let dir = tempdir("claude-install-preserve");
-        let path = dir.join("settings.json");
-        fs::write(
+        write(
             &path,
-            r#"{"permissions": {"allow": ["Bash"]}, "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": []}]}}"#,
+            &format!("{MARKER_KEY} = \"user-changed\"\nunrelated_key = \"kept\"\n"),
+        );
+
+        let removed = remove_hooks(&dir, &targets, false).expect("remove succeeds");
+        assert!(!removed[0].removed && removed[0].skipped_modified);
+        assert!(fs::read_to_string(&path).unwrap().contains("user-changed"));
+
+        let forced = remove_hooks(&dir, &targets, true).expect("forced remove succeeds");
+        assert!(forced[0].removed && !forced[0].skipped_modified);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(!text.contains(MARKER_KEY));
+        assert!(text.contains("unrelated_key = \"kept\""));
+    }
+
+    #[test]
+    fn claude_remove_preserves_user_key_order() {
+        let dir = tempdir("claude-order");
+        let path = dir.join("settings.json");
+        let seed = "{\n  \"z-last\": true,\n  \"hooks\": {\n    \"ZEvent\": [\n      {\n        \"z-last\": 2,\n        \"hooks\": [\n          {\n            \"command\": \"echo foreign\",\n            \"type\": \"command\"\n          }\n        ],\n        \"a-first\": 1\n      }\n    ]\n  },\n  \"a-first\": false\n}\n";
+        let installed = json_order::replace_owned_entries(
+            seed,
+            "SessionStart",
+            |_| false,
+            &[claude_entry(CLAUDE_SESSION_START_COMMAND)],
         )
-        .expect("seed writes");
+        .expect("fixture builds")
+        .0;
+        write(&path, &installed);
 
-        install_hooks(&dir, HOOK_TARGETS, false).expect("install succeeds");
+        remove_hooks(&dir, &HOOK_TARGETS[..1], false).expect("remove succeeds");
 
-        let text = fs::read_to_string(&path).expect("file exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
-        assert_eq!(doc["permissions"]["allow"][0], "Bash");
-        assert_eq!(doc["hooks"]["PreToolUse"][0]["matcher"], "Bash");
-        let command = doc["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-            .as_str()
-            .expect("command string");
-        assert!(command.contains("varde-code nav_map"));
+        assert_eq!(fs::read_to_string(path).unwrap(), seed);
     }
 
     #[test]
     fn claude_remove_leaves_unrelated_content_untouched() {
         let dir = tempdir("claude-remove");
         let path = dir.join("settings.json");
-        fs::write(&path, r#"{"permissions": {"allow": ["Bash"]}}"#).expect("seed writes");
+        let mut doc: serde_json::Value =
+            serde_json::from_str(&claude_settings(CLAUDE_SESSION_START_COMMAND)).unwrap();
+        doc["permissions"] = serde_json::json!({ "allow": ["Bash"] });
+        write(&path, &doc.to_string());
 
-        install_hooks(&dir, HOOK_TARGETS, false).expect("install succeeds");
-        let removed = remove_hooks(&dir, HOOK_TARGETS, false).expect("remove succeeds");
+        let removed = remove_hooks(&dir, &HOOK_TARGETS[..1], false).expect("remove succeeds");
         assert!(removed[0].removed && !removed[0].skipped_modified);
 
-        let text = fs::read_to_string(&path).expect("file still exists");
-        let doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
+        let doc: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(doc["permissions"]["allow"][0], "Bash");
-        assert!(
-            doc.get("hooks").is_none(),
-            "SessionStart-only hooks object pruned: {doc}"
-        );
+        assert!(doc.get("hooks").is_none(), "emptied hooks pruned: {doc}");
     }
 
     #[test]
-    fn claude_install_skips_locally_edited_entry_unless_forced() {
-        let dir = tempdir("claude-install-skip-edited");
-        let path = dir.join("settings.json");
-        install_hooks(&dir, HOOK_TARGETS, false).expect("install succeeds");
-
-        let text = fs::read_to_string(&path).expect("file exists");
-        let mut doc: serde_json::Value = serde_json::from_str(&text).expect("valid json");
-        doc["hooks"]["SessionStart"][0]["hooks"][0]["command"] =
-            serde_json::Value::String("echo user-customized".to_string());
-        fs::write(&path, serde_json::to_string_pretty(&doc).unwrap()).expect("edit writes");
-
-        let installed = install_hooks(&dir, HOOK_TARGETS, false).expect("install succeeds");
-        assert!(
-            !installed[0].written && installed[0].skipped_existing,
-            "local edit survives without --force"
+    fn claude_remove_skips_a_locally_edited_entry() {
+        let dir = tempdir("claude-remove-edited");
+        write(
+            &dir.join("settings.json"),
+            &claude_settings("echo user-customized"),
         );
 
-        let text = fs::read_to_string(&path).expect("file still exists");
-        assert!(
-            text.contains("echo user-customized"),
-            "local edit preserved:\n{text}"
-        );
-    }
-
-    #[test]
-    fn codex_install_creates_config_toml_with_session_start_hook() {
-        let dir = tempdir("codex-install-empty");
-        let targets = &[HookTarget {
-            agent: CODEX_AGENT,
-            kind: HookKind::MergeInto("config.toml", MergeStrategy::Toml),
-        }];
-        let installed = install_hooks(&dir, targets, false).expect("install succeeds");
-        assert_eq!(installed.len(), 1);
-        assert!(installed[0].written && !installed[0].skipped_existing);
-
-        let text = fs::read_to_string(dir.join("config.toml")).expect("file exists");
-        let doc = text.parse::<toml_edit::DocumentMut>().expect("valid toml");
-        let command = doc["hooks"]["session_start"]["command"]
-            .as_str()
-            .expect("command string");
-        assert!(
-            command.contains("varde-code nav_map"),
-            "command invokes nav_map: {command}"
-        );
-        assert_eq!(
-            doc["hooks"]["session_start"][MARKER_KEY].as_str(),
-            Some(MARKER_VALUE)
-        );
-    }
-
-    #[test]
-    fn codex_install_preserves_unrelated_content_and_comments() {
-        let dir = tempdir("codex-install-preserve");
-        let path = dir.join("config.toml");
-        let seed = "# a user comment\nmodel = \"gpt-5\"\n\n[some_table]\nfoo = 1\n";
-        fs::write(&path, seed).expect("seed writes");
-
-        let targets = &[HookTarget {
-            agent: CODEX_AGENT,
-            kind: HookKind::MergeInto("config.toml", MergeStrategy::Toml),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let text = fs::read_to_string(&path).expect("file exists");
-        assert!(
-            text.contains("# a user comment"),
-            "comment preserved:\n{text}"
-        );
-        assert!(
-            text.contains("model = \"gpt-5\""),
-            "unrelated key preserved:\n{text}"
-        );
-        assert!(text.contains("[some_table]"), "table preserved:\n{text}");
-        assert!(text.contains("foo = 1"), "table content preserved:\n{text}");
-
-        let doc = text.parse::<toml_edit::DocumentMut>().expect("valid toml");
-        let command = doc["hooks"]["session_start"]["command"]
-            .as_str()
-            .expect("command string");
-        assert!(command.contains("varde-code nav_map"));
+        let removed = remove_hooks(&dir, &HOOK_TARGETS[..1], false).expect("remove succeeds");
+        assert!(!removed[0].removed && removed[0].skipped_modified);
     }
 
     #[test]
@@ -1092,242 +725,124 @@ mod tests {
         let dir = tempdir("codex-remove");
         let path = dir.join("config.toml");
         let seed = "# keep this comment\nmodel = \"gpt-5\"\n";
-        fs::write(&path, seed).expect("seed writes");
+        write(
+            &path,
+            &format!("{seed}\n{}", codex_config(CODEX_SESSION_START_COMMAND)),
+        );
 
-        let targets = &[HookTarget {
-            agent: CODEX_AGENT,
-            kind: HookKind::MergeInto("config.toml", MergeStrategy::Toml),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
+        let removed = remove_hooks(&dir, &HOOK_TARGETS[1..2], false).expect("remove succeeds");
         assert!(removed[0].removed && !removed[0].skipped_modified);
 
-        let text = fs::read_to_string(&path).expect("file still exists");
-        assert!(
-            text.contains("# keep this comment"),
-            "comment untouched:\n{text}"
-        );
-        assert!(
-            text.contains("model = \"gpt-5\""),
-            "unrelated key untouched:\n{text}"
-        );
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("# keep this comment"), "{text}");
+        assert!(text.contains("model = \"gpt-5\""), "{text}");
         let doc = text.parse::<toml_edit::DocumentMut>().expect("valid toml");
-        assert!(
-            doc.get("hooks").is_none(),
-            "session_start-only hooks table pruned: {doc}"
-        );
+        assert!(doc.get("hooks").is_none(), "emptied hooks pruned: {doc}");
     }
 
     #[test]
-    fn codex_install_skips_locally_edited_entry_unless_forced() {
-        let dir = tempdir("codex-install-skip-edited");
-        let path = dir.join("config.toml");
-        let targets = &[HookTarget {
-            agent: CODEX_AGENT,
-            kind: HookKind::MergeInto("config.toml", MergeStrategy::Toml),
-        }];
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let text = fs::read_to_string(&path).expect("file exists");
-        let edited = text.replacen(CODEX_SESSION_START_COMMAND, "echo user-customized", 1);
-        fs::write(&path, edited).expect("edit writes");
-
-        let installed = install_hooks(&dir, targets, false).expect("install succeeds");
-        assert!(
-            !installed[0].written && installed[0].skipped_existing,
-            "local edit survives without --force"
+    fn codex_remove_skips_a_locally_edited_entry() {
+        let dir = tempdir("codex-remove-edited");
+        write(
+            &dir.join("config.toml"),
+            &codex_config("echo user-customized"),
         );
 
-        let text = fs::read_to_string(&path).expect("file still exists");
-        assert!(
-            text.contains("echo user-customized"),
-            "local edit preserved:\n{text}"
-        );
-
-        let forced = install_hooks(&dir, targets, true).expect("forced install succeeds");
-        assert!(forced[0].written && !forced[0].skipped_existing);
-        let text = fs::read_to_string(&path).expect("file still exists");
-        assert!(
-            text.contains(CODEX_SESSION_START_COMMAND),
-            "forced install restores canonical command:\n{text}"
-        );
-    }
-
-    fn opencode_target() -> &'static [HookTarget] {
-        const TARGETS: &[HookTarget] = &[HookTarget {
-            agent: OPENCODE_AGENT,
-            kind: HookKind::WriteFile("plugin/varde-code-nav-map.js", OPENCODE_PLUGIN_JS),
-        }];
-        TARGETS
+        let removed = remove_hooks(&dir, &HOOK_TARGETS[1..2], false).expect("remove succeeds");
+        assert!(!removed[0].removed && removed[0].skipped_modified);
     }
 
     #[test]
-    fn opencode_install_writes_plugin_js_when_absent() {
-        let dir = tempdir("opencode-install");
-        let targets = opencode_target();
+    fn claude_remove_accepts_legacy_session_start_commands() {
+        let pre_1_5 = pre_1_5_legacy_session_start_command()
+            .expect("current legacy command has the project-knowledge flag");
+        for command in [LEGACY_SESSION_START_COMMAND, pre_1_5.as_str()] {
+            let dir = tempdir("claude-remove-legacy-command");
+            write(&dir.join("settings.json"), &claude_settings(command));
 
-        let installed = install_hooks(&dir, targets, false).expect("install succeeds");
-        assert_eq!(installed.len(), 1);
-        assert!(installed[0].written && !installed[0].skipped_existing);
-
-        let path = dir.join("plugin/varde-code-nav-map.js");
-        assert!(path.exists());
-        let text = fs::read_to_string(&path).expect("file exists");
-        assert_eq!(text, OPENCODE_PLUGIN_JS);
-        assert!(
-            text.contains("varde-code nav_map"),
-            "plugin shells out to nav_map: {text}"
-        );
+            let removed = remove_hooks(&dir, &HOOK_TARGETS[..1], false).expect("remove succeeds");
+            assert_eq!(removed.len(), 1);
+            assert!(
+                removed[0].removed && !removed[0].skipped_modified,
+                "{command}"
+            );
+        }
     }
 
     #[test]
-    fn opencode_remove_after_unmodified_install_deletes_file() {
-        let dir = tempdir("opencode-remove-clean");
-        let targets = opencode_target();
-        install_hooks(&dir, targets, false).expect("install succeeds");
+    fn codex_remove_accepts_legacy_session_start_commands() {
+        let pre_1_5 = pre_1_5_legacy_session_start_command()
+            .expect("current legacy command has the project-knowledge flag");
+        for command in [LEGACY_SESSION_START_COMMAND, pre_1_5.as_str()] {
+            let dir = tempdir("codex-remove-legacy-command");
+            write(&dir.join("config.toml"), &codex_config(command));
 
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
-        assert_eq!(removed.len(), 1);
-        assert!(removed[0].removed && !removed[0].skipped_modified);
-        assert!(!dir.join("plugin/varde-code-nav-map.js").exists());
+            let removed = remove_hooks(&dir, &HOOK_TARGETS[1..2], false).expect("remove succeeds");
+            assert_eq!(removed.len(), 1);
+            assert!(
+                removed[0].removed && !removed[0].skipped_modified,
+                "{command}"
+            );
+        }
+    }
+
+    /// Whole-file targets: the opencode plugin (`HOOK_TARGETS[2]`) and the Pi extension
+    /// (`HOOK_TARGETS[3]`), each with the contents of every release that wrote it.
+    fn whole_file_cases() -> [(usize, &'static str, [String; 3]); 2] {
+        [
+            (
+                2,
+                "plugin/varde-code-nav-map.js",
+                [
+                    OPENCODE_PLUGIN_JS.to_owned(),
+                    legacy_asset_contents(OPENCODE_AGENT, OPENCODE_PLUGIN_JS).unwrap(),
+                    LEGACY_OPENCODE_PLUGIN_V1_4.to_owned(),
+                ],
+            ),
+            (
+                3,
+                "pi-extension.js",
+                [
+                    PI_EXTENSION_JS.to_owned(),
+                    legacy_asset_contents(PI_AGENT, PI_EXTENSION_JS).unwrap(),
+                    LEGACY_PI_EXTENSION_V1_4.to_owned(),
+                ],
+            ),
+        ]
     }
 
     #[test]
-    fn opencode_remove_skips_locally_modified_file_unless_forced() {
-        let dir = tempdir("opencode-remove-modified");
-        let targets = opencode_target();
-        install_hooks(&dir, targets, false).expect("install succeeds");
+    fn whole_file_remove_accepts_every_release_that_wrote_it() {
+        for (index, rel, releases) in whole_file_cases() {
+            for contents in releases {
+                let dir = tempdir("whole-file-release");
+                let path = dir.join(rel);
+                write(&path, &contents);
 
-        let path = dir.join("plugin/varde-code-nav-map.js");
-        fs::write(&path, "// user customized plugin\n").expect("edit writes");
-
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
-        assert!(
-            !removed[0].removed && removed[0].skipped_modified,
-            "modified file skipped without --force"
-        );
-        assert!(path.exists());
-
-        let forced = remove_hooks(&dir, targets, true).expect("forced remove succeeds");
-        assert!(forced[0].removed && !forced[0].skipped_modified);
-        assert!(!path.exists());
-    }
-
-    #[test]
-    fn opencode_plugin_js_is_syntactically_valid() {
-        let dir = tempdir("opencode-js-syntax");
-        let path = dir.join("varde-code-nav-map.js");
-        fs::write(&path, OPENCODE_PLUGIN_JS).expect("write plugin js");
-
-        match std::process::Command::new("node")
-            .arg("--check")
-            .arg(&path)
-            .output()
-        {
-            Ok(output) => {
-                assert!(
-                    output.status.success(),
-                    "node --check failed:\nstdout: {}\nstderr: {}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                eprintln!("node --check passed for opencode plugin JS");
-            }
-            Err(err) => {
-                eprintln!("node not found on PATH, skipping JS syntax check: {err}");
+                let removed = remove_hooks(&dir, &HOOK_TARGETS[index..=index], false)
+                    .expect("remove succeeds");
+                assert_eq!(removed.len(), 1);
+                assert!(removed[0].removed && !removed[0].skipped_modified, "{rel}");
+                assert!(!path.exists(), "{rel}");
             }
         }
     }
 
-    fn pi_target() -> &'static [HookTarget] {
-        const TARGETS: &[HookTarget] = &[HookTarget {
-            agent: PI_AGENT,
-            kind: HookKind::WriteFile("pi-extension.js", PI_EXTENSION_JS),
-        }];
-        TARGETS
-    }
-
     #[test]
-    fn pi_install_writes_extension_js_when_absent() {
-        let dir = tempdir("pi-install");
-        let targets = pi_target();
+    fn whole_file_remove_skips_locally_modified_file_unless_forced() {
+        for (index, rel, _) in whole_file_cases() {
+            let dir = tempdir("whole-file-modified");
+            let path = dir.join(rel);
+            write(&path, "// user customized\n");
+            let targets = &HOOK_TARGETS[index..=index];
 
-        let installed = install_hooks(&dir, targets, false).expect("install succeeds");
-        assert_eq!(installed.len(), 1);
-        assert!(installed[0].written && !installed[0].skipped_existing);
+            let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
+            assert!(!removed[0].removed && removed[0].skipped_modified, "{rel}");
+            assert!(path.exists(), "{rel}");
 
-        let path = dir.join("pi-extension.js");
-        assert!(path.exists());
-        let text = fs::read_to_string(&path).expect("file exists");
-        assert_eq!(text, PI_EXTENSION_JS);
-        assert!(
-            text.contains("session_start"),
-            "extension registers session_start handler: {text}"
-        );
-    }
-
-    #[test]
-    fn pi_remove_after_unmodified_install_deletes_file() {
-        let dir = tempdir("pi-remove-clean");
-        let targets = pi_target();
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
-        assert_eq!(removed.len(), 1);
-        assert!(removed[0].removed && !removed[0].skipped_modified);
-        assert!(!dir.join("pi-extension.js").exists());
-    }
-
-    #[test]
-    fn pi_remove_skips_locally_modified_file_unless_forced() {
-        let dir = tempdir("pi-remove-modified");
-        let targets = pi_target();
-        install_hooks(&dir, targets, false).expect("install succeeds");
-
-        let path = dir.join("pi-extension.js");
-        fs::write(&path, "// user customized extension\n").expect("edit writes");
-
-        let removed = remove_hooks(&dir, targets, false).expect("remove succeeds");
-        assert!(
-            !removed[0].removed && removed[0].skipped_modified,
-            "modified file skipped without --force"
-        );
-        assert!(path.exists());
-
-        let forced = remove_hooks(&dir, targets, true).expect("forced remove succeeds");
-        assert!(forced[0].removed && !forced[0].skipped_modified);
-        assert!(!path.exists());
-    }
-
-    #[test]
-    fn pi_extension_js_is_syntactically_valid() {
-        let dir = tempdir("pi-js-syntax");
-        let path = dir.join("pi-extension.js");
-        fs::write(&path, PI_EXTENSION_JS).expect("write extension js");
-
-        let node_bin = if std::path::Path::new("/opt/homebrew/bin/node").exists() {
-            "/opt/homebrew/bin/node"
-        } else {
-            "node"
-        };
-
-        match std::process::Command::new(node_bin)
-            .arg("--check")
-            .arg(&path)
-            .output()
-        {
-            Ok(output) => {
-                assert!(
-                    output.status.success(),
-                    "node --check failed:\nstdout: {}\nstderr: {}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                eprintln!("node --check passed for pi extension JS");
-            }
-            Err(err) => {
-                eprintln!("node not found, skipping JS syntax check: {err}");
-            }
+            let forced = remove_hooks(&dir, targets, true).expect("forced remove succeeds");
+            assert!(forced[0].removed && !forced[0].skipped_modified, "{rel}");
+            assert!(!path.exists(), "{rel}");
         }
     }
 }

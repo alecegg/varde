@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exercise varde-review scope and snapshot scripts in a temporary git repo.
+# Exercise varde-review scope scripts in a temporary git repo.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +15,7 @@ expect() { # expect <label> <actual> <expected>
   [ "$2" = "$3" ] || fail "$1"$'\n'"expected: $3"$'\n'"actual:   $2"
 }
 
-for script in change-ranges.sh snapshot.sh review-scope.sh; do
+for script in change-ranges.sh review-scope.sh; do
   test -x "$SCRIPTS/$script" || fail "$script is missing or not executable"
   "$SCRIPTS/$script" --help >/dev/null || fail "$script --help failed"
 done
@@ -63,45 +63,9 @@ out="$("$SCRIPTS/review-scope.sh" area)"
 expect "area files" "$(grep -v '^#' <<< "$out")" $'T\t.gitignore\nT\tedit.txt\nT\tkeep.txt\n?\tnew.txt'
 grep -q '^# base' <<< "$out" && fail "area mode must not print a base"
 
-# Snapshot and restore, one file at a time, including a file created later.
-backup="$TEST_ROOT/backup"
-mkdir -p sub
-"$SCRIPTS/snapshot.sh" save "$backup" edit.txt "$repo/sub/made.txt"
-printf 'changed\n' > edit.txt
-printf 'made\n' > sub/made.txt
-"$SCRIPTS/snapshot.sh" save "$backup" edit.txt  # keeps the first snapshot
-(cd sub && "$SCRIPTS/snapshot.sh" restore "$backup" edit.txt) >/dev/null
-expect "restored edit" "$(cat edit.txt)" $'1\nTWO\n3\n4\n5\n6'
-test -f sub/made.txt || fail "restore of one path touched another"
-"$SCRIPTS/snapshot.sh" restore "$backup" >/dev/null
-test ! -e sub/made.txt || fail "new file was not deleted"
-if "$SCRIPTS/snapshot.sh" restore "$backup" keep.txt 2>/dev/null; then
-  fail "restore of an unsaved path must fail"
-fi
-if "$SCRIPTS/snapshot.sh" restore "$TEST_ROOT/no-such-backup" 2>/dev/null; then
-  fail "restore from a missing backup dir must fail"
-fi
-test ! -e "$TEST_ROOT/no-such-backup" || fail "restore created the missing backup dir"
-
-# Paths are normalized, so "./x" and "sub/../x" name the same entry as "x".
-backup2="$TEST_ROOT/backup2"
-"$SCRIPTS/snapshot.sh" save "$backup2" ./keep.txt
-printf 'changed\n' > keep.txt
-"$SCRIPTS/snapshot.sh" restore "$backup2" sub/../keep.txt >/dev/null
-expect "normalized restore" "$(cat keep.txt)" ""
-expect "one manifest entry" "$(cut -f2 "$backup2/manifest")" "keep.txt"
-
-# Symlinks are saved and restored as links, not as their targets' contents.
-ln -s keep.txt link.txt
-"$SCRIPTS/snapshot.sh" save "$backup2" link.txt
-test -L "$backup2/files/link.txt" || fail "save dereferenced a symlink"
-rm link.txt && printf 'plain\n' > link.txt
-"$SCRIPTS/snapshot.sh" restore "$backup2" link.txt >/dev/null
-expect "restored symlink" "$(readlink link.txt)" "keep.txt"
-rm link.txt
-
 # Diff headers: an added line starting with "++ " and a file name with a space.
-git add -A && git commit -qm "snapshot fixtures"
+mkdir -p sub
+git add -A && git commit -qm "range fixtures"
 printf 'a\n' > 'with space.txt' && printf 'x\ny\n' > plus.txt
 git add . && git commit -qm "more fixtures"
 printf 'a\nb\n' > 'with space.txt'
@@ -116,4 +80,32 @@ out="$(cd sub && "$SCRIPTS/review-scope.sh" diff)"
 grep -qx $'?\ttop-untracked.txt' <<< "$out" || fail "diff from subdir missed a top-level untracked file"
 expect "change-ranges from subdir" "$(cd sub && "$SCRIPTS/change-ranges.sh" | grep untracked)" $'top-untracked.txt\tall'
 
-echo "PASS: review scope, change ranges, and snapshot scripts"
+# Diff bytes include untracked file contents, but not whole tracked files.
+python3 - <<'PYDATA'
+from pathlib import Path
+Path("large-ledger.txt").write_text(("x\n") * 100_000)
+PYDATA
+git add large-ledger.txt && git commit -qm "large ledger fixture"
+python3 - <<'PYDATA'
+from pathlib import Path
+p = Path("large-ledger.txt")
+s = p.read_text()
+p.write_text("y\n" + s[2:])
+PYDATA
+out="$($SCRIPTS/review-scope.sh diff)"
+diff_bytes="$(awk -F '\t' '$1 == "# bytes" { print $2 }' <<< "$out")"
+[ "$diff_bytes" -lt 2000 ] || fail "tracked large file inflated diff bytes: $diff_bytes"
+grep -qx $'M\tlarge-ledger.txt' <<< "$out" || fail "large tracked file missing from diff scope"
+python3 - <<'PYDATA'
+from pathlib import Path
+Path("untracked-large.txt").write_text("u" * 10_000)
+PYDATA
+out="$($SCRIPTS/review-scope.sh diff)"
+diff_bytes="$(awk -F '\t' '$1 == "# bytes" { print $2 }' <<< "$out")"
+grep -qx $'?\tuntracked-large.txt' <<< "$out" || fail "untracked large file missing from diff scope"
+[ "$diff_bytes" -ge 10000 ] || fail "untracked file bytes were not counted: $diff_bytes"
+area_out="$($SCRIPTS/review-scope.sh area)"
+area_bytes="$(awk -F '\t' '$1 == "# bytes" { print $2 }' <<< "$area_out")"
+[ "$area_bytes" -ge 200000 ] || fail "area mode stopped counting tracked file bytes: $area_bytes"
+
+echo "PASS: review scope and change ranges"

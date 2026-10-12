@@ -3,6 +3,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
+use varde_contracts::{CaptureInput, OutputCapture};
 
 /// Acquire a poisoned HOME lock after its prior holder unwound.
 pub(crate) fn home_lock() -> MutexGuard<'static, ()> {
@@ -15,86 +16,156 @@ fn recover_lock(lock: &Mutex<()>) -> MutexGuard<'_, ()> {
 
 /// Holds the shared HOME lock while an override is active.
 pub(crate) struct HomeOverride {
-    previous: Option<OsString>,
+    previous_home: Option<OsString>,
+    previous_xdg_config_home: Option<OsString>,
+    previous_varde_config_dir: Option<OsString>,
     _lock: Option<MutexGuard<'static, ()>>,
 }
 
 impl HomeOverride {
-    /// Redirect HOME to `path` until this guard is dropped.
+    /// Redirect HOME and both Varde config-root variables under `path` until dropped.
     pub(crate) fn new(path: &Path) -> Self {
         let lock = home_lock();
-        let previous = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", path) };
+        let (previous_home, previous_xdg_config_home, previous_varde_config_dir) =
+            Self::set_roots(path);
         Self {
-            previous,
+            previous_home,
+            previous_xdg_config_home,
+            previous_varde_config_dir,
             _lock: Some(lock),
         }
     }
 
-    /// Redirect HOME while the caller holds [`crate::HOME_TEST_LOCK`].
+    /// Redirect HOME and Varde config roots while the caller holds
+    /// [`crate::HOME_TEST_LOCK`].
     ///
     /// This supports existing tests that need one lock around several setup
     /// and assertion phases. The caller's lock must outlive this guard.
     pub(crate) fn while_locked(path: &Path) -> Self {
-        let previous = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", path) };
+        let (previous_home, previous_xdg_config_home, previous_varde_config_dir) =
+            Self::set_roots(path);
         Self {
-            previous,
+            previous_home,
+            previous_xdg_config_home,
+            previous_varde_config_dir,
             _lock: None,
         }
+    }
+
+    fn set_roots(path: &Path) -> (Option<OsString>, Option<OsString>, Option<OsString>) {
+        let previous_home = std::env::var_os("HOME");
+        let previous_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_varde_config_dir = std::env::var_os("VARDE_CONFIG_DIR");
+        let xdg_config_home = path.join(".config");
+        let varde_config_dir = xdg_config_home.join("varde");
+        unsafe {
+            std::env::set_var("HOME", path);
+            std::env::set_var("XDG_CONFIG_HOME", xdg_config_home);
+            std::env::set_var("VARDE_CONFIG_DIR", varde_config_dir);
+        }
+        (
+            previous_home,
+            previous_xdg_config_home,
+            previous_varde_config_dir,
+        )
     }
 }
 
 impl Drop for HomeOverride {
     fn drop(&mut self) {
-        match self.previous.take() {
-            Some(home) => unsafe { std::env::set_var("HOME", home) },
-            None => unsafe { std::env::remove_var("HOME") },
+        restore_env("VARDE_CONFIG_DIR", self.previous_varde_config_dir.take());
+        restore_env("XDG_CONFIG_HOME", self.previous_xdg_config_home.take());
+        restore_env("HOME", self.previous_home.take());
+    }
+}
+
+fn restore_env(key: &str, value: Option<OsString>) {
+    match value {
+        Some(value) => unsafe { std::env::set_var(key, value) },
+        None => unsafe { std::env::remove_var(key) },
+    }
+}
+
+/// Holds [`crate::TOZ_ENV_TEST_LOCK`] while a fake capture implementation is
+/// installed in [`crate::toz`], and restores the previous capture and
+/// `VARDE_CODE_TOZ` on drop. The lock serializes this crate's capture-faking
+/// tests against each other.
+pub(crate) struct CaptureOverride {
+    previous_capture: Option<&'static dyn OutputCapture>,
+    previous_toz_env: Option<OsString>,
+    _lock: MutexGuard<'static, ()>,
+}
+
+struct FakeCapture<F>(F);
+
+impl<F> OutputCapture for FakeCapture<F>
+where
+    F: Fn(CaptureInput<'_>, &str, &str) -> Option<String> + Send + Sync,
+{
+    fn capture(&self, input: CaptureInput<'_>, source: &str, label: &str) -> Option<String> {
+        (self.0)(input, source, label)
+    }
+}
+
+impl CaptureOverride {
+    /// Install a fake capture that answers every request with `fake`.
+    pub(crate) fn with<F>(fake: F) -> Self
+    where
+        F: Fn(CaptureInput<'_>, &str, &str) -> Option<String> + Send + Sync + 'static,
+    {
+        let fake: &'static dyn OutputCapture = Box::leak(Box::new(FakeCapture(fake)));
+        Self::set(Some(fake))
+    }
+
+    /// No capture implementation installed at all.
+    pub(crate) fn none() -> Self {
+        Self::set(None)
+    }
+
+    fn set(capture: Option<&'static dyn OutputCapture>) -> Self {
+        let lock = recover_lock(&crate::TOZ_ENV_TEST_LOCK);
+        let previous_capture = crate::toz::installed();
+        let previous_toz_env = std::env::var_os("VARDE_CODE_TOZ");
+        crate::toz::install_capture(capture);
+        Self {
+            previous_capture,
+            previous_toz_env,
+            _lock: lock,
+        }
+    }
+}
+
+impl Drop for CaptureOverride {
+    fn drop(&mut self) {
+        crate::toz::install_capture(self.previous_capture);
+        match self.previous_toz_env.take() {
+            Some(value) => unsafe { std::env::set_var("VARDE_CODE_TOZ", value) },
+            None => unsafe { std::env::remove_var("VARDE_CODE_TOZ") },
         }
     }
 }
 
 /// Holds [`crate::TOZ_ENV_TEST_LOCK`] while `PATH` is prepended with a
-/// stub-binary directory, and restores both `PATH` and `VARDE_CODE_TOZ` on
-/// drop. Prepending (rather than replacing) `PATH` keeps every other binary
-/// — `git`, `sh`, `toz` itself when no stub is meant to intercept it —
-/// resolvable, so tests running concurrently in other modules that spawn
-/// subprocesses are unaffected; only the deliberately-held lock serializes
-/// this crate's own `toz`-stubbing tests against each other.
+/// stub-binary directory, and restores `PATH` on drop. Prepending (rather than
+/// replacing) keeps every other binary resolvable.
 pub(crate) struct PathOverride {
     previous_path: Option<OsString>,
-    previous_toz_env: Option<OsString>,
     _lock: MutexGuard<'static, ()>,
 }
 
 impl PathOverride {
     /// Put `dir` first on `PATH` until this guard is dropped.
     pub(crate) fn new(dir: &Path) -> Self {
-        let mut paths = vec![dir.to_path_buf()];
-        if let Some(existing) = std::env::var_os("PATH") {
-            paths.extend(std::env::split_paths(&existing));
-        }
-        Self::set(paths)
-    }
-
-    /// `PATH` with no `toz` reachable at all, unlike [`Self::new`]'s prepend
-    /// (which would still find a real `toz` installed on the developer's
-    /// `PATH`, e.g. `~/.cargo/bin`, further along). Only `/bin` and
-    /// `/usr/bin` are kept, standard system dirs that never hold a
-    /// `cargo install`-ed binary like `toz`.
-    pub(crate) fn without_toz() -> Self {
-        Self::set(vec![PathBuf::from("/bin"), PathBuf::from("/usr/bin")])
-    }
-
-    fn set(paths: Vec<PathBuf>) -> Self {
         let lock = recover_lock(&crate::TOZ_ENV_TEST_LOCK);
         let previous_path = std::env::var_os("PATH");
-        let previous_toz_env = std::env::var_os("VARDE_CODE_TOZ");
+        let mut paths = vec![dir.to_path_buf()];
+        if let Some(existing) = &previous_path {
+            paths.extend(std::env::split_paths(existing));
+        }
         let joined = std::env::join_paths(paths).expect("PATH entries join");
         unsafe { std::env::set_var("PATH", joined) };
         Self {
             previous_path,
-            previous_toz_env,
             _lock: lock,
         }
     }
@@ -106,10 +177,6 @@ impl Drop for PathOverride {
             Some(path) => unsafe { std::env::set_var("PATH", path) },
             None => unsafe { std::env::remove_var("PATH") },
         }
-        match self.previous_toz_env.take() {
-            Some(value) => unsafe { std::env::set_var("VARDE_CODE_TOZ", value) },
-            None => unsafe { std::env::remove_var("VARDE_CODE_TOZ") },
-        }
     }
 }
 
@@ -117,8 +184,10 @@ impl Drop for PathOverride {
 pub(crate) fn with_isolated_home<F: FnOnce()>(label: &str, f: F) {
     let home = unique_home(label);
     std::fs::create_dir_all(&home).expect("home creates");
-    let _override = HomeOverride::new(&home);
-    f();
+    {
+        let _override = HomeOverride::new(&home);
+        f();
+    }
     let _ = std::fs::remove_dir_all(&home);
 }
 
@@ -140,17 +209,37 @@ mod tests {
     #[test]
     fn home_override_restores_the_prior_value_after_a_panic() {
         let _lock = home_lock();
-        let original = std::env::var_os("HOME");
+        let original_home = std::env::var_os("HOME");
+        let original_xdg_config_home = std::env::var_os("XDG_CONFIG_HOME");
+        let original_varde_config_dir = std::env::var_os("VARDE_CONFIG_DIR");
         let replacement = std::env::temp_dir().join("varde-test-home-restore");
+        let expected_xdg_config_home = replacement.join(".config");
+        let expected_varde_config_dir = expected_xdg_config_home.join("varde");
 
         let outcome = std::panic::catch_unwind(|| {
             let _override = HomeOverride::while_locked(&replacement);
             assert_eq!(std::env::var_os("HOME"), Some(replacement.into_os_string()));
+            assert_eq!(
+                std::env::var_os("XDG_CONFIG_HOME"),
+                Some(expected_xdg_config_home.into_os_string())
+            );
+            assert_eq!(
+                std::env::var_os("VARDE_CONFIG_DIR"),
+                Some(expected_varde_config_dir.into_os_string())
+            );
             panic!("expected test panic");
         });
 
         assert!(outcome.is_err());
-        assert_eq!(std::env::var_os("HOME"), original);
+        assert_eq!(std::env::var_os("HOME"), original_home);
+        assert_eq!(
+            std::env::var_os("XDG_CONFIG_HOME"),
+            original_xdg_config_home
+        );
+        assert_eq!(
+            std::env::var_os("VARDE_CONFIG_DIR"),
+            original_varde_config_dir
+        );
     }
 
     #[test]

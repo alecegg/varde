@@ -3,16 +3,8 @@
 set -euo pipefail
 
 SKILLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VALIDATOR="$SKILLS_DIR/varde-agent-doc-authoring/scripts/validate-frontmatter.py"
-
-if ! command -v uv >/dev/null 2>&1; then
-  echo "SKIP: uv not on PATH; frontmatter not validated"
-  exit 0
-fi
-
 run_validator() {
-  # only-system: use the interpreter on PATH, which works under the sandbox.
-  UV_PYTHON_PREFERENCE=only-system uv run -q "$VALIDATOR" "$@"
+  varde doc frontmatter "$@"
 }
 
 run_validator "$SKILLS_DIR"/varde-*/

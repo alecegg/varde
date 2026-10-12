@@ -1,33 +1,15 @@
 //! Secret handling: redaction on ingest and the never-capture list.
+//!
+//! Redaction delegates to the shared `varde_core::redact` engine; this module
+//! keeps the configuration bridge, the streaming spool path and `NeverCapture`.
 
 use crate::config::{CaptureRules, Redact};
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::fs::File;
 use std::io::{Seek, Write};
-
-/// Built-in patterns. Each is `(kind, regex)`; matches are replaced with `[redacted:<kind>]`.
-const BUILTIN: &[(&str, &str)] = &[
-    ("aws-key", r"AKIA[0-9A-Z]{16}"),
-    (
-        "aws-secret",
-        r#"(?i)aws_secret_access_key\s*[=:]\s*["']?[A-Za-z0-9/+=]{40}"#,
-    ),
-    ("github", r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b"),
-    ("github-pat", r"\bgithub_pat_[A-Za-z0-9_]{80,}\b"),
-    ("api-key", r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_\-]{20,}\b"),
-    ("slack", r"\bxox[abprs]-[A-Za-z0-9\-]{10,}\b"),
-    ("bearer", r"(?i)\bbearer\s+[A-Za-z0-9\-._~+/]{16,}=*"),
-    (
-        "pem",
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",
-    ),
-    (
-        "env-assign",
-        r#"(?im)^\s*(?:export\s+)?[A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*\S+"#,
-    ),
-    ("url-creds", r"\b[a-z][a-z0-9+.\-]*://[^\s:/@]+:[^\s@/]+@"),
-];
+use std::path::{Path, PathBuf};
+use varde_core::redact::{values, Notice, RedactConfig, Redactor as Engine};
 
 const BUILTIN_NEVER: &[&str] = &[
     "env",
@@ -41,37 +23,58 @@ const BUILTIN_NEVER: &[&str] = &[
 ];
 
 pub struct Redactor {
-    rules: Vec<(String, Regex)>,
+    engine: Engine,
 }
 
 impl Redactor {
+    /// Build a redactor for `cfg`, resolving value sources against `root`: the
+    /// `.env` and `.env.*` files directly under it, plus `cfg.dotenv` paths
+    /// (relative ones against `root`).
+    pub fn from_config_at(cfg: &Redact, root: &Path) -> Result<Self> {
+        Self::build(cfg, Some(root))
+    }
+
+    /// Build a redactor for `cfg` against the project root: the git root of the
+    /// current directory, or that directory itself outside a repo. When the root
+    /// cannot be resolved and value sources are needed, they are skipped rather
+    /// than failing the whole redactor.
     pub fn from_config(cfg: &Redact) -> Result<Self> {
-        let mut rules = Vec::new();
-        if cfg.builtin {
-            for (kind, pat) in BUILTIN {
-                rules.push((kind.to_string(), Regex::new(pat).expect("builtin regex")));
+        let root = if cfg.values { project_root() } else { None };
+        Self::build(cfg, root.as_deref())
+    }
+
+    /// Shared builder: value sources are read only when `cfg.values` is set and a
+    /// root is available.
+    fn build(cfg: &Redact, root: Option<&Path>) -> Result<Self> {
+        let mut redact_values = Vec::new();
+        if let (true, Some(root)) = (cfg.values, root) {
+            redact_values = values::collect(root);
+            for path in &cfg.dotenv {
+                redact_values.extend(values::from_dotenv(&root.join(path)));
             }
         }
-        for pat in &cfg.patterns {
-            let re = Regex::new(pat).with_context(|| format!("redact pattern {pat:?}"))?;
-            rules.push(("user".to_string(), re));
-        }
-        Ok(Self { rules })
+        let engine = Engine::new(&RedactConfig {
+            builtin: cfg.builtin,
+            patterns: cfg.patterns.clone(),
+            values: redact_values,
+            reveal: cfg.reveal,
+        })
+        .map_err(anyhow::Error::msg)?;
+        Ok(Self { engine })
+    }
+
+    /// Returns the redacted text and the engine notices: one entry per replaced
+    /// `(kind, label)`, with its count. Notices never carry matched text.
+    pub fn apply_with_notices(&self, text: &str) -> (String, Vec<Notice>) {
+        let redacted = self.engine.redact(text);
+        (redacted.text, redacted.notices)
     }
 
     /// Returns the redacted text and the number of replacements made.
     pub fn apply(&self, text: &str) -> (String, usize) {
-        let mut out = text.to_string();
-        let mut count = 0;
-        for (kind, re) in &self.rules {
-            let replacement = format!("[redacted:{kind}]");
-            let n = re.find_iter(&out).count();
-            if n > 0 {
-                count += n;
-                out = re.replace_all(&out, replacement.as_str()).into_owned();
-            }
-        }
-        (out, count)
+        let (text, notices) = self.apply_with_notices(text);
+        let count = notices.iter().map(|notice| notice.count).sum();
+        (text, count)
     }
 
     /// Normalize into a private spool, then redact the entire stream before chunking.
@@ -81,28 +84,23 @@ impl Redactor {
     ) -> Result<(File, usize)> {
         let mut input = tempfile::tempfile()?;
         let mut count = normalize(&mut input)?;
-        for (kind, re) in &self.rules {
-            // SAFETY: these unlinked files are created internally. The normalizer
-            // receives only dyn Write, never a handle or path to clone/expose.
-            // No file is mutated while mapped, and maps drop before replacement.
-            let map = if input.metadata()?.len() == 0 {
-                None
-            } else {
-                Some(unsafe { memmap2::Mmap::map(&input)? })
-            };
-            let bytes = map.as_deref().unwrap_or_default();
-            let text = std::str::from_utf8(bytes)?;
-            let mut matches = re.find_iter(text).peekable();
-            if matches.peek().is_none() {
-                continue;
-            }
+        // SAFETY: these unlinked files are created internally. The normalizer
+        // receives only dyn Write, never a handle or path to clone/expose.
+        // No file is mutated while mapped, and the map drops before replacement.
+        let map = if input.metadata()?.len() == 0 {
+            None
+        } else {
+            Some(unsafe { memmap2::Mmap::map(&input)? })
+        };
+        let bytes = map.as_deref().unwrap_or_default();
+        let spans = self.engine.redact_spans(std::str::from_utf8(bytes)?);
+        if !spans.is_empty() {
             let mut output = tempfile::tempfile()?;
-            let replacement = format!("[redacted:{kind}]");
             let mut end = 0;
-            for matched in matches {
-                output.write_all(&bytes[end..matched.start()])?;
-                output.write_all(replacement.as_bytes())?;
-                end = matched.end();
+            for span in &spans {
+                output.write_all(&bytes[end..span.start])?;
+                output.write_all(span.replacement.as_bytes())?;
+                end = span.end;
                 count += 1;
             }
             output.write_all(&bytes[end..])?;
@@ -112,6 +110,16 @@ impl Redactor {
         input.rewind()?;
         Ok((input, count))
     }
+}
+
+/// The project root for value-source discovery: the git root of the current
+/// directory, or that directory itself outside a repo. `None` when neither can be
+/// read (for example, a deleted working directory).
+fn project_root() -> Option<PathBuf> {
+    crate::project::Project::resolve(None)
+        .map(|project| project.root)
+        .or_else(|_| std::env::current_dir())
+        .ok()
 }
 
 pub struct NeverCapture {
@@ -158,6 +166,28 @@ mod tests {
     use std::io::Read;
 
     #[test]
+    fn configured_dotenv_values_are_redacted() {
+        let dir = tempfile::tempdir().unwrap();
+        let env_file = dir.path().join("custom.env");
+        std::fs::write(
+            &env_file,
+            "ANYNAME=zq9-unique-value-12345
+",
+        )
+        .unwrap();
+        let cfg = Redact {
+            builtin: false,
+            dotenv: vec![env_file.to_string_lossy().into_owned()],
+            ..Default::default()
+        };
+        let (text, count) = Redactor::from_config(&cfg)
+            .unwrap()
+            .apply("x zq9-unique-value-12345 y");
+        assert!(!text.contains("zq9-unique"), "{text}");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
     fn spooled_redaction_matches_whole_text_rules() {
         for text in ["", "BEGIN\nsecret\nEND\ntail\n", "unmatched\n", "é\n"] {
             let cfg = Redact {
@@ -167,6 +197,7 @@ mod tests {
                     r"\[redacted:user\]".into(),
                     "(?m)$".into(),
                 ],
+                ..Default::default()
             };
             let redactor = Redactor::from_config(&cfg).unwrap();
             let (mut file, count) = redactor
@@ -195,6 +226,17 @@ mod tests {
     }
 
     #[test]
+    fn apply_with_notices_names_the_label_and_count_without_the_match() {
+        let (out, notices) =
+            redactor().apply_with_notices("see ghp_abcdefghijklmnopqrstuvwxyz0123456789ABCD end");
+        assert!(!out.contains("ghp_"), "{out}");
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].kind, varde_core::redact::Kind::Pattern);
+        assert_eq!(notices[0].label, "github");
+        assert_eq!(notices[0].count, 1);
+    }
+
+    #[test]
     fn redacts_env_assignment_but_not_ordinary_vars() {
         let (out, n) = redactor().apply("DATABASE_PASSWORD=hunter2\nPATH=/usr/bin\n");
         assert_eq!(n, 1);
@@ -203,9 +245,99 @@ mod tests {
     }
 
     #[test]
+    fn overlapping_builtins_resolve_to_one_span() {
+        // The engine resolves all rules in one pass: a `Bearer sk-…` line is one
+        // `bearer` span, not a `bearer` plus an inner `api-key`.
+        let (bearer, bearer_count) =
+            redactor().apply("Authorization: Bearer sk-ant-abcdefghijklmnopqrstuvwx");
+        assert_eq!(bearer, "Authorization: [redacted:bearer]");
+        assert_eq!(bearer_count, 1);
+
+        // A `TOKEN=ghp_…` line is one `env-assign` span, not two replacements.
+        let (token, token_count) =
+            redactor().apply("GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789");
+        assert_eq!(token, "[redacted:env-assign]");
+        assert_eq!(token_count, 1);
+    }
+
+    #[test]
+    fn dotenv_discovery_uses_the_given_root() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".env"), "TOKEN=zq9-unique-value-12345\n").unwrap();
+        let cfg = Redact {
+            builtin: false,
+            ..Default::default()
+        };
+        let (text, count) = Redactor::from_config_at(&cfg, dir.path())
+            .unwrap()
+            .apply("x zq9-unique-value-12345 y");
+        assert!(!text.contains("zq9-unique"), "{text}");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn relative_dotenv_paths_resolve_against_the_given_root() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("custom.env"),
+            "ANYNAME=zq9-unique-value-12345\n",
+        )
+        .unwrap();
+        let cfg = Redact {
+            builtin: false,
+            dotenv: vec!["custom.env".into()],
+            ..Default::default()
+        };
+        let (text, count) = Redactor::from_config_at(&cfg, dir.path())
+            .unwrap()
+            .apply("x zq9-unique-value-12345 y");
+        assert!(!text.contains("zq9-unique"), "{text}");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
     fn git_shas_untouched() {
         let (_, n) = redactor().apply("commit 3f2a9c1d8e7b6a5f4c3d2e1f0a9b8c7d6e5f4a3b");
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn from_config_without_value_sources_survives_a_deleted_cwd() {
+        // The redactor only needs the project root to find value sources; without
+        // `values` it must build even when the cwd is gone (fail-open, like the
+        // value readers). The helper runs in its own process so the deletion
+        // cannot disturb other tests.
+        let exe = std::env::current_exe().unwrap();
+        let status = std::process::Command::new(&exe)
+            .args([
+                "--exact",
+                "redact::tests::deleted_cwd_helper_builds_a_pattern_only_redactor",
+                "--ignored",
+            ])
+            .status()
+            .unwrap();
+        assert!(status.success(), "helper process failed: {status}");
+    }
+
+    #[test]
+    #[ignore = "helper process for from_config_without_value_sources_survives_a_deleted_cwd"]
+    fn deleted_cwd_helper_builds_a_pattern_only_redactor() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        std::env::set_current_dir(&path).unwrap();
+        std::fs::remove_dir_all(&path).unwrap();
+        assert!(
+            std::env::current_dir().is_err(),
+            "the current directory should be gone"
+        );
+        let redactor = Redactor::from_config(&Redact {
+            values: false,
+            ..Default::default()
+        })
+        .expect("pattern-only config builds with a deleted cwd");
+        let (text, count) = redactor.apply("ghp_abcdefghijklmnopqrstuvwxyz0123456789");
+        assert_eq!(count, 1);
+        assert!(!text.contains("ghp_"), "{text}");
     }
 
     #[test]

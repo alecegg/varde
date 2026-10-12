@@ -23,8 +23,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          - runner: macos-15-intel
-            target: x86_64-apple-darwin
           - runner: macos-15
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.runner }}
@@ -32,12 +30,17 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
-      - name: Build CLI binaries
+      - name: Check tag matches workspace version
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          cargo build --locked --release --manifest-path clis/code/Cargo.toml --package varde-code --bin varde-code
-          cargo build --locked --release --manifest-path clis/workflow/Cargo.toml --package varde-workflow --bin varde-workflow
-          cargo build --locked --release --manifest-path clis/toz/Cargo.toml --package varde-toz --bin varde-toz
-          cargo build --locked --release --manifest-path clis/learn/Cargo.toml --package varde-learn --bin varde-learn
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' clis/Cargo.toml | head -n 1)"
+          if [ "${TAG#v}" != "$version" ]; then
+            printf 'Tag %s does not match workspace version %s\n' "$TAG" "$version" >&2
+            exit 1
+          fi
+      - name: Build CLI
+        run: cargo build --locked --release --manifest-path clis/Cargo.toml --package varde --bin varde
       - name: Generate third-party notices
         run: python3 clis/code/scripts/gen-third-party-licenses.py
       - name: Package binaries and notices
@@ -45,12 +48,20 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p package dist
-          cp clis/code/target/release/varde-code package/
-          cp clis/workflow/target/release/varde-workflow package/
-          cp clis/toz/target/release/varde-toz package/
-          cp clis/learn/target/release/varde-learn package/
+          cp clis/target/release/varde package/
           cp LICENSE clis/code/THIRD-PARTY-LICENSES.md package/
           tar -czf "dist/varde-${TARGET}.tar.gz" -C package .
+      - name: Verify release archive contents
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          archive="dist/varde-${TARGET}.tar.gz"
+          expected="$(printf '%s\n' LICENSE THIRD-PARTY-LICENSES.md varde | sort)"
+          actual="$(tar -tzf "$archive" | sed -e '/^\.\/$/d' -e 's#^\./##' | sort)"
+          if [ "$actual" != "$expected" ]; then
+            printf 'Unexpected contents in %s\nExpected:\n%s\nActual:\n%s\n' "$archive" "$expected" "$actual" >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@v6
         with:
           name: binaries-${{ matrix.target }}
@@ -71,7 +82,7 @@ jobs:
       - name: Generate checksums
         working-directory: dist
         run: |
-          test "$(find . -maxdepth 1 -name 'varde-*.tar.gz' | wc -l)" -eq 4
+          test "$(find . -maxdepth 1 -name 'varde-*.tar.gz' | wc -l)" -eq 3
           sha256sum varde-*.tar.gz > SHA256SUMS
           sha256sum --check SHA256SUMS
       - name: Attach release assets

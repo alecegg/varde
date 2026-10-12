@@ -1,16 +1,17 @@
 # Report mode
 
-## Choose the breadth
+## Choose breadth
 
-| The request is | Categories |
+| Request | Categories |
 |---|---|
-| A plain review, with no stated breadth | The default three: `CORRECTNESS`, `CODE`, `ARCHITECTURE` |
-| A thorough or full review | All 10 categories in `references/report-categories.md`, filtered by relevance |
-| A named concern — security, performance, and so on (tests → `CORRECTNESS`) | That single category |
+| Plain review | `CORRECTNESS`, `CODE`, `ARCHITECTURE` |
+| Thorough or full review | All relevant categories in `references/report-categories.md` |
+| Named concern | That category; tests map to `CORRECTNESS` |
 
-If no category matches the named concern, list the ten categories and ask.
+Every review also runs the Spec axis against the task, plan, or linked specs.
+If no category matches a named concern, list the categories and ask.
 
-## Workflow
+## Report workflow
 
 1. **Resolve scope and target,** then state the scope, its `# target`, and the
    active categories before reading code, or stop if no files are listed:
@@ -18,74 +19,39 @@ If no category matches the named concern, list the ten categories and ask.
    - Diff or ref: `scripts/review-scope.sh diff [--ref <ref>] [-- <area>]`.
    - Exclude generated files, lockfiles, and vendored code only when they
      cannot affect the stated concern, and name the exclusions.
-2. **Measure the read:** compare the script's `# tokens` with the **60k-token**
-   budget (about 240 KB); over it, follow `## Split a large review`.
-3. **Resolve the spec source** when `CORRECTNESS` is active, using the first
-   available in this order:
-   1. Acceptance criteria passed in from `varde-change build` (the plan goal
-      and plan-level criteria; verify every criterion).
-   2. The active plan or task on disk.
-   3. A spec under `<knowledge>/specs/` for the area.
-   4. Issue bodies that commits reference.
-   5. None: check internal consistency only.
-4. **Create the review folder** before category work, per
-   `references/report-format.md`.
-5. **Gather signals:** file failures from the project's lint/test/typecheck
-   commands under matching categories; with `varde-code`, follow
-   `references/varde-code-cli.md`. For each changed file, query tests and
-   dependents in one `varde-code batch` call holding every file's calls:
-
-   ```bash
-   ROOT=$(git rev-parse --show-toplevel)
-   varde-code batch --json '{"repoRoot":"'"$ROOT"'","calls":[
-     {"mode":"tests_for_file","filePath":"src/foo.ts"},
-     {"mode":"dependents","filePath":"src/foo.ts"},
-     {"mode":"tests_for_file","filePath":"src/bar.ts"},
-     {"mode":"dependents","filePath":"src/bar.ts"}]}'
-   ```
-
-   Flag a changed signature that a dependent still uses the old way, under
-   `API-DESIGN` if active, else `CORRECTNESS` if active.
-
-   Use `nav_map` for an unfamiliar area or multi-module diff. Reserve
-   `hotspots` and `scan` for whole-repository review.
-6. **Review** every scoped file in full, the diff for diff scope, and affected
-   callers; for a deleted path (status `D`), read `git show <base>:<path>` with
-   the script's `# base`. From `references/report-categories.md`, read only
-   `## Rules for every category` and each active category's section; apply
-   them in one pass (in full mode, only those whose `When` applies), and
-   verify every `high` or `critical` finding yourself.
-7. **Record** each finding in its category file as you find it. Add a
-   `Violates` link when it breaks a spec, decision, or pattern found by one
-   `<knowledge>/` search for the reviewed area.
-8. **Roll up and report.** Confirm a category file exists for every active
-   category that ran (a category with zero findings still gets its file;
-   skipped categories get none), update `review.md`, and tell the user the line below
-   plus each skipped category with its reason:
+   Record target, scope, exclusions, and categories in one `review.md`; read
+   `# base` for deleted-file context (step 4). Compare the helper's `# tokens`
+   with the 60k-token budget; over it, follow `## Split a large review`.
+2. For the Spec axis, use the first available spec: caller-supplied plan
+   criteria (verify each); the active plan or task; `<knowledge>/specs/`;
+   issues referenced by commits; otherwise check internal consistency only.
+3. Create the review folder and `review.md` before reading code, following
+   `references/report-format.md`. Run relevant lint, test, and typecheck
+   commands; use `varde map batch` to query tests and dependents for changed
+   files. For each changed file, use `calls`: `{"mode":"tests_for_file","filePath":"<f>"}` and `{"mode":"dependents","filePath":"<f>"}`.
+   Flag stale dependent calls under active `API-DESIGN`, else `CORRECTNESS`.
+   Use `nav_map` for unfamiliar or multi-module scopes; reserve `hotspots` and
+   `scan` for whole-repository reviews.
+4. Review the diff and necessary context; for area scopes, review listed files.
+   Read broader files only when a changed contract or unresolved evidence
+   requires it. For deleted paths, read `git show <base>:<path>` using `# base`.
+   From `references/report-categories.md`, apply the Spec axis and the active
+   Standards categories in one pass. Cover all changed lines with enough
+   context and verify every high/critical candidate.
+5. Record findings and evidence in `review.md`. Link `Violates` when a search
+   finds a relevant spec, decision, or pattern the finding breaks.
+6. Mark each active category `complete` or `skipped` with its finding count.
+   Report the completion line and each skipped category with its reason:
    ```text
    Review complete. <N> findings across <C> categories. Review folder: `<path>`.
    ```
 
-## Review-gate evidence
+## Review report header
 
-For a caller-assigned gate review, follow `references/review-gate-record.md`;
-a report file does not satisfy the gate.
+A caller-assigned review writes the same `review.md` header (`verdict`,
+`reviewer`, `base`, `head`) in `references/report-format.md`; `varde plan
+conclude` checks it.
 
 ## Split a large review
 
-1. Split the listed files into chunks that fit the budget, splitting an
-   oversized file into line ranges so its full contents are covered.
-2. For each batch of up to three chunks, give each chunk to one report-only
-   `varde-reviewer` subagent with the active categories, spec source, the chunk's
-   files or line ranges, and resolved absolute `<working>`/`<knowledge>`
-   paths. Tell it to load only the rules and active sections of
-   `references/report-categories.md` and `## Finding format` in
-   `references/report-format.md`, not this file or `references/varde-code-cli.md`.
-   It uses those paths without re-resolving, tries to disprove its own
-   candidates, returns findings in the finding format, and writes nothing.
-3. Write every category file yourself, verify each returned `high` or
-   `critical` finding in the code, and keep completed findings in the review
-   folder between batches.
-4. Continue until every scoped file is covered, reporting files that could not
-   be read. After the final batch, run one cross-chunk pass for
-   `ARCHITECTURE` and `API-DESIGN` using dependents and the returned findings.
+Over the 60k-token budget, divide the review into logical units (module, feature, commit series), each within budget, and give each to a report-only reviewer. Verify every high or critical finding yourself, then run one cross-unit pass for architecture and API design.

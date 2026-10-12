@@ -1,19 +1,19 @@
 ---
 type: reference
 status: active
-title: "varde-code extract CLI"
+title: "Code extraction CLI"
 related: ["2026-08-12-varde-code-rust-port/parsing-extraction"]
 ---
 
-# varde-code `extract` CLI reference
+# Code `extract` CLI reference
 
-Capability reference for the `varde-code extract` command — the multi-language
+Capability reference for the `varde map extract` command — the multi-language
 parsing/extraction entry point of varde-code (the Rust code-intelligence core).
 
 ## Invocation
 
 ```text
-varde-code extract <path> [--verbose]
+varde map extract <path> [--verbose]
 ```
 
 `<path>` is a file or a directory (walked recursively, skipping hidden
@@ -107,6 +107,6 @@ var is an alternative to `--include`.
 ## Example
 
 ```text
-$ varde-code extract crates/varde-code/tests/fixtures/ts/structural.ts
+$ varde map extract crates/varde-code/tests/fixtures/ts/structural.ts
 {"entities":[{"kind":"function","name":"greet","file":"...","span":{...}}, ...],"symbols":[],"diagnostics":[]}
 ```

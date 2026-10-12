@@ -1,0 +1,118 @@
+# Error-swallowing rules for c, scala, solidity.
+# Severity evidence: error needs zero false positives across this repository and
+# at least three reference repositories per language; tighten on a false positive.
+#
+# Languages and forms:
+# - c has no exceptions, so the swallow shapes are a discarded call result
+#   (`(void)f();`) and an empty status-check body (`if (<check>) { }`).
+#   A bare `(void)` cast is C's explicit "deliberately ignored" idiom, so the cast
+#   rule is scoped to known fallible operations (I/O, sockets, process and lock
+#   calls) and ships at `warning`; a `(void)` cast of a print/format call
+#   (`printf`, `snprintf`) is deliberate and stays valid. The empty status-check
+#   rule requires a comparison in the condition, so truthiness and bare-call
+#   guards (`if (p->ready) { }`, `if (__builtin_available(...)) { }`) stay valid.
+# - scala swallows through `catch { case _ => }` (empty body) and
+#   `catch { case _ => () }` (unit body); a `match` arm is not matched, and
+#   typed or named handlers stay valid.
+# - solidity swallows through an empty `catch { }` and an empty
+#   `catch Error(string memory ...) { }`. The Error pattern accepts both the
+#   named and unnamed parameter forms via a variadic parameter tail. A `Panic`
+#   or `catch (bytes memory ...)` empty body is not covered here; the follow-up
+#   audit plan owns those shapes.
+#
+# Measured 2026-10-10 with the branch binary (`map find_pattern` against the
+# read-only clones; constraints and `exclude_test_paths` applied):
+# - error-swallow-c-empty-if: redis 2 (both `if (write(...) == -1) { }`), curl 0
+#   (its one empty `if` is a bare `__builtin_available(...)` guard, excluded by
+#   the comparison constraint), libuv 0. Corpus C files: 2209.
+# - error-swallow-c-void-cast: curl 16 (`setsockopt` 9, `fwrite` 4, `sendto` 2,
+#   `fflush` 1), redis 0, libuv 0. `warning`: every hit discards a fallible
+#   status, but `(void)` marks the discard deliberate and most are best-effort
+#   socket/stream tuning, so `error` would demand edits to intentional code.
+# - scala: 0 hits in playframework, http4s and cats for both shapes. Corpus
+#   Scala files: 2354.
+# - error-swallow-solidity: openzeppelin 2, solmate 1 in a `.t.sol` test
+#   (excluded), v3-core and aave 0.
+# - error-swallow-solidity-error: 0 in all four Solidity repos. Corpus Solidity
+#   files: 679.
+#
+# `exclude_test_paths` drops findings in test-path files, where these shapes are
+# written deliberately (a test expecting a revert, a fixture, a C test helper).
+# This repository's own C/Scala/Solidity sources are all test fixtures, so every
+# error rule here adds no finding to the default-gate scan.
+
+[[rule]]
+id = "error-swallow-c-empty-if"
+kind = "pattern"
+severity = "error"
+name = "Empty C status-check body"
+description = "An `if` whose condition is a comparison has an empty body, discarding the checked status."
+message = "empty status-check body: the compared result is never handled"
+remediation = "handle the failure in the body, or add a comment explaining the intentional no-op"
+pattern = "if ($COND) { }"
+languages = ["c"]
+exclude_test_paths = true
+[rule.constraints]
+COND = "[=!<>]=|(?:^|[^-])[<>]"
+
+[[rule]]
+id = "error-swallow-c-void-cast"
+kind = "pattern"
+severity = "warning"
+name = "Discarded C call result"
+description = "A `(void)` cast discards the result of a known fallible C operation."
+message = "discarded call result: this fallible call's failure is ignored"
+remediation = "check the return value, or document why the failure is safe to ignore; `(void)` is C's explicit-ignore idiom"
+pattern = "(void)$CALL($$$ARGS)"
+languages = ["c"]
+exclude_test_paths = true
+[rule.constraints]
+CALL = "^(read|write|fread|fwrite|pread|pwrite|open|fopen|freopen|close|fclose|fflush|fsync|fdatasync|ftruncate|truncate|unlink|remove|rename|mkdir|rmdir|chmod|fchmod|chown|fchown|chdir|symlink|link|dup|dup2|fcntl|ioctl|ioctlsocket|IoctlSocket|recv|recvfrom|recvmsg|send|sendto|sendmsg|socket|connect|bind|listen|accept|shutdown|setsockopt|getsockopt|fork|execve|execv|execl|execlp|kill|waitpid|pthread_mutex_lock|pthread_mutex_unlock|pthread_create|pthread_join|mlock|munlock|sem_wait|sem_post|poll|select|pselect|epoll_ctl)$"
+
+[[rule]]
+id = "error-swallow-scala"
+kind = "pattern"
+severity = "error"
+name = "Empty Scala catch handler"
+description = "A catch handler whose only case binds `_` and has an empty body swallows the exception."
+message = "empty catch handler: the exception is discarded"
+remediation = "handle or log the exception, or add a comment explaining the intentional suppression"
+pattern = "try { $$$A } catch { case _ => }"
+languages = ["scala"]
+exclude_test_paths = true
+
+[[rule]]
+id = "error-swallow-scala-unit"
+kind = "pattern"
+severity = "warning"
+name = "Unit Scala catch handler"
+description = "A catch handler whose only case binds `_` and returns unit discards the exception."
+message = "unit catch handler: the exception is discarded with `()`"
+remediation = "handle or log the exception, or document the intentional suppression"
+pattern = "try { $$$A } catch { case _ => () }"
+languages = ["scala"]
+exclude_test_paths = true
+
+[[rule]]
+id = "error-swallow-solidity"
+kind = "pattern"
+severity = "error"
+name = "Empty Solidity catch handler"
+description = "A bare `catch { }` clause swallows the failed external call."
+message = "empty catch handler: the failed call is discarded"
+remediation = "handle or revert on the failure, or add a comment explaining the intentional suppression"
+pattern = "catch { }"
+languages = ["solidity"]
+exclude_test_paths = true
+
+[[rule]]
+id = "error-swallow-solidity-error"
+kind = "pattern"
+severity = "error"
+name = "Empty Solidity Error catch handler"
+description = "A `catch Error(string memory ...) { }` clause swallows the revert reason."
+message = "empty Error catch handler: the revert reason is discarded"
+remediation = "handle or bubble up the revert reason, or add a comment explaining the intentional suppression"
+pattern = "catch Error(string memory $$$REST) { }"
+languages = ["solidity"]
+exclude_test_paths = true

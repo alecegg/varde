@@ -10,6 +10,15 @@ use rusqlite::{Connection, params};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+mod c_cpp;
+mod csharp_swift;
+mod elixir_haskell;
+mod jvm;
+mod lua_bash;
+mod python;
+mod ruby_php;
+mod rust;
+
 const IMPORT_KIND: i64 = 1;
 const TYPE_ONLY: &str = "type_only";
 
@@ -50,7 +59,20 @@ fn build_facts(
     imports: &[ImportRow],
     edges: &[EdgeRow],
 ) -> Result<Vec<Fact>, String> {
+    let input = FactInput {
+        files,
+        imports,
+        edges,
+    };
     let mut facts = build_go_facts(files, imports, edges)?;
+    facts.extend(c_cpp::facts(&input)?);
+    facts.extend(csharp_swift::facts(&input)?);
+    facts.extend(elixir_haskell::facts(&input)?);
+    facts.extend(jvm::facts(&input)?);
+    facts.extend(lua_bash::facts(&input)?);
+    facts.extend(python::facts(&input)?);
+    facts.extend(ruby_php::facts(&input)?);
+    facts.extend(rust::facts(&input)?);
     facts.extend(build_relative_facts(root, files, indexed, imports)?);
     facts.sort_by(fact_order);
     deduplicate_facts(&mut facts);
@@ -108,7 +130,7 @@ fn write_facts(conn: &Connection, facts: Vec<Fact>) -> Result<(), String> {
 }
 
 #[derive(Debug, Clone)]
-struct FileRow {
+pub(super) struct FileRow {
     id: i64,
     path: String,
     relative: String,
@@ -118,7 +140,7 @@ struct FileRow {
 }
 
 #[derive(Debug, Clone)]
-struct ImportRow {
+pub(super) struct ImportRow {
     id: i64,
     file_id: i64,
     specifier: String,
@@ -126,7 +148,7 @@ struct ImportRow {
 }
 
 #[derive(Debug, Clone)]
-struct EdgeRow {
+pub(super) struct EdgeRow {
     from_file_id: i64,
     from_entity_id: Option<i64>,
     to_file_id: Option<i64>,
@@ -134,7 +156,7 @@ struct EdgeRow {
 }
 
 #[derive(Debug, Clone)]
-struct Fact {
+pub(super) struct Fact {
     from_file_id: i64,
     from_unit: String,
     to_file_id: Option<i64>,
@@ -143,6 +165,15 @@ struct Fact {
     certainty: &'static str,
     source_entity_id: i64,
     specifier: String,
+}
+
+/// The indexed inputs every per-group fact builder receives: the files, their
+/// import rows and the resolved import edges (the same inputs as the Go
+/// builder).
+pub(super) struct FactInput<'a> {
+    pub(super) files: &'a [FileRow],
+    pub(super) imports: &'a [ImportRow],
+    pub(super) edges: &'a [EdgeRow],
 }
 
 fn load_files(conn: &Connection, root: &Path) -> Result<Vec<FileRow>, String> {

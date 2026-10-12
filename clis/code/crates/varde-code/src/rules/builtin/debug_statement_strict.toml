@@ -3,7 +3,7 @@
 [[rule]]
 id = "debug-macro-strict"
 kind = "pattern"
-severity = "error"
+severity = "warning"
 name = "Debug macro left in code"
 description = "A bare dbg! macro invocation violates the debug syntax policy. Macro binding is not resolved."
 message = "bare dbg! macro invocation violates the debug syntax policy"
@@ -15,7 +15,7 @@ exclude_test_paths = true
 [[rule]]
 id = "debug-statement-strict"
 kind = "pattern"
-severity = "error"
+severity = "warning"
 name = "Debugger statement left in code"
 description = "A debugger statement violates the committed-code debug syntax policy."
 message = "debugger statement violates the debug syntax policy"
@@ -36,3 +36,77 @@ pattern = "console.log($$$ARGS)"
 languages = ["javascript", "typescript", "tsx"]
 exclude_test_paths = true
 exclude_tooling_paths = true
+
+# Severity evidence: these calls are recognizable debugging helpers, but they
+# can be intentional during development or in diagnostics, so findings remain warnings.
+[[rule]]
+id = "python-breakpoint-strict"
+kind = "pattern"
+severity = "warning"
+name = "Python breakpoint left in code"
+description = "A breakpoint() call may leave an interactive debugger in committed code."
+message = "breakpoint() call detected; inspect whether it should remain"
+remediation = "remove the breakpoint() call before committing when it is no longer needed"
+pattern = "breakpoint()"
+languages = ["python"]
+exclude_test_paths = true
+
+[[rule]]
+id = "python-pdb-set-trace-strict"
+kind = "pattern"
+severity = "warning"
+name = "Python pdb trace left in code"
+description = "A pdb.set_trace() call may leave an interactive debugger in committed code."
+message = "pdb.set_trace() call detected; inspect whether it should remain"
+remediation = "remove the pdb.set_trace() call before committing when it is no longer needed"
+pattern = "pdb.set_trace()"
+languages = ["python"]
+exclude_test_paths = true
+
+[[rule]]
+id = "php-var-dump-strict"
+kind = "pattern"
+severity = "warning"
+name = "PHP var_dump call detected"
+description = "A var_dump() call may expose debugging output in committed code."
+message = "var_dump() call detected; inspect whether this debugging output should remain"
+remediation = "remove the var_dump() call before committing when it is no longer needed"
+pattern = "var_dump($$$ARGS)"
+languages = ["php"]
+exclude_test_paths = true
+
+[[rule]]
+id = "php-dd-strict"
+kind = "pattern"
+severity = "warning"
+name = "PHP dd call detected"
+description = "A dd() call may terminate execution and expose debugging output in committed code."
+message = "dd() call detected; inspect whether this debugging helper should remain"
+remediation = "remove the dd() call before committing when it is no longer needed"
+pattern = "dd($$$ARGS)"
+languages = ["php"]
+exclude_test_paths = true
+
+[[rule]]
+id = "elixir-io-inspect-strict"
+kind = "pattern"
+severity = "warning"
+name = "Elixir IO.inspect call detected"
+description = "An IO.inspect() call may leave temporary debugging output in committed code."
+message = "IO.inspect() call detected; inspect whether this output should remain"
+remediation = "remove the IO.inspect() call before committing when it is no longer needed"
+pattern = "IO.inspect($$$ARGS)"
+languages = ["elixir"]
+exclude_test_paths = true
+
+[[rule]]
+id = "elixir-dbg-strict"
+kind = "pattern"
+severity = "warning"
+name = "Elixir dbg call detected"
+description = "A dbg() call may leave temporary debugging behavior in committed code."
+message = "dbg() call detected; inspect whether this debugging helper should remain"
+remediation = "remove the dbg() call before committing when it is no longer needed"
+pattern = "dbg($$$ARGS)"
+languages = ["elixir"]
+exclude_test_paths = true

@@ -55,7 +55,7 @@ git diff --name-only <release-base> HEAD -- skills | cut -d/ -f2 | sort -u
 For each name with both required files, run:
 
 ```bash
-varde-learn eval output skills/<name>
+varde learn eval output skills/<name>
 ```
 
 Those files are `SKILL.md` and `evals/evals.json`.

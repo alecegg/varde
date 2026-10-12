@@ -4,7 +4,8 @@ description: Defines Varde's versioned workflow artifact mechanics.
 generated: { by: codex/gpt-5, at: 2026-09-19T02:30:00Z }
 paths:
   - clis/workflow/varde-workflow/src/artifact.rs
-  - clis/workflow/varde-workflow/src/journal.rs
+  - clis/workflow/varde-workflow/src/workflow_schema.rs
+  - clis/workflow/varde-workflow/src/conclusion.rs
 ---
 
 # Workflow artifact kernel
@@ -29,14 +30,6 @@ Valid edits produce a new revision during inspection.
 Invalid edits return field diagnostics and preserve bytes.
 No command repairs malformed content silently.
 
-## Migration and recovery
-
-Staged writes record paths, hashes, phases, and actions.
-`recover` commits matching staged bytes exactly once.
-
-Recovery uses advisory locking around journal processing.
-It never claims atomicity across the complete filesystem.
-
 ## Output and availability
 
 Machine output uses one versioned JSON response envelope.
@@ -46,37 +39,32 @@ Human output remains separate from machine-readable output.
 Mutations require the CLI and stop when unavailable.
 Read-only workflows may use an explicitly degraded fallback.
 
-## Review evidence
+## Validation and ownership
 
-`review init` binds a subject to a canonical repository, persisted plan or
-bounded contract, and immutable scoped baseline. Reviewer-authored approval
-records and baseline blobs live in the configured working store. `inspect`,
-`record`, and `check` use inspected revisions so changed contracts, coverage,
-or source evidence cannot be silently accepted. The coordinator cannot supply
-an approval flag.
+`varde plan validate` checks statuses, frontmatter keys, plan-only fields, and
+task ownership (`modifies`/`creates`/both rename endpoints), flagging stray
+paths against the plan's `shared:` list and each task's `owns`. `execution-wave`
+conflicts tasks by glob intersection of their `owns` patterns.
 
-Workflow start, resume, and completion checkpoints consume this evidence.
-Planning readiness remains distinct from implementation readiness. Missing or
-stale evidence blocks gated implementation and completion; it does not prevent
-planning or rewriting a contract for renewed review. Review commands are
-required for gated work and do not have a manual fallback.
+## The review report
 
-## Explicit worktree authority
+One `review.md` per plan or change holds the verdict and the reviewed commits:
 
-Subjects keep exact repository identity. An explicitly registered linked
-worktree may reuse a current parent pre-edit approval for its bounded owned
-scope. Its registration pins Git path/branch/common-directory identity, starting
-commit, parent approval and optional task contract; worker baselines and change
-evidence remain separate. Start/resume checks require explicit binding context.
-Workers cannot record parent approvals or conclude parents through that context.
+- `verdict`: `approved` or `changes-requested`
+- `reviewer`
+- `base`: the fixed commit
+- `head`: the reviewed commit
 
-The approval checkout owns isolated task state writes after verified source
-integration. Release verifies the integrated commit and archives worker evidence
-before cleanup. Live bindings block parent completion; archived binding evidence
-participates in its combined change fingerprint and independent final review.
+`varde plan conclude` is the only gate and accepts only an approved verdict
+whose `head` equals the merged commit (see
+[workflow-conclusion](workflow-conclusion.md)).
+A fixes-only re-review or header-only re-check rewrites `head`.
 
-Stale approval cannot authorize execution. Read-only inspection retains current
-evidence/version; current approved active parents may archive valid integrated
-source within current scope. Explicit abandonment archives available evidence
-(or unavailable status), preserves source/branch/checkout, and cannot complete
-a task. Both terminal archives require current combined final review.
+## Explicit integration authority
+
+Each parallel task gets one worktree and branch
+(`scripts/worktree-wave.sh start`). `integrate` audits every task commit with
+`check-task-ownership`, runs one combined check, bisects failures to the
+culprit task, and fast-forwards the plan branch. `release` removes the task and
+integration worktrees. Workers never merge or mutate plan state; the plan
+branch's owner holds both.

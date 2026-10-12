@@ -226,17 +226,45 @@ fn visit_part_4(node: &Node<'_>, kind: &str, ctx: &mut ExtractCtx) -> bool {
     match kind {
         // ---- control flow ----
         "if_statement" => {
-            let name = if is_else_if(node) {
+            let else_if = is_else_if(node);
+            let name = if else_if {
                 "elseif_statement"
             } else {
                 "if_statement"
             };
             ctx.push(EntityKind::ControlFlow, name.to_string(), node);
+            end_event_at_consequence(node, ctx);
+            if let Some(alternative) = node.field("alternative") {
+                // The pre-change event covered the whole `else` tail and was
+                // its max-nesting parent. The trim above ended the event at
+                // the consequence, so keep a legacy nesting marker over the
+                // tail (`legacy_nesting` counts only in `max_nesting`).
+                if !else_if {
+                    ctx.push(
+                        EntityKind::ControlFlow,
+                        "legacy_nesting".to_string(),
+                        &alternative,
+                    );
+                }
+                // A plain `else` is a hybrid increment. An `else` that
+                // directly wraps an `if` stays the `elseif_statement` event
+                // above (`spec:176-179`, `491-518`).
+                if let Some(body) = alternative
+                    .children()
+                    .find(|child| child.is_named() && child.kind() != "comment")
+                    && body.kind() != "if_statement"
+                {
+                    ctx.push(EntityKind::ControlFlow, "else_branch".to_string(), &body);
+                }
+            }
         }
         "binary_expression" => {
             if let Some(name) = boolean_operator_name(node) {
                 ctx.push(EntityKind::ControlFlow, name.to_string(), node);
             }
+        }
+        "unary_expression" if is_negated_logical_sequence(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
         }
         "for_statement"
         | "while_statement"
@@ -282,6 +310,31 @@ fn boolean_operator_name(node: &Node<'_>) -> Option<&'static str> {
         "||" => Some("logical_or"),
         _ => None,
     }
+}
+
+/// End the event just pushed at this `if`'s consequence. The syntax span
+/// covers the whole `else` tail; ending it earlier keeps later branches at the
+/// root `if` body's nesting level (`spec:502-518`). Shared with C++.
+pub(crate) fn end_event_at_consequence(node: &Node<'_>, ctx: &mut ExtractCtx) {
+    let Some(consequence) = node.field("consequence") else {
+        return;
+    };
+    let span = crate::extract::span_of(&consequence);
+    if let Some(event) = ctx.out.last_mut() {
+        event.span.end_byte = span.end_byte;
+        event.span.end_line = span.end_line;
+        event.span.end_col = span.end_col;
+    }
+}
+
+/// Whether this unary expression is a negated binary logical sequence, which
+/// starts a new like-operator run (`spec:207-229`, `254-256`).
+fn is_negated_logical_sequence(node: &Node<'_>) -> bool {
+    node.field("operator")
+        .is_some_and(|operator| matches!(operator.text().as_ref(), "!" | "not"))
+        && node.dfs().skip(1).any(|child| {
+            child.kind() == "binary_expression" && boolean_operator_name(&child).is_some()
+        })
 }
 
 /// Whether this `if` is the direct branch of an `else` clause.
@@ -344,6 +397,85 @@ pub(crate) fn is_reserved_keyword(name: &str) -> bool {
             | "noexcept"
             | "static_assert"
     )
+}
+
+/// Peels the declarator layers of a `function_definition` down to its
+/// `function_declarator` (pointer-returning functions wrap it in a
+/// `pointer_declarator`). Shared with C++.
+pub(crate) fn function_declarator<'a>(node: &Node<'a>) -> Option<Node<'a>> {
+    let mut current = node.field("declarator")?;
+    loop {
+        match current.kind().as_ref() {
+            "function_declarator" => return Some(current),
+            "pointer_declarator" | "array_declarator" | "parenthesized_declarator" => {
+                current = current.field("declarator")?;
+            }
+            _ => return None,
+        }
+    }
+}
+
+/// Callable name of a `function_definition`: the operator's own text for an
+/// `operator+`-style declarator (so overloaded operators are callables),
+/// otherwise the unwrapped identifier. Shared with C++.
+pub(crate) fn function_name(node: &Node<'_>) -> Option<String> {
+    let declarator = node.field("declarator")?;
+    if let Some(operator) = declarator
+        .dfs()
+        .find(|child| child.kind() == "operator_name")
+    {
+        let name = operator.text().trim().to_string();
+        return (!name.is_empty()).then_some(name);
+    }
+    declarator_identifier(&declarator)
+}
+
+/// Inclusive `parameter_list` bounds `(required, total)` for a function
+/// definition, or `(0, 0)` when it has no parameter list. Defaulted
+/// parameters are optional; a variadic tail makes the total unbounded.
+/// Shared with C++.
+pub(crate) fn callable_arity(node: &Node<'_>) -> (u16, u16) {
+    let Some(parameters) = function_declarator(node).and_then(|fd| fd.field("parameters")) else {
+        return (0, 0);
+    };
+    let mut required = 0u16;
+    let mut total = 0u16;
+    let mut variadic = false;
+    for parameter in parameters.children() {
+        match parameter.kind().as_ref() {
+            // A `(void)` parameter list declares no parameters.
+            "parameter_declaration"
+                if parameter.field("declarator").is_none() && parameter.text().trim() == "void" => {
+            }
+            "parameter_declaration" | "identifier" => {
+                required = required.saturating_add(1);
+                total = total.saturating_add(1);
+            }
+            "optional_parameter_declaration" => total = total.saturating_add(1),
+            "variadic_parameter_declaration" => variadic = true,
+            _ => {}
+        }
+    }
+    if variadic {
+        total = u16::MAX;
+    }
+    (required, total)
+}
+
+/// Span of the callable's name token, used for the emitted `recursive_call`
+/// marker. Falls back to the definition span when no name token is found.
+/// Shared with C++.
+pub(crate) fn name_token_span(node: &Node<'_>) -> Option<crate::model::Span> {
+    let declarator = node.field("declarator")?;
+    let target = declarator
+        .dfs()
+        .find(|child| matches!(child.kind().as_ref(), "operator_name" | "destructor_name"))
+        .or_else(|| {
+            declarator
+                .dfs()
+                .find(|child| matches!(child.kind().as_ref(), "identifier" | "field_identifier"))
+        })?;
+    Some(crate::extract::span_of(&target))
 }
 
 /// Peel a declarator down to its bottom `identifier` / `field_identifier`
@@ -612,4 +744,179 @@ mod tests {
             crate::complexity::ComplexityConfidence::Low
         );
     }
+
+    #[test]
+    fn else_chain_emits_else_branch_and_legacy_nesting() {
+        let src = "int f(int a, int b, int c) {\n\
+                     if (a) { return 1; } else if (b) { if (c) { return 2; } } else { if (a) { return 3; } }\n\
+                     return 0;\n\
+                   }\n";
+        let parsed = parse_source(&SupportLang::C, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = crate::extract::extract(&parsed, 0).entities;
+        let flows = names(&entities, EntityKind::ControlFlow);
+        assert_eq!(
+            flows.iter().filter(|name| *name == "if_statement").count(),
+            3,
+            "entities: {flows:?}"
+        );
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| *name == "elseif_statement")
+                .count(),
+            1
+        );
+        assert_eq!(
+            flows.iter().filter(|name| *name == "else_branch").count(),
+            1
+        );
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| *name == "legacy_nesting")
+                .count(),
+            1
+        );
+        let metric = &crate::complexity::function_complexities(&entities)[0];
+        // root if 1 + else if 1 + its body if 2 + else 1 + its body if 2.
+        assert_eq!(metric.cognitive, 7, "metric: {metric:?}");
+        assert_eq!(metric.cyclomatic, 5, "metric: {metric:?}");
+        assert_eq!(metric.max_nesting, 1, "metric: {metric:?}");
+        // One point per control-flow row: three ifs, the else if, and four
+        // returns; `else_branch` and `legacy_nesting` are complexity-only.
+        assert_eq!(crate::complexity::cyclomatic_for_entities(&entities), 9);
+    }
+
+    #[test]
+    fn negation_goto_and_recursion_roles_score_once() {
+        let src = "int f(int a, int b) {\n\
+                     if (a && !(b && a)) { goto done; }\n\
+                   done:\n\
+                     return f(a - 1, b);\n\
+                   }\n";
+        let parsed = parse_source(&SupportLang::C, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = crate::extract::extract(&parsed, 0).entities;
+        let flows = names(&entities, EntityKind::ControlFlow);
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| *name == "negation_break")
+                .count(),
+            1,
+            "entities: {flows:?}"
+        );
+        assert!(
+            flows.iter().any(|name| name == "goto_statement"),
+            "entities: {flows:?}"
+        );
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| *name == "recursive_call")
+                .count(),
+            1
+        );
+        let metric = &crate::complexity::function_complexities(&entities)[0];
+        // if 1 + outer run 1 + negated inner run 1 + goto 1 + recursion 1.
+        assert_eq!(metric.cognitive, 5, "metric: {metric:?}");
+        assert_eq!(metric.cyclomatic, 4, "metric: {metric:?}");
+    }
+
+    #[test]
+    fn receiver_calls_and_missing_peers_do_not_create_recursion() {
+        let src = "struct Ops { int (*through_ptr)(struct Ops *ops, int n); };\n\
+                   int through_ptr(struct Ops *ops, int n) { return ops->through_ptr(ops, n); }\n\
+                   int missing(int n) { return absent_peer(n); }\n";
+        let parsed = parse_source(&SupportLang::C, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = crate::extract::extract(&parsed, 0).entities;
+        let metrics = crate::complexity::function_complexities(&entities);
+        for name in ["through_ptr", "missing"] {
+            let metric = metrics.iter().find(|metric| metric.name == name).unwrap();
+            assert_eq!(metric.cognitive, 0, "{metric:?}");
+        }
+    }
+}
+
+/// Language-specific flow-role overrides, extended by language tasks.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[];
+
+/// Collect free-function declarations and same-file call references for the
+/// shared recursion resolver. C functions are module-level, so every callable
+/// is a valid unqualified target.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let callables: Vec<_> = root
+        .dfs()
+        .filter(|node| FUNCTION_SCOPES.contains(&node.kind().as_ref()))
+        .filter_map(|node| {
+            let name = function_name(&node)?;
+            let (required_args, total_args) = callable_arity(&node);
+            Some(Callable {
+                owner: None,
+                owner_type: None,
+                unqualified_callable: true,
+                name,
+                required_args,
+                total_args,
+                file_id: 0,
+                span: crate::extract::span_of(&node),
+                name_span: name_token_span(&node).unwrap_or_else(|| crate::extract::span_of(&node)),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call_expression") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| FUNCTION_SCOPES.contains(&ancestor.kind().as_ref()))
+        else {
+            continue;
+        };
+        let caller_span = crate::extract::span_of(&caller_node);
+        let Some(caller) = callables.iter().position(|item| item.span == caller_span) else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier) = match function.kind().as_ref() {
+            "identifier" => (function.text().into_owned(), Qualifier::None),
+            // A struct-member call (`table->handler(x)`) goes through a
+            // function-pointer field, not the current free function.
+            "field_expression" => {
+                let Some(field) = function.field("field") else {
+                    continue;
+                };
+                (field.text().into_owned(), Qualifier::Other)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|child| child.is_named())
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name: None,
+        });
+    }
+    (callables, references)
 }

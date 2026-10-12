@@ -21,3 +21,7 @@ tempfile = "3.27.0"
 thiserror = "2.0.20"
 time = { version = "=0.3.47", default-features = false, features = ["parsing", "formatting"] }
 toml = "1.1.6"
+varde-core.workspace = true
+
+[dev-dependencies]
+varde-core = { workspace = true, features = ["write-meter"] }

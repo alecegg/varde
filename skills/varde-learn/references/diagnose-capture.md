@@ -23,7 +23,7 @@ For each distinct eligible incident:
 5. Run:
 
    ```sh
-   varde-learn diagnose capture --snapshot <the exact --snapshot-out path> \
+   varde learn diagnose capture --snapshot <the exact --snapshot-out path> \
      --source-id <id> --record-index <n> --kind failed-tool \
      --item-source varde-change --item-title "<title>" \
      --evidence "<what the anchored result shows>" --json

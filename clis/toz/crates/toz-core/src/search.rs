@@ -26,6 +26,19 @@ pub struct SearchOpts {
     pub content_type: Option<String>,
     pub include_superseded: bool,
     pub recency_floor: Option<f64>,
+    /// Keep or drop captures by kind (exact match).
+    pub kind: Option<ValueFilter>,
+    /// Keep or drop captures whose source starts with one of the prefixes (case-sensitive).
+    pub source_prefix: Option<ValueFilter>,
+    /// Always drop captures whose source starts with any of these prefixes.
+    pub source_prefix_excludes: Vec<String>,
+}
+
+/// Include (`exclude: false`) or exclude rows matching any of `values`.
+#[derive(Debug, Clone, Default)]
+pub struct ValueFilter {
+    pub exclude: bool,
+    pub values: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -44,6 +57,9 @@ pub struct Hit {
     /// `index` captures only: the backing file has changed since it was indexed.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub stale: bool,
+    /// The capture's source (a file path for `index` captures). Not part of `--json` output.
+    #[serde(skip_serializing)]
+    pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
 }
@@ -73,6 +89,7 @@ struct ChunkMeta {
     created_at: i64,
     body: String,
     stale: bool,
+    source: String,
 }
 
 pub fn search(store: &Store, queries: &[String], opts: &SearchOpts) -> Result<Vec<QueryResult>> {
@@ -156,6 +173,7 @@ fn hit_from_candidate(meta: ChunkMeta, rrf: f64, terms: &[String], t_now: i64, f
         age_secs: age,
         snippet,
         stale: meta.stale,
+        source: meta.source,
         project: None,
     }
 }
@@ -257,6 +275,36 @@ fn ranked(store: &Store, table: &str, fts: &str, opts: &SearchOpts) -> Result<Ve
         args.push(SqlValue::Text(t.clone()));
         sql.push_str(&format!(" AND ch.content_type = ?{}", args.len()));
     }
+    if let Some(f) = opts.kind.as_ref().filter(|f| !f.values.is_empty()) {
+        let marks = push_values(&mut args, &f.values);
+        let not = if f.exclude { "NOT " } else { "" };
+        sql.push_str(&format!(" AND c.kind {not}IN ({marks})"));
+    }
+    if let Some(f) = opts.source_prefix.as_ref().filter(|f| !f.values.is_empty()) {
+        let tests: Vec<String> = f
+            .values
+            .iter()
+            .map(|prefix| {
+                args.push(SqlValue::Text(prefix.clone()));
+                let n = args.len();
+                format!("substr(c.source, 1, length(?{n})) = ?{n}")
+            })
+            .collect();
+        let not = if f.exclude { "NOT " } else { "" };
+        sql.push_str(&format!(" AND {not}({})", tests.join(" OR ")));
+    }
+    if !opts.source_prefix_excludes.is_empty() {
+        let tests: Vec<String> = opts
+            .source_prefix_excludes
+            .iter()
+            .map(|prefix| {
+                args.push(SqlValue::Text(prefix.clone()));
+                let n = args.len();
+                format!("substr(c.source, 1, length(?{n})) = ?{n}")
+            })
+            .collect();
+        sql.push_str(&format!(" AND NOT ({})", tests.join(" OR ")));
+    }
     if !opts.include_superseded && opts.handle.is_none() {
         sql.push_str(" AND c.superseded_by IS NULL");
     }
@@ -264,6 +312,18 @@ fn ranked(store: &Store, table: &str, fts: &str, opts: &SearchOpts) -> Result<Ve
     let mut stmt = store.conn().prepare(&sql)?;
     let rows = stmt.query_map(params_from_iter(args.iter()), |r| r.get::<_, i64>(0))?;
     Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
+/// Append `values` as bound arguments; returns their comma-separated placeholders.
+fn push_values(args: &mut Vec<SqlValue>, values: &[String]) -> String {
+    values
+        .iter()
+        .map(|v| {
+            args.push(SqlValue::Text(v.clone()));
+            format!("?{}", args.len())
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn chunk_meta(store: &Store, rowid: i64) -> Result<Option<ChunkMeta>> {
@@ -293,6 +353,7 @@ fn chunk_meta(store: &Store, rowid: i64) -> Result<Option<ChunkMeta>> {
                     created_at: r.get(8)?,
                     body: r.get(9)?,
                     stale,
+                    source,
                 })
             },
         )
@@ -494,9 +555,31 @@ mod tests {
     use crate::chunk::chunk_default;
     use crate::store::NewCapture;
 
-    fn store_with(docs: &[(&str, &str)]) -> Store {
-        let dir = std::env::temp_dir().join(format!("toz-search-{}", crate::rand::next_u64()));
-        let mut s = Store::open(&dir.join("toz.db")).unwrap();
+    struct TestStore {
+        _dir: tempfile::TempDir,
+        store: Store,
+    }
+
+    impl std::ops::Deref for TestStore {
+        type Target = Store;
+
+        fn deref(&self) -> &Self::Target {
+            &self.store
+        }
+    }
+
+    impl std::ops::DerefMut for TestStore {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.store
+        }
+    }
+
+    fn store_with(docs: &[(&str, &str)]) -> TestStore {
+        let dir = tempfile::Builder::new()
+            .prefix("toz-search-")
+            .tempdir()
+            .unwrap();
+        let mut s = Store::open(&dir.path().join("toz.db")).unwrap();
         for (label, body) in docs {
             let chunks: Vec<_> = chunk_default(body)
                 .into_iter()
@@ -521,7 +604,7 @@ mod tests {
             )
             .unwrap();
         }
-        s
+        TestStore { _dir: dir, store: s }
     }
 
     fn opts() -> SearchOpts {
@@ -603,6 +686,54 @@ mod tests {
         )
         .unwrap();
         assert_eq!(all[0].hits.len(), 2);
+    }
+
+    #[test]
+    fn kind_and_source_prefix_filters_apply_in_sql() {
+        let s = store_with(&[
+            ("work/a", "needle one\n"),
+            ("repo/b", "needle two\n"),
+            ("repo/work/c", "needle three\n"),
+            ("repo/work-old/d", "needle four\n"),
+        ]);
+        let filter = |exclude, value: &str| {
+            Some(ValueFilter {
+                exclude,
+                values: vec![value.to_string()],
+            })
+        };
+        let sources = |o: SearchOpts| -> Vec<String> {
+            let r = search(&s, &["needle".into()], &o).unwrap();
+            let mut sources: Vec<String> = r[0].hits.iter().map(|h| h.source.clone()).collect();
+            sources.sort();
+            sources
+        };
+        let only = sources(SearchOpts {
+            source_prefix: filter(false, "work/"),
+            ..opts()
+        });
+        assert_eq!(only, ["work/a"]);
+        let rest = sources(SearchOpts {
+            source_prefix: filter(true, "work/"),
+            ..opts()
+        });
+        assert_eq!(rest, ["repo/b", "repo/work-old/d", "repo/work/c"]);
+        let repo_without_work = sources(SearchOpts {
+            source_prefix: filter(false, "repo/"),
+            source_prefix_excludes: vec!["repo/work/".to_string()],
+            ..opts()
+        });
+        assert_eq!(repo_without_work, ["repo/b", "repo/work-old/d"]);
+        let no_runs = sources(SearchOpts {
+            kind: filter(true, "run"),
+            ..opts()
+        });
+        assert!(no_runs.is_empty());
+        let runs = sources(SearchOpts {
+            kind: filter(false, "run"),
+            ..opts()
+        });
+        assert_eq!(runs.len(), 4);
     }
 
     #[test]

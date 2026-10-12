@@ -7,6 +7,7 @@
 //! [`grade_run`] after it has written `timing.json`, while the run's
 //! sandbox is still on disk.
 
+use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::ffi::CString;
 use std::fs;
@@ -86,6 +87,7 @@ pub(super) struct GradeRequest<'a> {
     pub raw_path: &'a Path,
     pub transcript: &'a str,
     pub run_outcome: EvalOutcome,
+    pub sandbox_before: &'a BTreeMap<PathBuf, Vec<u8>>,
     pub timeout_seconds: u64,
     pub harness: OutputHarness,
     pub model: Option<&'a str>,
@@ -96,6 +98,8 @@ pub(super) struct GradeSummary {
     pub total: u32,
     pub passed: u32,
     pub judge_outcome: &'static str,
+    pub redacted: usize,
+    pub assertions: Vec<Value>,
 }
 
 /// Ports `grade_current_run()`: deterministic verification, then the LLM
@@ -104,7 +108,17 @@ pub(super) struct GradeSummary {
 /// `judge-grading.json`).
 pub(super) fn grade_run(req: &GradeRequest) -> Result<GradeSummary, LearnError> {
     let declared = &req.eval.assertions;
-    let total = declared.len() as u32;
+    let deterministic = super::assertions::verify(
+        &req.eval.case_assertions,
+        req.sbox,
+        req.transcript,
+        req.sandbox_before,
+    );
+    write_json(
+        &req.run_dir.join("assertions.json"),
+        &json!({"results": deterministic}),
+    )?;
+    let total = (declared.len() + deterministic.len()) as u32;
     if total == 0 {
         write_json(
             &req.run_dir.join("grading.json"),
@@ -119,9 +133,12 @@ pub(super) fn grade_run(req: &GradeRequest) -> Result<GradeSummary, LearnError> 
             total: 0,
             passed: 0,
             judge_outcome: "not_needed",
+            redacted: 0,
+            assertions: deterministic,
         });
     }
 
+    let mut redacted = 0;
     let (merged, judge_outcome) = if req.run_outcome != EvalOutcome::Completed {
         write_json(
             &req.run_dir.join("verification.json"),
@@ -140,13 +157,43 @@ pub(super) fn grade_run(req: &GradeRequest) -> Result<GradeSummary, LearnError> 
         } else {
             "Evaluated run failed; assertions cannot pass".into()
         };
-        let merged: Vec<GradeResult> = declared
+        let mut merged: Vec<GradeResult> = declared
             .iter()
             .map(|assertion| GradeResult::fail(assertion, evidence.clone()))
             .collect();
+        merged.extend(deterministic.iter().zip(&req.eval.case_assertions).map(
+            |(result, assertion)| {
+                GradeResult::fail(
+                    &serde_json::to_string(assertion).unwrap_or_else(|_| assertion.to_string()),
+                    result["evidence"].as_str().unwrap_or(&evidence),
+                )
+            },
+        ));
         (merged, JudgeOutcome::NotRun)
     } else {
-        let verified = run_deterministic_verification(req, declared)?;
+        let mut verified = run_deterministic_verification(req, declared)?;
+        let deterministic_results: Vec<GradeResult> = deterministic
+            .iter()
+            .zip(&req.eval.case_assertions)
+            .map(|(result, assertion)| {
+                let label =
+                    serde_json::to_string(assertion).unwrap_or_else(|_| assertion.to_string());
+                GradeResult {
+                    assertion: label,
+                    verdict: if result["passed"].as_bool() == Some(true) {
+                        "PASS"
+                    } else {
+                        "FAIL"
+                    }
+                    .to_string(),
+                    evidence: result["evidence"]
+                        .as_str()
+                        .unwrap_or("assertion failed")
+                        .to_string(),
+                }
+            })
+            .collect();
+        verified.extend(deterministic_results);
         let verified_set: HashSet<&str> = verified.iter().map(|r| r.assertion.as_str()).collect();
         let judge_assertions: Vec<String> = declared
             .iter()
@@ -158,7 +205,9 @@ pub(super) fn grade_run(req: &GradeRequest) -> Result<GradeSummary, LearnError> 
             write_json(&req.run_dir.join("judge-raw.json"), &json!({}))?;
             (Vec::new(), JudgeOutcome::NotNeeded)
         } else {
-            run_llm_judge(req, &judge_assertions)?
+            let (judged, outcome, count) = run_llm_judge(req, &judge_assertions)?;
+            redacted += count;
+            (judged, outcome)
         };
         write_json(
             &req.run_dir.join("judge-grading.json"),
@@ -177,6 +226,25 @@ pub(super) fn grade_run(req: &GradeRequest) -> Result<GradeSummary, LearnError> 
                     .unwrap_or_else(|| GradeResult::fail(assertion, "No grading result returned"))
             })
             .collect();
+        let mut merged = merged;
+        merged.extend(deterministic.iter().zip(&req.eval.case_assertions).map(
+            |(result, assertion)| {
+                GradeResult {
+                    assertion: serde_json::to_string(assertion)
+                        .unwrap_or_else(|_| assertion.to_string()),
+                    verdict: if result["passed"].as_bool() == Some(true) {
+                        "PASS"
+                    } else {
+                        "FAIL"
+                    }
+                    .to_string(),
+                    evidence: result["evidence"]
+                        .as_str()
+                        .unwrap_or("evaluated run failed")
+                        .to_string(),
+                }
+            },
+        ));
         (merged, judge_outcome)
     };
 
@@ -196,6 +264,8 @@ pub(super) fn grade_run(req: &GradeRequest) -> Result<GradeSummary, LearnError> 
         total,
         passed,
         judge_outcome: judge_outcome.as_str(),
+        redacted,
+        assertions: deterministic,
     })
 }
 
@@ -450,7 +520,7 @@ fn capture_verification_output(
 fn run_llm_judge(
     req: &GradeRequest,
     judge_assertions: &[String],
-) -> Result<(Vec<GradeResult>, JudgeOutcome), LearnError> {
+) -> Result<(Vec<GradeResult>, JudgeOutcome, usize), LearnError> {
     let assertions_json = serde_json::to_string(judge_assertions).unwrap_or_default();
     let prompt = format!(
         "You are grading an agent's output against a list of assertions. For EACH assertion, decide PASS or FAIL and cite concrete evidence quoted or referenced from the output — do not give the benefit of the doubt (a vague gesture at a requirement is a FAIL). Output ONLY a JSON object, no prose and no markdown fences, shaped exactly:\n\
@@ -472,7 +542,8 @@ TOOL USES DURING THE RUN, IN ORDER:\n{tools}",
         tools = tool_use_list(req.raw_path),
     );
 
-    let args = adapter::args(req.harness, req.model, &prompt, req.sbox, true);
+    let prompt = super::redact_text(&prompt);
+    let args = adapter::args(req.harness, req.model, &prompt.text, req.sbox, true);
     let judge_raw_path = req.run_dir.join("judge-raw.json");
     let stream_path = if req.harness == OutputHarness::Codex {
         req.run_dir.join("judge-raw.jsonl")
@@ -486,7 +557,7 @@ TOOL USES DURING THE RUN, IN ORDER:\n{tools}",
         cwd: Some(req.sbox),
         env: &[],
         stdin: if req.harness == OutputHarness::Codex {
-            prompt.as_bytes()
+            prompt.text.as_bytes()
         } else {
             &[]
         },
@@ -501,12 +572,14 @@ TOOL USES DURING THE RUN, IN ORDER:\n{tools}",
         ProcessOutcome::TimedOut => JudgeOutcome::TimedOut,
     };
 
+    let response_redacted =
+        adapter::redact_file(&stream_path)? + adapter::redact_file(&judge_stderr_path)?;
     let (raw_value, trace_error) = adapter::read_raw(req.harness, &stream_path, &judge_raw_path)?;
     if trace_error.is_some() && matches!(judge_outcome, JudgeOutcome::Completed) {
         judge_outcome = JudgeOutcome::Failed;
     }
     if !matches!(judge_outcome, JudgeOutcome::Completed) {
-        return Ok((Vec::new(), judge_outcome));
+        return Ok((Vec::new(), judge_outcome, prompt.count + response_redacted));
     }
     let text = raw_value
         .as_ref()
@@ -524,7 +597,7 @@ TOOL USES DURING THE RUN, IN ORDER:\n{tools}",
         .flatten()
         .filter_map(value_to_grade_result)
         .collect();
-    Ok((judged, judge_outcome))
+    Ok((judged, judge_outcome, prompt.count + response_redacted))
 }
 
 fn value_to_grade_result(item: &Value) -> Option<GradeResult> {

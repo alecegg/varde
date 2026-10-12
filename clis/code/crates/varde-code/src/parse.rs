@@ -191,6 +191,9 @@ pub fn language_name(lang: &SupportLang) -> &'static str {
 pub struct ParsedFile {
     pub lang: SupportLang,
     pub root: AstGrep<StrDoc<SupportLang>>,
+    /// True when the parse tree came from a directive-masked retry. The
+    /// scanner then restores directive entities from the original source.
+    pub masked_preprocessor: bool,
 }
 
 impl ParsedFile {
@@ -219,7 +222,11 @@ pub fn parse_source(lang: &SupportLang, source: &str) -> ParsedFile {
         std::borrow::Cow::Borrowed(source)
     };
     let root = lang.ast_grep(source.as_ref());
-    ParsedFile { lang: *lang, root }
+    ParsedFile {
+        lang: *lang,
+        root,
+        masked_preprocessor: false,
+    }
 }
 
 /// Parse source using its selected language.
@@ -233,12 +240,124 @@ pub fn parse_source_for_path(lang: &SupportLang, path: &Path, source: &str) -> P
         && path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("h"));
-    if !is_ambiguous_header || !parsed.has_error() {
+    if is_ambiguous_header && parsed.has_error() {
+        let cpp = parse_source(&SupportLang::Cpp, source);
+        if !cpp.has_error() {
+            return cpp;
+        }
+        let cpp = parse_with_preprocessor_recovery(&SupportLang::Cpp, source, cpp);
+        if !cpp.has_error() {
+            return cpp;
+        }
+    }
+
+    parse_with_preprocessor_recovery(lang, source, parsed)
+}
+
+fn parse_with_preprocessor_recovery(
+    lang: &SupportLang,
+    source: &str,
+    parsed: ParsedFile,
+) -> ParsedFile {
+    if !matches!(
+        *lang,
+        SupportLang::C | SupportLang::Cpp | SupportLang::CSharp
+    ) || !parsed.has_error()
+        || !has_conditional_preprocessor_directive(source)
+    {
         return parsed;
     }
 
-    let cpp = parse_source(&SupportLang::Cpp, source);
-    if cpp.has_error() { parsed } else { cpp }
+    let masked = mask_preprocessor_directive_lines(source);
+    if let Some(recovered) = parse_clean_mask(lang, &masked) {
+        return recovered;
+    }
+
+    if let Some(first_branch_masked) = mask_preprocessor_alternative_branches(source) {
+        if let Some(recovered) = parse_clean_mask(lang, &first_branch_masked) {
+            return recovered;
+        }
+    }
+
+    parsed
+}
+
+fn parse_clean_mask(lang: &SupportLang, masked: &str) -> Option<ParsedFile> {
+    let mut parsed = parse_source(lang, masked);
+    if parsed.has_error() {
+        return None;
+    }
+    parsed.masked_preprocessor = true;
+    Some(parsed)
+}
+
+fn has_conditional_preprocessor_directive(source: &str) -> bool {
+    source.split_inclusive('\n').any(|line| {
+        let Some(after_hash) = line.trim_start().strip_prefix('#') else {
+            return false;
+        };
+        let name = after_hash
+            .trim_start()
+            .split_whitespace()
+            .next()
+            .unwrap_or("");
+        matches!(name, "if" | "ifdef" | "ifndef")
+    })
+}
+
+fn mask_preprocessor_directive_lines(source: &str) -> String {
+    let mut bytes = source.as_bytes().to_vec();
+    let mut start = 0;
+    for line in source.split_inclusive('\n') {
+        if line.trim_start().starts_with('#') {
+            let content_len = line.trim_end_matches(['\r', '\n']).len();
+            bytes[start..start + content_len].fill(b' ');
+        }
+        start += line.len();
+    }
+    String::from_utf8(bytes).expect("masking ASCII directive bytes preserves UTF-8")
+}
+
+/// Keep the first branch of each conditional group and blank alternative
+/// branch bodies when directive-only masking leaves mutually exclusive bodies
+/// in a syntactically invalid combination.
+fn mask_preprocessor_alternative_branches(source: &str) -> Option<String> {
+    let mut bytes = source.as_bytes().to_vec();
+    let mut branches = Vec::<bool>::new();
+    let mut has_alternative = false;
+    let mut start = 0;
+
+    for line in source.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        let directive = trimmed
+            .strip_prefix('#')
+            .map(|rest| rest.trim_start().split_whitespace().next().unwrap_or(""));
+
+        if let Some(name) = directive {
+            match name {
+                "if" | "ifdef" | "ifndef" => branches.push(false),
+                "elif" | "elseif" | "else" => {
+                    if let Some(excluded) = branches.last_mut() {
+                        *excluded = true;
+                        has_alternative = true;
+                    }
+                }
+                "endif" => {
+                    branches.pop();
+                }
+                _ => {}
+            }
+            let content_len = line.trim_end_matches(['\r', '\n']).len();
+            bytes[start..start + content_len].fill(b' ');
+        } else if branches.iter().any(|excluded| *excluded) {
+            let content_len = line.trim_end_matches(['\r', '\n']).len();
+            bytes[start..start + content_len].fill(b' ');
+        }
+
+        start += line.len();
+    }
+
+    has_alternative.then(|| String::from_utf8(bytes).expect("masking source bytes preserves UTF-8"))
 }
 
 /// Parse a file on disk. Returns `Ok(None)` for unsupported extensions.
@@ -313,5 +432,19 @@ mod tests {
             parsed.has_error(),
             "malformed header must remain diagnostic"
         );
+    }
+
+    #[test]
+    fn csharp_expression_body_masks_alternative_preprocessor_branch() {
+        let path = Path::new("conditional-expression.cs");
+        let source = "class C { private static bool Verify =>\n#if NET\n !RuntimeFeature.IsDynamicCodeSupported;\n#else\n false;\n#endif\n}\n";
+        let parsed = parse_source_for_path(&SupportLang::CSharp, path, source);
+
+        assert!(
+            !parsed.has_error(),
+            "one preprocessor branch should produce a clean C# expression body"
+        );
+        assert!(parsed.masked_preprocessor);
+        assert_eq!(parsed.root.root().text().len(), source.len());
     }
 }

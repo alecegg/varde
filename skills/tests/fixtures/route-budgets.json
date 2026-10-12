@@ -1,0 +1,347 @@
+[
+  {
+    "skill": "varde-agent-doc-authoring",
+    "route": "Author or revise a skill or agent document",
+    "typical": 2152,
+    "max": 2358,
+    "set_by": "proposal",
+    "waived": "min 2556 > typical 2152 (+404): criteria.md gained the prompt anti-pattern checks and the cross-skill load rule; SKILL.md gained `recommends` and the load line."
+  },
+  {
+    "skill": "varde-agent-doc-authoring",
+    "route": "Improve triggering",
+    "typical": 463,
+    "max": 463,
+    "set_by": "proposal",
+    "waived": "min 543 > typical 497 (+46): criteria.md gained the prompt anti-pattern checks and the cross-skill load rule; SKILL.md gained `recommends` and the load line."
+  },
+  {
+    "skill": "varde-agent-doc-authoring",
+    "route": "Review a skill or agent document",
+    "typical": 2290,
+    "max": 2773,
+    "set_by": "proposal",
+    "waived": "min 2767 > typical 2290 (+477): criteria.md gained the prompt anti-pattern checks and the cross-skill load rule; SKILL.md gained `recommends` and the load line."
+  },
+  {
+    "skill": "varde-agent-doc-authoring",
+    "route": "Score or audit a skill's full-flow complexity",
+    "typical": 874,
+    "max": 874,
+    "set_by": "proposal",
+    "waived": "min 1079 > typical 1033 (+46): criteria.md gained the prompt anti-pattern checks and the cross-skill load rule; SKILL.md gained `recommends` and the load line."
+  },
+  {
+    "skill": "varde-change",
+    "route": "\"What's in flight?\", or an empty invocation — show curren...",
+    "typical": 862,
+    "max": 1155,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "A named plan, multiple dependent outcomes, or unresolved...",
+    "typical": 3277,
+    "max": 3570,
+    "set_by": "user"
+  },
+  {
+    "skill": "varde-change",
+    "route": "A settled single-outcome change that fits one task",
+    "typical": 1278,
+    "max": 2645,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "A settled single-outcome refactor",
+    "typical": 1411,
+    "max": 2645,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "Diagnose why something fails, without fixing it",
+    "typical": 1556,
+    "max": 2413,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "Fix a named bug or regression, no mode given",
+    "typical": 1556,
+    "max": 2413,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "One task file assigned by an orchestrator (builder)",
+    "typical": 1046,
+    "max": 2413,
+    "set_by": "user"
+  },
+  {
+    "skill": "varde-change",
+    "route": "Plan a new feature before building",
+    "typical": 2699,
+    "max": 2992,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "Report evidence for finished work without changing anything",
+    "typical": 1038,
+    "max": 1331,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "Resume planning with no feature named",
+    "typical": 2699,
+    "max": 2992,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-change",
+    "route": "Run a plan set's ready plans in parallel",
+    "typical": 2244,
+    "max": 3015,
+    "set_by": "user"
+  },
+  {
+    "skill": "varde-customize",
+    "route": "Add a code scan rule or tune its matches, severity, or th...",
+    "typical": 2379,
+    "max": 2379,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-customize",
+    "route": "Customize tool-output previews, sections, or extracted re...",
+    "typical": 1272,
+    "max": 1272,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-docs",
+    "route": "A generated domain specification under <knowledge>/specs/...",
+    "typical": 2501,
+    "max": 2501,
+    "set_by": "proposal",
+    "waived": "min 2574 > typical 2534 (+40): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-docs",
+    "route": "User-facing: README.md, docs/*.md, CHANGELOGs, release no...",
+    "typical": 682,
+    "max": 747,
+    "set_by": "proposal",
+    "waived": "min 709 > typical 682 (+27): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-explore",
+    "route": "An explicit ask to explain a diff or code area, or compar...",
+    "typical": 864,
+    "max": 864,
+    "set_by": "proposal",
+    "waived": "min 904 > typical 864 (+40); max 904 > max 864 (+40): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-knowledge",
+    "route": "Check a knowledge note against current code",
+    "typical": 339,
+    "max": 339,
+    "set_by": "proposal",
+    "waived": "min 377 > typical 339 (+38): SKILL.md gained the distill route row and description."
+  },
+  {
+    "skill": "varde-knowledge",
+    "route": "Distill concluded plans or inactive areas (skip when none...",
+    "typical": 717,
+    "max": 717,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-knowledge",
+    "route": "Find or record durable knowledge — a decision, pattern, d...",
+    "typical": 923,
+    "max": 1182,
+    "set_by": "proposal",
+    "waived": "min 961 > typical 923 (+38): SKILL.md gained the distill route row and description."
+  },
+  {
+    "skill": "varde-knowledge",
+    "route": "Resume a session from notes, or pick up where a previous...",
+    "typical": 726,
+    "max": 830,
+    "set_by": "proposal",
+    "waived": "min 764 > typical 726 (+38): SKILL.md gained the distill route row and description."
+  },
+  {
+    "skill": "varde-knowledge",
+    "route": "Wrap up finished work or capture what was learned",
+    "typical": 1300,
+    "max": 2572,
+    "set_by": "proposal",
+    "waived": "min 1817 > typical 1300 (+517): reflect.md step 2 now routes concluded plans to the new distill.md; SKILL.md gained the distill row and description."
+  },
+  {
+    "skill": "varde-knowledge",
+    "route": "Write session notes",
+    "typical": 1022,
+    "max": 1126,
+    "set_by": "proposal",
+    "waived": "min 1060 > typical 1022 (+38): SKILL.md gained the distill route row and description."
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Author query sets or eval cases, or run an approved evalu...",
+    "typical": 1167,
+    "max": 1167,
+    "set_by": "proposal",
+    "waived": "min 1197 > typical 1167 (+30); max 1197 > max 1167 (+30): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Capture an observed friction event",
+    "typical": 697,
+    "max": 697,
+    "set_by": "proposal",
+    "waived": "min 822 > typical 811 (+11); max 822 > max 811 (+11): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Check whether an adopted change recurred",
+    "typical": 575,
+    "max": 575,
+    "set_by": "proposal",
+    "waived": "min 586 > typical 575 (+11); max 586 > max 575 (+11): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Diagnose an existing or current agent session",
+    "typical": 1801,
+    "max": 2758,
+    "set_by": "proposal",
+    "waived": "min 1812 > typical 1801 (+11); max 2855 > max 2758 (+97): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Distill recurring friction into an improvement",
+    "typical": 1385,
+    "max": 2442,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Reconcile an item against evidence",
+    "typical": 729,
+    "max": 729,
+    "set_by": "proposal",
+    "waived": "min 740 > typical 729 (+11); max 740 > max 729 (+11): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Review recurring friction for an improvement proposal",
+    "typical": 928,
+    "max": 928,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Run a multi-session retrospective or orchestrated-build w...",
+    "typical": 1591,
+    "max": 2207,
+    "set_by": "proposal",
+    "waived": "min 1602 > typical 1591 (+11); max 2218 > max 2207 (+11): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-learn",
+    "route": "Triage supplied agent-session evidence without a session-...",
+    "typical": 595,
+    "max": 595,
+    "set_by": "proposal",
+    "waived": "min 606 > typical 595 (+11); max 606 > max 595 (+11): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-manage",
+    "route": "Install and configure",
+    "typical": 1339,
+    "max": 1479,
+    "set_by": "proposal",
+    "waived": "min 1479 > typical 1339 (+140); max 1479 > max 1339 (+140): the three new presets, derived instruction sections and hooks, and the upgrade note are the plan's user-facing change."
+  },
+  {
+    "skill": "varde-prototype",
+    "route": "\"Does this state model, logic, or data shape feel right?\"...",
+    "typical": 875,
+    "max": 875,
+    "set_by": "proposal",
+    "waived": "min 915 > typical 875 (+40); max 915 > max 875 (+40): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-prototype",
+    "route": "Shape, prototype, or refine a frontend page, layout, or c...",
+    "typical": 1111,
+    "max": 1111,
+    "set_by": "proposal",
+    "waived": "min 1151 > typical 1111 (+40); max 1151 > max 1111 (+40): the `recommends` frontmatter line and the longer cross-skill load line grew this route."
+  },
+  {
+    "skill": "varde-review",
+    "route": "Address review threads or failing checks on an open GitHu...",
+    "typical": 1386,
+    "max": 1386,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-review",
+    "route": "Apply the findings an earlier review already wrote down",
+    "typical": 1386,
+    "max": 1386,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-review",
+    "route": "Fix one named, already recorded standalone finding",
+    "typical": 1386,
+    "max": 1386,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-review",
+    "route": "Inspect a running web, iOS simulator, or macOS app visual...",
+    "typical": 2567,
+    "max": 2567,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-review",
+    "route": "Review a diff, branch, or code area and write down what i...",
+    "typical": 1586,
+    "max": 2060,
+    "set_by": "user"
+  },
+  {
+    "skill": "varde-review",
+    "route": "Tidy up a just-committed change — naming, redundancy, con...",
+    "typical": 1236,
+    "max": 1236,
+    "set_by": "proposal"
+  },
+  {
+    "skill": "varde-scan",
+    "route": "Scan code and triage findings",
+    "typical": 692,
+    "max": 944,
+    "set_by": "proposal",
+    "waived": "min 698 > typical 692 (+6); max 1094 > max 1081 (+13): the `requires` frontmatter line grew this route."
+  },
+  {
+    "skill": "varde-toz",
+    "route": "Run a batch script",
+    "typical": 651,
+    "max": 1034,
+    "set_by": "proposal"
+  }
+]

@@ -1,7 +1,7 @@
 # varde-docs flow
 
 Generated for human readers; agents do not load this file. Regenerate
-with skill-flow.py --write from varde-agent-doc-authoring. Dotted edges
+with `varde doc flow --write`. Dotted edges
 are conditional loads; min tokens follow only solid edges. Thick edges
 are hand-offs to a later stage, outside min and max. Double-bordered
 nodes are skill modes run inline or agent dispatches. Min and max count
@@ -11,65 +11,42 @@ conditional dispatch. Module overview first, then one diagram per module.
 
 ## Files
 
-- SKILL.md (~227 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no..., A generated domain specification under <knowledge>/specs/...)
-  - references/refresh.md (~458 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no...)
-  - references/review-gate-plan.md (~508 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no..., A generated domain specification under <knowledge>/specs/...)
-  - references/review-gate-record.md (~546 tok; routes: -)
-  - references/review-gate-worktree.md (~469 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no..., A generated domain specification under <knowledge>/specs/...)
-  - references/review-gates.md (~1352 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no..., A generated domain specification under <knowledge>/specs/...)
-  - references/spec.md (~1445 tok; routes: A generated domain specification under <knowledge>/specs/...)
-    - references/spec-format.md (~813 tok; routes: A generated domain specification under <knowledge>/specs/...)
-  - references/varde-code-cli.md (~46 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no..., A generated domain specification under <knowledge>/specs/...)
+- SKILL.md (~234 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no..., A generated domain specification under <knowledge>/specs/...)
+  - references/refresh.md (~459 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no...)
+  - references/review-gates.md (~438 tok; routes: -)
+  - references/spec.md (~1396 tok; routes: A generated domain specification under <knowledge>/specs/...)
+    - references/spec-format.md (~814 tok; routes: A generated domain specification under <knowledge>/specs/...)
+  - references/varde-code-cli.md (~54 tok; routes: User-facing: README.md, docs/*.md, CHANGELOGs, release no..., A generated domain specification under <knowledge>/specs/...)
 
 ```mermaid
 flowchart TD
   m0["refresh (1 file)"]
-  m1["review (4 files)"]
-  m2["scripts (2 files)"]
-  m3["spec (1 file)"]
-  m1 -->|"2"| m2
-  m3 -->|"3"| m2
+  m1["scripts (1 file)"]
+  m2["spec (1 file)"]
+  m2 -->|"3"| m1
 ```
 
 ### refresh
 
 ```mermaid
 flowchart TD
-  n0["references/refresh.md (~458 tok)<br/>ref: references/varde-code-cli.md (~46 tok)"]
-```
-
-### review
-
-```mermaid
-flowchart TD
-  n0["references/review-gate-plan.md (~508 tok)"]
-  n1["references/review-gate-record.md (~546 tok)"]
-  n2["references/review-gate-worktree.md (~469 tok)"]
-  n3["references/review-gates.md (~1352 tok)"]
-  n4["scripts"]
-  n0 --> n4
-  n3 -.-> n0
-  n3 -.-> n2
-  n3 --> n4
+  n0["references/refresh.md (~459 tok)<br/>ref: references/varde-code-cli.md (~54 tok)"]
 ```
 
 ### scripts
 
 ```mermaid
 flowchart TD
-  n0["scripts/risk-tier.py"]
-  n1["scripts/source-hash.py"]
-  n2["review"]
-  n3["spec"]
-  n2 --> n0
-  n3 --> n1
+  n0["scripts/source-hash.py"]
+  n1["spec"]
+  n1 --> n0
 ```
 
 ### spec
 
 ```mermaid
 flowchart TD
-  n0["references/spec.md (~1445 tok)<br/>ref: references/spec-format.md (~813 tok)<br/>ref: references/varde-code-cli.md (~46 tok)"]
+  n0["references/spec.md (~1396 tok)<br/>ref: references/spec-format.md (~814 tok)<br/>ref: references/varde-code-cli.md (~54 tok)"]
   n1["scripts"]
   n0 --> n1
 ```
@@ -78,21 +55,21 @@ flowchart TD
 
 | Route | Min tokens | Max tokens | Main min | Main max | Subagents per dispatch | Lookups | Files |
 |---|---|---|---|---|---|---|---|
-| User-facing: README.md, docs/*.md, CHANGELOGs, release no... | ~685 | ~3060 | ~685 | ~3060 | review* ~3406, review* ~4749-7624 | 1 | references/refresh.md, references/review-gates.md, references/varde-code-cli.md, references/review-gate-plan.md, references/review-gate-worktree.md, scripts/risk-tier.py |
-| A generated domain specification under <knowledge>/specs/... | ~2531 | ~4860 | ~2531 | ~4860 | executor ~3823-7625, review* ~3406, review* ~4749-7624 | 1 | references/spec.md, references/review-gates.md, references/spec-format.md, references/varde-code-cli.md, references/review-gate-plan.md, references/review-gate-worktree.md, scripts/risk-tier.py, scripts/source-hash.py |
+| User-facing: README.md, docs/*.md, CHANGELOGs, release no... | ~747 | ~747 | ~747 | ~747 | - | 0 | references/refresh.md, references/varde-code-cli.md |
+| A generated domain specification under <knowledge>/specs/... | ~2498 | ~2498 | ~2498 | ~2498 | builder ~2489-3856 | 1 | references/spec.md, references/spec-format.md, references/varde-code-cli.md, scripts/source-hash.py |
 
 ## Structure
 
 | Measure | Value | Target | Status |
 |---|---|---|---|
 | Mutual links | 0 | 0 | ok |
-| Max links out of one file | 3 (references/review-gates.md) | < 6 | ok |
-| Average links per linking file | 1.6 (8 links, 5 files) | <= 2 | ok |
-| Cross-module edges | 5 | - | - |
-| Diagram edges | 18 | <= 60 | ok |
-| Max route cyclomatic | 4 | <= 10 | ok |
-| Max route cognitive | 7 | <= 10 warn, <= 15 error | ok |
-| Most files reached by one route | 8 (A generated domain specification under <knowledge>/specs/...) | <= 15 | ok |
+| Max links out of one file | 2 (references/spec.md) | < 6 | ok |
+| Average links per linking file | 1.33 (4 links, 3 files) | <= 2 | ok |
+| Cross-module edges | 3 | - | - |
+| Diagram edges | 9 | <= 60 | ok |
+| Max route cyclomatic | 1 | <= 10 | ok |
+| Max route cognitive | 0 | <= 10 warn, <= 15 error | ok |
+| Most files reached by one route | 4 (A generated domain specification under <knowledge>/specs/...) | <= 15 | ok |
 
 ## Findings
 

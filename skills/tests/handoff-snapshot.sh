@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT="$SCRIPT_DIR/../varde-knowledge/scripts/handoff-snapshot.py"
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/handoff-snapshot.XXXXXX")"
+SCRIPT="$SCRIPT_DIR/../varde-knowledge/scripts/session-notes-snapshot.py"
+TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/session-notes-snapshot.XXXXXX")"
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 fail() {
@@ -11,7 +11,7 @@ fail() {
   exit 1
 }
 
-test -f "$SCRIPT" || fail "handoff-snapshot.py is missing"
+test -f "$SCRIPT" || fail "session-notes-snapshot.py is missing"
 
 make_tree() {
   mkdir -p "$1/dir/nested"
@@ -62,4 +62,4 @@ expected="$(git -C "$inside" hash-object --no-filters -- file.md)"
 got="$(cd "$inside" && python3 -B "$SCRIPT" -- file.md | python3 -c 'import json,sys; print(json.load(sys.stdin)["snapshots"]["file.md"][0]["hash"])')"
 [ "$got" = "git-blob:$expected" ] || fail "git-blob mismatch: $got"
 
-echo "PASS: handoff-snapshot"
+echo "PASS: session-notes-snapshot"

@@ -204,6 +204,13 @@ fn visit_part_3(
         "function_definition" => {
             let name = field_name(node).unwrap_or_default();
             ctx.push(EntityKind::Function, name, node);
+            if is_compensating_usage(node) {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "compensating_usage".to_string(),
+                    node,
+                );
+            }
         }
         "lambda" if node.is_named() => ctx.push_callable_boundary(node),
         "class_definition" => {
@@ -440,6 +447,9 @@ fn visit_part_7(
         "case_clause" => {
             ctx.push(EntityKind::ControlFlow, "match_arm".to_string(), node);
         }
+        "not_operator" if contains_boolean_operator(node) => {
+            ctx.push(EntityKind::ControlFlow, "negation_break".to_string(), node);
+        }
         _ => return false,
     }
     true
@@ -451,14 +461,51 @@ fn visit_part_8(
     ctx: &mut ExtractCtx,
 ) -> bool {
     match kind {
-        "for_in_clause" => {
-            ctx.push(EntityKind::ControlFlow, "for_statement".to_string(), node);
+        "else_clause"
+            if node
+                .parent()
+                .is_some_and(|parent| parent.kind() == "if_statement") =>
+        {
+            ctx.push(EntityKind::ControlFlow, "else_branch".to_string(), node);
         }
-        "if_clause" => {
-            ctx.push(EntityKind::ControlFlow, "if_statement".to_string(), node);
+        "if_statement" => {
+            let consequence = node.field("consequence");
+            if let Some(consequence) = consequence.as_ref() {
+                ctx.push(
+                    EntityKind::ControlFlow,
+                    "if_statement".to_string(),
+                    consequence,
+                );
+            } else {
+                ctx.push(EntityKind::ControlFlow, "if_statement".to_string(), node);
+            }
+            if let Some(condition) = node.field("condition") {
+                ctx.push(EntityKind::ControlFlow, "legacy_nesting".to_string(), node);
+                if let Some(marker) = ctx.out.last_mut() {
+                    let condition_span = crate::extract::span_of(&condition);
+                    let marker_end = consequence
+                        .as_ref()
+                        .filter(|consequence| if_consequence_needs_legacy_nesting(consequence))
+                        .map(crate::extract::span_of)
+                        .unwrap_or(condition_span);
+                    marker.span.end_byte = marker_end.end_byte;
+                    marker.span.end_line = marker_end.end_line;
+                    marker.span.end_col = marker_end.end_col;
+                }
+            }
+            push_if_alternative_legacy_nesting(node, ctx);
         }
-        "if_statement"
-        | "for_statement"
+        "for_in_clause" => ctx.push(
+            EntityKind::ControlFlow,
+            "comprehension_for".to_string(),
+            node,
+        ),
+        "if_clause" => ctx.push(
+            EntityKind::ControlFlow,
+            "comprehension_if".to_string(),
+            node,
+        ),
+        "for_statement"
         | "while_statement"
         | "with_statement"
         | "try_statement"
@@ -473,6 +520,83 @@ fn visit_part_8(
     true
 }
 
+/// Preserve legacy nesting over all alternatives without extending the new `if` decision.
+fn push_if_alternative_legacy_nesting(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+    ctx: &mut ExtractCtx,
+) {
+    let Some(alternative) = node.field("alternative") else {
+        return;
+    };
+    let node_span = crate::extract::span_of(node);
+    ctx.push(
+        EntityKind::ControlFlow,
+        "legacy_nesting".to_string(),
+        &alternative,
+    );
+    if let Some(marker) = ctx.out.last_mut() {
+        marker.span.end_byte = node_span.end_byte;
+        marker.span.end_line = node_span.end_line;
+        marker.span.end_col = node_span.end_col;
+    }
+}
+
+/// Restore the old parent edge when a single flow statement shares the clipped `if` span.
+fn if_consequence_needs_legacy_nesting(
+    consequence: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> bool {
+    let consequence_span = crate::extract::span_of(consequence);
+    let direct_flow = if python_node_emits_its_full_span(consequence) {
+        Some(consequence.clone())
+    } else {
+        consequence.children().find(|child| {
+            python_node_emits_its_full_span(child)
+                && crate::extract::span_of(child) == consequence_span
+        })
+    };
+    let Some(direct_flow) = direct_flow else {
+        return false;
+    };
+
+    !direct_flow.dfs().any(|child| {
+        let span = crate::extract::span_of(&child);
+        span != consequence_span
+            && span.start_byte >= consequence_span.start_byte
+            && span.end_byte <= consequence_span.end_byte
+            && python_node_contributes_to_max_nesting(&child)
+    })
+}
+
+fn python_node_emits_its_full_span(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.kind() != "if_statement" && python_node_contributes_to_max_nesting(node)
+}
+
+fn python_node_contributes_to_max_nesting(
+    node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> bool {
+    let kind = node.kind();
+    match kind.as_ref() {
+        "except_clause" | "for_in_clause" | "if_clause" | "match_statement" => true,
+        "if_statement"
+        | "for_statement"
+        | "while_statement"
+        | "with_statement"
+        | "try_statement"
+        | "return_statement"
+        | "break_statement"
+        | "continue_statement"
+        | "conditional_expression" => matches!(
+            crate::complexity::control_flow_role(kind.as_ref()),
+            crate::complexity::FlowRole::StructuralDecision
+                | crate::complexity::FlowRole::DecisionContainer
+                | crate::complexity::FlowRole::Catch
+                | crate::complexity::FlowRole::LegacyOnly
+                | crate::complexity::FlowRole::LegacyNesting
+        ),
+        _ => false,
+    }
+}
+
 fn boolean_operator_name(
     node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
 ) -> Option<&'static str> {
@@ -483,6 +607,24 @@ fn boolean_operator_name(
             "or" => Some("logical_or"),
             _ => None,
         })
+}
+
+fn contains_boolean_operator(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    node.dfs().any(|child| child.kind() == "boolean_operator")
+}
+
+fn is_compensating_usage(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    let Some(body) = node.field("body") else {
+        return false;
+    };
+    let statements: Vec<_> = body.children().filter(|child| child.is_named()).collect();
+    statements.len() == 2
+        && statements
+            .iter()
+            .any(|child| child.kind() == "function_definition")
+        && statements
+            .iter()
+            .any(|child| child.kind() == "return_statement")
 }
 
 /// Names assigned by an assignment statement's `left` (an identifier or a
@@ -840,6 +982,8 @@ def f(items, ready, fallback):
         return values
     elif fallback:
         return []
+    else:
+        return [None]
     match values:
         case []:
             return []
@@ -861,6 +1005,7 @@ def f(items, ready, fallback):
             flows.contains(&"elseif_statement"),
             "entities: {entities:?}"
         );
+        assert!(flows.contains(&"else_branch"), "entities: {entities:?}");
         assert!(
             flows.contains(&"match_expression"),
             "entities: {entities:?}"
@@ -869,13 +1014,283 @@ def f(items, ready, fallback):
         assert_eq!(
             flows
                 .iter()
-                .filter(|name| **name == "for_statement")
+                .filter(|name| **name == "comprehension_for")
+                .count(),
+            1
+        );
+        assert_eq!(
+            flows
+                .iter()
+                .filter(|name| **name == "comprehension_if")
                 .count(),
             1
         );
         assert_eq!(
             flows.iter().filter(|name| **name == "if_statement").count(),
-            2
+            1
         );
     }
+
+    #[test]
+    fn legacy_nesting_spans_the_full_if_alternative_chain() {
+        let src = "def branch_depth(outer, flag, first, second, deeper, items):\n    if outer:\n        if flag:\n            pass\n        elif first:\n            if deeper:\n                pass\n        elif second:\n            for item in items:\n                pass\n        else:\n            while outer:\n                pass\n";
+        let parsed = parse_source(&SupportLang::Python, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let branch = crate::complexity::function_complexities(&entities)
+            .into_iter()
+            .find(|metric| metric.name == "branch_depth")
+            .expect("branch_depth metrics");
+        // Installed pre-change varde: cyclomatic/max_nesting = 8/2.
+        assert_eq!((branch.cyclomatic, branch.max_nesting), (8, 2));
+
+        let alternative_markers: Vec<_> = entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::ControlFlow
+                    && entity.name == "legacy_nesting"
+                    && entity.enclosing_function.as_deref() == Some("branch_depth")
+                    && src[entity.span.start_byte as usize..].starts_with("elif")
+            })
+            .collect();
+        assert_eq!(alternative_markers.len(), 1);
+        assert_eq!(
+            &src[alternative_markers[0].span.start_byte as usize
+                ..alternative_markers[0].span.end_byte as usize],
+            "elif first:\n            if deeper:\n                pass\n        elif second:\n            for item in items:\n                pass\n        else:\n            while outer:\n                pass"
+        );
+    }
+
+    #[test]
+    fn legacy_nesting_preserves_single_flow_if_consequence() {
+        let src = "def nested_loop(ready, items):\n    if ready:\n        for item in items:\n            pass\n\ndef nested_if(outer, inner):\n    if outer:\n        if inner:\n            pass\n";
+        let parsed = parse_source(&SupportLang::Python, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let metrics = crate::complexity::function_complexities(&entities);
+        let nested_loop = metrics
+            .iter()
+            .find(|metric| metric.name == "nested_loop")
+            .expect("nested_loop metrics");
+        let nested_if = metrics
+            .iter()
+            .find(|metric| metric.name == "nested_if")
+            .expect("nested_if metrics");
+        // Installed pre-change varde: both functions have cyclomatic/max_nesting = 3/1.
+        assert_eq!((nested_loop.cyclomatic, nested_loop.max_nesting), (3, 1));
+        assert_eq!((nested_if.cyclomatic, nested_if.max_nesting), (3, 1));
+
+        let marker = entities
+            .iter()
+            .find(|entity| {
+                entity.kind == EntityKind::ControlFlow
+                    && entity.name == "legacy_nesting"
+                    && entity.enclosing_function.as_deref() == Some("nested_loop")
+            })
+            .expect("legacy if-span marker");
+        assert_eq!(
+            &src[marker.span.start_byte as usize..marker.span.end_byte as usize],
+            "if ready:\n        for item in items:\n            pass"
+        );
+    }
+
+    #[test]
+    fn comprehension_flows_do_not_duplicate_legacy_nesting() {
+        let src = "def nested_comprehension(xs):\n    return [x for x in (y for y in xs)]\n";
+        let parsed = parse_source(&SupportLang::Python, src);
+        assert!(!parsed.has_error(), "fixture must parse cleanly");
+        let entities = extract::extract(&parsed, 0).entities;
+        let nested = crate::complexity::function_complexities(&entities)
+            .into_iter()
+            .find(|metric| metric.name == "nested_comprehension")
+            .expect("nested_comprehension metrics");
+        // Installed pre-change varde: cyclomatic/max_nesting = 3/1.
+        assert_eq!((nested.cyclomatic, nested.max_nesting), (3, 1));
+
+        let comp_spans: Vec<_> = entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::ControlFlow && entity.name == "comprehension_for"
+            })
+            .map(|entity| entity.span)
+            .collect();
+        assert_eq!(comp_spans.len(), 2);
+        let legacy_markers: Vec<_> = entities
+            .iter()
+            .filter(|entity| {
+                entity.kind == EntityKind::ControlFlow && entity.name == "legacy_nesting"
+            })
+            .collect();
+        assert!(
+            legacy_markers
+                .iter()
+                .all(|marker| !comp_spans.contains(&marker.span)),
+            "comprehension spans must have one legacy event: {entities:?}"
+        );
+    }
+}
+
+/// Match containers add one cognitive point; their arms retain legacy branches.
+pub const FLOW_NAME_ROLES: &[(&str, crate::complexity::FlowRole)] = &[
+    (
+        "match_expression",
+        crate::complexity::FlowRole::DecisionContainer,
+    ),
+    ("comprehension_for", crate::complexity::FlowRole::LegacyOnly),
+    ("comprehension_if", crate::complexity::FlowRole::LegacyOnly),
+];
+
+/// Collect Python declarations and same-file call references for recursion.
+pub fn match_callees(
+    root: &super::ParsedNode<'_>,
+) -> (
+    Vec<crate::extract::recursion::Callable>,
+    Vec<crate::extract::recursion::CalleeReference>,
+) {
+    use crate::extract::recursion::{Callable, CalleeReference, Qualifier};
+
+    let declarations: Vec<_> = root
+        .dfs()
+        .filter(|node| node.kind() == "function_definition")
+        .collect();
+    let callables: Vec<_> = declarations
+        .iter()
+        .filter_map(|node| {
+            let name_node = node.field("name")?;
+            let name = name_node.text().into_owned();
+            let parameters = node.field("parameters");
+            let parameter_nodes: Vec<_> = parameters
+                .map(|list| {
+                    list.children()
+                        .filter(|child| is_python_parameter(child.kind().as_ref()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let lexical_parent = node
+                .ancestors()
+                .find(|ancestor| ancestor.kind() == "function_definition")
+                .and_then(|ancestor| ancestor.field("name"))
+                .map(|name| name.text().into_owned());
+            let owner_type = enclosing_type_name(node);
+            let mut callable_parameters = parameter_nodes.as_slice();
+            if lexical_parent.is_none()
+                && owner_type.is_some()
+                && callable_parameters
+                    .first()
+                    .and_then(python_parameter_name)
+                    .is_some_and(|name| matches!(name.as_str(), "self" | "cls"))
+            {
+                callable_parameters = &callable_parameters[1..];
+            }
+            let required_args = callable_parameters
+                .iter()
+                .filter(|parameter| !parameter.kind().as_ref().contains("default"))
+                .count();
+            let owner = lexical_parent.clone().or_else(|| owner_type.clone());
+            Some(Callable {
+                owner,
+                owner_type,
+                unqualified_callable: lexical_parent.is_some() || owner_type_is_none(node),
+                name,
+                required_args: u16::try_from(required_args).unwrap_or(u16::MAX),
+                total_args: u16::try_from(callable_parameters.len()).unwrap_or(u16::MAX),
+                file_id: 0,
+                span: crate::extract::span_of(node),
+                name_span: crate::extract::span_of(&name_node),
+            })
+        })
+        .collect();
+
+    let mut references = Vec::new();
+    for call in root.dfs().filter(|node| node.kind() == "call") {
+        let Some(caller_node) = call
+            .ancestors()
+            .find(|ancestor| ancestor.kind() == "function_definition")
+        else {
+            continue;
+        };
+        let Some(caller) = callables
+            .iter()
+            .position(|item| item.span == crate::extract::span_of(&caller_node))
+        else {
+            continue;
+        };
+        let Some(function) = call.field("function") else {
+            continue;
+        };
+        let (name, qualifier) = match function.kind().as_ref() {
+            "identifier" => (function.text().into_owned(), Qualifier::None),
+            "attribute" => {
+                let Some(method) = function.field("attribute") else {
+                    continue;
+                };
+                let Some(receiver) = function.field("object") else {
+                    continue;
+                };
+                let qualifier = if matches!(receiver.text().as_ref(), "self" | "cls") {
+                    Qualifier::SelfLike
+                } else {
+                    Qualifier::Other
+                };
+                (method.text().into_owned(), qualifier)
+            }
+            _ => continue,
+        };
+        let argument_count = call
+            .field("arguments")
+            .map(|arguments| {
+                arguments
+                    .children()
+                    .filter(|argument| argument.is_named() && argument.kind() != "comment")
+                    .count()
+            })
+            .unwrap_or(0);
+        references.push(CalleeReference {
+            caller,
+            name,
+            argument_count: u16::try_from(argument_count).unwrap_or(u16::MAX),
+            qualifier,
+            qualifier_name: None,
+        });
+    }
+    (callables, references)
+}
+
+fn is_python_parameter(kind: &str) -> bool {
+    matches!(
+        kind,
+        "identifier"
+            | "typed_parameter"
+            | "default_parameter"
+            | "typed_default_parameter"
+            | "list_splat_pattern"
+            | "dictionary_splat_pattern"
+    )
+}
+
+fn python_parameter_name(
+    parameter: &ast_grep_core::Node<'_, StrDoc<SupportLang>>,
+) -> Option<String> {
+    if parameter.kind() == "identifier" {
+        return Some(parameter.text().into_owned());
+    }
+    parameter
+        .field("name")
+        .or_else(|| {
+            parameter
+                .children()
+                .find(|child| child.kind() == "identifier")
+        })
+        .map(|name| name.text().into_owned())
+}
+
+fn owner_type_is_none(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> bool {
+    enclosing_type_name(node).is_none()
+}
+
+fn enclosing_type_name(node: &ast_grep_core::Node<'_, StrDoc<SupportLang>>) -> Option<String> {
+    node.ancestors()
+        .find(|ancestor| ancestor.kind() == "class_definition")
+        .and_then(|ancestor| ancestor.field("name"))
+        .map(|name| name.text().into_owned())
 }

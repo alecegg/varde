@@ -24,7 +24,7 @@ deprecate/undeprecate commands are removed; set
 `status` to `deprecated`, or `draft`, with this command.
 
 ```text
-Usage: varde-workflow concept set-field [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG> <KEY> <VALUE>
+Usage: varde knowledge concept set-field [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG> <KEY> <VALUE>
 
 Arguments:
   <SLUG>   Concept slug, e.g. `my-concept`
@@ -50,7 +50,7 @@ Validation rules (matching `md_core::crud::set_field`):
   required identity field. Setting `type` on a Concept that lacks it
   repairs the Concept.
 - The structured field names `sources`, `verified`, `generated`,
-  `stale_after`, `runtime`, `executor`, `attester` reject a bare-scalar
+  `stale_after`, `runtime`, `builder`, `attester` reject a bare-scalar
   write: they are list/object-typed, and a scalar write would
   corrupt their YAML shape. (Removal is not exposed through this CLI verb,
   which always takes a value.)
@@ -71,7 +71,7 @@ frontmatter, and bodies. Both options compose: fields narrow results first.
 Search has no cached index or semantic matching.
 
 ```text
-Usage: varde-workflow concept search [OPTIONS]
+Usage: varde knowledge concept search [OPTIONS]
 
 Options:
       --field <KEY=VALUE>
@@ -84,7 +84,7 @@ Options:
           Cap ranked text results (default: 20)
 
       --bundle <BUNDLE>
-          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde-workflow paths`) when omitted
+          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde setup paths`) when omitted
 
       --json
           Machine-readable JSON output
@@ -125,7 +125,7 @@ as structured JSON — no body text, no version line, no YAML. This is the
 machine-consumable retrieval path matching the registry's contract.
 
 ```text
-Usage: varde-workflow concept show [OPTIONS] --bundle <BUNDLE> <SLUG>
+Usage: varde knowledge concept show [OPTIONS] --bundle <BUNDLE> <SLUG>
 
 Options:
       --bundle <BUNDLE>   Knowledge Bundle root directory (holds the Concept `.md` files)
@@ -161,7 +161,7 @@ fails because of them.
 
 `status` is a free-form string, not a fixed enum; absent implies
 `stable`. `concept list` excludes `status: deprecated` Concepts by
-default (a varde-workflow policy, not a validation rule); pass
+default (a workflow policy, not a validation rule); pass
 `--include-deprecated` to include them. `status: draft`
 Concepts are unaffected (still listed by default). `concept show` and
 `concept delete` are unchanged by status: a deprecated Concept is still

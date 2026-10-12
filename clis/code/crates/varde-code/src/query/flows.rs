@@ -649,6 +649,7 @@ mod flows_reachable_tree_tests {
         fn count_statement(_sql: &str) {
             STATEMENT_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
+        #[allow(deprecated)] // rusqlite 0.40: trace_v2 changes the hook signature
         conn.trace(Some(count_statement));
 
         let entrypoint = Entrypoint {
@@ -663,6 +664,7 @@ mod flows_reachable_tree_tests {
 
         let trees =
             build_flows(&conn, std::slice::from_ref(&entrypoint)).expect("build_flows computes");
+        #[allow(deprecated)]
         conn.trace(None);
 
         let mut symbols = Vec::new();

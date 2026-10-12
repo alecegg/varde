@@ -122,7 +122,7 @@ pub enum StoreDirSource {
     TozConfigEnv,
     /// The `toz` key in the varde user config (project-table or default).
     VardeConfig,
-    /// `config_dir()`'s own default resolution (XDG, else `~/.config/tool-output-zone`).
+    /// `config_dir()`'s resolution: legacy roots before migration, else `<varde config>/toz`.
     Default,
 }
 
@@ -288,11 +288,6 @@ pub fn all_store_dbs(project: &Project) -> Result<Vec<(String, PathBuf)>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    // Guards tests that mutate process-wide env vars this module reads (`VARDE_CONFIG_DIR`,
-    // `TOZ_CONFIG_DIR`, `TOZ_FALLBACK_DIR`), since `cargo test` runs tests in parallel by default.
-    static ENV_GUARD: Mutex<()> = Mutex::new(());
 
     fn clear_env() {
         std::env::remove_var("VARDE_CONFIG_DIR");
@@ -304,7 +299,7 @@ mod tests {
 
     #[test]
     fn expand_toz_dir_expands_leading_tilde_to_home() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         let home_dir = tempfile::tempdir().unwrap();
         let original_home = std::env::var_os("HOME");
         std::env::set_var("HOME", home_dir.path());
@@ -322,7 +317,7 @@ mod tests {
 
     #[test]
     fn expand_toz_dir_substitutes_project_placeholder() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         assert_eq!(
             expand_toz_dir(Path::new("/r/myproj"), "/a/{project}/b"),
             Some(PathBuf::from("/a/myproj/b"))
@@ -331,13 +326,13 @@ mod tests {
 
     #[test]
     fn expand_toz_dir_treats_relative_result_as_unset() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         assert_eq!(expand_toz_dir(Path::new("/r/myproj"), "rel/dir"), None);
     }
 
     #[test]
     fn varde_toz_dir_is_unset_without_a_config_file() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         clear_env();
         let varde_dir = tempfile::tempdir().unwrap();
         std::env::set_var("VARDE_CONFIG_DIR", varde_dir.path());
@@ -348,7 +343,7 @@ mod tests {
 
     #[test]
     fn varde_toz_dir_project_table_wins_over_default() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         clear_env();
         let varde_dir = tempfile::tempdir().unwrap();
         let project_dir = tempfile::tempdir().unwrap();
@@ -376,7 +371,7 @@ mod tests {
 
     #[test]
     fn varde_toz_dir_prefers_new_config_and_falls_back_to_legacy() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         clear_env();
         let varde_dir = tempfile::tempdir().unwrap();
         let project_root = Path::new("/tmp/config-precedence-project");
@@ -405,7 +400,7 @@ mod tests {
 
     #[test]
     fn store_dir_prefers_varde_config_over_an_existing_fallback_store() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         clear_env();
         let varde_dir = tempfile::tempdir().unwrap();
         let store_dir = tempfile::tempdir().unwrap();
@@ -436,7 +431,7 @@ mod tests {
 
     #[test]
     fn store_dir_prefers_default_primary_over_existing_fallback() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         clear_env();
         let xdg = tempfile::tempdir().unwrap();
         let varde_config = tempfile::tempdir().unwrap();
@@ -455,7 +450,7 @@ mod tests {
         std::env::set_var("VARDE_CONFIG_DIR", varde_config.path());
         std::env::set_var("VARDE_TOZ_FALLBACK_DIR", fallback.path());
         let (dir, source) = project.store_dir_with_source().unwrap();
-        assert_eq!(dir, xdg.path().join("varde-toz").join(&project.key));
+        assert_eq!(dir, varde_config.path().join("toz").join(&project.key));
         assert_eq!(source, StoreDirSource::Default);
         match prior_xdg {
             Some(value) => std::env::set_var("XDG_CONFIG_HOME", value),
@@ -466,7 +461,7 @@ mod tests {
 
     #[test]
     fn explicit_primary_still_allows_a_configured_fallback_on_access_failure() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         clear_env();
         let primary = tempfile::tempdir().unwrap();
         let fallback = tempfile::tempdir().unwrap();
@@ -495,7 +490,7 @@ mod tests {
 
     #[test]
     fn toz_config_dir_env_still_wins_over_varde_config() {
-        let _lock = ENV_GUARD.lock().unwrap();
+        let _lock = crate::test_support::env_lock();
         clear_env();
         let varde_dir = tempfile::tempdir().unwrap();
         let store_dir = tempfile::tempdir().unwrap();

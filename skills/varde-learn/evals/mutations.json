@@ -1,0 +1,46 @@
+{
+  "mutations": [
+    {
+      "id": "remove-retrospective-evidence-threshold",
+      "file": "references/retro.md",
+      "remove": "Keep candidates seen in at least two distinct root sessions, or label a high-severity single-session finding.",
+      "evals": [
+        "retro"
+      ]
+    },
+    {
+      "id": "remove-distill-recurrence-threshold",
+      "file": "references/distill.md",
+      "remove": "Require at least two real occurrences of the same obstacle, on one item or\n   across matching items, with a shared improvement target.",
+      "evals": [
+        "distill"
+      ]
+    },
+    {
+      "id": "remove-recurrence-uncertainty",
+      "file": "references/recurrence.md",
+      "remove": "After an improvement ships, check whether the friction recurred. This reports\nhistorical occurrences; it does not establish that the issue is still present.",
+      "evals": [
+        "recurrence"
+      ]
+    },
+    {
+      "id": "negative-remove-removal-option",
+      "file": "references/options.md",
+      "remove": "When proposing solutions, include an option that simplifies by removing one of these:",
+      "negative": true,
+      "evals": [
+        "improve",
+        "removal-option"
+      ]
+    },
+    {
+      "id": "remove-friction-log-source-of-truth",
+      "file": "references/capture.md",
+      "remove": "Keep friction in `<store dir>/friction.jsonl`, the source of truth; `learn.db` is a rebuildable cache.",
+      "evals": [
+        "friction-capture"
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@ bounded history, not after a failed evaluation or a possible recurrence.
 ## Resolve private storage
 
 1. Use the caller-supplied absolute working-store path, else absolute
-   `data.working` from one `varde-workflow paths --json` run.
+   `data.working` from one `varde setup paths --json` run.
 2. On failure, retry unchanged once with escalated access, then ask for the
    path before writing.
 
@@ -16,19 +16,28 @@ bounded history, not after a failed evaluation or a possible recurrence.
 
 ## Inspect bounded evidence
 
+List recent sessions and linked workers with:
+
 ```sh
-varde-learn diagnose inspect --harness codex --session <THREAD_ID> \
-  --snapshot-out <new-private-path>/bundle.json --json
+varde learn diagnose list --harness all --repository <repo-root> --json
+```
+
+Inspect `data.sources` and `data.children` to identify the files and linked
+sessions included in an inspection. The list command groups workers only when
+their relationship is verified; ambiguous or missing links remain uncovered.
+
+```sh
+varde learn diagnose inspect --harness codex --session <THREAD_ID> --snapshot-out <new-private-path>/bundle.json --json
 ```
 
 - Select with `--harness {codex,claude,opencode}` and exactly one of
   `--current`, `--session <ID>`, or `--path <FILE>`.
 - `--current` needs a verified harness identity. Claude supplies it only as
   command-hook JSON on stdin, which an agent session cannot provide; OpenCode
-  does not expose a verified current caller identity. In those cases, ask for
-  `--session <ID>` or `--path <FILE>`.
-- If current identity is unavailable or ambiguous, stop and report the typed
-  blocker; never substitute an environment variable or a guessed path.
+  does not expose a verified current caller identity. When current identity is
+  unavailable or ambiguous, stop, report the typed blocker, and ask for `--session
+  <ID>` or `--path <FILE>`; never substitute an environment variable or guessed
+  path.
 - Select the analysis procedure from `data.overlap` (`current`, `not_current`,
   or `unknown`), never from the selector: a path or ID can alias the invoking
   session. When `data.overlap` is `current` or `unknown`, read
@@ -37,17 +46,16 @@ varde-learn diagnose inspect --harness codex --session <THREAD_ID> \
 Page a saved bundle without a live selector:
 
 ```sh
-varde-learn diagnose inspect --snapshot-in <bundle.json> \
-  --offset 100 --limit 100 --json
+varde learn diagnose inspect --snapshot-in <bundle.json> --offset N --limit N --json
 ```
 
-Coverage warnings mean partial coverage; never call it complete. They flag
-sources that are:
 
-- partial or malformed;
-- compacted;
-- unsupported or oversized;
-- changing.
+Coverage warnings mean partial coverage; never call it complete.
+
+Inspect `data.coverage.unknown_events`, `data.coverage.inherited_events`, and
+warnings. Unknown events retain a bounded `unknown_payload_excerpt`; inspect
+that excerpt before interpreting the event. Inherited events belong to a
+copied or forked history prefix and are not eligible for capture.
 
 ## Toz output friction
 
@@ -89,6 +97,8 @@ Report rules:
 - For bounded triage, cover failures, repeated work, workflow deviations, and
   available time/token signals.
 - Recommend without applying changes or status updates.
+- For each proposed change, use the removal option, audit lens, and outcome tag
+  in [`options.md`](options.md).
 - Leave uncaptured, with its reason, any candidate with:
   - a missing timestamp or cwd;
   - unresolved identity;

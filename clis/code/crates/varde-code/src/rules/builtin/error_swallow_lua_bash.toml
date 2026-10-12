@@ -1,0 +1,67 @@
+# Error-swallowing rules for lua, bash.
+#
+# Accepted Lua limit (2026-10-11): `pcall(...)` as a discarded statement and
+# `local ok, err = pcall(...)` both match `function_call` in `map find_pattern`.
+# The rule schema has no parent `inside`/`kind` selector, and regex constraints
+# only inspect metavariable text. Shipping a Lua rule would flag captured,
+# handled results along with discarded ones, so no Lua rule is shipped. See the
+# Lua positive/negative examples in the `swallow_lua_bash.rs` contract comment.
+# Severity evidence: error needs zero false positives across this repository and
+# at least three reference repositories per language; tighten on a false positive.
+#
+# Bash has no exceptions, so the swallow shape is a discarded command status:
+# `<cmd> || true` / `<cmd> || :` (the no-op commands) and the same with stderr
+# redirected, e.g. `<cmd> 2>/dev/null || :`. The variant commands (`exit`,
+# `return`, `die`, a logging block) handle the failure and stay valid.
+# `$NOOP` constrains the right-hand command to the two no-op builtins/commands.
+#
+# Two left-hand forms are matched, because the ast-grep matcher binds a meta
+# variable to a single node and a redirection wraps the command in a
+# `redirected_statement`:
+# - plain command: `$CMD $$$ARGS || $NOOP`
+# - command with a stderr redirect: `$CMD $$$ARGS 2>$DEST || $NOOP`
+#
+# Not matched (gaps for the follow-up parity audit): a piped left side
+# (`cmd | grep ... || true`), an assignment left side
+# (`VAR="$(cmd)" || :`), stdout-only and combined redirects
+# (`cmd >/dev/null 2>&1 || true`), and compound left sides
+# (`test ... && skip ... || true`). `set +e` scope cannot be expressed by a
+# structural pattern; the rule reports the discard itself, not errexit state.
+#
+# `exclude_test_paths` drops findings in test-path files (bats `.bats` suites
+# and shell test harnesses invoke failing commands deliberately). Measured
+# 2026-10-10 with `map find_pattern` over the read-only clones; raw hits after
+# the test-path filter: nvm 2, bats-core 0, bash-it 19, pyenv 0 (Bash corpus:
+# nvm 8, bats-core 277, bash-it 371, pyenv 57 files). Every hit discards a
+# cleanup/probe failure with no handling (`unalias ... 2>/dev/null || true`,
+# `_bash-it-completion-helper-necessary X || :`, `type -P git || true`), so the
+# idiom is deliberate: both rules ship at `warning`, not `error`, matching the
+# Go `_ = f(...)` and C `(void)f(...)` discards.
+
+[[rule]]
+id = "error-swallow-bash"
+kind = "pattern"
+severity = "warning"
+name = "Discarded Bash command status"
+description = "A command's failure is discarded by `|| true` or `|| :` with no logging or handling."
+message = "discarded command status: `|| $NOOP` ignores the failure"
+remediation = "handle the failure (`|| exit`, `|| return`, a logging block), or document the intentional ignore"
+pattern = "$CMD $$$ARGS || $NOOP"
+languages = ["bash"]
+exclude_test_paths = true
+[rule.constraints]
+NOOP = "^(true|:)$"
+
+[[rule]]
+id = "error-swallow-bash-redirect"
+kind = "pattern"
+severity = "warning"
+name = "Discarded redirected Bash command status"
+description = "A command with a stderr redirect discards its failure via `|| true` or `|| :`."
+message = "discarded command status: the redirected command's failure is ignored by `|| $NOOP`"
+remediation = "handle the failure (`|| exit`, `|| return`, a logging block), or document the intentional ignore"
+pattern = "$CMD $$$ARGS 2>$DEST || $NOOP"
+languages = ["bash"]
+exclude_test_paths = true
+[rule.constraints]
+NOOP = "^(true|:)$"

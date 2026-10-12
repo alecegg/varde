@@ -14,8 +14,6 @@ pub struct WorkflowArtifact {
     pub status: String,
     pub depends_on: Vec<String>,
     pub path: PathBuf,
-    pub revision: String,
-    pub identity: Option<crate::journal::FileIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -42,8 +40,6 @@ pub struct ArtifactGraph {
     pub root_id: String,
     pub nodes: BTreeMap<String, WorkflowArtifact>,
     pub blockers: Vec<Blocker>,
-    pub input_revisions: BTreeMap<PathBuf, Option<String>>,
-    pub input_identities: BTreeMap<PathBuf, Option<crate::journal::FileIdentity>>,
 }
 
 impl ArtifactGraph {
@@ -54,8 +50,6 @@ impl ArtifactGraph {
             root_id,
             nodes: BTreeMap::new(),
             blockers: Vec::new(),
-            input_revisions: BTreeMap::new(),
-            input_identities: BTreeMap::new(),
         };
         let mut visiting = BTreeSet::new();
         graph.visit(root, schema, &mut visiting)?;
@@ -163,16 +157,10 @@ impl ArtifactGraph {
         let id = artifact.id.clone();
         let dependencies = artifact.depends_on.clone();
         let path = artifact.path.clone();
-        self.input_revisions
-            .insert(path.clone(), Some(artifact.revision.clone()));
-        self.input_identities
-            .insert(path.clone(), artifact.identity.clone());
         self.nodes.insert(id.clone(), artifact);
         for dependency in dependencies {
             let dependency_path = dependency_path(&path, &dependency);
             if !dependency_path.exists() {
-                self.input_revisions.insert(dependency_path.clone(), None);
-                self.input_identities.insert(dependency_path.clone(), None);
                 self.blockers.push(Blocker {
                     code: "dependency_missing".to_string(),
                     artifact_id: id.clone(),
@@ -182,10 +170,6 @@ impl ArtifactGraph {
                 continue;
             }
             let child = read_artifact(&dependency_path, schema)?;
-            self.input_revisions
-                .insert(dependency_path.clone(), Some(child.revision.clone()));
-            self.input_identities
-                .insert(dependency_path.clone(), child.identity.clone());
             if visiting.contains(&child.id) {
                 self.blockers.push(Blocker {
                     code: "dependency_cycle".to_string(),
@@ -238,9 +222,6 @@ impl ArtifactGraph {
 pub fn read_artifact(path: &Path, schema: &WorkflowSchema) -> Result<WorkflowArtifact> {
     let bytes = std::fs::read(path)
         .with_context(|| format!("failed to read workflow artifact {}", path.display()))?;
-    let revision = varde_workflow_core::occ::version(&bytes);
-    let identity =
-        crate::journal::file_identity(&varde_workflow_core::memory::canonical_or_lexical(path))?;
     let (frontmatter, _) = varde_workflow_core::frontmatter::parse(&bytes)?;
     let mapping = frontmatter.as_mapping().expect("parser guarantees mapping");
     let artifact_type = optional_string(mapping, "artifact_type")
@@ -265,23 +246,7 @@ pub fn read_artifact(path: &Path, schema: &WorkflowSchema) -> Result<WorkflowArt
         status,
         depends_on,
         path: path.to_path_buf(),
-        revision,
-        identity,
     })
-}
-
-pub fn content_with_status(path: &Path, status: &str) -> Result<Vec<u8>> {
-    let bytes = std::fs::read(path)?;
-    let (frontmatter, body) = varde_workflow_core::frontmatter::parse(&bytes)?;
-    let mut mapping = frontmatter
-        .as_mapping()
-        .expect("parser guarantees mapping")
-        .clone();
-    mapping.insert(key("status"), YamlValue::String(status.to_string()));
-    Ok(
-        varde_workflow_core::frontmatter::serialize(&YamlValue::Mapping(mapping), &body)?
-            .into_bytes(),
-    )
 }
 
 fn dependency_path(source: &Path, dependency: &str) -> PathBuf {

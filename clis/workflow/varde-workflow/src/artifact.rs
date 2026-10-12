@@ -1,5 +1,6 @@
 //! Workflow artifact inspection: versioned envelopes and plain template frontmatter.
 
+use crate::conclusion::unchecked_acceptance;
 use serde_json::{Value as JsonValue, json};
 use serde_yaml::{Mapping, Value as YamlValue};
 use std::path::{Path, PathBuf};
@@ -51,7 +52,7 @@ pub fn inspect(path: &Path) -> Result<ArtifactEnvelope, Vec<Diagnostic>> {
         }]
     })?;
     let revision = varde_workflow_core::occ::version(&bytes);
-    let (frontmatter, _) = varde_workflow_core::frontmatter::parse(&bytes).map_err(|error| {
+    let (frontmatter, body) = varde_workflow_core::frontmatter::parse(&bytes).map_err(|error| {
         vec![Diagnostic {
             field: "frontmatter".to_string(),
             message: error.to_string(),
@@ -59,11 +60,44 @@ pub fn inspect(path: &Path) -> Result<ArtifactEnvelope, Vec<Diagnostic>> {
     })?;
     let mapping = frontmatter.as_mapping().expect("parser guarantees mapping");
 
-    if mapping.contains_key(YamlValue::String("schema_version".to_string())) {
-        inspect_versioned(path, mapping, revision)
+    let envelope = if mapping.contains_key(YamlValue::String("schema_version".to_string())) {
+        inspect_versioned(path, mapping, revision)?
     } else {
-        Ok(inspect_frontmatter(path, mapping, revision))
+        inspect_frontmatter(path, mapping, revision)
+    };
+    if envelope.artifact_type == "plan" {
+        let mut diagnostics = Vec::new();
+        if unchecked_acceptance(&body).is_none() {
+            diagnostics.push(Diagnostic {
+                field: "body".to_string(),
+                message: "plan is missing a `## Acceptance criteria` section".to_string(),
+            });
+        }
+        if let Some(generated) = mapping.get(key("generated")) {
+            let message = match generated {
+                YamlValue::Sequence(items)
+                    if items
+                        .iter()
+                        .all(|item| matches!(item, YamlValue::String(_))) =>
+                {
+                    None
+                }
+                YamlValue::Sequence(_) => Some("field must contain only strings"),
+                _ => Some("field must be a list of strings"),
+            };
+            if let Some(message) = message {
+                diagnostics.push(Diagnostic {
+                    field: "generated".to_string(),
+                    message: message.to_string(),
+                });
+            }
+        }
+        if !diagnostics.is_empty() {
+            diagnostics.sort_by(|a, b| a.field.cmp(&b.field));
+            return Err(diagnostics);
+        }
     }
+    Ok(envelope)
 }
 
 fn inspect_versioned(

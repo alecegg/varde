@@ -4,4 +4,4 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../../../.."
 export PATH="$HOME/.cargo/bin:$PATH"
-cargo build --release -p varde-code
+cargo build --release -p varde

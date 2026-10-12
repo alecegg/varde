@@ -5,44 +5,25 @@ status: stable
 
 # Workflow conclusion
 
-Contracts prescribe intended behavior.
-Observed specifications describe current source behavior.
-Conclusion keeps both artifact classes independent.
+`varde plan conclude <dir> [--merged <rev>] [--repo <path>]` is the only
+conclusion gate. It reads `<dir>/review.md` and succeeds only when both hold:
 
-Plans declare relative artifact paths through these fields:
+- the report's `verdict` is `approved`;
+- the merged commit equals the report's `head`.
 
-- `contract_deltas`
-- `promotion_candidates`
-- `observed_specs`
+The repository is `--repo <path>` when given, else the git root of the cwd.
+`--merged <rev>` overrides the commit compared with `head` (default `HEAD`).
+On success in a plan directory the plan's `status` becomes `completed`.
+Otherwise it exits 1 naming the verdict or both shas, or
+`review commit <sha> not found in <repo>`.
 
-Contract deltas use schema version `1`.
-They contain `ADDED`, `MODIFIED`, and `REMOVED` sections.
-Existing contract changes require the current base revision.
+No other review machinery gates conclusion: there are no subjects, fingerprints,
+records, contracts, or checkpoints. The report header (`verdict`, `reviewer`,
+`base`, `head`) written by the independent review IS the gate. A fixes-only
+re-review or header-only re-check rewrites `head`, so `head` always covers every
+commit merged before conclusion.
 
-Observed specifications must match every recorded source hash.
-They must also match their deterministic aggregate source hash.
-Semantic regeneration remains owned by `varde-docs spec`.
-
-Promotion candidates require accepted status and provenance.
-Required fields include source plan and source review.
-Disposition, staleness, and resolution remain searchable afterward.
-
-Conclusion validates dependency and review prerequisites before staging writes.
-When review is required, current independent implementation evidence must cover
-the complete subject change. A missing or stale record rejects before
-promotions or plan status are written.
-It then journals contracts, promotions, records, and plan status.
-The journal retains consumed review and source revisions. Recovery validates
-untouched prerequisites and finishes staged or partially committed writes
-exactly once; changed prerequisites remain a conflict for diagnosis.
-
-Reflection, friction, and handoff follow mechanical conclusion.
-Their state remains visible and independently retryable.
-Action outputs deduplicate during idempotent status recording.
-
-Group plans retain aggregate scope, child dependency/contract evidence and
-acceptance criteria. Their own independent pre-edit and combined implementation
-reviews augment child gates; active groups resume without repeated activation.
-All child completion and aggregate checks precede group conclusion. Active
-worktree bindings block parent completion. Separate archived worker evidence
-and integrated source contribute to the current aggregate fingerprint.
+`varde plan status` and `varde plan now` remain advisory: they print a
+staleness notice per plan when `git log <reviewed_commit>..HEAD` touches the
+plan's `owns` paths (or `shared:` when a plan has no `owns`) or
+`reviewed_on` is over 7 days old, and they never exit non-zero for it.

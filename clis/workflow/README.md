@@ -1,7 +1,8 @@
 # varde-workflow
 
-Markdown document and workflow management CLI. Lives in the [varde](../../) monorepo as
-the `workflow` module (its own Cargo workspace).
+Markdown document and workflow management exposed through the unified `varde`
+CLI. The `varde-workflow` and `varde-workflow-core` packages are members of the
+workspace in [`clis/Cargo.toml`](../Cargo.toml).
 
 Grew out of a prior generic knowledge-bundle implementation: Concept CRUD, OCC
 version-checked writes, bundle validation, and search.
@@ -10,6 +11,11 @@ version-checked writes, bundle validation, and search.
 
 Pre-alpha. Varde skills use this CLI for workflow mutations.
 Read-only skill operations may degrade visibly when unavailable.
+`varde plan status` can append `stalled <elapsed>m` to a task row when its
+validated worktree, task, and optional task note show no recent activity.
+Configure the positive-minute threshold with `[orchestration] stall_minutes`
+in `~/.config/varde/config.toml`; it defaults to `20`. Invalid values use the
+default and print a notice. Status only reads this evidence.
 
 ## Scope
 
@@ -18,71 +24,58 @@ Read-only skill operations may degrade visibly when unavailable.
 - Structural lint (broken links, malformed frontmatter; orphans and missing
   indexes as warnings)
 - Versioned workflow artifact inspection and validation
-- Staged-write recovery
-- Declarative workflow schemas, readiness, and transitions
-- Reviewer-written evidence and start/resume/completion checkpoints
+- Declarative workflow schemas, readiness, and execution waves
+- Task ownership checks (`owns` plus plan `shared:`)
+- One review report per plan or change, gated by `plan conclude`
 
 
 ## Workspace layout
 
-A Rust workspace (`Cargo.toml`) with two crates:
+A workspace module with two packages:
 
 - **`varde-workflow-core`** (`md-core/`) — library implementing Concept/Bundle CRUD, OCC
   version checks, project path resolution, and `lint`.
-- **`varde-workflow`** — the CLI binary (`clap`-based) that wraps `varde-workflow-core`.
+- **`varde-workflow`** — the `clap`-based workflow CLI package, routed by `varde`.
 
 ## Build
 
 ```sh
-cargo build --release
+cd clis && cargo build -p varde-workflow --release --locked
 ```
 
-The binary is written to `target/release/varde-workflow`.
+The unified `varde` executable routes lifecycle commands under `varde plan`, knowledge-bundle commands under `varde knowledge`, and `paths`, `instructions` and session hooks under `varde setup`.
 
 ## Usage
 
 ```sh
-varde-workflow concept create --bundle <dir> <slug>      # reads document from stdin
-varde-workflow concept create --bundle <dir> --file <path>
-varde-workflow concept show --bundle <dir> <slug> [--frontmatter-only] [--json]
-varde-workflow concept update --bundle <dir> <slug> --expected-version <hash> [--file <path>] [--json]
-varde-workflow concept set-field --bundle <dir> <slug> <key> <value> --expected-version <hash> [--json]
-varde-workflow concept delete --bundle <dir> <slug> [--json]
-varde-workflow concept map --bundle <dir> [--json]
-varde-workflow concept list [--bundle <dir>] [--include-deprecated] [--limit <n>] [--offset <n>] [--all] [--json]
-varde-workflow concept search [--field key=value]... [--text <query>] [--limit <n>] [--bundle <dir>] [--json]
-varde-workflow lint [--bundle <dir>] [--require-index] [--limit <n>] [--offset <n>] [--all] [--json]
-varde-workflow spec inventory --repository <root> --knowledge <dir> --working <dir> [--refresh] [--acknowledge-architecture-path <path>] [--json]
-varde-workflow validate <artifact> [--json]
-varde-workflow recover [--root <dir>] [--json]
-varde-workflow graph <plan> [--limit <n>] [--offset <n>] [--all] [--json]
-varde-workflow check-task-ownership --task <file> --commit <ref> [--repo-root <dir>] [--json]
-varde-workflow execution-wave <plan-dir> [--repo-root <dir>] [--max-workers <n>] [--json]
-varde-workflow readiness <plan> [--json]
-varde-workflow transition <artifact> <state> [--json]
-varde-workflow conclude <plan> [--json]
-varde-workflow escalate-deferred --plan-dir <absolute-dir> --deferred-dir <absolute-dir> [--json]
-varde-workflow review init --plan <plan> --repository <root> (--scope <path> | --artifact <absolute-file>)... [--json]
-varde-workflow review init --subject <id> --contract <file> --repository <root> (--scope <path> | --artifact <absolute-file>)... [--json]
-varde-workflow review inspect --subject <id> --phase <phase> [--json]
-varde-workflow review record --subject <id> --expected-version <revision> --file <record.json> [--json]
-varde-workflow review check --subject <id> --checkpoint <checkpoint> [--json]
-varde-workflow review bind-worktree --subject <id> --binding <id> --expected-version <version> --worktree <path> --scope <path> [--scope <path> ...] [--task <task.md>] [--json]
-varde-workflow review check --subject <id> --repository <parent> --worktree <path> --binding <id> --checkpoint <start|resume> [--json]
-varde-workflow review inspect-worktree --subject <id> --binding <id> [--json]
-varde-workflow review release-worktree --subject <id> --binding <id> --expected-version <version> --commit <sha> [--json]
-varde-workflow review abandon-worktree --subject <id> --binding <id> --expected-version <version> --reason <text> [--json]
-varde-workflow review contract --subject <id> --expected-version <revision> --file <contract.json> [--json]
-varde-workflow review expand --subject <id> --expected-version <revision> (--scope <path> | --artifact <absolute-file>)... [--json]
-varde-workflow conclusion-status <plan> [--json]
-varde-workflow conclusion-retry <plan> [--json]
-varde-workflow conclusion-action <plan> <reflection|friction|handoff> [--output <path>] [--failed] [--json]
-varde-workflow instructions install [--target <path>]... [--max-agents <n>] [--dry-run]
-varde-workflow instructions targets
-varde-workflow instructions remove [--dry-run]
-varde-workflow paths [--project <root>] [--json]
-varde-workflow paths set [--project <root> | --default] [--working <dir>] [--knowledge <dir>] [--toz <dir>] [--learn <dir>] [--json]
-varde-workflow paths unset [--project <root> | --default] [--working] [--knowledge] [--toz] [--learn] [--json]
+varde knowledge concept create --bundle <dir> <slug>      # reads document from stdin
+varde knowledge concept create --bundle <dir> --file <path>
+varde knowledge concept show --bundle <dir> <slug> [--frontmatter-only] [--json]
+varde knowledge concept update --bundle <dir> <slug> --expected-version <hash> [--file <path>] [--json]
+varde knowledge concept set-field --bundle <dir> <slug> <key> <value> --expected-version <hash> [--json]
+varde knowledge concept delete --bundle <dir> <slug> [--json]
+varde knowledge concept map --bundle <dir> [--json]
+varde knowledge concept list [--bundle <dir>] [--include-deprecated] [--limit <n>] [--offset <n>] [--all] [--json]
+varde knowledge concept search [--field key=value]... [--text <query>] [--limit <n>] [--bundle <dir>] [--json]
+varde knowledge lint [--bundle <dir>] [--require-index] [--limit <n>] [--offset <n>] [--all] [--json]
+varde doc spec inventory --repository <root> --knowledge <dir> --working <dir> [--refresh] [--acknowledge-architecture-path <path>] [--json]
+varde plan validate <artifact> [--json]
+varde plan graph <plan> [--limit <n>] [--offset <n>] [--all] [--json]
+varde plan check-task-ownership --task <file> --commit <ref> [--repo-root <dir>] [--json]
+varde plan execution-wave <plan-dir> [--repo-root <dir>] [--max-workers <n>] [--json]
+varde plan readiness <plan> [--json]
+varde plan status [--json]
+varde plan now <plan> <TEXT> [--json]
+varde plan now <plan> --clear [--json]
+varde msg send --from <name> --to <address> --kind <kind> [--notes <path>] <TEXT>
+varde msg read [--as <address>] [--all] [--json]
+varde plan conclude <dir> [--merged <rev>] [--repo <path>] [--json]
+varde setup instructions install [--target <path>]... [--max-agents <n>] [--dry-run]
+varde setup instructions targets
+varde setup instructions remove [--dry-run]
+varde setup paths [--project <root>] [--json]
+varde setup paths set [--project <root> | --default] [--working <dir>] [--knowledge <dir>] [--toz <dir>] [--learn <dir>] [--json]
+varde setup paths unset [--project <root> | --default] [--working] [--knowledge] [--toz] [--learn] [--json]
 ```
 
 `check-task-ownership` audits one source commit against a task's `modifies`,
@@ -99,8 +92,10 @@ errors); task, revision, Git, and merge errors exit 1 with typed errors in
 JSON mode. The command writes no repository or workflow state.
 
 `execution-wave` reads `<plan-dir>/tasks/*.md` and proposes an ordered wave
-of ready tasks. The worker default and ceiling are 3. Repository discovery
-uses Git; pass `--repo-root` when the plan is outside a Git checkout.
+of ready tasks. The default width is `[orchestration] builders` (minimum 1);
+`--max-workers` accepts any positive integer, and 0 is rejected with a hint to
+omit the flag. Repository discovery uses Git; pass `--repo-root` when the plan
+is outside a Git checkout.
 Plain output is the scheduler JSON object (`schema_version: 3`); `--json`
 places that object in the shared envelope's `data` field. Input errors exit
 1, command-line syntax errors exit 2, and dependency cycles exit 3.
@@ -111,25 +106,16 @@ read-only queries and Git basename fallback for successful empty graphs.
 Failed queries exclude that task from parallel candidates; uncertain ownership
 keeps the whole wave serial. With no parallel wave, the first eligible ready
 task runs alone. Tasks mentioning another unfinished task's created or renamed
-path are held pending an explicit dependency. Shared compile units, refactor
-posture, and spike kind select `worktree` mode for multi-task waves.
+path are held pending an explicit dependency. Every nonempty wave selects
+`worktree` mode, including a single task; an empty wave retains `single`.
 It dispatches nothing, writes no workflow state, and starts no index or watcher.
 
-`escalate-deferred` copies blank findings with valid escalation notes from a
-plan's direct child reviews, preserves their Markdown and provenance, then
-marks the originals escalated. The plan must be under configured
-`<working>/plans`; the destination must be disjoint and under `<working>`.
-Reruns deduplicate by source review and finding ID, including legacy partial
-copies. A shared working-store lock serializes allocation across checkouts.
-Interrupted writes leave `<working>/.varde-workflow-escalation.json`; run
-`recover --root <repository>` before retrying. Recovery validates source
-revisions and the permitted bookkeeping writes. Conclusion approval remains
-required for `conclude` and its recovery.
-New reviews use the local calendar date from the platform `date` command.
+Findings deferred to `<working>/reviews/deferred/<CATEGORY>.md` stay there; the
+deferrer appends directly, and no CLI command moves them.
 
 `--bundle` points at a Knowledge Bundle root directory (holds Concept `.md`
 files); when omitted, `list`, `search`, and `lint` default to the project's
-resolved `<knowledge>` directory (same resolution as `varde-workflow paths`).
+resolved `<knowledge>` directory (same resolution as `varde setup paths`).
 Writes (`update`, `set-field`) require
 `--expected-version`, the OCC version hash last read via `show`, and reject
 stale writes as a typed conflict rather than silently overwriting.
@@ -167,48 +153,86 @@ status; a content change requires inspection again. Its cache is advisory;
 
 ## Instruction block
 
-`varde sync` installs or refreshes the managed Varde block in configured global
-instruction files. When no targets are configured, an interactive sync prompts
-for them; `--yes` and noninteractive runs print a setup warning. This block is
+`varde setup sync` installs or refreshes the managed Varde block in configured global
+instruction files. Pass one or more `--instructions-target <file>` values to
+install the block at explicit targets. This block is
 required: Varde will not work as designed until it is installed. Use one
 canonical `AGENTS.md` in a standard global or personal Git-tracked location, then
 symlink it into each harness.
 
 ```sh
-varde-workflow instructions install --target <path>
-varde-workflow instructions install --max-agents <n>
-varde-workflow instructions targets
-varde-workflow instructions remove
+varde setup instructions install --target <path>
+varde setup instructions install --max-agents <n>
+varde setup instructions targets
+varde setup instructions remove
 ```
 
 `--target` can be repeated and replaces the configured target list. Targets are
-persisted, so `varde sync` refreshes them on later runs. `--max-agents` persists
-the new cap and rewrites the blocks; after editing `[orchestration].max_agents`
-by hand, rerun `varde sync`. `targets` prints the configured files, and `remove`
+persisted, so `varde setup sync` refreshes them on later runs. `--max-agents`
+persists the new cap and rewrites the blocks; after editing
+`[orchestration].builders` by hand, rerun `varde setup sync`. `targets` prints the configured files, and `remove`
 strips the managed block from each target and clears `[instructions].targets`.
+
+### Presets and sync features
+
+Sync derives instruction sections and hook features from the selected skills'
+`requires` closure. With no saved selection, sync selects all skills.
+
+#### Upgrade behavior
+
+For configured instruction targets and synced harnesses, `workflow`, `full`,
+and default all-skills installs retain orchestration. A hand-picked list without
+`varde-change` drops orchestration and the inbox hook on the next sync.
+Use `varde doc spec inventory` for domain spec inventory.
 
 ## Session-start hook
 
-`varde-workflow hook session-start --harness claude|codex|opencode|pi` prints
+`varde hook session-start --harness claude|codex|opencode|pi` prints
 session-start context for one harness. It runs the providers listed in
-`~/.config/varde/config.toml` in order, each limited to 5 seconds, and reports
+`~/.config/varde/config.toml` in order, and reports
 a failed or timed-out provider as a notice in the context. It always exits 0.
 
 ```toml
 [hooks.session_start]
-providers = ["nav_map"]  # default
+providers = ["nav_map", "toz_note"]  # default
 ```
 
-Legacy `orchestration` and `toz_note` entries are skipped. The orchestration
+`nav_map` times out after five seconds. `toz_note` runs when no configured instruction target holds the managed block. Legacy `orchestration` entries are skipped. The orchestration
 brief is in the managed Varde instruction block.
 
-`varde-workflow hook install|remove --harness <h> [--dry-run]` writes or
-removes the hook entry (Claude `settings.json`, Codex `hooks.json`, opencode
-`plugin/varde-session.ts`, Pi `extensions/varde-session.ts`) with a 20 second entry timeout. `varde sync` runs
-`varde-code hooks remove` and then `hook install` for each of these harnesses.
-For Codex, `hook install` also drops leftover `varde-code nav_map` SessionStart
-entries from `hooks.json`; `varde-code hooks remove` owns the Claude one.
-`varde sync` also removes the legacy varde-code Pi hook.
+## Session notes
+
+Post-tool-use providers default to `capture`, then `session_notes`; an
+explicit provider list replaces that default. The `session_notes` provider
+reads the latest bounded context sample and nudges once on each upward crossing
+at or above the absolute token threshold. `[session].notes_at_tokens` defaults
+to `250000`; set it to `0` to disable. Invalid values use the default with a
+notice.
+
+For one release, `context_handoff` remains an alias for `session_notes`, and
+`[session].handoff_at_tokens` remains an alias for
+`[session].notes_at_tokens`. The new provider and key take precedence when both
+names are set. `varde plan watch --handoff <path>` also remains an alias for
+`--notes`; aliases print a deprecation notice and are removed one release after
+this rename ships.
+
+The crossing state is stored per harness and session. It re-arms only after
+usage drops below the threshold. Session start prints the validated session ID
+and a stable reserved path under
+`<working>/session-notes/`; the main agent creates or refreshes that note and
+advises the user to compact. The hook never compacts automatically. Run
+`varde setup migrate-session-notes` to move existing
+`<working>/handoffs/<id>/handoff.md` notes without changing their contents.
+
+`varde setup hooks install|remove` writes or removes the unified hook entries
+(Claude `settings.json`, Codex `hooks.json`, opencode `plugin/varde.ts`, Pi
+`extensions/varde.ts`). The installer accepts `--features change,toz,learn,code,knowledge`;
+`varde setup sync` derives hook features from the selected skills and their
+`requires` closure. Sync first retires the older per-feature
+code, Toz and session hooks, including the legacy workflow session entries and
+plugin files, then installs the unified hooks. For Codex it
+also drops leftover `varde map nav_map` SessionStart entries from `hooks.json`.
+The workflow crate no longer installs hooks.
 
 ### Child sessions
 
@@ -227,7 +251,7 @@ The brief is for main sessions; harnesses handle child sessions differently:
 
 ## Memory locations
 
-Working memory (plans, tasks, handoffs, reviews, journals) and knowledge memory
+Working memory (plans, tasks, session notes, reviews) and knowledge memory
 (durable notes, specs, contracts) have built-in defaults in the project tree.
 We recommend redirecting working memory outside source repositories to a shared
 storage root with distinct project folders. Prefer a separate Git repository
@@ -254,7 +278,7 @@ knowledge = "/Volumes/notes/app/knowledge"
 To configure the recommended shared working default:
 
 ```sh
-varde-workflow paths set --default --working '~/varde-memory/{project}/working'
+varde setup paths set --default --working '~/varde-memory/{project}/working'
 ```
 
 Changing paths does not migrate existing artifacts or create version history.
@@ -288,7 +312,7 @@ repositories distinct project overrides so `{project}` does not merge their stor
 
 `config.toml` can also hold a `toz` key (`paths set --toz <dir>`), recording
 where toz's output-capture store lives. Unlike working/knowledge it has no
-env override and no built-in fallback in this crate — toz resolves its own
+env override and no built-in fallback in this crate — Toz resolves its own
 default when the key is unset. `paths --json` reports it as `data.toz` /
 `data.toz_source`, both `null` when unset. Unlike working/knowledge, toz
 does not fall back to resolving a relative value against the project root:
@@ -298,10 +322,10 @@ treats the key as unset and falls back to its own default store location.
 An existing `paths.toml` remains readable until the first `paths` write
 migrates its entries to `config.toml`.
 
-`conclude`, `conclusion-*`, `recover`, and the schema override honour the
-resolved directories: a plan may live in a redirected working directory and
-its contracts, conclusions, and promotions land in the redirected knowledge
-directory. The journal and lock stay in the project root.
+`conclude`, `status`, and the schema override honour the resolved
+directories: a plan may live in a redirected working directory and its review
+report and plan files stay in that working directory. `--repo` names the
+repository whose commits the review report's `head` must match.
 
 ## Workflow artifact kernel
 
@@ -318,14 +342,6 @@ Valid direct edits advance the content revision automatically.
 Invalid direct edits preserve every source byte unchanged.
 An artifact missing `schema_version` is a validation failure.
 
-Mutations stage content beside its target before committing.
-A versioned journal records source and target hashes.
-`recover` completes interrupted writes exactly once under locking.
-This provides recoverability, not filesystem-wide atomicity.
-On Unix, journal-managed replacements preserve existing permission bits.
-Stages are created with mode `0600` (subject to umask); new journal-managed
-documents keep that private mode.
-
 Every `--json` response uses envelope schema version `1`.
 Success places command payloads beneath `data`.
 Failures include stable `error.code` and `error.message` fields.
@@ -334,6 +350,8 @@ Human-readable output remains separate from machine output.
 ## Workflow schemas
 
 Built-in schema version `1` defines plan and task states.
+Plan statuses are `backlog`, `active`, `blocked`, `cancelled`, `completed`;
+task statuses are `todo`, `in_progress`, `blocked`, `done`.
 Projects may add artifact types through this committed file (under the
 resolved knowledge directory, by default):
 
@@ -344,141 +362,57 @@ memory-bank/knowledge/workflow/schema.yml
 Each addition declares states, initial state, completion states,
 and allowed transitions. Project schemas cannot replace core types.
 
+Plan `plan.md` frontmatter may add `shared: []` (paths any task may touch,
+accepted by ownership checks), `reviewed_commit: <sha>`, and
+`reviewed_on: <YYYY-MM-DD>` (recorded at Finalize; `status` reads them for its
+advisory staleness notice).
+
 `graph` resolves sibling plan dependencies from `depends_on`.
 Its output contains sorted nodes, edges, and blockers.
-`readiness` reports root blockers and currently available actions.
-Dependency blockers retain only the `blocked` action.
+`readiness` is read-only: a task is ready when its status is `todo` and every
+`depends_on` task is `done`. `execution-wave` reports the ready tasks and
+conflicts across `owns` patterns (glob intersection, ignoring `shared:`);
+`check-task-ownership` accepts directories, globs, and exact files in `owns`
+plus the plan's `shared:` paths on a candidate commit.
 
-`transition` validates the current state and dependency readiness.
-Rejected transitions preserve every source byte unchanged.
-Accepted transitions use the recoverable staged-write journal.
+## Review report and conclusion
 
-## Review evidence and gates
+One independent review covers the whole diff of a plan or change since a fixed
+commit and writes one `review.md` with a header naming `verdict` (`approved` or
+`changes-requested`), `reviewer`, `base`, and `head`. A fixes-only re-review
+answers behaviour-changing fixes (new findings block only at critical or high
+severity); any other fix gets a header-only re-check that rewrites `head`.
 
-`review init` creates a local subject and immutable source baseline for a
-persisted plan or bounded JSON contract. It requires the canonical repository
-root and at least one repository-relative `--scope` or absolute external-file
-`--artifact`. `review inspect` returns
-the contract and baseline fingerprints, current change fingerprint, and an
-OCC `version`. The independent reviewer writes evidence and submits it with
-`review record --expected-version`; there is no coordinator approval flag.
-Review evidence and baseline blobs live under the configured working store.
+`varde plan conclude <dir> [--merged <rev>] [--repo <path>]` is the only gate:
+it exits 0 only when `<dir>/review.md` says `verdict: approved` and the merged
+commit (default `HEAD`, override with `--merged`) equals `head`; otherwise it
+exits 1 naming the verdict or both shas, or `review commit <sha> not found in
+<repo>`. On success in a plan directory the plan's `status` becomes `completed`.
 
-External documents, including files in external working memory, need explicit
-file scopes. Artifact-only initialization and additive expansion use:
+`varde plan status` and `varde plan now` stay advisory: they print one line per
+plan when `git log <reviewed_commit>..HEAD` touches the plan's `owns` paths (or
+`shared:` when a plan has no `owns`) or `reviewed_on` is over 7 days old, and
+they never exit non-zero for it. An unknown `reviewed_commit` prints
+`review commit <sha> not found in <repo>`.
 
-```bash
-varde-workflow review init --subject <id> --contract <contract.json> --repository <root> --artifact <absolute-file> --json
-varde-workflow review expand --subject <id> --expected-version <revision> --artifact <absolute-file> --json
-```
+`varde msg send` appends one message line to the per-machine inbox for a
+recipient address; `varde msg read` prints a reader's unread messages and
+advances its cursor, and `--all` prints every message without moving a
+cursor. Non-main readers pass `--as`.
 
-Repeat or combine `--scope` and `--artifact`. Artifact scopes cover exact files,
-including planned files whose ancestors do not exist yet. Directories, traversal,
-symlink aliases (including ancestors), and Unix hard-linked files are rejected.
-Use `--scope` for files inside the repository. Review evidence and generated
-workflow state cannot be artifacts. External scopes use the same immutable
-baselines, OCC and final fingerprint checks; they grant no task or worktree
-ownership. Repository root `--scope .` never implicitly covers external files.
+Migrated plan files keep validating through legacy-field tolerance:
+`modifies`/`creates`/`renames`/`verification_resources` on tasks pass
+`validate`, and the dropped `observed_specs` and `shape: group` fields are
+ignored.
 
-`review check` accepts `start`, `resume`, or `complete` and reports readiness,
-typed blockers, and consumed evidence revisions. Missing, blocked, invalid,
-stale-contract, and stale-change evidence rejects the checkpoint with exit
-code 4; OCC conflicts exit 3. `readiness` exposes dependency-based
-`planning_ready` separately from review-gated `implementation_ready`, so
-approval gaps do not hide plans from planning but do prevent implementation.
-Workflow transitions and `conclude` enforce the corresponding checkpoint
-before their writes. Tasks inherit their parent plan's approval. A verified
-task may finish while a required aggregate plan review is pending; the plan
-may not complete until current full-subject implementation evidence passes.
+## Worktree wave execution
 
-Explicit worktree bindings inherit current parent approval for a declared source
-scope while preserving ordinary subjects' exact checkout identity. Run
-`bind-worktree` from the parent with its current pre-edit inspection version.
-The linked worktree must be registered in the same Git repository, clean at the
-parent HEAD, and within approved coverage without excluded paths. For plan
-work, the parent plan must be active; `--task` names an original `in_progress`
-task and its binding scope must match declared writes (both rename paths).
-Standalone bounded work may omit `--task`. Changes to task ownership,
-dependencies, verification or parent approval invalidate authorization.
-
-Workers run the explicit binding `check` from their registered checkout, for
-start/resume only. Their baseline and manifest are separate from the parent's.
-Out-of-scope committed, unstaged and untracked changes reject the check. Workers
-return evidence and source commits; the parent owns task transitions after
-successful source integration. The integration checkout combines and verifies
-source only. The parent then inspects each binding again and releases it using
-that version and the integrated worker HEAD. Release verifies ancestry and
-matching source content, archives evidence, and permits worktree cleanup.
-Active bindings prevent parent completion. Aggregate implementation evidence
-covers the current parent change plus archived authorization evidence; releasing
-or changing bindings makes earlier final review stale. Ordinary linked-worktree
-subjects remain independent, and unregistered access to parent evidence fails.
-
-Every binding archive requires a fresh aggregate implementation record before
-parent completion, even if the original pre-edit verdict was low risk.
-`inspect-worktree` reports stale execution blockers alongside evidence and an
-OCC version. After new independent parent approval, `release-worktree` may
-archive integrated original-scope source without renewing obsolete task or
-approval pins; start/resume still reject those pins. Original scope must remain
-covered by current approval. If integration is abandoned or a worktree is
-missing, use `abandon-worktree` with its inspection version and a concrete
-reason. This requires an active, independently approved parent and archives
-available evidence without deleting source, branch or worktree. It records
-unavailable source explicitly, does not recreate missing directories, and
-requires final aggregate review. A released or abandoned binding cannot be
-reused for editing; new execution needs a fresh binding.
-
-
-## Contracts and conclusion
-
-Plans declare contract deltas through `contract_deltas`.
-Each path is relative to the plan directory.
-Versioned delta frontmatter names its capability and source plan.
-
-Delta bodies use three typed operation sections:
-
-```markdown
-## ADDED
-### Requirement: stable-id
-
-## MODIFIED
-### Requirement: existing-id
-
-## REMOVED
-- retired-id
-```
-
-Existing contracts require their current OCC `base_revision`.
-Merged contracts live under `../../memory-bank/knowledge/contracts/`.
-
-Plans list affected domains through `observed_specs`.
-Conclusion rejects stale source or aggregate hashes.
-The documentation workflow regenerates stale semantic content first.
-
-Accepted review candidates use `promotion_candidates` paths.
-Their provenance fields remain searchable after promotion.
-
-`conclude` stages contracts, promotions, conclusions, and plan status.
-Its transaction journal supports idempotent partial-commit recovery.
-Unchecked acceptance criteria stop conclusion before any write.
-
-Qualitative actions follow the committed mechanical transaction.
-Their status remains visible through `conclusion-status`.
-`conclusion-retry` resets failed actions without duplicating outputs.
-`conclusion-action` records each result idempotently.
-
-Post-conclusion `--output` accepts descriptive labels and existing relative paths
-unchanged. Absolute paths inside the configured stores or invoking checkout are
-stored as `<working>/path`, `<knowledge>/path`, or `<repo>/path`. The deepest
-matching root wins (working, knowledge, then checkout for ties). References must
-have a nonempty suffix of normal path components. External absolute paths and
-file URIs are rejected; use a portable description identifying an external source.
-Unresolved or escaping symlinks and traversal are rejected before any update.
-
-`conclusion-status` adds `output_references` for stored root references, with
-`reference`, current resolved `path`, and `available`. Missing artifacts are
-unavailable; resolution errors report a null path and an `error`. These values
-are read-only status data, never stored in the document. Changing configured
-stores changes resolution without rewriting references or copying their contents.
-The referenced document remains authoritative; a missing private document on
-another machine is reported unavailable.
+Each parallel task runs in its own worktree and branch created by
+`scripts/worktree-wave.sh start`; a serial single writer may use the plan
+worktree. `integrate` audits each worker commit with `check-task-ownership`,
+merges workers in task order, runs one combined check, bisects a failure to the
+culprit task (exit 5 with `culprit=`, `verified_prefix=`, and
+`untouched_remainder=`), and fast-forwards the plan branch. `release` removes
+the task and integration worktrees. Sync conflicts exit 3 naming the conflicting
+paths; dirty, moved, detached, or missing checkouts exit 4. Workers never merge
+or mutate plan state; the plan branch's owner holds both.

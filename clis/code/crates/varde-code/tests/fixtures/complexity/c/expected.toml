@@ -1,0 +1,229 @@
+# Hand-derived expectations for tests/fixtures/complexity/c/conformance.c.
+# Cognitive values follow the spec text (spec cites in `rule`); cyclomatic
+# values keep the pre-change semantics and were confirmed against installed
+# varde 2.0.0 on a directive-blanked copy.
+
+[[case]]
+callable = "include_guard_zero"
+cognitive = 0
+cyclomatic = 1
+rule = "spec:175, 281-291; the `#ifndef`/`#define` file wrapper is an include guard, not a conditional, so it adds no cognitive point; `return` adds 0 and cyclomatic is the baseline 1"
+
+[[case]]
+callable = "preproc_extern_c"
+cognitive = 1
+cyclomatic = 2
+matrix = "preproc-extern-c"
+rule = "spec:281-291; the function sits between the split `#ifdef __cplusplus` / `extern \"C\" {` / `#endif` pair, and neither region contains a callable, so each adds 0; its own `if` adds 1; cyclomatic 1 + if"
+
+[[case]]
+callable = "if_else_if_else"
+cognitive = 3
+cyclomatic = 3
+matrix = "if-else-if-else"
+rule = "spec:176-179, 491-501; `if` +1, `else if` +1, plain `else` +1; cyclomatic 1 + `if` + `else if` (plain else adds none)"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:502-518; root `if` +1, `else if` +1 (hybrid, no nesting cost of its own), and its body `if` at the root body's nesting +2; cyclomatic 1 + `if` + `else if` + body `if`"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:491-518; root `if` +1, plain `else` +1, and its body `if` at the root body's nesting +2; cyclomatic 1 + `if` + body `if` (plain else adds none)"
+
+[[case]]
+callable = "nested_if_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:510-518; outer `if` +1 and nested `if` +2; cyclomatic 1 + two `if`s"
+
+[[case]]
+callable = "loops"
+cognitive = 4
+cyclomatic = 4
+matrix = "loops"
+rule = "spec:491-518; `for` +1, nested `while` +2, sibling `do while` +1; cyclomatic 1 + `for` + `while` + `do while`"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 5
+matrix = "switch-once"
+rule = "spec:196-205, 491-500; the `switch` and all four case arms combined add one cognitive point; cyclomatic 1 + four `case` arms"
+
+[[case]]
+callable = "ternary"
+cognitive = 3
+cyclomatic = 3
+matrix = "ternary"
+rule = "spec:491-501, 510-518; outer ternary +1 and its nested ternary +2; cyclomatic 1 + two ternaries"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; the `if` adds 1 and the early returns add 0; cyclomatic 1 + `if`"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229, 491-501; `a && b && c` is one like-operator run worth 1; cyclomatic keeps one point per `&&` operator (1 + two)"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229, 491-501; the `&&` run +1 and the `||` run +1; cyclomatic 1 + two logical operators"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256; the outer `&&` run +1 and the negation starts a new inner `&&` run +1; cyclomatic 1 + two logical operators"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 3
+cyclomatic = 3
+matrix = "condition-nesting"
+rule = "spec:491-501, 510-518; the `if` +1 and its condition ternary, nested inside the `if`, +2; cyclomatic 1 + `if` + ternary"
+
+[[case]]
+callable = "goto_or_labeled_jump"
+cognitive = 2
+cyclomatic = 2
+matrix = "goto-or-labeled-jump"
+rule = "spec:238-243, 491-501; the `if` +1 and `goto` +1; the label target adds 0; cyclomatic 1 + `if` (goto is not a branch)"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-501; one direct recursive function adds 1, once; cyclomatic stays at the baseline 1"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-501; two self-calls still add one recursion point; cyclomatic stays at the baseline 1"
+
+[[case]]
+callable = "recursion_other_receiver"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-other-receiver"
+rule = "spec:230-237; `ops->recursion_other_receiver(ops, n)` is a struct function-pointer receiver call, so it does not bind to this function and adds 0; cyclomatic baseline 1"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+cognitive = 1
+cyclomatic = 1
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237, 491-501; member A of the same-file cycle adds 1; cyclomatic baseline 1"
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237, 491-501; member B of the same-file cycle adds 1; cyclomatic baseline 1"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 0
+cyclomatic = 1
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237; `recursion_cross_file_peer` lives in another file and is absent here, so no same-file binding forms and the increment is 0; cyclomatic baseline 1"
+
+[[case]]
+callable = "preproc_conditional"
+cognitive = 3
+cyclomatic = 2
+matrix = "preproc-conditional"
+rule = "spec:175, 286-291; `#if DEBUG` +1 and its nested `if` at nesting 1 adds 2; cyclomatic 1 + `if` (the preprocessor region is not a branch)"
+
+[[case]]
+callable = "get_words"
+cognitive = 1
+cyclomatic = 5
+matrix = "spec-example-small"
+rule = "spec:316-327; the `switch` and all its cases combined add 1; cyclomatic 1 + four `case` arms"
+
+[[case]]
+callable = "sum_of_primes"
+cognitive = 7
+cyclomatic = 4
+rule = "spec:328-339; `for` +1, nested `for` +2, nested `if` +3, `goto` +1; cyclomatic 1 + two `for`s + `if` (goto is not a branch)"
+
+[["n/a"]]
+matrix_id = "catch-once"
+reason = "C has no exceptions: no `try`, `catch`, or `throw` statement exists in the language."
+
+[["n/a"]]
+matrix_id = "try-finally-zero"
+reason = "C has no `try`/`finally` form, so there is no zero-scoring try/finally block to pin."
+
+[["n/a"]]
+matrix_id = "lambda-nesting"
+reason = "C has no lambda or closure expression; nested callables are not expressible."
+
+[["n/a"]]
+matrix_id = "logical-run-across-lambda"
+reason = "C has no lambda, so no callable boundary can separate two logical runs."
+
+[["n/a"]]
+matrix_id = "null-coalescing-zero"
+reason = "C has no null-coalescing operator (`??`, `?.`); the idiom is written with pointer checks."
+
+[["n/a"]]
+matrix_id = "named-nested-function"
+reason = "C has no nested function declarations; every function is defined at file scope."
+
+[["n/a"]]
+matrix_id = "class-in-method"
+reason = "C has no classes or local type definitions with methods; only plain records exist."
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "The compensating-usage markers apply to JS/TS/TSX declaration-only functions and Python decorators; C has neither form."
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "The callback compensation example is a JS callback shape; C has no compensating-usage marker semantics."
+
+[["n/a"]]
+matrix_id = "multi-level-break"
+reason = "C `break` and `continue` take no label or numeric level; only `goto` provides a multi-level jump, covered by goto-or-labeled-jump."
+
+[["n/a"]]
+matrix_id = "recursion-qualified-self"
+reason = "C free functions have no receiver or owning type, so there is no `this.f`/`Type.f` self-call form to qualify."
+
+[["n/a"]]
+matrix_id = "recursion-overload-delegate"
+reason = "C has no function overloading; one name declares one function, so an arity-delegating overload does not exist."
+
+[["n/a"]]
+matrix_id = "recursion-in-closure"
+reason = "C has no closure expression, so a self-call cannot be placed inside a nested callable boundary."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "C has no comprehension or query syntax; all iteration is written with explicit loops."
+
+[["n/a"]]
+matrix_id = "spec-example-large"
+reason = "The large worked examples (overriddenSymbolFrom, addVersion, toRegexp, model.js) are Java, JavaScript, and C# renderings; the plan scopes this id to those languages."

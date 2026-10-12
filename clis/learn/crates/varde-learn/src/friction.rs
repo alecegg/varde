@@ -7,8 +7,8 @@ use anyhow::Result;
 use serde_json::json;
 use varde_learn_core::{
     AdoptionRecordRequest, FrictionAddMode, FrictionAddRequest, FrictionExportItem,
-    FrictionImportFile, FrictionImportSummary, FrictionListRequest, FrictionStatus, LearnError,
-    MAX_PAGE_LIMIT, PageRequest, Store, read_import_files,
+    FrictionImportFile, FrictionImportSummary, FrictionItem, FrictionListRequest, FrictionStatus,
+    LearnError, MAX_PAGE_LIMIT, PageRequest, Store, read_import_files,
 };
 
 use crate::cli::{
@@ -17,8 +17,8 @@ use crate::cli::{
 };
 
 pub fn run_list_command(args: FrictionListArgs) -> Result<()> {
-    if args.global && args.repo.is_some() {
-        return Err(invalid_add("--repo and --global cannot be combined").into());
+    if args.global && args.repository.is_some() {
+        return Err(invalid_add("--repository and --global cannot be combined").into());
     }
     let status = args
         .status
@@ -34,7 +34,7 @@ pub fn run_list_command(args: FrictionListArgs) -> Result<()> {
     let page = store.list_items(&FrictionListRequest {
         status,
         source: args.source,
-        repo_root: args.repo,
+        repo_root: args.repository,
         global: args.global,
         text: args.text,
         cwd,
@@ -46,20 +46,16 @@ pub fn run_list_command(args: FrictionListArgs) -> Result<()> {
     if args.json {
         println!(
             "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": { "items": page.items },
-                "meta": {
+            varde_core::envelope::success(
+                json!({ "items": page.items }),
+                json!({
                     "total": page.total,
                     "offset": page.offset,
                     "limit": page.limit,
                     "next_offset": page.next_offset,
                     "truncated": page.truncated,
-                },
-            })
+                }),
+            )
         );
     } else if page.items.is_empty() {
         println!("No friction items found.");
@@ -100,17 +96,13 @@ pub fn run_show_command(args: FrictionShowArgs) -> Result<()> {
     if args.json {
         println!(
             "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": {
+            varde_core::envelope::success(
+                json!({
                     "item": show.item,
                     "occurrences": show.occurrences.items,
                     "status_changes": show.status_changes.items,
-                },
-                "meta": {
+                }),
+                json!({
                     "total": {
                         "occurrences": show.occurrences.total,
                         "status_changes": show.status_changes.total,
@@ -119,8 +111,8 @@ pub fn run_show_command(args: FrictionShowArgs) -> Result<()> {
                     "limit": args.limit,
                     "next_offset": next_offset,
                     "truncated": truncated,
-                },
-            })
+                }),
+            )
         );
     } else {
         println!(
@@ -174,14 +166,10 @@ pub fn run_set_status_command(args: FrictionSetStatusArgs) -> Result<()> {
     if args.json {
         println!(
             "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": { "id": item.id, "status": item.status },
-                "meta": { "truncated": false },
-            })
+            varde_core::envelope::success(
+                json!({ "id": item.id, "status": item.status }),
+                json!({ "truncated": false }),
+            )
         );
     } else {
         println!("{} [{}]", item.id, item.status);
@@ -207,14 +195,10 @@ pub fn run_export_command(args: FrictionExportArgs) -> Result<()> {
     if args.json {
         println!(
             "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": { "exported": items.len() },
-                "meta": { "truncated": false },
-            })
+            varde_core::envelope::success(
+                json!({ "exported": items.len() }),
+                json!({ "truncated": false }),
+            )
         );
     } else {
         println!(
@@ -235,7 +219,7 @@ pub fn run_import_command(args: FrictionImportArgs) -> Result<()> {
     if args.dry_run {
         Store::validate_global_path()?;
     }
-    let files = read_import_files(&args.directory, &args.repo)?;
+    let files = read_import_files(&args.directory, &args.repository)?;
     let mut store = if args.dry_run {
         None
     } else {
@@ -674,35 +658,108 @@ pub fn run_add_command(args: FrictionAddArgs) -> Result<()> {
         FrictionAddMode::Append { .. } => {}
     }
 
-    let mut evidence = String::new();
-    std::io::Read::read_to_string(&mut std::io::stdin(), &mut evidence)?;
+    let evidence = match args.text {
+        Some(text) => text,
+        None => {
+            let mut evidence = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut evidence)?;
+            evidence
+        }
+    };
     if evidence.trim().is_empty() {
-        return Err(invalid_add("evidence from stdin must not be blank").into());
+        return Err(invalid_add("evidence from --text or stdin must not be blank").into());
     }
     let cwd = std::env::current_dir()
         .map_err(|error| invalid_add(format!("could not read current directory: {error}")))?;
+    let creating = matches!(&mode, FrictionAddMode::Create { .. });
     let mut store = Store::open_global()?;
     let item = store.add_friction(FrictionAddRequest {
         mode,
         evidence,
-        cwd,
+        cwd: cwd.clone(),
     })?;
+    let similar = if creating {
+        similar_open_items(&mut store, &item.title, item.id, &cwd)?
+    } else {
+        Vec::new()
+    };
     if args.json {
         println!(
             "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": { "id": item.id, "slug": item.slug },
-                "meta": { "truncated": false },
-            })
+            varde_core::envelope::success(
+                json!({ "id": item.id, "slug": item.slug, "similar": similar }),
+                json!({ "truncated": false }),
+            )
         );
     } else {
         println!("{}", item.id);
+        if !similar.is_empty() {
+            println!("Similar open items:");
+            for candidate in &similar {
+                println!(
+                    "- {} [{}] {} ({})",
+                    candidate.id, candidate.status, candidate.title, candidate.source
+                );
+            }
+        }
     }
     Ok(())
+}
+
+const SIMILAR_ITEM_LIMIT: usize = 3;
+
+/// Up to [`SIMILAR_ITEM_LIMIT`] open items whose titles share the most words
+/// with `title`, so a create can point at an existing item instead of a duplicate.
+fn similar_open_items(
+    store: &mut Store,
+    title: &str,
+    exclude_id: i64,
+    cwd: &Path,
+) -> Result<Vec<FrictionItem>> {
+    let wanted = title_tokens(title);
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let page = store.list_items(&FrictionListRequest {
+        status: Some(FrictionStatus::Open),
+        source: None,
+        repo_root: None,
+        global: false,
+        text: None,
+        cwd: cwd.to_path_buf(),
+        page: PageRequest {
+            offset: 0,
+            limit: MAX_PAGE_LIMIT,
+        },
+    })?;
+    let mut scored = page
+        .items
+        .into_iter()
+        .filter(|item| item.id != exclude_id)
+        .filter_map(|item| {
+            let score = wanted.intersection(&title_tokens(&item.title)).count();
+            (score > 0).then_some((score, item))
+        })
+        .collect::<Vec<_>>();
+    scored.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.id.cmp(&right.1.id))
+    });
+    Ok(scored
+        .into_iter()
+        .take(SIMILAR_ITEM_LIMIT)
+        .map(|(_, item)| item)
+        .collect())
+}
+
+fn title_tokens(title: &str) -> HashSet<String> {
+    title
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|token| token.chars().count() >= 3)
+        .map(str::to_lowercase)
+        .collect()
 }
 
 pub fn run_adopt_record_command(args: AdoptionRecordArgs) -> Result<()> {
@@ -749,17 +806,13 @@ pub fn run_adopt_record_command(args: AdoptionRecordArgs) -> Result<()> {
     if args.json {
         println!(
             "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": {
+            varde_core::envelope::success(
+                json!({
                     "adoption_id": adoption.id,
                     "items": adoption.item_ids,
-                },
-                "meta": { "truncated": false },
-            })
+                }),
+                json!({ "truncated": false }),
+            )
         );
     } else {
         println!(
@@ -786,21 +839,17 @@ pub fn run_adopt_recurrence_command(args: AdoptionRecurrenceArgs) -> Result<()> 
     if args.json {
         println!(
             "{}",
-            json!({
-                "schema_version": 1,
-                "envelope_version": 1,
-                "ok": true,
-                "outcome": "success",
-                "data": { "items": page.items },
-                "meta": {
+            varde_core::envelope::success(
+                json!({ "items": page.items }),
+                json!({
                     "total": page.total,
                     "offset": page.offset,
                     "limit": page.limit,
                     "next_offset": page.next_offset,
                     "truncated": page.truncated,
                     "skipped_invalid_timestamps": report.skipped_invalid_timestamps,
-                },
-            })
+                }),
+            )
         );
     } else {
         if page.items.is_empty() {

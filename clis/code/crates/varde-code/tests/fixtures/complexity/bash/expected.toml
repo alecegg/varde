@@ -1,0 +1,218 @@
+[[case]]
+callable = "if_else_if_else"
+cognitive = 3
+cyclomatic = 3
+matrix = "if-else-if-else"
+rule = "spec:176-179, 491-518; if, elif, else each add one; elif and else bodies still raise nesting"
+
+[[case]]
+callable = "else_if_body_nesting"
+cognitive = 4
+cyclomatic = 4
+matrix = "else-if-body-nesting"
+rule = "spec:491-518; if +1, elif +1, and if nested in the elif body +2"
+
+[[case]]
+callable = "else_body_nesting"
+cognitive = 4
+cyclomatic = 3
+matrix = "else-body-nesting"
+rule = "spec:491-518; if +1, else +1, and if nested in else body +2"
+
+[[case]]
+callable = "nested_if"
+cognitive = 3
+cyclomatic = 3
+matrix = "nested-if-nesting"
+rule = "spec:491-518; outer if adds 1 and nested if adds 2"
+
+[[case]]
+callable = "loops"
+cognitive = 12
+cyclomatic = 7
+matrix = "loops"
+rule = "spec:491-518; nested for/while/until add 1, 2, 3; body if adds 4; select and C-style for each add 1"
+
+[[case]]
+callable = "switch_once"
+cognitive = 1
+cyclomatic = 5
+matrix = "switch-once"
+rule = "spec:196-205, 491-501; case adds one container point; pattern arms keep legacy cyclomatic branches"
+
+[[case]]
+callable = "ternary"
+cognitive = 1
+cyclomatic = 1
+matrix = "ternary"
+rule = "spec:491-518; Bash arithmetic ?: parses as a ternary and adds one"
+
+[[case]]
+callable = "early_return_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "early-return-zero"
+rule = "spec:238-243, 491-501; if adds one, return adds zero"
+
+[[case]]
+callable = "logical_run_same"
+cognitive = 1
+cyclomatic = 3
+matrix = "logical-run-same"
+rule = "spec:207-229; one [[ ]] same-operator && run adds one point"
+
+[[case]]
+callable = "logical_run_mixed"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-run-mixed"
+rule = "spec:207-229; the && and || operators form separate runs"
+
+[[case]]
+callable = "logical_negated_run"
+cognitive = 2
+cyclomatic = 3
+matrix = "logical-negated-run"
+rule = "spec:207-229, 254-256; outer [[ ]] && run adds 1, and ! breaks the nested && run for a second point"
+
+[[case]]
+callable = "named_nested_function"
+cognitive = 2
+cyclomatic = 1
+matrix = "named-nested-function"
+rule = "spec:267-291, 491-518; nested function raises its if to a nesting increment of 2 in the outer function"
+
+[[case]]
+callable = "inner"
+cognitive = 1
+cyclomatic = 2
+rule = "spec:267-291, 491-518; nested function's own if is at its callable root"
+
+[[case]]
+callable = "condition_nesting"
+cognitive = 3
+cyclomatic = 2
+matrix = "condition-nesting"
+rule = "spec:491-518; if adds 1 and ternary in its condition adds 2 at nesting one"
+
+[[case]]
+callable = "multi_level_break"
+cognitive = 6
+cyclomatic = 4
+matrix = "multi-level-break"
+rule = "spec:498-518; first for +1, nested while +2, break 2 +1; second for +1 and continue 2 +1"
+
+[[case]]
+callable = "labeled_jumps"
+cognitive = 4
+cyclomatic = 3
+matrix = "goto-or-labeled-jump"
+rule = "spec:498-499; the for and nested while each add one and numbered break adds one as a labeled jump"
+
+[[case]]
+callable = "recursion_direct"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-direct"
+rule = "spec:230-237, 491-501; if and direct self-recursion each add one"
+
+[[case]]
+callable = "recursion_two_calls"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-two-calls"
+rule = "spec:230-237, 491-501; if adds one and multiple self-calls share one recursion point"
+
+[[case]]
+callable = "recursion_same_file_cycle_a"
+cognitive = 2
+cyclomatic = 2
+matrix = "recursion-same-file-cycle"
+rule = "spec:230-237, 491-501; if adds one and cycle member adds one recursion point"
+
+[[case]]
+callable = "recursion_same_file_cycle_b"
+cognitive = 1
+cyclomatic = 1
+rule = "spec:230-237; second same-file cycle member receives its own recursion point"
+
+[[case]]
+callable = "recursion_cross_file_zero"
+cognitive = 1
+cyclomatic = 2
+matrix = "recursion-cross-file-zero"
+rule = "spec:230-237, 491-501; if adds one; absent peer in this one-file fixture has no recursion increment"
+
+[[case]]
+callable = "spec_example_small"
+cognitive = 1
+cyclomatic = 6
+matrix = "spec-example-small"
+rule = "spec:316-327, 196-205; Bash case analogue adds one for the switch and no arm nesting"
+
+[[case]]
+callable = "spec_example_large"
+cognitive = 7
+cyclomatic = 4
+matrix = "spec-example-large"
+rule = "spec:328-339, 491-518; outer for +1, inner for +2, if +3, continue 2 +1"
+
+[["n/a"]]
+matrix_id = "catch-once"
+reason = "Bash has no try/catch construct; `trap` registers a signal/error handler and does not delimit a protected region (spec:190-203)."
+
+[["n/a"]]
+matrix_id = "try-finally-zero"
+reason = "Bash has no try/finally syntax; `trap` is not a finally clause (spec:190-203)."
+
+[["n/a"]]
+matrix_id = "logical-run-across-lambda"
+reason = "Bash has no lambda or anonymous callable syntax to contain a separate logical run."
+
+[["n/a"]]
+matrix_id = "null-coalescing-zero"
+reason = "Bash parameter expansions such as ${value:-fallback} supply defaults, but are not a null-coalescing operator (spec:160-168)."
+
+[["n/a"]]
+matrix_id = "lambda-nesting"
+reason = "Bash has no lambda or anonymous callable syntax."
+
+[["n/a"]]
+matrix_id = "class-in-method"
+reason = "Bash grammar has no class or type declarations, including local classes."
+
+[["n/a"]]
+matrix_id = "compensating-usage"
+reason = "Bash has no JavaScript declarative outer-function idiom or Python decorator form from Appendix A (spec:415-480)."
+
+[["n/a"]]
+matrix_id = "compensating-usage-callback"
+reason = "Bash has no anonymous lambda or callback block callable for the negative compensating-usage shape (spec:267-291, 502-518)."
+
+[["n/a"]]
+matrix_id = "recursion-qualified-self"
+reason = "Bash has no receiver-qualified function calls or `self` construct."
+
+[["n/a"]]
+matrix_id = "recursion-other-receiver"
+reason = "Bash has no object receiver method calls; functions are invoked by command name."
+
+[["n/a"]]
+matrix_id = "recursion-overload-delegate"
+reason = "Bash functions cannot be overloaded by arity or delegated through a declaration form; a repeated function name replaces its earlier definition."
+
+[["n/a"]]
+matrix_id = "recursion-in-closure"
+reason = "Bash has no closure or anonymous callable syntax."
+
+[["n/a"]]
+matrix_id = "preproc-conditional"
+reason = "Bash has no source preprocessor conditional directives."
+
+[["n/a"]]
+matrix_id = "preproc-extern-c"
+reason = "Bash has no extern-C declaration syntax or C++ linkage blocks."
+
+[["n/a"]]
+matrix_id = "comprehension-or-query"
+reason = "Bash has no comprehension or query expression syntax; loops are explicit statements."

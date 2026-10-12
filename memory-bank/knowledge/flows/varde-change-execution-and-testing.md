@@ -5,22 +5,38 @@ title: varde change execution and testing
 
 # Varde change execution and testing
 
-Build tasks execute sequentially by default. Proven independent tasks may run
-in one isolated parallel wave.
+Build tasks execute through `varde-change build` (`references/build.md`) and
+the builder route (`references/build-execution.md`). Builders start from the
+task file in their worktree; the task file is reference material, not state to
+edit.
 
 ## Execution strategies
 
-`varde-workflow execution-wave` reports facts: ready tasks, conflicts, and
-a `next_wave` of tasks safe to run together. The orchestrator picks the
-strategy from `execution=<auto|serial|inline>`:
+Ready independent tasks may run in one parallel wave. `varde plan
+execution-wave` reports ready tasks, conflicts, and a next wave; tasks conflict
+when their `owns` patterns intersect. Each parallel writer gets one worktree and
+branch (`scripts/worktree-wave.sh start`); a serial single writer may use the
+plan worktree. The integration queue runs one combined check per batch and
+bisects failures to the culprit task; release removes the worker worktrees.
+The orchestrator may run fewer tasks than the next wave, never more.
 
-- `parallel`: `auto` with two or more tasks in `next_wave`, one executor per
-  task in its own worktree.
-- `serial`: `execution=serial` or a one-task wave, one executor at a time.
-- `inline`: `execution=inline` or no executor agent available.
+## Builder testing guidance
 
-The orchestrator may run fewer tasks together than `next_wave`, never more.
-Announce the selected strategy before dispatch.
+- Write the failing test first for a behavior change, then the fix.
+- Test only the slice: task asserts plus tests for changed files (via the
+  `tests_for_file` mode of `varde map batch`, or a package- or target-scoped
+  test); never run the full suite; after a fix rerun only the failing target.
+- Do not poll a running command or agent; wait on completion or use one long
+  wait.
+- Stop after two failed attempts at one approach; reproduce a failure the task
+  calls pre-existing at the prerequisite commit.
+- Check dependents before changing a shared surface; format only owned files
+  and return writes outside the task's paths to the parent.
+- Run the task's assert and retrieve checks with independent expected values.
+  For `not-applicable`, run the named structural checks and explain why.
+- Commit only verified task paths with the task ID in the message; report the
+  commit, worktree, owned paths, checks, status, and blockers, and do not edit
+  task or plan state.
 
 ## Testing profiles
 

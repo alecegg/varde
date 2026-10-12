@@ -1,11 +1,11 @@
 ---
 type: reference
 status: active
-title: "varde-code resolution graph API"
+title: "Code resolution graph API"
 related: ["2026-08-12-varde-code-rust-port/resolution-graph-algorithms"]
 ---
 
-# varde-code resolution graph API reference
+# Code resolution graph API reference
 
 Contract reference for the resolution phase of varde-code (the Rust
 code-intelligence core): cross-file call/import resolution, dependency graph,

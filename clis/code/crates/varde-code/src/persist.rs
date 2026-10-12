@@ -26,7 +26,7 @@ pub struct StoredFileState {
 }
 
 /// Encoding version for persisted function-level complexity metrics.
-const FUNCTION_METRIC_VERSION: i64 = 2;
+pub(crate) const FUNCTION_METRIC_VERSION: i64 = 3;
 
 /// Reconstructed raw state used by the global resolution pass.
 pub(crate) struct PersistedState {
@@ -84,6 +84,8 @@ pub(crate) fn insert_new_files(conn: &rusqlite::Connection, paths: &[String]) ->
 /// fiddly (type annotations, `as &dyn ToSql` casts) and appears at every
 /// scoped-`IN` site — see CORRECTNESS-104 for the variable-limit note and
 /// the scoped-path cap in `slice::freshen_edges`.
+const FILE_ID_QUERY_CHUNK_SIZE: usize = 400;
+
 pub(crate) fn in_clause(ids: &[i64]) -> (String, Vec<&dyn rusqlite::ToSql>) {
     let placeholders = vec!["?"; ids.len()].join(", ");
     let params: Vec<&dyn rusqlite::ToSql> =
@@ -95,7 +97,7 @@ pub(crate) fn delete_deleted_files(conn: &rusqlite::Connection, deleted_ids: &[i
     if deleted_ids.is_empty() {
         return Ok(());
     }
-    for ids in deleted_ids.chunks(400) {
+    for ids in deleted_ids.chunks(FILE_ID_QUERY_CHUNK_SIZE) {
         delete_deleted_files_batch(conn, ids)?;
     }
     // Drop now-orphaned communities/clone bands after every batch completes.
@@ -160,16 +162,9 @@ fn delete_deleted_files_batch(conn: &rusqlite::Connection, deleted_ids: &[i64]) 
     Ok(())
 }
 
-pub(crate) fn delete_global_rows(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute("DELETE FROM clone_band_members", [])?;
-    conn.execute("DELETE FROM clone_bands", [])?;
-    conn.execute("DELETE FROM community_members", [])?;
-    conn.execute("DELETE FROM communities", [])?;
-    conn.execute("DELETE FROM resolved_edges", [])?;
-    conn.execute(
-        "UPDATE files SET community_id = NULL, fan_in = 0, fan_out = 0",
-        [],
-    )?;
+pub(crate) fn delete_global_rows(_conn: &rusqlite::Connection) -> Result<()> {
+    // Retain edges until persist_global_graph reconciles them against the
+    // fresh graph; deleting here would rewrite every edge index page.
     Ok(())
 }
 
@@ -213,10 +208,10 @@ pub(crate) fn load_file_state(
 /// only per-file rows (§0, step 1). `output` must be a single-file scan whose
 /// `files[0]` is the path being refreshed.
 ///
-/// Cross-slice note: reinserting a file's entities changes their rowids, so
-/// edge/clone rows referencing the old ids go stale — that is expected. Each
-/// tool freshens the slice it reads; the edges/global slices are rebuilt by
-/// their own consumers' `ensure_fresh`, not here.
+/// Matching entity and symbol identities retain their rowids while changed
+/// fields are updated and removed identities are deleted. Edge freshness is
+/// tracked by `files.rev` versus `edges_built_rev`; callers freshen the edge
+/// and global slices through their own `ensure_fresh` paths.
 pub(crate) fn refresh_file_slice(
     conn: &rusqlite::Connection,
     output: &ExtractOutput,
@@ -258,8 +253,6 @@ fn ensure_file_row(conn: &rusqlite::Connection, path: &str) -> Result<i64> {
 
 fn clear_raw_file_rows(conn: &rusqlite::Connection, file_id: i64) -> Result<()> {
     for sql in [
-        "DELETE FROM entities WHERE file_id = ?1",
-        "DELETE FROM symbols WHERE file_id = ?1",
         "DELETE FROM diagnostics WHERE file_id = ?1",
         "DELETE FROM function_metrics WHERE file_id = ?1",
     ] {
@@ -457,10 +450,10 @@ pub(crate) fn rewrite_import_edges(
 /// edge-layer resolve, and denormalize the fresh fan-in/fan-out back onto
 /// `files`.
 ///
-/// Unlike [`rewrite_import_edges`] this deletes **all** rows, not just the
-/// Import kind: call edges carry `from_entity_id` references to entity
-/// rowids, and a raw re-parse reassigns rowids — so any raw advance
-/// invalidates the whole edge set. `nodes` carries the fan metrics computed
+/// Unlike [`rewrite_import_edges`] this reconciles **all** rows, not just the
+/// Import kind. Call edges carry `from_entity_id` references to entity rowids;
+/// `write_edge_diff` preserves rows whose complete persisted identity remains
+/// valid and replaces only changed edges. `nodes` carries fan metrics computed
 /// by the same resolve (import + call edges both contribute), so they are
 /// rewritten here in the same transaction as the edges they are derived
 /// from. `community_id` is deliberately untouched — that column belongs to
@@ -472,10 +465,13 @@ pub(crate) fn rewrite_edges(
     nodes: &[FileNode],
 ) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM resolved_edges", [])?;
-    write_state_edges(&tx, state, edges)?;
+    let rows = resolved_edge_rows(state, edges)?;
+    write_edge_diff(&tx, &state.file_ids, &rows)?;
 
-    let mut file_stmt = tx.prepare("UPDATE files SET fan_in = ?1, fan_out = ?2 WHERE id = ?3")?;
+    let mut file_stmt = tx.prepare(
+        "UPDATE files SET fan_in = ?1, fan_out = ?2
+         WHERE id = ?3 AND (fan_in IS NOT ?1 OR fan_out IS NOT ?2)",
+    )?;
     for (index, node) in nodes.iter().enumerate() {
         file_stmt.execute(rusqlite::params![
             node.fan_in,
@@ -526,6 +522,23 @@ pub(crate) fn write_graph_cache(
     let blob =
         postcard::to_allocvec(graph).map_err(|e| anyhow::anyhow!("graph_cache encode: {e}"))?;
     let rev = max_rev(conn)?;
+    let old: Option<Vec<u8>> = conn
+        .query_row("SELECT blob FROM graph_cache WHERE id = 1", [], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    let unchanged = old.as_deref() == Some(blob.as_slice())
+        || old.as_deref().is_some_and(|old| {
+            postcard::from_bytes::<crate::query::graph::Graph>(old)
+                .is_ok_and(|stored| stored == *graph)
+        });
+    if unchanged {
+        conn.execute(
+            "UPDATE graph_cache SET rev=?1 WHERE id=1 AND rev IS NOT ?1",
+            [rev],
+        )?;
+        return Ok(());
+    }
     conn.execute(
         "INSERT INTO graph_cache (id, blob, rev) VALUES (1, ?1, ?2)
          ON CONFLICT(id) DO UPDATE SET blob = excluded.blob, rev = excluded.rev",
@@ -641,11 +654,9 @@ pub(crate) fn rewrite_edges_for_files(
     let tx = conn.unchecked_transaction()?;
     let (placeholders, params) = in_clause(file_ids);
     let old_incoming = scoped_incoming_counts(&tx, &placeholders, &params)?;
-    tx.execute(
-        &format!("DELETE FROM resolved_edges WHERE from_file_id IN ({placeholders})"),
-        params.as_slice(),
-    )?;
-    let (new_outgoing, new_incoming) = insert_scoped_edges(&tx, state, edges)?;
+    let rows = resolved_edge_rows(state, edges)?;
+    write_edge_diff(&tx, file_ids, &rows)?;
+    let (new_outgoing, new_incoming) = scoped_edge_counts(state, edges)?;
     apply_fan_deltas(&tx, file_ids, &old_incoming, &new_outgoing, &new_incoming)?;
     tx.execute(
         &format!("UPDATE files SET edges_built_rev = rev WHERE id IN ({placeholders})"),
@@ -676,33 +687,27 @@ fn scoped_incoming_counts(
     Ok(counts)
 }
 
-fn insert_scoped_edges(
-    conn: &rusqlite::Connection,
+fn scoped_edge_counts(
     state: &PersistedState,
     edges: &[ResolvedEdge],
 ) -> Result<(FanCounts, FanCounts)> {
-    write_state_edges(conn, state, edges)?;
     let mut outgoing = FanCounts::new();
     let mut incoming = FanCounts::new();
     for edge in edges {
+        if !edge.resolved {
+            continue;
+        }
         let from = state.file_ids[edge.from as usize];
-        let to = if edge.resolved {
-            match edge.to {
-                EdgeTarget::File(fid) => Some(state.file_ids[fid as usize]),
-                EdgeTarget::Entity(entity_id) => {
-                    let file_index = state.entities[entity_id as usize].file_id as usize;
-                    Some(state.file_ids[file_index])
-                }
-                EdgeTarget::Unknown => None,
+        *outgoing.entry(from).or_insert(0) += 1;
+        let to = match edge.to {
+            EdgeTarget::File(fid) => Some(state.file_ids[fid as usize]),
+            EdgeTarget::Entity(entity_id) => {
+                Some(state.file_ids[state.entities[entity_id as usize].file_id as usize])
             }
-        } else {
-            None
+            EdgeTarget::Unknown => None,
         };
-        if edge.resolved {
-            *outgoing.entry(from).or_insert(0) += 1;
-            if let Some(to) = to {
-                *incoming.entry(to).or_insert(0) += 1;
-            }
+        if let Some(to) = to {
+            *incoming.entry(to).or_insert(0) += 1;
         }
     }
     Ok((outgoing, incoming))
@@ -715,15 +720,19 @@ fn apply_fan_deltas(
     new_outgoing: &FanCounts,
     new_incoming: &FanCounts,
 ) -> Result<()> {
-    let mut file_stmt =
-        conn.prepare("UPDATE files SET fan_in = fan_in + ?1, fan_out = ?2 WHERE id = ?3")?;
+    let mut file_stmt = conn.prepare(
+        "UPDATE files SET fan_in = fan_in + ?1, fan_out = ?2 WHERE id = ?3
+         AND (fan_in IS NOT fan_in + ?1 OR fan_out IS NOT ?2)",
+    )?;
     for &file_id in file_ids {
         let delta_out = new_outgoing.get(&file_id).copied().unwrap_or(0);
         let delta_in = new_incoming.get(&file_id).copied().unwrap_or(0)
             - old_incoming.get(&file_id).copied().unwrap_or(0);
         file_stmt.execute(rusqlite::params![delta_in, delta_out, file_id])?;
     }
-    let mut target_stmt = conn.prepare("UPDATE files SET fan_in = fan_in + ?1 WHERE id = ?2")?;
+    let mut target_stmt = conn.prepare(
+        "UPDATE files SET fan_in = fan_in + ?1 WHERE id = ?2 AND fan_in IS NOT fan_in + ?1",
+    )?;
     let targets: std::collections::BTreeSet<i64> = old_incoming
         .keys()
         .chain(new_incoming.keys())
@@ -760,18 +769,176 @@ pub(crate) fn rewrite_global(
         "resolved graph nodes must match persisted files"
     );
     let tx = conn.unchecked_transaction()?;
-    tx.execute("DELETE FROM clone_band_members", [])?;
-    tx.execute("DELETE FROM clone_bands", [])?;
-    tx.execute("DELETE FROM community_members", [])?;
-    tx.execute("DELETE FROM communities", [])?;
-    tx.execute("UPDATE files SET community_id = NULL", [])?;
     let file_ids = FileIds {
         flat: state.file_ids.clone(),
         offsets: vec![0],
     };
-    write_communities(&tx, graph, &file_ids)?;
-    write_clone_bands(&tx, graph, &state.entity_ids)?;
+    diff_communities(&tx, graph, &file_ids)?;
+    diff_clone_bands(&tx, graph, &state.entity_ids)?;
     tx.commit()?;
+    Ok(())
+}
+
+fn diff_communities(
+    conn: &rusqlite::Connection,
+    graph: &ResolvedGraph,
+    file_ids: &FileIds,
+) -> Result<()> {
+    let old: Vec<(i64, String, Vec<String>)> = {
+        let mut stmt = conn.prepare("SELECT id, label FROM communities ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let mut result = Vec::new();
+        for row in rows {
+            let (id, label) = row?;
+            let mut members_stmt = conn.prepare(
+                "SELECT f.path FROM community_members cm JOIN files f ON f.id=cm.file_id WHERE cm.community_id=?1 ORDER BY f.path",
+            )?;
+            let members = members_stmt
+                .query_map([id], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            result.push((id, label, members));
+        }
+        result
+    };
+    let node_by_path: HashMap<&str, usize> = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.path.as_str(), i))
+        .collect();
+    let mut desired: Vec<(String, Vec<String>, u32)> = graph
+        .communities
+        .iter()
+        .map(|c| {
+            let mut members = c.members.clone();
+            members.sort();
+            (format!("community-{}", c.id), members, c.id)
+        })
+        .collect();
+    desired.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut old_by_label: HashMap<&str, i64> = old
+        .iter()
+        .map(|(id, label, _)| (label.as_str(), *id))
+        .collect();
+    let mut desired_ids = HashMap::new();
+    let mut used_old = HashSet::new();
+    for (label, _, upstream) in &desired {
+        let id = if let Some(id) = old_by_label.remove(label.as_str()) {
+            used_old.insert(id);
+            id
+        } else {
+            conn.execute("INSERT INTO communities(label) VALUES(?1)", [label])?;
+            conn.last_insert_rowid()
+        };
+        desired_ids.insert(*upstream, id);
+    }
+    for (id, _, _) in &old {
+        if !used_old.contains(id) {
+            conn.execute("DELETE FROM community_members WHERE community_id=?1", [id])?;
+            conn.execute("DELETE FROM communities WHERE id=?1", [id])?;
+        }
+    }
+    let old_members: HashSet<(i64, i64)> = conn
+        .prepare("SELECT community_id,file_id FROM community_members")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut new_members = HashSet::new();
+    for (_, members, upstream) in &desired {
+        let cid = desired_ids[upstream];
+        for member in members {
+            if let Some(index) = node_by_path.get(member.as_str()) {
+                new_members.insert((cid, file_ids.by_node(*index as u32)));
+            }
+        }
+    }
+    for (cid, fid) in old_members.difference(&new_members) {
+        conn.execute(
+            "DELETE FROM community_members WHERE community_id=?1 AND file_id=?2",
+            rusqlite::params![cid, fid],
+        )?;
+    }
+    for (cid, fid) in new_members.difference(&old_members) {
+        conn.execute(
+            "INSERT INTO community_members(community_id,file_id) VALUES(?1,?2)",
+            rusqlite::params![cid, fid],
+        )?;
+    }
+    let mut stmt=conn.prepare("UPDATE files SET community_id=?1, fan_in=?2, fan_out=?3 WHERE id=?4 AND (community_id IS NOT ?1 OR fan_in IS NOT ?2 OR fan_out IS NOT ?3)")?;
+    for (i, node) in graph.nodes.iter().enumerate() {
+        let cid = node
+            .community_id
+            .and_then(|id| desired_ids.get(&id).copied());
+        stmt.execute(rusqlite::params![
+            cid,
+            node.fan_in,
+            node.fan_out,
+            file_ids.by_node(i as u32)
+        ])?;
+    }
+    Ok(())
+}
+
+fn diff_clone_bands(
+    conn: &rusqlite::Connection,
+    graph: &ResolvedGraph,
+    entity_ids: &EntityIdIndex,
+) -> Result<()> {
+    let old: Vec<(i64, String, Vec<i64>)> = {
+        let mut stmt = conn.prepare("SELECT id,label FROM clone_bands ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let mut result = Vec::new();
+        for row in rows {
+            let (id, label) = row?;
+            let mut s = conn.prepare(
+                "SELECT entity_id FROM clone_band_members WHERE band_id=?1 ORDER BY entity_id",
+            )?;
+            let members = s
+                .query_map([id], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            result.push((id, label, members));
+        }
+        result
+    };
+    let mut old_by_members = HashMap::<Vec<i64>, std::collections::VecDeque<(i64, String)>>::new();
+    for (id, label, members) in old {
+        old_by_members
+            .entry(members)
+            .or_default()
+            .push_back((id, label));
+    }
+    for band in &graph.clone_bands {
+        let label = format!("clone-band-{}", band.id);
+        let mut members: Vec<i64> = band
+            .members
+            .iter()
+            .filter_map(|&i| entity_id_at(entity_ids, i as usize))
+            .collect();
+        members.sort_unstable();
+        if let Some((id, old_label)) = old_by_members
+            .get_mut(&members)
+            .and_then(std::collections::VecDeque::pop_front)
+        {
+            if old_label != label {
+                conn.execute(
+                    "UPDATE clone_bands SET label=?1 WHERE id=?2",
+                    rusqlite::params![label, id],
+                )?;
+            }
+        } else {
+            conn.execute("INSERT INTO clone_bands(label) VALUES(?1)", [&label])?;
+            let id = conn.last_insert_rowid();
+            for member in members {
+                conn.execute(
+                    "INSERT INTO clone_band_members(band_id,entity_id) VALUES(?1,?2)",
+                    rusqlite::params![id, member],
+                )?;
+            }
+        }
+    }
+    for (id, _) in old_by_members.into_values().flatten() {
+        conn.execute("DELETE FROM clone_band_members WHERE band_id=?1", [id])?;
+        conn.execute("DELETE FROM clone_bands WHERE id=?1", [id])?;
+    }
     Ok(())
 }
 
@@ -782,7 +949,8 @@ pub(crate) fn set_churn_batch(
 ) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     {
-        let mut stmt = tx.prepare("UPDATE files SET churn = ?1 WHERE path = ?2")?;
+        let mut stmt =
+            tx.prepare("UPDATE files SET churn = ?1 WHERE path = ?2 AND churn IS NOT ?1")?;
         for (path, count) in counts {
             stmt.execute(rusqlite::params![*count, path])?;
         }
@@ -1060,65 +1228,17 @@ pub(crate) fn persist_global_graph(
         "resolved graph nodes must match persisted files"
     );
     let tx = conn.unchecked_transaction()?;
-    write_state_edges(&tx, state, &graph.edges)?;
+    let rows = resolved_edge_rows(state, &graph.edges)?;
+    write_edge_diff(&tx, &state.file_ids, &rows)?;
     let file_ids = FileIds {
         flat: state.file_ids.clone(),
         offsets: vec![0],
     };
-    write_communities(&tx, graph, &file_ids)?;
-    write_clone_bands(&tx, graph, &state.entity_ids)?;
+    diff_communities(&tx, graph, &file_ids)?;
+    diff_clone_bands(&tx, graph, &state.entity_ids)?;
     tx.execute("UPDATE files SET edges_built_rev = rev", [])?;
     record_all_slices_fresh(&tx)?;
     tx.commit()?;
-    Ok(())
-}
-
-fn write_state_edges(
-    conn: &rusqlite::Connection,
-    state: &PersistedState,
-    edges: &[ResolvedEdge],
-) -> Result<()> {
-    let mut edge_stmt = conn.prepare(
-        "INSERT INTO resolved_edges
-            (from_file_id, to_file_id, kind, resolved, from_entity_id, to_entity_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-    )?;
-    for edge in edges {
-        let from = state.file_ids[edge.from as usize];
-        let to = if edge.resolved {
-            match edge.to {
-                EdgeTarget::File(file_id) => Some(state.file_ids[file_id as usize]),
-                EdgeTarget::Entity(entity_id) => {
-                    let file_index = state.entities[entity_id as usize].file_id as usize;
-                    Some(state.file_ids[file_index])
-                }
-                EdgeTarget::Unknown => None,
-            }
-        } else {
-            None
-        };
-        let from_entity_id = edge
-            .from_entity
-            .and_then(|entity_id| entity_id_at(&state.entity_ids, entity_id as usize));
-        let to_entity_id = if edge.resolved {
-            match edge.to {
-                EdgeTarget::Entity(entity_id) => {
-                    entity_id_at(&state.entity_ids, entity_id as usize)
-                }
-                EdgeTarget::File(_) | EdgeTarget::Unknown => None,
-            }
-        } else {
-            None
-        };
-        edge_stmt.execute(rusqlite::params![
-            from,
-            to,
-            edge.kind.as_i64(),
-            edge.resolved as i64,
-            from_entity_id,
-            to_entity_id
-        ])?;
-    }
     Ok(())
 }
 
@@ -1482,12 +1602,12 @@ fn ingest_chunk(
     // Raw rows against the global file-id table (entities carry global file_id,
     // so `file_ids.get(0, e.file_id)` resolves into the flat table just grown).
     let (chunk_entity_ids, chunk_complexity) =
-        write_entities(conn, std::slice::from_ref(&sub), file_ids)?;
+        write_entities_insert_only(conn, std::slice::from_ref(&sub), file_ids)?;
     entity_ids.extend_from_slice(&chunk_entity_ids);
     for (slot, add) in complexity_counts.iter_mut().zip(&chunk_complexity) {
         *slot += *add;
     }
-    write_symbols(conn, std::slice::from_ref(&sub), file_ids)?;
+    write_symbols_insert_only(conn, std::slice::from_ref(&sub), file_ids)?;
     write_diagnostics(conn, std::slice::from_ref(&sub), file_ids)?;
     let chunk_start = (file_ids.flat.len() - chunk_files.len()) as u32;
     write_function_metrics_with_bases(conn, std::slice::from_ref(&sub), file_ids, &[chunk_start])?;
@@ -1524,8 +1644,9 @@ fn ensure_default_subscriber() {
 /// Replace persisted data for changed files within an existing database.
 ///
 /// `changed_file_ids` must match the flattened order of `output.files` and
-/// `graph.nodes`. The files rows themselves remain in place; every dependent
-/// row is explicitly removed before the freshly parsed rows are inserted.
+/// `graph.nodes`. The files rows remain in place; diagnostics and metrics are
+/// replaced, while entity and symbol rows are reconciled by identity. Edge
+/// freshness is carried by the per-file revision ledger.
 pub(crate) fn persist_delta(
     conn: &rusqlite::Connection,
     changed_file_ids: &[i64],
@@ -1560,6 +1681,8 @@ fn persist_delta_with_churn(
     offsets: Vec<usize>,
     churn_handle: ChurnWorker,
 ) -> Result<()> {
+    let full_edge_refresh = changed_file_ids.len() > crate::slice::MAX_SCOPED_FILES
+        || crate::slice::reverse_dependent_scope(conn, changed_file_ids)?.is_none();
     let tx = conn.unchecked_transaction()?;
     delete_delta_rows(&tx, changed_file_ids)?;
 
@@ -1568,10 +1691,20 @@ fn persist_delta_with_churn(
         offsets,
     };
     let (entity_ids, complexity_counts) = write_entities(&tx, output, &file_ids)?;
+    if !full_edge_refresh {
+        tx.execute(
+            "DELETE FROM resolved_edges WHERE
+             (from_entity_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM entities WHERE id=from_entity_id)) OR
+             (to_entity_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM entities WHERE id=to_entity_id))",
+            [],
+        )?;
+    }
     write_symbols(&tx, output, &file_ids)?;
     write_diagnostics(&tx, output, &file_ids)?;
     write_function_metrics(&tx, output, &file_ids)?;
-    write_edges(&tx, output, graph, &file_ids, &entity_ids)?;
+    if !full_edge_refresh {
+        write_edges(&tx, output, graph, &file_ids, &entity_ids)?;
+    }
     write_communities(&tx, graph, &file_ids)?;
     write_clone_bands(&tx, graph, &entity_ids)?;
     write_complexity(&tx, &file_ids, &complexity_counts)?;
@@ -1613,14 +1746,9 @@ fn delete_delta_rows(conn: &rusqlite::Connection, changed_file_ids: &[i64]) -> R
     if changed_file_ids.is_empty() {
         return Ok(());
     }
-    for ids in changed_file_ids.chunks(400) {
+    for ids in changed_file_ids.chunks(FILE_ID_QUERY_CHUNK_SIZE) {
         delete_delta_rows_batch(conn, ids)?;
     }
-    conn.execute(
-        "DELETE FROM communities
-         WHERE id NOT IN (SELECT DISTINCT community_id FROM community_members)",
-        [],
-    )?;
     conn.execute(
         "DELETE FROM clone_bands
          WHERE id NOT IN (SELECT DISTINCT band_id FROM clone_band_members)",
@@ -1644,31 +1772,11 @@ fn delete_delta_rows_batch(conn: &rusqlite::Connection, changed_file_ids: &[i64]
         params.as_slice(),
     )?;
     conn.execute(
-        &format!(
-            "DELETE FROM resolved_edges
-             WHERE from_file_id IN ({placeholders}) OR to_file_id IN ({placeholders})"
-        ),
-        params
-            .iter()
-            .chain(params.iter())
-            .copied()
-            .collect::<Vec<_>>()
-            .as_slice(),
-    )?;
-    conn.execute(
         &format!("DELETE FROM diagnostics WHERE file_id IN ({placeholders})"),
         params.as_slice(),
     )?;
     conn.execute(
         &format!("DELETE FROM function_metrics WHERE file_id IN ({placeholders})"),
-        params.as_slice(),
-    )?;
-    conn.execute(
-        &format!("DELETE FROM symbols WHERE file_id IN ({placeholders})"),
-        params.as_slice(),
-    )?;
-    conn.execute(
-        &format!("DELETE FROM entities WHERE file_id IN ({placeholders})"),
         params.as_slice(),
     )?;
     Ok(())
@@ -1716,12 +1824,12 @@ fn write_raw_tables(
     write_checkpoint(profile, started, "files");
     let (entity_ids, complexity_counts) = {
         let _span = tracing::info_span!("entities").entered();
-        write_entities(conn, output, &file_ids)?
+        write_entities_insert_only(conn, output, &file_ids)?
     };
     write_checkpoint(profile, started, "entities");
     {
         let _span = tracing::info_span!("symbols").entered();
-        write_symbols(conn, output, &file_ids)?;
+        write_symbols_insert_only(conn, output, &file_ids)?;
     }
     write_checkpoint(profile, started, "symbols");
     {
@@ -1932,6 +2040,91 @@ fn write_symbols<'a>(
         })
         .collect();
 
+    let files = &file_ids.flat;
+    let mut old = HashMap::<(i64, i64, String, i64, usize), i64>::new();
+    let mut ordinals = HashMap::<(i64, i64, String, i64), usize>::new();
+    for file_chunk in files.chunks(FILE_ID_QUERY_CHUNK_SIZE) {
+        let (placeholders, params) = in_clause(file_chunk);
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id,file_id,kind,name,start_byte FROM symbols
+             WHERE file_id IN ({placeholders}) ORDER BY id"
+        ))?;
+        for row in stmt.query_map(params.as_slice(), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, i64>(4)?,
+            ))
+        })? {
+            let (id, file, kind, name, pos) = row?;
+            let base = (file, kind, name, pos);
+            let ordinal = ordinals.entry(base.clone()).or_default();
+            old.insert((base.0, base.1, base.2, base.3, *ordinal), id);
+            *ordinal += 1;
+        }
+    }
+    let mut pending = Vec::new();
+    let mut seen = HashMap::<(i64, i64, String, i64), usize>::new();
+    let mut update=conn.prepare("UPDATE symbols SET kind=?1,file_id=?2,name=?3,start_byte=?4,end_byte=?5,start_line=?6,start_col=?7,end_line=?8,end_col=?9 WHERE id=?10 AND (kind IS NOT ?1 OR file_id IS NOT ?2 OR name IS NOT ?3 OR start_byte IS NOT ?4 OR end_byte IS NOT ?5 OR start_line IS NOT ?6 OR start_col IS NOT ?7 OR end_line IS NOT ?8 OR end_col IS NOT ?9)")?;
+    for row in &rows {
+        let base = (row.1, row.0, row.2.to_string(), row.3);
+        let ordinal = seen.entry(base.clone()).or_default();
+        let key = (base.0, base.1, base.2.clone(), base.3, *ordinal);
+        *ordinal += 1;
+        if let Some(id) = old.remove(&key) {
+            update.execute(rusqlite::params![
+                row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, id
+            ])?;
+        } else {
+            pending.push(row);
+        }
+    }
+    batch_insert(conn, symbols_insert_sql, 9, &pending, |params, row| {
+        params.push(&row.0);
+        params.push(&row.1);
+        params.push(&row.2);
+        params.push(&row.3);
+        params.push(&row.4);
+        params.push(&row.5);
+        params.push(&row.6);
+        params.push(&row.7);
+        params.push(&row.8);
+    })?;
+    drop(update);
+    for id in old.into_values() {
+        conn.execute("DELETE FROM symbols WHERE id=?1", [id])?;
+    }
+    Ok(())
+}
+
+/// Insert symbols for a fresh full build before the symbol indexes exist.
+fn write_symbols_insert_only<'a>(
+    conn: &rusqlite::Connection,
+    output: &'a [ExtractOutput],
+    file_ids: &FileIds,
+) -> Result<()> {
+    type SymbolRow<'a> = (i64, i64, &'a str, i64, i64, i64, i64, i64, i64);
+    let rows: Vec<SymbolRow<'a>> = output
+        .iter()
+        .enumerate()
+        .flat_map(|(out_idx, out)| {
+            out.symbols.iter().map(move |s| {
+                (
+                    s.kind.as_i64(),
+                    file_ids.get(out_idx, s.file_id),
+                    s.name.as_str(),
+                    s.span.start_byte as i64,
+                    s.span.end_byte as i64,
+                    s.span.start_line as i64,
+                    s.span.start_col as i64,
+                    s.span.end_line as i64,
+                    s.span.end_col as i64,
+                )
+            })
+        })
+        .collect();
     batch_insert(conn, symbols_insert_sql, 9, &rows, |params, row| {
         params.push(&row.0);
         params.push(&row.1);
@@ -1975,27 +2168,24 @@ fn insert_community_labels(
     conn: &rusqlite::Connection,
     communities: &[crate::resolve::Community],
 ) -> Result<HashMap<u32, i64>> {
-    let labels: Vec<String> = communities
-        .iter()
-        .map(|c| format!("community-{}", c.id))
-        .collect();
-    let first_rowid = batch_insert(
-        conn,
-        |n| multi_insert_sql("communities (label)", "(?)", n),
-        1,
-        &labels,
-        |params, label| params.push(label),
-    )?;
-    if communities.is_empty() {
-        return Ok(HashMap::new());
+    let mut old = HashMap::<String, i64>::new();
+    {
+        let mut stmt = conn.prepare("SELECT label,id FROM communities")?;
+        for row in stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))? {
+            let (label, id) = row?;
+            old.insert(label, id);
+        }
     }
-    let Some(first) = first_rowid else {
-        anyhow::bail!("batch_insert returned no rowid for a non-empty communities batch");
-    };
-    let mut surrogate: std::collections::HashMap<u32, i64> =
-        std::collections::HashMap::with_capacity(communities.len());
-    for (i, community) in communities.iter().enumerate() {
-        surrogate.insert(community.id, first + i as i64);
+    let mut surrogate = HashMap::with_capacity(communities.len());
+    for community in communities {
+        let label = format!("community-{}", community.id);
+        let id = if let Some(id) = old.remove(&label) {
+            id
+        } else {
+            conn.execute("INSERT INTO communities(label) VALUES(?1)", [&label])?;
+            conn.last_insert_rowid()
+        };
+        surrogate.insert(community.id, id);
     }
     Ok(surrogate)
 }
@@ -2045,8 +2235,10 @@ fn update_community_files(
     file_ids: &FileIds,
     surrogate: &HashMap<u32, i64>,
 ) -> Result<()> {
-    let mut stmt = conn
-        .prepare("UPDATE files SET community_id = ?1, fan_in = ?2, fan_out = ?3 WHERE id = ?4")?;
+    let mut stmt = conn.prepare(
+        "UPDATE files SET community_id = ?1, fan_in = ?2, fan_out = ?3 WHERE id = ?4
+         AND (community_id IS NOT ?1 OR fan_in IS NOT ?2 OR fan_out IS NOT ?3)",
+    )?;
     for (i, node) in graph.nodes.iter().enumerate() {
         let fid = file_ids.by_node(i as u32);
         let community_id = node
@@ -2234,34 +2426,9 @@ fn write_output_function_metrics(
 }
 
 fn has_certified_complexity_profile(path: &Path) -> bool {
-    use ast_grep_language::SupportLang;
-
-    matches!(
-        crate::parse::language_for_path(path),
-        Some(
-            SupportLang::Bash
-                | SupportLang::C
-                | SupportLang::Cpp
-                | SupportLang::CSharp
-                | SupportLang::Dart
-                | SupportLang::Elixir
-                | SupportLang::Go
-                | SupportLang::Haskell
-                | SupportLang::Java
-                | SupportLang::JavaScript
-                | SupportLang::Kotlin
-                | SupportLang::Lua
-                | SupportLang::Php
-                | SupportLang::Python
-                | SupportLang::Ruby
-                | SupportLang::Rust
-                | SupportLang::Scala
-                | SupportLang::Solidity
-                | SupportLang::Swift
-                | SupportLang::Tsx
-                | SupportLang::TypeScript
-        )
-    )
+    crate::parse::language_for_path(path).is_some_and(|language| {
+        crate::certified::CERTIFIED_COMPLEXITY_LANGUAGES.contains(&language)
+    })
 }
 
 fn function_metric_path<'a>(
@@ -2463,24 +2630,79 @@ fn write_edges(
         .map(|edge| edge_row(edge, &entities, file_ids, entity_ids))
         .collect();
 
+    write_edge_diff(conn, &file_ids.flat, &rows)
+}
+
+fn resolved_edge_rows(state: &PersistedState, edges: &[ResolvedEdge]) -> Result<Vec<EdgeRow>> {
+    let entities: Vec<(usize, &Entity)> = state.entities.iter().map(|entity| (0, entity)).collect();
+    let ids = FileIds {
+        flat: state.file_ids.clone(),
+        offsets: vec![0],
+    };
+    let entity_ids = state.entity_ids.clone();
+    Ok(edges
+        .iter()
+        .map(|edge| edge_row(edge, &entities, &ids, &entity_ids))
+        .collect())
+}
+
+fn write_edge_diff(conn: &rusqlite::Connection, file_ids: &[i64], rows: &[EdgeRow]) -> Result<()> {
+    if file_ids.is_empty() {
+        return Ok(());
+    }
+    let mut old = HashMap::<EdgeRow, Vec<i64>>::new();
+    for file_chunk in file_ids.chunks(FILE_ID_QUERY_CHUNK_SIZE) {
+        let (placeholders, params) = in_clause(file_chunk);
+        let mut stmt = conn.prepare(&format!("SELECT id,from_file_id,to_file_id,kind,resolved,from_entity_id,to_entity_id FROM resolved_edges WHERE from_file_id IN ({placeholders}) ORDER BY id"))?;
+        for row in stmt.query_map(params.as_slice(), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                (
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                ),
+            ))
+        })? {
+            let (id, key) = row?;
+            old.entry(key).or_default().push(id);
+        }
+    }
+    let mut insert = Vec::new();
+    for row in rows {
+        if let Some(ids) = old.get_mut(row) {
+            if ids.pop().is_some() {
+                continue;
+            }
+        }
+        insert.push(*row);
+    }
+    for ids in old.values() {
+        for id in ids {
+            conn.execute("DELETE FROM resolved_edges WHERE id=?1", [id])?;
+        }
+    }
     batch_insert(
         conn,
         |n| {
             multi_insert_sql(
-                "resolved_edges (from_file_id, to_file_id, kind, resolved, from_entity_id, to_entity_id)",
-                "(?, ?, ?, ?, ?, ?)",
+                "resolved_edges (from_file_id,to_file_id,kind,resolved,from_entity_id,to_entity_id)",
+                "(?,?,?,?,?,?)",
                 n,
             )
         },
         6,
-        &rows,
-        |params, row| {
-            params.push(&row.0);
-            params.push(&row.1);
-            params.push(&row.2);
-            params.push(&row.3);
-            params.push(&row.4);
-            params.push(&row.5);
+        &insert,
+        |p, r| {
+            p.push(&r.0);
+            p.push(&r.1);
+            p.push(&r.2);
+            p.push(&r.3);
+            p.push(&r.4);
+            p.push(&r.5);
         },
     )?;
     Ok(())
@@ -2684,8 +2906,108 @@ fn write_entities(
 ) -> Result<(EntityIdIndex, Vec<u32>)> {
     let mut complexity_counts = vec![0u32; file_ids.flat.len()];
     let rows = collect_entity_rows(output, file_ids, &mut complexity_counts);
+    let ids = diff_entity_rows(conn, &rows, &file_ids.flat)?;
+    Ok((ids, complexity_counts))
+}
+
+/// Insert entities for a fresh full build before the entity indexes exist.
+fn write_entities_insert_only(
+    conn: &rusqlite::Connection,
+    output: &[ExtractOutput],
+    file_ids: &FileIds,
+) -> Result<(EntityIdIndex, Vec<u32>)> {
+    let mut complexity_counts = vec![0u32; file_ids.flat.len()];
+    let rows = collect_entity_rows(output, file_ids, &mut complexity_counts);
     let ids = insert_entity_rows(conn, &rows)?;
     Ok((ids, complexity_counts))
+}
+
+/// Preserve rowids for entities whose declaration identity survives a file
+/// refresh. Byte offsets are deliberately excluded: inserting a comment can
+/// move every later span without changing the declarations themselves.
+fn diff_entity_rows(
+    conn: &rusqlite::Connection,
+    rows: &[EntityInsertRow<'_>],
+    file_ids: &[i64],
+) -> Result<Vec<i64>> {
+    type Key = (i64, String, Option<String>, Option<String>);
+    let mut old = HashMap::<(i64, Key, usize), i64>::new();
+    for file_chunk in file_ids.chunks(FILE_ID_QUERY_CHUNK_SIZE) {
+        let (placeholders, params) = in_clause(file_chunk);
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, file_id, kind, name, owner_type, enclosing_function
+             FROM entities WHERE file_id IN ({placeholders}) ORDER BY id"
+        ))?;
+        let mut ordinals = HashMap::<(i64, Key), usize>::new();
+        let iter = stmt.query_map(params.as_slice(), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+            ))
+        })?;
+        for row in iter {
+            let (id, file, kind, name, owner, enclosing) = row?;
+            let base = (file, (kind, name, owner, enclosing));
+            let ordinal = ordinals.entry(base.clone()).or_default();
+            old.insert((base.0, base.1.clone(), *ordinal), id);
+            *ordinal += 1;
+        }
+    }
+    let mut ids = vec![-1; rows.len()];
+    let mut inserts = Vec::new();
+    let mut seen = HashMap::<(i64, Key), usize>::new();
+    let mut update = conn.prepare(
+        "UPDATE entities SET kind=?1,name=?2,file_id=?3,start_byte=?4,end_byte=?5,
+         start_line=?6,start_col=?7,end_line=?8,end_col=?9,enclosing_function=?10,
+         method=?11,path=?12,status=?13,body_shape=?14,body_minhash=?15,is_async=?16,
+         is_test=?17,owner_type=?18 WHERE id=?19 AND
+         (kind IS NOT ?1 OR name IS NOT ?2 OR file_id IS NOT ?3 OR start_byte IS NOT ?4 OR
+          end_byte IS NOT ?5 OR start_line IS NOT ?6 OR start_col IS NOT ?7 OR end_line IS NOT ?8 OR
+          end_col IS NOT ?9 OR enclosing_function IS NOT ?10 OR method IS NOT ?11 OR path IS NOT ?12 OR
+          status IS NOT ?13 OR body_shape IS NOT ?14 OR body_minhash IS NOT ?15 OR is_async IS NOT ?16 OR
+          is_test IS NOT ?17 OR owner_type IS NOT ?18)",
+    )?;
+    for (index, row) in rows.iter().enumerate() {
+        let base = (
+            row.1,
+            (
+                row.0,
+                row.2.to_string(),
+                row.17.map(str::to_owned),
+                row.9.map(str::to_owned),
+            ),
+        );
+        let ordinal = seen.entry(base.clone()).or_default();
+        let key = (base.0, base.1.clone(), *ordinal);
+        *ordinal += 1;
+        if EntityKind::from_i64(row.0).is_some_and(is_dropped_kind) {
+            continue;
+        }
+        if let Some(id) = old.remove(&key) {
+            ids[index] = id;
+            update.execute(rusqlite::params![
+                row.0, row.2, row.1, row.3, row.4, row.5, row.6, row.7, row.8, row.9, row.10,
+                row.11, row.12, row.13, row.14, row.15, row.16, row.17, id
+            ])?;
+        } else {
+            inserts.push((index, row));
+        }
+    }
+    let pending: Vec<_> = inserts.iter().map(|(_, row)| (*row).clone()).collect();
+    let inserted = insert_entity_rows(conn, &pending)?;
+    for ((index, _), id) in inserts.into_iter().zip(inserted) {
+        ids[index] = id;
+    }
+    drop(update);
+    let removed: Vec<i64> = old.into_values().collect();
+    for id in removed {
+        conn.execute("DELETE FROM entities WHERE id=?1", [id])?;
+    }
+    Ok(ids)
 }
 
 #[allow(clippy::type_complexity)]
@@ -2720,7 +3042,7 @@ fn collect_entity_rows<'a>(
     for (out_idx, out) in output.iter().enumerate() {
         let offset = file_ids.offsets[out_idx];
         for e in &out.entities {
-            if e.kind == EntityKind::ControlFlow {
+            if crate::complexity::counts_toward_file_complexity(e) {
                 complexity_counts[offset + e.file_id as usize] += 1;
             }
             rows.push((
@@ -2792,6 +3114,12 @@ fn insert_entity_rows(
 mod tests {
     use super::*;
     use crate::model::{Diagnostic, Entity, EntityKind, FileMeta, Span, Symbol, SymbolKind};
+
+    #[test]
+    fn file_id_query_chunks_stay_below_sqlite_variable_limit() {
+        assert_eq!(FILE_ID_QUERY_CHUNK_SIZE, 400);
+        assert!(FILE_ID_QUERY_CHUNK_SIZE <= 32_766);
+    }
 
     /// A persisted `entities` row (kind, name, file_id, byte/line span,
     /// enclosing_function, method, path, status, body_shape).
@@ -4126,6 +4454,39 @@ mod tests {
         use super::*;
 
         #[test]
+        fn churn_unchanged_writes_nothing() {
+            let db_path = temp_db("churn-unchanged");
+            let conn = crate::db::open_or_rebuild(&db_path).expect("schema creates");
+            conn.execute("INSERT INTO files (path) VALUES ('a.rs'), ('b.rs')", [])
+                .expect("file rows insert");
+            let counts = HashMap::from([("a.rs".to_string(), 3), ("b.rs".to_string(), 5)]);
+
+            set_churn_batch(&conn, &counts).expect("initial churn writes");
+            let before_unchanged = conn.total_changes();
+            set_churn_batch(&conn, &counts).expect("unchanged churn refreshes");
+            assert_eq!(
+                conn.total_changes() - before_unchanged,
+                0,
+                "unchanged churn values do not update rows"
+            );
+
+            let changed = HashMap::from([("a.rs".to_string(), 3), ("b.rs".to_string(), 6)]);
+            let before_changed = conn.total_changes();
+            set_churn_batch(&conn, &changed).expect("changed churn refreshes");
+            assert_eq!(
+                conn.total_changes() - before_changed,
+                1,
+                "only the row with a changed churn value updates"
+            );
+            let b_churn: i64 = conn
+                .query_row("SELECT churn FROM files WHERE path = 'b.rs'", [], |row| {
+                    row.get(0)
+                })
+                .expect("changed churn reads");
+            assert_eq!(b_churn, 6);
+        }
+
+        #[test]
         fn churn_written_to_matching_files_row() {
             // A real, long-lived, git-tracked file in this crate: it has a
             // known non-zero commit history and the value must land on ITS
@@ -4516,6 +4877,13 @@ mod tests {
                     |row| row.get(0),
                 )
                 .expect("unchanged community exists");
+            let changed_community_id: i64 = conn
+                .query_row(
+                    "SELECT id FROM communities WHERE label = 'community-1'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("changed singleton community exists");
             let unchanged_band_id: i64 = conn
                 .query_row(
                     "SELECT id FROM clone_bands WHERE label = 'clone-band-2'",
@@ -4534,13 +4902,13 @@ mod tests {
             let changed_graph = ResolvedGraph {
                 nodes: vec![FileNode {
                     path: "changed.rs".to_string(),
-                    community_id: Some(10),
+                    community_id: Some(1),
                     fan_in: 0,
                     fan_out: 0,
                 }],
                 edges: vec![],
                 communities: vec![Community {
-                    id: 10,
+                    id: 1,
                     members: vec!["changed.rs".to_string()],
                 }],
                 clone_bands: vec![CloneBand {
@@ -4602,6 +4970,14 @@ mod tests {
                 )
                 .expect("unchanged community remains");
             assert_eq!(retained_community_id, unchanged_community_id);
+            let updated_community_id: i64 = conn
+                .query_row(
+                    "SELECT id FROM communities WHERE label = 'community-1'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("changed singleton community remains");
+            assert_eq!(updated_community_id, changed_community_id);
             let retained_band_id: i64 = conn
                 .query_row(
                     "SELECT id FROM clone_bands WHERE label = 'clone-band-2'",

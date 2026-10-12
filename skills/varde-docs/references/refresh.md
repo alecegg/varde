@@ -8,9 +8,8 @@
      notes of the current module (or the Git root outside a module).
    - For a cross-module request, also list each named or touched module's
      documents.
-2. When mapping docs to source is unclear and `varde-code` is on PATH, load
-   `references/varde-code-cli.md`;
-   `varde-code context_pack --json '{"repoRoot":"<repo>","query":"<doc subject>"}'`
+2. Load `references/varde-code-cli.md`;
+   `varde map context_pack --json '{"repoRoot":"<repo>","query":"<doc subject>"}'`
    maps each doc to source; use `get_symbol`/`batch` for exact bodies and
    related lookups.
 3. **Edit each document** one at a time, or with up to three delegates for
@@ -27,7 +26,8 @@
 5. **Verify edited documents** against their source. Repair source-path
    references within scope when the correct path is established and verify
    again; report paths whose replacement remains uncertain.
-6. **Record lessons:** real obstacles through `varde-learn`; skip otherwise.
+6. **Record lessons:** load `varde-learn`: use your skill tool, or read
+   `../../varde-learn/SKILL.md`, record real obstacles with it; skip otherwise.
 
 ## Constraints
 

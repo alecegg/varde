@@ -5,7 +5,7 @@ title: "bundle_lint — contradiction-aware health check"
 
 # bundle_lint
 
-`varde-workflow lint` runs the contradiction-aware health check over a
+`varde knowledge lint` runs the contradiction-aware health check over a
 single Knowledge Bundle: it walks the bundle recursively (a
 root-plus-subdirectories tree) and reports structural issues.
 Report-only — it never modifies a bundle, never blocks
@@ -16,7 +16,7 @@ reference `knowledge/reference/varde-workflow-cli`.
 ## Usage
 
 ```text
-Usage: varde-workflow lint [OPTIONS]
+Usage: varde knowledge lint [OPTIONS]
 
 Options:
       --bundle <BUNDLE>  Knowledge Bundle root directory (holds the Concept `.md` files)
@@ -25,7 +25,7 @@ Options:
 ```
 
 The lint scans one bundle: `--bundle` when given, else the project's
-resolved `<knowledge>` directory (same resolution as `varde-workflow
+resolved `<knowledge>` directory (same resolution as `varde setup
 paths`).
 
 ## Checks

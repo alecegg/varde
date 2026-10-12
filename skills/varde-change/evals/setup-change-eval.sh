@@ -33,6 +33,7 @@ case "$EVAL_ID" in
   1)
     mkdir -p memory-bank/working/plans/2026-09-18-active/tasks
     mkdir -p memory-bank/working/handoffs/2026-09-19-open
+    mkdir -p memory-bank/working/session-notes/2026-09-20-open
     cat > memory-bank/working/plans/2026-09-18-active/plan.md <<'PLAN'
 ---
 status: active
@@ -59,11 +60,21 @@ TASK
 ---
 type: handoff
 status: open
-description: Open fixture handoff.
+description: Legacy open fixture handoff.
 ---
 
 # Open fixture
 HANDOFF
+    cat > memory-bank/working/session-notes/2026-09-20-open/notes.md <<'NOTES'
+---
+type: session-notes
+status: open
+description: Open fixture session notes.
+timestamp: 2026-09-20T12:00:00Z
+---
+
+# Open fixture session notes
+NOTES
     ;;
   2)
     mkdir -p src
@@ -190,8 +201,8 @@ Design the notification record schema.
 TASK
     fi
     ;;
-  8)
-    mkdir -p memory-bank/working/plans/2026-09-20-retry-policy
+  8|24)
+    mkdir -p memory-bank/working/plans/2026-09-20-retry-policy src
     cat > memory-bank/working/plans/2026-09-20-retry-policy/plan.md <<'PLAN'
 ---
 status: active
@@ -360,7 +371,7 @@ PLAN
     cat > memory-bank/working/plans/2026-09-21-logger-fix/tasks/flush-on-exit.md <<'TASK'
 ---
 type: task
-status: todo
+status: in_progress
 depends_on: []
 modifies: ["src/logger.ts"]
 creates: []
@@ -439,6 +450,136 @@ CONFIG
     printf '%s\n' 'export function handleRequest(request) { return { status: 200 }; }' > src/api.mjs
     printf '%s\n' '// No account/IP limit scope has been selected.' > test/api.test.mjs
     ;;
+  23|25)
+    mkdir -p memory-bank/working/plans/2026-10-06-parallel-wave/tasks src test
+    write_node_package parallel-wave-fixture
+    cat > memory-bank/working/plans/2026-10-06-parallel-wave/plan.md <<'PLAN'
+---
+status: backlog
+title: Parallel wave
+type: plan
+---
+
+## Problem
+
+The fixture needs three small tasks with a dependency that can be verified from Git history.
+
+## Solution
+
+Implement independent `partA` and `partB` modules, then combine their results in `src/c.mjs`.
+
+## Acceptance criteria
+
+- [ ] `src/a.mjs` exports `partA()` returning `A`.
+- [ ] `src/b.mjs` exports `partB()` returning `B`.
+- [ ] `src/c.mjs` exports `combined()` returning `AB` by using both task modules.
+- [ ] `node --test` passes.
+PLAN
+    cat > memory-bank/working/plans/2026-10-06-parallel-wave/tasks/a.md <<'TASK'
+---
+type: task
+status: todo
+depends_on: []
+modifies: []
+creates: [src/a.mjs, test/a.test.mjs]
+---
+
+Implement `partA()` in `src/a.mjs` so it returns `A`, with a focused `node:test` test.
+
+#### Test approach
+
+profile: regression
+rationale: the exported behavior needs a deterministic test.
+
+#### Verification
+
+- assert: `node --test test/a.test.mjs` → exit 0
+TASK
+    cat > memory-bank/working/plans/2026-10-06-parallel-wave/tasks/b.md <<'TASK'
+---
+type: task
+status: todo
+depends_on: []
+modifies: []
+creates: [src/b.mjs, test/b.test.mjs]
+---
+
+Implement `partB()` in `src/b.mjs` so it returns `B`, with a focused `node:test` test.
+
+#### Test approach
+
+profile: regression
+rationale: the exported behavior needs a deterministic test.
+
+#### Verification
+
+- assert: `node --test test/b.test.mjs` → exit 0
+TASK
+    cat > memory-bank/working/plans/2026-10-06-parallel-wave/tasks/c.md <<'TASK'
+---
+type: task
+status: todo
+depends_on: [a, b]
+modifies: []
+creates: [src/c.mjs, test/c.test.mjs]
+---
+
+Implement `combined()` in `src/c.mjs`; it must use `partA()` and `partB()` and return `AB`.
+
+#### Test approach
+
+profile: regression
+rationale: this integration behavior depends on both independent task modules.
+
+#### Verification
+
+- assert: `node --test test/c.test.mjs` → exit 0
+TASK
+    ;;
+  26|27)
+    session_id="fixture-session-2026-10-07"
+    session_hash="$(printf '%s' "$session_id" | shasum -a 256 | awk '{print $1}')"
+    notes_dir="memory-bank/working/session-notes/2026-10-06-session-$session_hash"
+    mkdir -p run memory-bank/working/session-notes
+    printf 'session_id: %s\nreserved_path: %s/notes.md\n' \
+      "$session_id" "$notes_dir" > run/session-context.txt
+    if [[ "$EVAL_ID" == 27 ]]; then
+      mkdir -p "$notes_dir"
+      cat > "$notes_dir/notes.md" <<'NOTES'
+---
+type: session-notes
+status: open
+description: Resume the milestone session notes fixture.
+timestamp: 2026-10-06T23:59:00Z
+cwd: /eval
+keywords: milestone, session notes
+repo_root: /eval
+branch: fixture
+head_sha: 0000000
+dirty: []
+links: []
+---
+
+# Session notes: Resume the milestone session notes fixture
+
+## Rules
+
+none
+
+## Decisions
+
+Keep one note per session.
+
+## What's left
+
+Refresh this note for the next milestone.
+
+## Suggested next skill
+
+`varde-change build`
+NOTES
+    fi
+    ;;
   *)
     printf 'unsupported change eval id: %s\n' "$EVAL_ID" >&2
     exit 2
@@ -452,4 +593,8 @@ if [ "$EVAL_ID" = 15 ]; then
 else
   git add .
   git commit -qm "seed eval $EVAL_ID"
+fi
+
+if [[ "$EVAL_ID" == 23 || "$EVAL_ID" == 25 ]]; then
+  git config eval.targetBranch "$(git branch --show-current)"
 fi

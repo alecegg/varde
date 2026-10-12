@@ -7,9 +7,16 @@
 //!
 //! Entry point: [`resolve`].
 
+mod c_cpp_modules;
 pub mod clones;
 pub mod community;
+mod csharp_swift_modules;
+mod elixir_haskell_modules;
 pub mod graph;
+mod jvm_modules;
+mod lua_bash_modules;
+mod python_modules;
+mod ruby_php_modules;
 mod rust_modules;
 
 use anyhow::Result;
@@ -919,6 +926,29 @@ fn match_import_target(spec: &str, from_file: &str, idx: &ImportIndexes<'_>) -> 
     if from_lang == Some(ast_grep_language::SupportLang::Rust)
         && let Some(target) = rust_modules::resolve(spec, from_file, idx)
     {
+        return target;
+    }
+    // Each group resolver claims only its own languages and returns `None`
+    // for every other file, so the order below does not matter.
+    if let Some(target) = c_cpp_modules::resolve(spec, from_file, idx) {
+        return target;
+    }
+    if let Some(target) = csharp_swift_modules::resolve(spec, from_file, idx) {
+        return target;
+    }
+    if let Some(target) = elixir_haskell_modules::resolve(spec, from_file, idx) {
+        return target;
+    }
+    if let Some(target) = jvm_modules::resolve(spec, from_file, idx) {
+        return target;
+    }
+    if let Some(target) = lua_bash_modules::resolve(spec, from_file, idx) {
+        return target;
+    }
+    if let Some(target) = python_modules::resolve(spec, from_file, idx) {
+        return target;
+    }
+    if let Some(target) = ruby_php_modules::resolve(spec, from_file, idx) {
         return target;
     }
     let target = match_import_target_unchecked(spec, from_file, idx, from_lang);

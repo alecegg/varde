@@ -5,7 +5,7 @@
 id = "duplicate-code-clone"
 kind = "sql"
 verification = "exact-clone"
-severity = "error"
+severity = "warning"
 name = "Exact function duplication budget"
 description = "At least three substantive function bodies have identical syntax trees within one language."
 message = "exact function duplication exceeds the configured occurrence budget"

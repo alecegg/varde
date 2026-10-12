@@ -1,0 +1,77 @@
+{
+  "skill_name": "varde-manage",
+  "skills": ["varde-manage", "varde-customize"],
+  "evals": [
+    {
+      "id": "install",
+      "prompt": "Install the Varde skills and agents from this checkout into the fixture harness. Inspect the available varde command first, preview the explicit targets, then apply the install. Keep all writes inside the fixture.",
+      "expected_output": "Uses the checkout's varde binary, chooses explicit skills and agents targets, previews the sync, then applies it. Verifies installed contents and links, reports effective agent models, and keeps all changes inside the fixture.",
+      "assertions": [
+        "Uses the intended checkout's varde binary and explicit skill and agent targets",
+        "Runs and inspects a dry run before applying sync",
+        "Checks installed skill contents and canonical links after sync",
+        "Reports effective models for installed agents",
+        "Does not write outside the fixture"
+      ],
+      "assert": [
+        { "kind": "no_write_outside", "allowed_paths": ["skills", "agents"] }
+      ]
+    },
+    {
+      "id": "upgrade",
+      "prompt": "Upgrade the fixture's existing Varde skill installation from this checkout. Preserve a locally customized unrelated skill and agent setting, and verify which version and files are active. Keep all writes inside the fixture.",
+      "expected_output": "Previews and applies sync from the selected checkout, preserves unmanaged content and unrelated agent settings, then verifies the selected binary, installed source content, and resolved canonical links.",
+      "assertions": [
+        "Uses the selected checkout as the upgrade source and previews before applying",
+        "Preserves unrelated local skill content and agent settings",
+        "Verifies the installed contents and links against the selected source",
+        "Does not write outside the fixture"
+      ],
+      "assert": [
+        { "kind": "no_write_outside", "allowed_paths": ["skills", "agents"] }
+      ]
+    },
+    {
+      "id": "configure",
+      "prompt": "Configure this project's Varde working and knowledge stores to use the fixture directories. Inspect the current paths first, make only the project-scoped changes requested, and verify the resolved paths. Keep all writes inside the fixture.",
+      "expected_output": "Inspects current paths with varde setup paths --json, applies only a project-scoped override for the requested stores, then rereads the paths and confirms they resolve to the fixture directories without changing the shared default.",
+      "assertions": [
+        "Inspects current store paths before changing configuration",
+        "Applies only the requested project-scoped working and knowledge paths",
+        "Rereads and verifies the resolved paths and leaves shared defaults unchanged",
+        "Does not write outside the fixture"
+      ],
+      "assert": [
+        { "kind": "no_write_outside", "allowed_paths": ["config"] }
+      ]
+    },
+    {
+      "id": "scan-rules",
+      "prompt": "I want to author a new Varde code scan rule for unsafe SQL input. Find the right workflow and help add the rule, its test, and any needed documentation. Keep all writes inside the fixture.",
+      "expected_output": "Routes scan-rule authoring to varde-customize, checks the local rule conventions, and adds a focused rule with a test and necessary documentation. It does not route authoring through varde-manage or varde-scan.",
+      "assertions": [
+        "Routes scan-rule authoring to varde-customize",
+        "Uses the existing rule conventions and includes a focused test",
+        "Does not confuse rule authoring with running or triaging a scan",
+        "Does not write outside the fixture"
+      ],
+      "assert": [
+        { "kind": "no_write_outside", "allowed_paths": [".varde-code/rules"] }
+      ]
+    },
+    {
+      "id": "toz-profiles",
+      "prompt": "Tune the Toz output profile to show only concise command summaries. Find the correct workflow, make the profile change, and verify it with a fixture command. Keep all writes inside the fixture.",
+      "expected_output": "Routes Toz output-profile authoring to varde-customize, changes the appropriate profile configuration, and verifies the result with fixture command output. It does not treat profile authoring as Varde setup or scan triage.",
+      "assertions": [
+        "Routes Toz output-profile authoring to varde-customize",
+        "Changes the output profile rather than unrelated Varde setup paths",
+        "Verifies the profile using fixture command output",
+        "Does not write outside the fixture"
+      ],
+      "assert": [
+        { "kind": "no_write_outside", "allowed_paths": [".varde"] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+# category<TAB>path regex<TAB>anchored line regex<TAB>reason
+non-goal	^clis/code/.*$	^.*handoff.*$	The extraction-to-resolution pipeline phase keeps its handoff terminology.
+non-goal	^clis/doc/.*$	^.*handoff.*$	Workflow artifact and skill cross-reference handoff kinds are unrelated to session notes.
+non-goal	^clis/learn/README\.md$	^.*handoff.*$	The learn module documents a separate workflow handoff.
+non-goal	^skills/(ledgers/varde-delivery\.json|tests/fixtures/flow-ledger/varde\.json)$	^.*handoff.*$	Workflow phase ledger entries retain their handoff phase.
+non-goal	^skills/(README\.md|varde-agent-doc-authoring/references/criteria\.md|varde-learn/references/diagnose-current\.md)$	^.*handoff.*$	These documents use handoff for separate workflow or review senses.
+non-goal	^skills/tests/(agent-review-correctness|spike-approved-fix-routing)\.sh$	^.*handoff.*$	These tests cover agent report and routing handoffs.
+non-goal	^memory-bank/knowledge/decision/(cli-only-no-mcp|resolution-extends-handoff-model|resolution-graph-algorithms-scope)\.md$	^.*handoff.*$	These decisions describe unrelated workflow and resolution concepts.
+non-goal	^memory-bank/knowledge/reference/resolution-graph-algorithms\.md$	^.*handoff.*$	The graph resolution description uses the pipeline handoff sense.
+non-goal	^memory-bank/knowledge/reference/varde-superpowers-discussion\.md$	^.*(verdict handoff|reflect-handoff|Handoff resume).*$	The remaining mentions describe review and reflection workflow handoffs.
+alias	^clis/(varde|workflow)/.*$	^.*(context_handoff|handoff_at_tokens|handoff_path|--handoff|alias = "handoff").*$	The old provider, config key, stored field, and flag remain aliases for one release.
+legacy-read	^clis/(varde|workflow)/.*$	^.*(handoff\.md|handoffs\b|legacy.{0,16}handoff).*$	The resolver and migration retain reads of legacy session-note paths for one release.
+migration-command	^clis/(varde|workflow)/.*$	^.*(migrate-session-notes|handoff\.md|handoffs/).*$	The migration command names the old source layout while moving notes.
+legacy-read	^skills/(varde-change|varde-knowledge|shared)/.*$	^.*(handoff\.md|handoffs\b|legacy.{0,16}handoff).*$	Skill guidance and migration helpers describe legacy session-note paths.
+migration-command	^skills/(varde-change|varde-knowledge|shared)/.*$	^.*(migrate-session-notes|handoff\.md|handoffs/).*$	Skill guidance documents the one-time migration command and source layout.
+fixture	^clis/.*/tests/.*$	^.*handoff.*$	Tests retain old names as fixtures for alias and legacy-read behavior.
+fixture	^skills/tests/.*$	^.*handoff.*$	Skill tests retain old names as compatibility or workflow fixtures.
+fixture	^skills/eval-tools/query-sets/sibling-boundaries\.json$	^.*handoff.*$	The query set contains an explicit boundary fixture.
+legacy-read	^memory-bank/knowledge/decision/session-notes-rename\.md$	^.*(handoff\.md|handoffs/).*$	The decision records the legacy type-config and directory read.
+alias	^memory-bank/knowledge/decision/session-notes-rename\.md$	^.*(context_handoff|handoff_at_tokens|--handoff).*$	The decision records the one-release aliases.
+migration-command	^memory-bank/knowledge/decision/session-notes-rename\.md$	^.*(migrate-session-notes|handoff\.md|handoffs/).*$	The decision records the one-time migration and its old source layout.
+alias	^clis/workflow/README\.md$	^.*(context_handoff|handoff_at_tokens|--handoff).*$	The workflow README documents aliases for one release.
+legacy-read	^clis/workflow/README\.md$	^.*(handoff\.md|handoffs\b).*$	The workflow README documents migration from the legacy session-note layout.
+migration-command	^clis/workflow/README\.md$	^.*(migrate-session-notes|handoff\.md|handoffs/).*$	The workflow README documents the one-time migration command and source layout.
+legacy-read	^skills/check-refs\.sh$	^.*handoff\.md.*$	The reference checker still accepts the legacy session-note file name.
+fixture	^skills/varde-change/evals/.*$	^.*(handoff|HANDOFF).*$	Change evaluations keep legacy session-note fixtures for compatibility behavior.

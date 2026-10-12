@@ -1,0 +1,54 @@
+{
+  "mutations": [
+    {
+      "id": "remove-install-source-and-target-guidance",
+      "file": "references/setup.md",
+      "remove": "Use an installed `varde` or the binary in a known Varde checkout. If missing, ask for\nthe checkout location; do not guess a download URL.",
+      "evals": [
+        "install"
+      ]
+    },
+    {
+      "id": "remove-upgrade-preview-requirement",
+      "file": "references/setup.md",
+      "remove": "2. Preview the explicit targets:\n\n   ```sh\n   varde setup sync --skills-dir <skills-dir> --agents-dir <agents-dir> --dry-run\n   ```\n\n3. After approval, run with the same targets:",
+      "replace_with": "3. Run with the same explicit targets:",
+      "evals": [
+        "upgrade"
+      ]
+    },
+    {
+      "id": "remove-project-scope-configuration-guidance",
+      "file": "references/setup.md",
+      "remove": "project scope for project settings, `--default` only for an authorized shared default",
+      "evals": [
+        "configure"
+      ]
+    },
+    {
+      "id": "remove-rule-authoring-boundary",
+      "file": "SKILL.md",
+      "remove": "Not for authoring scan rules or output profiles",
+      "evals": [
+        "scan-rules"
+      ]
+    },
+    {
+      "id": "remove-profile-authoring-boundary",
+      "file": "SKILL.md",
+      "remove": "or output profiles (varde-customize)",
+      "evals": [
+        "toz-profiles"
+      ]
+    },
+    {
+      "id": "control-remove-unrelated-hook-install-guidance",
+      "file": "references/setup.md",
+      "remove": "Harness hooks | Run `varde setup hooks install --harness <h>` per requested harness; hooks do not install the skill.",
+      "negative": true,
+      "evals": [
+        "install"
+      ]
+    }
+  ]
+}

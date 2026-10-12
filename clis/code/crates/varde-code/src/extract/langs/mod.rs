@@ -28,10 +28,115 @@ pub mod swift;
 pub mod ts;
 pub mod tsx;
 
+use crate::extract::recursion::{Callable, CalleeReference};
+
 use crate::extract::entity::ExtractCtx;
 use crate::model::{Entity, EntityKind};
 use ast_grep_core::tree_sitter::StrDoc;
 use ast_grep_language::SupportLang;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+pub(crate) type ParsedNode<'a> = ast_grep_core::Node<'a, StrDoc<SupportLang>>;
+
+/// Combined language-specific flow-role overrides. Names may recur only when
+/// every language assigns the same normalized role.
+const LANGUAGE_FLOW_NAME_ROLES: &[&[(&str, crate::complexity::FlowRole)]] = &[
+    bash::FLOW_NAME_ROLES,
+    c::FLOW_NAME_ROLES,
+    cpp::FLOW_NAME_ROLES,
+    cs::FLOW_NAME_ROLES,
+    dart::FLOW_NAME_ROLES,
+    elixir::FLOW_NAME_ROLES,
+    go::FLOW_NAME_ROLES,
+    haskell::FLOW_NAME_ROLES,
+    java::FLOW_NAME_ROLES,
+    javascript::FLOW_NAME_ROLES,
+    kotlin::FLOW_NAME_ROLES,
+    lua::FLOW_NAME_ROLES,
+    php::FLOW_NAME_ROLES,
+    python::FLOW_NAME_ROLES,
+    ruby::FLOW_NAME_ROLES,
+    rust::FLOW_NAME_ROLES,
+    scala::FLOW_NAME_ROLES,
+    solidity::FLOW_NAME_ROLES,
+    swift::FLOW_NAME_ROLES,
+    ts::FLOW_NAME_ROLES,
+    tsx::FLOW_NAME_ROLES,
+];
+
+/// Resolve a language-specific name override without making the scorer depend
+/// on the parser language.
+pub(crate) fn registered_flow_role(name: &str) -> Option<crate::complexity::FlowRole> {
+    static FLOW_ROLE_INDEX: OnceLock<HashMap<String, crate::complexity::FlowRole>> =
+        OnceLock::new();
+    let index = FLOW_ROLE_INDEX.get_or_init(|| {
+        let mut index = HashMap::new();
+        for language_roles in LANGUAGE_FLOW_NAME_ROLES {
+            for &(registered, role) in *language_roles {
+                index.entry(registered.to_ascii_lowercase()).or_insert(role);
+            }
+        }
+        index
+    });
+
+    if name.bytes().any(|byte| byte.is_ascii_uppercase()) {
+        index.get(&name.to_ascii_lowercase()).copied()
+    } else {
+        index.get(name).copied()
+    }
+}
+
+#[cfg(test)]
+mod flow_role_lookup_tests {
+    use super::*;
+
+    #[test]
+    fn indexed_lookup_preserves_registered_roles_and_ascii_case_insensitivity() {
+        for language_roles in LANGUAGE_FLOW_NAME_ROLES {
+            for &(name, role) in *language_roles {
+                assert_eq!(registered_flow_role(name), Some(role), "{name}");
+                assert_eq!(
+                    registered_flow_role(&name.to_ascii_uppercase()),
+                    Some(role),
+                    "{name}"
+                );
+            }
+        }
+    }
+}
+
+/// Dispatch syntactic call matching to every supported language. Matchers are
+/// intentionally empty until their language-specific extraction tasks land.
+pub(crate) fn match_callees(
+    lang: SupportLang,
+    root: &ParsedNode<'_>,
+) -> (Vec<Callable>, Vec<CalleeReference>) {
+    match lang {
+        SupportLang::Bash => bash::match_callees(root),
+        SupportLang::C => c::match_callees(root),
+        SupportLang::Cpp => cpp::match_callees(root),
+        SupportLang::CSharp => cs::match_callees(root),
+        SupportLang::Dart => dart::match_callees(root),
+        SupportLang::Elixir => elixir::match_callees(root),
+        SupportLang::Go => go::match_callees(root),
+        SupportLang::Haskell => haskell::match_callees(root),
+        SupportLang::Java => java::match_callees(root),
+        SupportLang::JavaScript => javascript::match_callees(root),
+        SupportLang::Kotlin => kotlin::match_callees(root),
+        SupportLang::Lua => lua::match_callees(root),
+        SupportLang::Php => php::match_callees(root),
+        SupportLang::Python => python::match_callees(root),
+        SupportLang::Ruby => ruby::match_callees(root),
+        SupportLang::Rust => rust::match_callees(root),
+        SupportLang::Scala => scala::match_callees(root),
+        SupportLang::Solidity => solidity::match_callees(root),
+        SupportLang::Swift => swift::match_callees(root),
+        SupportLang::TypeScript => ts::match_callees(root),
+        SupportLang::Tsx => tsx::match_callees(root),
+        _ => (Vec::new(), Vec::new()),
+    }
+}
 
 /// Stable complexity name for symbolic short-circuit operators.
 pub(super) fn boolean_operator_name(
@@ -554,6 +659,25 @@ pub(super) fn chain_status(
             return first_arg_text(&obj);
         }
         cur = inner_fn;
+    }
+}
+
+#[cfg(test)]
+mod flow_role_registry_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn flow_name_roles_are_unambiguous() {
+        let mut roles = HashMap::new();
+        for (name, role) in LANGUAGE_FLOW_NAME_ROLES
+            .iter()
+            .flat_map(|table| table.iter())
+        {
+            if let Some(previous) = roles.insert(*name, *role) {
+                assert_eq!(previous, *role, "flow role for {name} differs by language");
+            }
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 use crate::cli::*;
 use crate::diagnostics;
+use crate::hook_input;
 use crate::sandbox;
 use crate::worker;
 use anyhow::{bail, Context, Result};
@@ -41,24 +42,24 @@ pub fn dispatch(cli: Cli) -> Result<i32> {
         return Ok(0);
     }
     if let Command::Note(a) = &cli.cmd {
-        return cmd_note(NoteArgs {
-            harness: a.harness.clone(),
-            block: a.block,
-        });
+        return cmd_note(a);
     }
     let command = cli.cmd;
     let cfg = Config::load()?;
     let project = Project::resolve(cli.global.project.as_deref())?;
     if !matches!(&command, Command::Query(QueryArgs { raw: Some(_), .. })) {
-        // With no daemon, the next toz invocation performs expiry cleanup.
-        if let Ok(dir) = project.store_dir() {
-            if let Ok(raw) = toz_core::raw::RawStore::open(&dir.join("raw"), &cfg.raw, &cfg.capture)
-            {
-                let _ = raw.prune();
-            }
-        }
+        prune_expired(&cfg, &project);
     }
     dispatch_loaded(&cfg, &project, &cli.global, command)
+}
+
+/// With no daemon, the next toz invocation performs expiry cleanup.
+fn prune_expired(cfg: &Config, project: &Project) {
+    if let Ok(dir) = project.store_dir() {
+        if let Ok(raw) = toz_core::raw::RawStore::open(&dir.join("raw"), &cfg.raw, &cfg.capture) {
+            let _ = raw.prune();
+        }
+    }
 }
 
 fn dispatch_loaded(
@@ -79,8 +80,6 @@ fn dispatch_loaded(
         Command::Doctor => cmd_doctor(cfg, project, g),
         Command::Profile(a) => cmd_profile(cfg, project, g, a),
         Command::Event(_) => unreachable!("event returned before loading configuration"),
-        Command::Install(a) => cmd_install(g, a),
-        Command::Uninstall(a) => cmd_uninstall(g, a),
         Command::Note(_) => unreachable!("note returned before loading configuration"),
     }
 }
@@ -103,12 +102,12 @@ enum QueryMode {
 
 impl QueryMode {
     fn from_args(a: QueryArgs) -> Result<Self> {
-        if a.raw.is_some() {
+        if let Some(handle) = a.raw.as_ref() {
             if query_raw_conflicts(&a) {
                 bail!("--raw cannot be combined with search or capture options");
             }
             return Ok(Self::Raw(RawArgs {
-                handle: a.raw.expect("raw mode has a handle"),
+                handle: handle.clone(),
                 stream: a.stream,
             }));
         }
@@ -364,7 +363,7 @@ fn emit_preview(g: &GlobalOpts, p: &toz_core::Preview) -> Result<()> {
     } else if g.quiet {
         writeln!(
             out,
-            "varde-toz: captured {} → handle {} ({} chunks)",
+            "varde: captured {} → handle {} ({} chunks)",
             capture::fmt_bytes(p.bytes),
             p.handle,
             p.chunks
@@ -697,7 +696,7 @@ fn emit_fetch_report(cfg: &Config, g: &GlobalOpts, url: &str, report: FetchRepor
                 );
             } else {
                 println!(
-                    "varde-toz: cached {age} ago → handle {handle} ({chunk_count} chunks)   next: varde-toz query --handle {handle} \"<query>\"   |   varde-toz query --handle {handle} --chunk N"
+                    "varde-toz: cached {age} ago → handle {handle} ({chunk_count} chunks)   next: varde run query --handle {handle} \"<query>\"   |   varde run query --handle {handle} --chunk N"
                 );
             }
             Ok(0)
@@ -1029,9 +1028,9 @@ fn purge_stores(
     targets: &[(String, std::path::PathBuf)],
 ) -> Result<i32> {
     let what = if a.global {
-        format!("delete ALL {} toz store(s) and cached pages", targets.len())
+        format!("delete ALL {} Toz store(s) and cached pages", targets.len())
     } else {
-        format!("delete the toz store for {}", project.key)
+        format!("delete the Toz store for {}", project.key)
     };
     if !confirm(&format!("varde-toz: {what}?"), a.yes)? {
         println!("varde-toz: aborted");
@@ -1222,10 +1221,10 @@ fn run_profile_test_case(
 
     let mut failures = missing_profile_preview_terms(&preview.render(), case);
 
-    if case.expect_records.is_some() {
-        if !check_profile_records(&store, &preview.handle, case, &mut failures) {
-            return fail(failures.join("; "));
-        }
+    if case.expect_records.is_some()
+        && !check_profile_records(&store, &preview.handle, case, &mut failures)
+    {
+        return fail(failures.join("; "));
     }
 
     if failures.is_empty() {
@@ -1310,6 +1309,20 @@ fn check_profile_records(
 // ---------------------------------------------------------------------------------------------
 // doctor
 
+/// Informational lines a host adds to `doctor`: shown after the checks and under
+/// `key` in the JSON report. They never change the exit code.
+pub struct DoctorSection {
+    pub key: &'static str,
+    pub entries: Vec<DoctorEntry>,
+}
+
+pub struct DoctorEntry {
+    pub line: String,
+    pub json: Value,
+}
+
+pub(crate) static DOCTOR_SECTION: std::sync::OnceLock<DoctorSection> = std::sync::OnceLock::new();
+
 fn cmd_doctor(cfg: &Config, project: &Project, g: &GlobalOpts) -> Result<i32> {
     let mut checks = Vec::new();
     let (_, profile_load_diagnostics) = profile::load_profiles(project);
@@ -1321,7 +1334,6 @@ fn cmd_doctor(cfg: &Config, project: &Project, g: &GlobalOpts) -> Result<i32> {
     doctor_store_dir(project, &mut checks);
     let mut profile_diagnostics = Vec::new();
     doctor_store(project, &mut checks, &mut profile_diagnostics);
-    doctor_plugins(&mut checks);
     doctor_sandbox_access(&mut checks);
     doctor_context_mode(&mut checks);
     let recent = diagnostics::recent();
@@ -1332,19 +1344,23 @@ fn cmd_doctor(cfg: &Config, project: &Project, g: &GlobalOpts) -> Result<i32> {
             .iter()
             .map(|(p, m)| json!({"ok": p, "message": m}))
             .collect();
-        println!(
-            "{}",
-            json!({
-                "checks": v,
-                "warnings": failures,
-                "hook_outcomes_7d": recent.ok(),
-                "profile_diagnostics": profile_diagnostics,
-                "profile_load_diagnostics": profile_load_diagnostics,
-            })
-        );
+        let mut report = json!({
+            "checks": v,
+            "warnings": failures,
+            "hook_outcomes_7d": recent.ok(),
+            "profile_diagnostics": profile_diagnostics,
+            "profile_load_diagnostics": profile_load_diagnostics,
+        });
+        if let Some(section) = DOCTOR_SECTION.get() {
+            report[section.key] = section.entries.iter().map(|e| e.json.clone()).collect();
+        }
+        println!("{report}");
     } else {
         for (pass, msg) in &checks {
             println!("{} {msg}", if *pass { "ok  " } else { "warn" });
+        }
+        for entry in DOCTOR_SECTION.get().iter().flat_map(|s| &s.entries) {
+            println!("{}", entry.line);
         }
         if failures == 0 {
             println!("all good");
@@ -1561,133 +1577,6 @@ fn doctor_store(
     }
 }
 
-fn doctor_plugins(checks: &mut Vec<(bool, String)>) {
-    for bundle in crate::install::BUNDLES {
-        doctor_plugin(bundle, checks);
-    }
-}
-
-fn doctor_plugin(bundle: &'static crate::install::Bundle, checks: &mut Vec<(bool, String)>) {
-    let version = crate::install::installed_version(bundle.binary);
-    let bundle = crate::install::resolve(bundle, version);
-    let dir = match (bundle.default_dir)() {
-        Ok(dir) => dir,
-        Err(e) => {
-            checks.push((false, format!("{}: {e:#}", bundle.harness)));
-            return;
-        }
-    };
-    if !bundle
-        .files
-        .iter()
-        .any(|(rel, _, _)| dir.join(rel).exists())
-        && !match bundle.harness {
-            "pi" => dir.join("extensions/toz.ts").exists(),
-            "opencode" => dir.join("plugin/toz.ts").exists(),
-            "claude-code" => dir.with_file_name("toz").join("hooks/hooks.json").exists(),
-            _ => false,
-        }
-    {
-        checks.push((
-            bundle.harness != "claude-code",
-            format!(
-                "{} plugin not installed (run `varde-toz install {}`)",
-                bundle.harness, bundle.harness
-            ),
-        ));
-        return;
-    }
-    doctor_plugin_version(bundle, version, checks);
-    doctor_plugin_drift(bundle, &dir, checks);
-}
-
-fn doctor_plugin_version(
-    bundle: &crate::install::Bundle,
-    version: Option<(u64, u64, u64)>,
-    checks: &mut Vec<(bool, String)>,
-) {
-    let mut ok = |pass: bool, msg: String| checks.push((pass, msg));
-    match version {
-        Some(v) if v < bundle.min_version => ok(
-            false,
-            format!(
-                "{} {} is older than {} which the shim needs ({})",
-                bundle.harness,
-                crate::install::fmt_version(v),
-                crate::install::fmt_version(bundle.min_version),
-                bundle.why_min
-            ),
-        ),
-        Some(v) => ok(
-            true,
-            format!(
-                "{} {} ≥ {} ({})",
-                bundle.harness,
-                crate::install::fmt_version(v),
-                crate::install::fmt_version(bundle.min_version),
-                bundle.why_min
-            ),
-        ),
-        None => ok(
-            false,
-            format!(
-                "{} version unknown (`{} --version` not runnable); shim needs ≥ {} for {}",
-                bundle.harness,
-                bundle.binary,
-                crate::install::fmt_version(bundle.min_version),
-                bundle.why_min
-            ),
-        ),
-    }
-}
-
-fn doctor_plugin_drift(
-    bundle: &crate::install::Bundle,
-    dir: &std::path::Path,
-    checks: &mut Vec<(bool, String)>,
-) {
-    let mut drift = Vec::new();
-    for (rel, template, mode) in bundle.files {
-        let have = std::fs::read_to_string(dir.join(rel)).ok();
-        let want =
-            crate::install::desired(*mode, template, have.as_deref(), dir).unwrap_or_default();
-        if have.as_deref() != Some(want.as_str()) {
-            drift.push(*rel);
-        }
-    }
-    if drift.is_empty() {
-        checks.push((
-            true,
-            format!(
-                "{} plugin installed at {} and up to date",
-                bundle.harness,
-                dir.display()
-            ),
-        ));
-        return;
-    }
-    let blocked = crate::install::unowned_files(bundle, dir);
-    let advice = if blocked.is_empty() {
-        format!("run `varde-toz install {}`", bundle.harness)
-    } else {
-        format!(
-            "`varde-toz install {}` will refuse: {} look hand-edited; move them aside or use --force",
-            bundle.harness,
-            blocked.join(", ")
-        )
-    };
-    checks.push((
-        false,
-        format!(
-            "{} plugin at {} is out of date ({}); {}",
-            bundle.harness,
-            dir.display(),
-            drift.join(", "),
-            advice
-        ),
-    ));
-}
-
 fn doctor_sandbox_access(checks: &mut Vec<(bool, String)>) {
     let mut ok = |pass: bool, msg: String| checks.push((pass, msg));
     // An actual open above is authoritative; config text alone cannot prove sandbox access.
@@ -1706,7 +1595,7 @@ fn doctor_sandbox_access(checks: &mut Vec<(bool, String)>) {
                     )
                 } else {
                     format!(
-                        "codex: add the toz store to the sandbox so `varde-toz run` can save output:\n                                [sandbox_workspace_write]\n       writable_roots = [\"{}\"]  (in {})",
+                        "codex: add the Toz store to the sandbox so `varde run` can save output:\n                                [sandbox_workspace_write]\n       writable_roots = [\"{}\"]  (in {})",
                         root,
                         cfg_path.display()
                     )
@@ -1819,7 +1708,8 @@ fn cmd_capture(cfg: &Config, project: &Project, g: &GlobalOpts, a: CaptureArgs) 
         spool
             .read_to_end(&mut raw)
             .context("reading spooled hook payload")?;
-        return hook_capture(cfg, project, &raw, &a.harness);
+        print!("{}", hook_capture(cfg, project, &raw, &a.harness)?);
+        return Ok(0);
     }
 
     let (mut spool, total) =
@@ -1863,6 +1753,50 @@ fn cmd_capture(cfg: &Config, project: &Project, g: &GlobalOpts, a: CaptureArgs) 
         Outcome::Captured(p) => emit_preview(g, &p)?,
     }
     Ok(0)
+}
+
+/// In-process equivalent of `toz capture --force --source <source> --label
+/// <label>` (with `--json` and `--defer-index` as requested) reading `input`
+/// as stdin. Returns the preview `toz capture` prints on stdout, or `None`
+/// when the input was not stored.
+pub fn capture_forced(
+    input: &mut impl Read,
+    source: &str,
+    label: &str,
+    json: bool,
+    defer_index: bool,
+) -> Result<Option<String>> {
+    let cfg = Config::load()?;
+    let project = Project::resolve(None)?;
+    let (mut spool, total) = streaming::spool(input).context("spooling capture input")?;
+    let (profiles, _) = profile::load_profiles(&project);
+    let mut capture_input = CaptureInput::new(&[], source, "capture");
+    capture_input.label = Some(label);
+    capture_input.force = true;
+    capture_input.defer_index = defer_index;
+    let mut store = open_store(&cfg, &project)?;
+    let sess = session();
+    capture_input.session = sess.as_deref();
+    let mut empty = std::io::Cursor::new(&[][..]);
+    let outcome = streaming::run_with_profiles(
+        &cfg,
+        &mut store,
+        capture_input,
+        &mut spool,
+        &mut empty,
+        total,
+        &profiles,
+    )?;
+    let Outcome::Captured(preview) = outcome else {
+        return Ok(None);
+    };
+    if json {
+        let mut value = serde_json::to_value(&preview)?;
+        value["preview"] = Value::String(preview.render());
+        Ok(Some(format!("{}\n", serde_json::to_string(&value)?)))
+    } else {
+        Ok(Some(preview.render()))
+    }
 }
 
 struct ShellWord {
@@ -1995,8 +1929,15 @@ fn assignment_name(word: &ShellWord) -> Option<&str> {
     Some(name)
 }
 
-fn is_toz_executable(word: &ShellWord) -> bool {
-    matches!(word.value.rsplit('/').next(), Some("toz" | "varde-toz"))
+fn is_toz_executable(words: &[ShellWord], index: usize) -> bool {
+    match words[index].value.rsplit('/').next() {
+        Some("toz" | "varde-toz") => true,
+        Some("varde") => matches!(
+            words.get(index + 1).map(|word| word.value.as_str()),
+            Some("run" | "capture" | "note" | "event")
+        ),
+        _ => false,
+    }
 }
 
 /// `Some(true)` is a Toz command; `Some(false)` is a silent directory/assignment setup.
@@ -2033,7 +1974,7 @@ fn classify_shell_command(words: &[ShellWord]) -> Option<bool> {
             words
                 .get(index)
                 .filter(|word| !word.value.starts_with('-'))
-                .map(is_toz_executable)
+                .map(|_| is_toz_executable(words, index))
                 .filter(|is_toz| *is_toz)
         }
         "command" => {
@@ -2044,7 +1985,7 @@ fn classify_shell_command(words: &[ShellWord]) -> Option<bool> {
             words
                 .get(index)
                 .filter(|word| !word.value.starts_with('-'))
-                .map(is_toz_executable)
+                .map(|_| is_toz_executable(words, index))
                 .filter(|is_toz| *is_toz)
         }
         "exec" => {
@@ -2052,10 +1993,10 @@ fn classify_shell_command(words: &[ShellWord]) -> Option<bool> {
             words
                 .get(index)
                 .filter(|word| !word.value.starts_with('-'))
-                .map(is_toz_executable)
+                .map(|_| is_toz_executable(words, index))
                 .filter(|is_toz| *is_toz)
         }
-        _ => Some(is_toz_executable(&words[index])).filter(|is_toz| *is_toz),
+        _ => Some(is_toz_executable(words, index)).filter(|is_toz| *is_toz),
     }
 }
 
@@ -2077,8 +2018,46 @@ fn toz_only_shell_source(source: &str) -> bool {
         && has_toz
 }
 
-/// Claude Code PostToolUse payload → `updatedToolOutput` JSON on overflow, nothing otherwise.
-fn hook_capture(cfg: &Config, project: &Project, raw: &[u8], harness: &str) -> Result<i32> {
+/// The workflow name `claude` is the `claude-code` harness.
+fn canonical_harness(harness: &str) -> &str {
+    if harness == "claude" {
+        "claude-code"
+    } else {
+        harness
+    }
+}
+
+/// `capture --hook` for a payload already in memory, run in-process: the bytes to print
+/// (empty when nothing is captured). Like the CLI, it fails open: errors and panics are
+/// logged and produce empty output.
+pub fn hook_capture_bytes(raw: &[u8], harness: &str) -> Vec<u8> {
+    let harness = canonical_harness(harness);
+    let result = std::panic::catch_unwind(|| -> Result<String> {
+        let cfg = Config::load()?;
+        if raw.len() > MAX_HOOK_PAYLOAD_BYTES {
+            if let Some(path) = hook_log_path(&cfg) {
+                log_payload(&path, raw);
+            }
+            diagnostics::record_best_effort(harness, "failed", "invalid-payload", "", raw.len());
+            return Ok(String::new());
+        }
+        let project = Project::resolve(None)?;
+        prune_expired(&cfg, &project);
+        hook_capture(&cfg, &project, raw, harness)
+    })
+    .unwrap_or_else(|_| Err(anyhow::anyhow!("panic inside hook")));
+    match result {
+        Ok(output) => output.into_bytes(),
+        Err(e) => {
+            log_hook_error(&e, harness);
+            Vec::new()
+        }
+    }
+}
+
+/// Claude Code PostToolUse payload → `updatedToolOutput` JSON on overflow, empty otherwise.
+fn hook_capture(cfg: &Config, project: &Project, raw: &[u8], harness: &str) -> Result<String> {
+    let harness = canonical_harness(harness);
     if let Some(path) = hook_log_path(cfg) {
         log_payload(&path, raw);
     }
@@ -2086,45 +2065,103 @@ fn hook_capture(cfg: &Config, project: &Project, raw: &[u8], harness: &str) -> R
         Ok(v) => v,
         Err(_) => {
             diagnostics::record_best_effort(harness, "failed", "invalid-payload", "", raw.len());
-            return Ok(0);
+            return Ok(String::new());
         }
     };
     let tool = payload["tool_name"].as_str().unwrap_or("");
     let input = &payload["tool_input"];
     let response = &payload["tool_response"];
-    let Some(shape) = extract(tool, input, response, harness) else {
+    let Some(mut shape) = extract(tool, input, response, harness) else {
         diagnostics::record_best_effort(harness, "skipped", "unsupported-shape", tool, raw.len());
-        return Ok(0);
+        return Ok(String::new());
     };
 
     // A running unified-exec session is delivered again when its final
     // write_stdin poll completes. Leave intermediate polling output alone.
     if harness == "codex" && !shape.completed {
-        return Ok(0);
+        return Ok(String::new());
+    }
+
+    // The scoped pass-through, the compound heading and the reset-line strip apply
+    // only to shell sources; a structured tool's synthesized source (for example
+    // `grep fn  /src`) is not a command to classify.
+    let shell_source = ["command", "cmd"]
+        .iter()
+        .find_map(|key| input[key].as_str().filter(|source| !source.is_empty()));
+    let shell = shell_source.is_some();
+
+    // Strip harness noise from both carriers before anything counts bytes.
+    let raw_stdout = std::mem::take(&mut shape.stdout);
+    let raw_stderr = std::mem::take(&mut shape.stderr);
+    let clean = |text: &str| {
+        if shell {
+            hook_input::cwd_noise::strip(text)
+        } else {
+            text.to_string()
+        }
+    };
+    shape.stdout = clean(&raw_stdout);
+    shape.stderr = clean(&raw_stderr);
+    // Already-scoped commands pass through while their output stays at or below the
+    // inline preview cap and redaction finds nothing to mask: nothing to save. A
+    // secret must still be redacted, so that case falls through to the normal path.
+    let scoped_bytes = shape.stdout.len() + shape.stderr.len();
+    let scoped = shell_source.is_some()
+        && scoped_bytes <= worker::PREVIEW_BYTES as usize
+        && hook_input::scoped::is_scoped(&shape.source);
+
+    // Redact every result size; the notices travel with the hook output.
+    let (stdout, mut notices) = hook_input::redact::apply(cfg, &shape.stdout);
+    let (stderr, stderr_notices) = hook_input::redact::apply(cfg, &shape.stderr);
+    notices.extend(stderr_notices);
+    let masked = !notices.is_empty() || stdout != shape.stdout || stderr != shape.stderr;
+    let changed = stdout != raw_stdout || stderr != raw_stderr || !notices.is_empty();
+    shape.stdout = stdout;
+    shape.stderr = stderr;
+    if shape.structured.is_some() {
+        // The envelope above is the redacted rendering of the structured value;
+        // read it back so the harness replacement carries the redacted copy too.
+        shape.structured = redacted_structured_content(&shape.stdout);
+    }
+
+    if scoped && !masked {
+        diagnostics::record_best_effort(harness, "skipped", "pass-through", tool, scoped_bytes);
+        return Ok(String::new());
     }
 
     let total = shape.stdout.len() + shape.stderr.len();
     let threshold = cfg.threshold_for(tool, is_file_read(tool, input));
     if total <= threshold {
-        return Ok(0);
+        if !changed {
+            return Ok(String::new());
+        }
+        // Nothing was stored; the harness gets the updated output when it can
+        // replace it, and the notices alone otherwise.
+        return Ok(render_hook_output(
+            harness, &shape, response, None, &notices, shell,
+        ));
     }
-    let shell_source = ["command", "cmd"]
-        .iter()
-        .find_map(|key| input[key].as_str().filter(|source| !source.is_empty()));
     if shell_source.is_some_and(toz_only_shell_source) {
-        return Ok(0); // don't capture our own previews
+        return Ok(String::new()); // don't capture our own previews
     }
 
     let Some(preview) = capture_hook_output(
         cfg, project, &payload, &shape, harness, tool, threshold, total,
     )?
     else {
-        return Ok(0);
+        return Ok(String::new());
     };
-    print_hook_output(harness, &shape, response, &preview);
-    Ok(0)
+    Ok(render_hook_output(
+        harness,
+        &shape,
+        response,
+        Some(&preview),
+        &notices,
+        shell,
+    ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn capture_hook_output(
     cfg: &Config,
     project: &Project,
@@ -2178,32 +2215,61 @@ fn capture_hook_output(
     Ok(Some(p))
 }
 
-fn print_hook_output(harness: &str, shape: &Extracted, response: &Value, p: &toz_core::Preview) {
-    let text = p.render();
+fn render_hook_output(
+    harness: &str,
+    shape: &Extracted,
+    response: &Value,
+    p: Option<&toz_core::Preview>,
+    notices: &[String],
+    shell: bool,
+) -> String {
+    // A structured result's own text is the redacted `contentText`, not the JSON
+    // envelope it was extracted from; the envelope only fed redaction and capture.
+    let mut text = match p {
+        Some(p) => p.render(),
+        None => structured_content_text(shape).unwrap_or_else(|| shape.stdout.clone()),
+    };
+    // A compound shell command gets a `commands:` heading above the preview.
+    if shell {
+        if let Some(heading) = hook_input::compound::heading(&shape.source) {
+            text = format!("{heading}\n{text}");
+        }
+    }
 
     if harness == "codex" {
-        print_codex_hook_output(shape, p, &text);
-        return;
+        return render_codex_hook_output(shape, p, &text, notices);
     }
 
     let (key, value) = match &shape.kind {
         ShapeKind::StructuredHint => {
-            println!(
-                "{}",
-                json!({
-                    "hookSpecificOutput": {
-                        "hookEventName": "PostToolUse",
-                        "additionalContext": hook_handle_hint(p)
-                    }
-                })
-            );
-            return;
+            let raw = response
+                .get("structuredContent")
+                .cloned()
+                .unwrap_or(Value::Null);
+            let redacted = shape.structured.clone().unwrap_or_else(|| raw.clone());
+            if redacted == raw {
+                // Nothing redacted: no replacement to make, so keep the notice-only form.
+                return format!(
+                    "{}\n",
+                    json!({
+                        "hookSpecificOutput": {
+                            "hookEventName": "PostToolUse",
+                            "additionalContext": hook_context(p, notices)
+                        }
+                    })
+                );
+            }
+            let mut v = response.clone();
+            v["structuredContent"] = redacted;
+            ("updatedToolOutput", v)
         }
         ShapeKind::Streams => (
             "updatedToolOutput",
             json!({
                 "stdout": text,
-                "stderr": "",
+                // Below the capture threshold only the reset line is dropped, so
+                // the redacted stderr must reach the harness alongside stdout.
+                "stderr": if p.is_some() { String::new() } else { shape.stderr.clone() },
                 "interrupted": response["interrupted"].as_bool().unwrap_or(false),
             }),
         ),
@@ -2212,52 +2278,93 @@ fn print_hook_output(harness: &str, shape: &Extracted, response: &Value, p: &toz
         ShapeKind::ContentField => {
             let mut v = response.clone();
             v["content"] = content_preview(&response["content"], &text);
+            if let Some(redacted) = shape.structured.clone() {
+                // The structured copy is redacted too, so the notice is truthful.
+                v["structuredContent"] = redacted;
+            }
             ("updatedToolOutput", v)
         }
         ShapeKind::Field(path) => {
             let mut v = response.clone();
             // `set_path` keeps arrays as arrays: Claude Code joins Grep/Glob `filenames` itself.
-            set_path(&mut v, &path, Value::String(text));
+            set_path(&mut v, path, Value::String(text));
             ("updatedToolOutput", v)
         }
     };
-    println!(
-        "{}",
-        json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", key: value } })
-    );
+    let mut output =
+        json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", key: value } });
+    if !notices.is_empty() {
+        output["hookSpecificOutput"]["additionalContext"] = json!(notices.join("\n"));
+    }
+    format!("{}\n", output)
 }
 
-fn print_codex_hook_output(shape: &Extracted, p: &toz_core::Preview, text: &str) {
+fn render_codex_hook_output(
+    shape: &Extracted,
+    p: Option<&toz_core::Preview>,
+    text: &str,
+    notices: &[String],
+) -> String {
     // Codex can replace streams and plain strings with bounded feedback. Other
     // shapes keep their value and get only a handle hint.
     if matches!(shape.kind, ShapeKind::Streams | ShapeKind::PlainString) {
-        println!(
-            "{}",
+        // The replacement carries one string; a small result's redacted stderr
+        // must travel with stdout so it is not dropped.
+        let replacement = if p.is_none() && !shape.stderr.is_empty() {
+            format!("{text}{}", shape.stderr)
+        } else {
+            text.to_string()
+        };
+        return format!(
+            "{}\n",
             json!({
                 "continue": false,
-                "stopReason": text,
+                "stopReason": replacement,
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
-                    "additionalContext": hook_handle_hint(p)
+                    "additionalContext": hook_context(p, notices)
                 }
             })
         );
-        return;
     }
-    let hint = hook_handle_hint(p);
-    println!(
-        "{}",
-        json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", "additionalContext": hint } })
-    );
+    format!(
+        "{}\n",
+        json!({ "hookSpecificOutput": { "hookEventName": "PostToolUse", "additionalContext": hook_context(p, notices) } })
+    )
+}
+
+/// The hook's `additionalContext`: the handle hint when something was stored,
+/// then one line per notice (`redacted 2 values: GITHUB_TOKEN`, ...).
+fn hook_context(p: Option<&toz_core::Preview>, notices: &[String]) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    if let Some(p) = p {
+        lines.push(hook_handle_hint(p));
+    }
+    lines.extend(notices.iter().cloned());
+    lines.join("\n")
 }
 
 fn hook_handle_hint(p: &toz_core::Preview) -> String {
     format!(
-        "varde-toz: stored this output as handle {h} ({}, {} chunks). Later: varde-toz query --handle {h} \"<query>\" | varde-toz query --handle {h} --chunk N",
+        "varde-toz: stored this output as handle {h} ({}, {} chunks). Later: varde run query --handle {h} \"<query>\" | varde run query --handle {h} --chunk N",
         capture::fmt_bytes(p.bytes),
         p.chunks,
         h = p.handle,
     )
+}
+
+/// The redacted `contentText` from a structured shape's redacted envelope, or
+/// `None` for a shape that was not extracted from `structuredContent`.
+fn structured_content_text(shape: &Extracted) -> Option<String> {
+    shape.structured.as_ref()?;
+    let envelope: Value = serde_json::from_str(&shape.stdout).ok()?;
+    envelope.get("contentText")?.as_str().map(str::to_string)
+}
+
+/// The redacted `structuredContent` inside a structured shape's redacted envelope.
+fn redacted_structured_content(envelope_text: &str) -> Option<Value> {
+    let envelope: Value = serde_json::from_str(envelope_text).ok()?;
+    envelope.get("structuredContent").cloned()
 }
 
 fn content_preview(response: &Value, text: &str) -> Value {
@@ -2290,7 +2397,7 @@ pub fn log_hook_error(e: &anyhow::Error, harness: &str) {
         .map(std::path::PathBuf::from)
         .or_else(|| Config::load().ok().and_then(|c| c.hook_log));
     if let Some(path) = log {
-        log_payload(&path, format!("# toz hook error: {e:#}").as_bytes());
+        log_payload(&path, format!("# Toz hook error: {e:#}").as_bytes());
     }
 }
 
@@ -2337,9 +2444,15 @@ struct Extracted {
     source: String,
     exit_code: Option<i32>,
     completed: bool,
+    /// For `codex`/`claude-code` structured responses: the redacted
+    /// `structuredContent`, written back so the raw value never returns to the
+    /// harness. `None` for every other shape.
+    structured: Option<Value>,
 }
 
-/// A file-read tool, or a single simple `cat`/`head`/`tail`/`nl`/`sed -n` shell command.
+/// A file-read tool, a read-only shell command, or a shell command whose
+/// `&&`/`;` segments are all `cat`/`head`/`tail`/`nl`/`sed -n` reads or
+/// `cd`/`echo`, with at least one read.
 fn is_file_read(tool: &str, input: &Value) -> bool {
     if tool.eq_ignore_ascii_case("read") {
         return true;
@@ -2350,16 +2463,28 @@ fn is_file_read(tool: &str, input: &Value) -> bool {
     else {
         return false;
     };
-    let compound = ["|", ">", "<", ";", "&", "||", "$(", "`", "\n"];
+    if hook_input::readonly::is_readonly(command) {
+        return true;
+    }
+    let compound = ["|", ">", "<", "$(", "`", "\n"];
     if compound.iter().any(|token| command.contains(token)) {
         return false;
     }
-    let mut words = command.split_whitespace();
-    match words.next() {
-        Some("cat" | "head" | "tail" | "nl") => true,
-        Some("sed") => words.any(|word| word == "-n"),
-        _ => false,
+    let chain = command.replace("&&", ";");
+    if chain.contains('&') {
+        return false;
     }
+    let mut has_read = false;
+    for segment in chain.split(';') {
+        let mut words = segment.split_whitespace();
+        match words.next() {
+            None | Some("cd" | "echo") => {}
+            Some("cat" | "head" | "tail" | "nl") => has_read = true,
+            Some("sed") if words.any(|word| word == "-n") => has_read = true,
+            _ => return false,
+        }
+    }
+    has_read
 }
 
 fn source_of(tool: &str, input: &Value) -> String {
@@ -2417,6 +2542,7 @@ fn extract(tool: &str, input: &Value, response: &Value, harness: &str) -> Option
                 source,
                 exit_code: None,
                 completed: true,
+                structured: Some(structured.clone()),
             });
         }
     }
@@ -2433,6 +2559,7 @@ fn extract(tool: &str, input: &Value, response: &Value, harness: &str) -> Option
             source,
             exit_code: None,
             completed: true,
+            structured: None,
         });
     }
     if let Some(s) = response.as_str() {
@@ -2444,6 +2571,7 @@ fn extract(tool: &str, input: &Value, response: &Value, harness: &str) -> Option
             source,
             exit_code: None,
             completed: true,
+            structured: None,
         });
     }
     if response.is_object() {
@@ -2456,6 +2584,7 @@ fn extract(tool: &str, input: &Value, response: &Value, harness: &str) -> Option
             source,
             exit_code: None,
             completed: response_completed(response),
+            structured: None,
         });
     }
     None
@@ -2484,6 +2613,7 @@ fn extract_streams(response: &Value, source: String, label: String) -> Extracted
         source,
         exit_code: response["exit_code"].as_i64().map(|c| c as i32),
         completed: response_completed(response),
+        structured: None,
     }
 }
 
@@ -2657,91 +2787,28 @@ fn set_path(v: &mut Value, path: &[String], new: Value) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// install / note
+// note
 
-fn cmd_install(g: &GlobalOpts, a: InstallArgs) -> Result<i32> {
-    let forced = match a.for_version.as_deref() {
-        Some(text) => Some(
-            crate::install::parse_version(text)
-                .with_context(|| format!("--for-version {text:?} is not an X.Y.Z version"))?,
-        ),
-        None => None,
-    };
-    let b = crate::install::resolve(crate::install::bundle(&a.harness)?, forced);
-    let dir = match a.dir {
-        Some(d) => d,
-        None => (b.default_dir)()?,
-    };
-    if a.print {
-        for (rel, template, _) in b.files {
-            println!("==> {rel}\n{}", crate::install::render_at(template, &dir)?);
-        }
-        return Ok(0);
-    }
-    let written = crate::install::install(b, &dir, a.force)?;
-    if g.json {
-        let v: Vec<Value> = written
-            .iter()
-            .map(|(p, c)| json!({"path": p, "changed": c}))
-            .collect();
-        println!("{}", serde_json::to_string(&v)?);
-        return Ok(0);
-    }
-    for (p, changed) in &written {
-        println!(
-            "{} {}",
-            if *changed { "wrote  " } else { "current" },
-            p.display()
-        );
-    }
-    println!("\n{}", b.after);
+fn cmd_note(a: &NoteArgs) -> Result<i32> {
+    println!("{}", note_text(a.harness.as_deref()));
     Ok(0)
 }
 
-fn cmd_uninstall(g: &GlobalOpts, a: UninstallArgs) -> Result<i32> {
-    let b = crate::install::bundle(&a.harness)?;
-    let dir = match a.dir {
-        Some(d) => d,
-        None => (b.default_dir)()?,
-    };
-    let done = crate::install::uninstall(b, &dir)?;
-    if g.json {
-        let v: Vec<Value> = done
-            .iter()
-            .map(|(p, what)| json!({"path": p, "result": what}))
-            .collect();
-        println!("{}", serde_json::to_string(&v)?);
-        return Ok(0);
-    }
-    for (p, what) in &done {
-        println!("{what:<20} {}", p.display());
-    }
-    Ok(0)
-}
-
-fn cmd_note(a: NoteArgs) -> Result<i32> {
-    if a.block {
-        println!("{}", crate::install::instruction_block());
-        return Ok(0);
-    }
-
-    let mut note = crate::install::usage_note();
+/// The guidance note `note --harness <harness>` prints, without printing it.
+pub fn note_text(harness: Option<&str>) -> String {
+    let mut note = varde_core::TOZ_NOTE.to_string();
     match diagnostics::recent() {
         Ok(summary) if summary.failed > 0 || summary.unreadable_lines > 0 || summary.unavailable_sources > 0 => note.push_str(&format!(
-            "\nToz recorded {} hook failure(s), {} unreadable record(s), and {} unavailable diagnostic source(s) recently. Run `varde-toz doctor --json` and report recurring failures.",
+            "\nToz recorded {} hook failure(s), {} unreadable record(s), and {} unavailable diagnostic source(s) recently. Run `varde setup doctor --json` and report recurring failures.",
             summary.failed, summary.unreadable_lines, summary.unavailable_sources
         )),
-        Err(_) => note.push_str("\nToz diagnostics are unavailable. Run `varde-toz doctor --json`."),
+        Err(_) => note.push_str("\nToz diagnostics are unavailable. Run `varde setup doctor --json`."),
         _ => {}
     }
-    match a.harness.as_deref() {
-        Some("claude-code") | Some("codex") => println!(
-            "{}",
-            json!({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": note}})
-        ),
-        _ => println!("{note}"),
+    match harness.map(canonical_harness) {
+        Some("claude-code") | Some("codex") => json!({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": note}}).to_string(),
+        _ => note,
     }
-    Ok(0)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2755,6 +2822,7 @@ fn cmd_search(cfg: &Config, project: &Project, g: &GlobalOpts, a: SearchArgs) ->
         content_type: a.content_type.clone(),
         include_superseded: a.all,
         recency_floor: None,
+        ..SearchOpts::default()
     };
     let mut results = if a.global {
         search_all_projects(project, &a, &opts)?
@@ -3153,7 +3221,7 @@ fn show_request_details(a: &ShowArgs) -> Value {
 /// and 2 keeps meaning "toz itself failed".
 fn cmd_script(cfg: &Config, project: &Project, g: &GlobalOpts, a: RunArgs) -> Result<i32> {
     if !cfg.script.enabled {
-        bail!("toz run is disabled (set script.enabled = true in config.toml)");
+        bail!("varde run is disabled (set script.enabled = true in config.toml)");
     }
     let source = script_source(&a)?;
     if source.trim().is_empty() {
@@ -3348,7 +3416,7 @@ fn emit_script_result(
     external_calls_used: bool,
 ) -> Result<i32> {
     let mut origin = format!(
-        "varde-toz run {} #{}",
+        "varde run {} #{}",
         a.handle.as_deref().unwrap_or("no-capture"),
         toz_core::script::source_fingerprint(source)
     );
@@ -3511,8 +3579,287 @@ mod tests {
     use super::*;
     use clap::Parser;
 
+    /// Serializes tests that point the process-wide config at a temp dir.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Run `body` with isolated config dirs and no threshold override.
+    fn with_isolated_config(body: impl FnOnce()) {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let keys = [
+            "VARDE_TOZ_CONFIG_DIR",
+            "VARDE_CONFIG_DIR",
+            "TOZ_THRESHOLD",
+            "TOZ_SESSION",
+        ];
+        let previous: Vec<_> = keys.iter().map(std::env::var_os).collect();
+        std::env::set_var("VARDE_TOZ_CONFIG_DIR", dir.path());
+        std::env::set_var("VARDE_CONFIG_DIR", dir.path().join("varde"));
+        std::env::remove_var("TOZ_THRESHOLD");
+        std::env::remove_var("TOZ_SESSION");
+        body();
+        for (key, value) in keys.iter().zip(previous) {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+
+    #[test]
+    fn hook_capture_bytes_replaces_large_claude_output() {
+        with_isolated_config(|| {
+            let payload = json!({
+                "tool_name": "Bash",
+                "tool_input": {"command": "seq 1 20000"},
+                "tool_response": {"stdout": "line of output\n".repeat(20_000), "stderr": ""},
+                "session_id": "s1",
+            })
+            .to_string();
+            for harness in ["claude", "claude-code"] {
+                let out =
+                    String::from_utf8(hook_capture_bytes(payload.as_bytes(), harness)).unwrap();
+                let value: Value = serde_json::from_str(out.trim()).unwrap();
+                assert_eq!(value["hookSpecificOutput"]["hookEventName"], "PostToolUse");
+                assert!(value["hookSpecificOutput"]["updatedToolOutput"]["stdout"]
+                    .as_str()
+                    .unwrap()
+                    .contains("varde run query"));
+            }
+        });
+    }
+
+    fn hook_payload(command: &str, stdout: String) -> String {
+        json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": stdout, "stderr": ""},
+            "session_id": "s1",
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn scoped_output_under_the_inline_cap_passes_through() {
+        with_isolated_config(|| {
+            // 700 * 15 = 10,500 bytes: bounded output well under the 64 KiB cap.
+            let payload = hook_payload("seq 1 2000 | head -2000", "line of output\n".repeat(700));
+            for harness in ["claude", "claude-code"] {
+                assert!(hook_capture_bytes(payload.as_bytes(), harness).is_empty());
+            }
+        });
+    }
+
+    #[test]
+    fn scoped_output_with_a_secret_is_not_passed_through() {
+        with_isolated_config(|| {
+            // `cat f | head -5` is scoped and small, but a built-in secret pattern
+            // must be redacted instead of passing the raw output through.
+            let token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+            let command = "cat f | head -5";
+            assert!(hook_input::scoped::is_scoped(command));
+            let payload = hook_payload(command, format!("{token}\n"));
+            let out =
+                String::from_utf8(hook_capture_bytes(payload.as_bytes(), "claude-code")).unwrap();
+            assert!(
+                !out.is_empty(),
+                "scoped secret output must not pass through"
+            );
+            let value: Value = serde_json::from_str(out.trim()).unwrap();
+            let rendered = value["hookSpecificOutput"]["updatedToolOutput"]["stdout"]
+                .as_str()
+                .unwrap();
+            assert!(!rendered.contains(token), "raw secret leaked: {rendered}");
+            assert!(rendered.contains("[redacted:github]"), "{rendered}");
+            assert!(value["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap()
+                .contains("redacted 1 pattern: github"));
+        });
+    }
+
+    #[test]
+    fn scoped_output_above_the_inline_cap_is_captured() {
+        with_isolated_config(|| {
+            // 5,000 * 15 = 75,000 bytes: bounded output past the 64 KiB cap.
+            let payload = hook_payload(
+                "seq 1 20000 | head -20000",
+                "line of output\n".repeat(5_000),
+            );
+            let out =
+                String::from_utf8(hook_capture_bytes(payload.as_bytes(), "claude-code")).unwrap();
+            let value: Value = serde_json::from_str(out.trim()).unwrap();
+            assert_eq!(value["hookSpecificOutput"]["hookEventName"], "PostToolUse");
+            assert!(value["hookSpecificOutput"]["updatedToolOutput"]["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("varde run query"));
+        });
+    }
+
+    #[test]
+    fn scoped_read_only_pipeline_stays_scoped_over_the_read_threshold() {
+        with_isolated_config(|| {
+            // `is_readonly` accepts the pipeline, so the hook would give it the 16 KiB
+            // read threshold; the scoped pass-through still wins under the inline cap.
+            let command = "cat f | head -20000";
+            assert!(is_file_read("Bash", &json!({"command": command})));
+            assert!(hook_input::scoped::is_scoped(command));
+            // 1,400 * 15 = 21,000 bytes: past the read threshold, under the cap.
+            let payload = hook_payload(command, "line of output\n".repeat(1_400));
+            assert!(hook_capture_bytes(payload.as_bytes(), "claude-code").is_empty());
+        });
+    }
+
+    #[test]
+    fn small_shell_rewrite_keeps_redacted_stderr() {
+        with_isolated_config(|| {
+            let payload = json!({
+                "tool_name": "Bash",
+                "tool_input": {"command": "cat f"},
+                "tool_response": {
+                    "stdout": "",
+                    "stderr": "error[E0425]: cannot find value x\nShell cwd was reset to /tmp/w",
+                },
+                "session_id": "s1",
+            })
+            .to_string();
+            let out =
+                String::from_utf8(hook_capture_bytes(payload.as_bytes(), "claude-code")).unwrap();
+            let value: Value = serde_json::from_str(out.trim()).unwrap();
+            let stderr = value["hookSpecificOutput"]["updatedToolOutput"]["stderr"]
+                .as_str()
+                .unwrap();
+            assert!(stderr.contains("cannot find value x"), "{stderr:?}");
+            assert!(!stderr.contains("Shell cwd was reset"), "{stderr:?}");
+        });
+    }
+
+    #[test]
+    fn small_shell_rewrite_redacts_stderr_and_keeps_other_lines() {
+        with_isolated_config(|| {
+            let token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+            let payload = json!({
+                "tool_name": "Bash",
+                "tool_input": {"command": "printf ok"},
+                "tool_response": {"stdout": "ok\n", "stderr": format!("warning: {token}\n")},
+                "session_id": "s1",
+            })
+            .to_string();
+            let out =
+                String::from_utf8(hook_capture_bytes(payload.as_bytes(), "claude-code")).unwrap();
+            assert!(!out.contains(token), "raw secret leaked: {out}");
+            let value: Value = serde_json::from_str(out.trim()).unwrap();
+            let updated = &value["hookSpecificOutput"]["updatedToolOutput"];
+            assert_eq!(updated["stdout"], "ok\n");
+            let stderr = updated["stderr"].as_str().unwrap();
+            assert!(stderr.contains("warning: [redacted:github]"), "{stderr:?}");
+        });
+    }
+
+    #[test]
+    fn non_shell_tools_keep_reset_lines_and_get_no_heading() {
+        with_isolated_config(|| {
+            let token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+            // A URL's `;` would split into a compound heading for a shell source.
+            let payload = json!({
+                "tool_name": "WebFetch",
+                "tool_input": {"url": "https://x.test/a?b=1;c=2"},
+                "tool_response": [{"type": "text", "text": format!("{token}\nShell cwd was reset to /tmp/w\n")}],
+                "session_id": "s1",
+            })
+            .to_string();
+            let out =
+                String::from_utf8(hook_capture_bytes(payload.as_bytes(), "claude-code")).unwrap();
+            let value: Value = serde_json::from_str(out.trim()).unwrap();
+            let text = value["hookSpecificOutput"]["updatedMCPToolOutput"][0]["text"]
+                .as_str()
+                .unwrap();
+            assert!(text.contains("Shell cwd was reset"), "{text:?}");
+            assert!(!text.contains("commands:"), "{text:?}");
+            assert!(text.contains("[redacted:github]"), "{text:?}");
+        });
+    }
+
+    #[test]
+    fn structured_content_is_redacted_in_the_harness_replacement() {
+        let token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
+        // ContentField: a content text item plus structuredContent.
+        with_isolated_config(|| {
+            let payload = json!({
+                "tool_name": "StructuredTool",
+                "tool_input": {},
+                "tool_response": {
+                    "content": [{"type": "text", "text": format!("see {token}")}],
+                    "structuredContent": {"tok": token},
+                },
+                "session_id": "s1",
+            })
+            .to_string();
+            let out =
+                String::from_utf8(hook_capture_bytes(payload.as_bytes(), "claude-code")).unwrap();
+            assert!(!out.contains(token), "raw secret leaked: {out}");
+            let value: Value = serde_json::from_str(out.trim()).unwrap();
+            let updated = &value["hookSpecificOutput"]["updatedToolOutput"];
+            assert_eq!(updated["structuredContent"]["tok"], "[redacted:github]");
+            let content = updated["content"][0]["text"].as_str().unwrap();
+            assert!(content.contains("[redacted:github]"), "{content:?}");
+        });
+        // StructuredHint: structuredContent only, no content text.
+        with_isolated_config(|| {
+            let payload = json!({
+                "tool_name": "StructuredTool",
+                "tool_input": {},
+                "tool_response": {"structuredContent": {"tok": token}},
+                "session_id": "s1",
+            })
+            .to_string();
+            let out =
+                String::from_utf8(hook_capture_bytes(payload.as_bytes(), "claude-code")).unwrap();
+            assert!(!out.contains(token), "raw secret leaked: {out}");
+            let value: Value = serde_json::from_str(out.trim()).unwrap();
+            let updated = &value["hookSpecificOutput"]["updatedToolOutput"];
+            assert_eq!(updated["structuredContent"]["tok"], "[redacted:github]");
+        });
+    }
+
+    #[test]
+    fn hook_capture_bytes_fails_open_on_malformed_payload() {
+        with_isolated_config(|| {
+            assert!(hook_capture_bytes(b"not json", "claude").is_empty());
+            assert!(hook_capture_bytes(b"{}", "claude-code").is_empty());
+        });
+    }
+
+    #[test]
+    fn note_text_matches_harness_shapes() {
+        with_isolated_config(|| {
+            let plain = note_text(None);
+            assert!(plain.contains(varde_core::TOZ_NOTE.lines().next().unwrap()));
+            let claude: Value = serde_json::from_str(&note_text(Some("claude"))).unwrap();
+            assert_eq!(
+                claude["hookSpecificOutput"]["hookEventName"],
+                "SessionStart"
+            );
+            assert_eq!(claude["hookSpecificOutput"]["additionalContext"], plain);
+        });
+    }
+
+    #[test]
+    fn varde_subcommands_are_recognized_as_toz_executables() {
+        for command in [
+            "varde run run --script -",
+            "varde capture --hook",
+            "varde note --harness pi",
+            "varde event --tool shell",
+        ] {
+            assert!(toz_only_shell_source(command), "{command}");
+        }
+    }
+
     #[test]
     fn global_purge_clears_cache_without_a_store() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let previous_config = std::env::var_os("VARDE_TOZ_CONFIG_DIR");
         let previous_varde = std::env::var_os("VARDE_CONFIG_DIR");

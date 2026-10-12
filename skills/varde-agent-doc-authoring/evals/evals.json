@@ -34,7 +34,7 @@
     {
       "id": 3,
       "prompt": "Use the completed-task notes in evals/fixtures/deploy-release/release-notes.md as the source. Turn them into a skill in the relative workspace path deploy-release/SKILL.md, and make sure its description triggers when someone says 'cut a release'.",
-      "expected_output": "The included task notes provide concrete grounding. The skill is authored with an ordered numbered ## Workflow, captures the validate-before-push correction as a Gotcha or verification loop with its rationale, and phrases instructions as positive targets rather than prohibitions. The description is written for the model, front-loaded with the user's leading trigger ('cut a release'/'release'), leads with the user's likely request, and targets the multi-step release task. Frontmatter name matches the directory (deploy-release) and is validated with validate-frontmatter.py. The output is written to deploy-release/SKILL.md inside the workspace.",
+      "expected_output": "The included task notes provide concrete grounding. The skill is authored with an ordered numbered ## Workflow, captures the validate-before-push correction as a Gotcha or verification loop with its rationale, and phrases instructions as positive targets rather than prohibitions. The description is written for the model, front-loaded with the user's leading trigger ('cut a release'/'release'), leads with the user's likely request, and targets the multi-step release task. Frontmatter name matches the directory (deploy-release) and is validated with varde doc frontmatter. The output is written to deploy-release/SKILL.md inside the workspace.",
       "files": [
         "evals/fixtures/deploy-release/release-notes.md"
       ],
@@ -42,7 +42,7 @@
       "assertions": [
         "The validate-manifest-before-push correction is captured as a Gotcha or verification loop paired with its rationale, not dropped or stated generically",
         "The description front-loads the user's leading trigger word ('release'/'cut a release') and leads with the user's likely request rather than a 'This skill does...' summary",
-        "The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and passes validate-frontmatter.py",
+        "The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and passes varde doc frontmatter",
         "Multi-step release procedure is expressed as a numbered ## Workflow checklist with an inline Gotchas section, not narrative prose",
         "The skill file exists at deploy-release/SKILL.md inside the evaluation workspace"
       ]

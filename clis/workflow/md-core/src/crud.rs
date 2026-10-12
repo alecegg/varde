@@ -630,7 +630,7 @@ pub enum FieldError {
 /// Structured frontmatter family names that are list/object-typed
 /// and therefore reject bare-scalar writes (a naive scalar write
 /// would corrupt their YAML shape): `sources`/`verified`/`generated`
-/// (provenance), `stale_after` (lifecycle), `runtime`/`executor`/`attester`
+/// (provenance), `stale_after` (lifecycle), `runtime`/`builder`/`attester`
 /// (runtime provenance).
 pub(crate) const STRUCTURED_FIELD_NAMES: [&str; 7] = [
     "sources",
@@ -638,7 +638,7 @@ pub(crate) const STRUCTURED_FIELD_NAMES: [&str; 7] = [
     "generated",
     "stale_after",
     "runtime",
-    "executor",
+    "builder",
     "attester",
 ];
 
@@ -1053,7 +1053,7 @@ mod tests {
             "generated",
             "stale_after",
             "runtime",
-            "executor",
+            "builder",
             "attester",
         ] {
             std::fs::write(dir.join("use-rust.md"), CONCEPT).unwrap();

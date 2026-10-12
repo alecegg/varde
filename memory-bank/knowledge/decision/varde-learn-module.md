@@ -11,7 +11,7 @@ Create `learn-cli/` (binary `varde-learn`) plus a `varde-learn` skill that own f
 The working store is per project, so recurring skill friction never clusters across projects, evals cannot run outside this repo, and nothing measures whether a promoted fix worked.
 
 ## Constraints
-- Do not collect or delegate session evidence during ordinary friction capture or evaluations. Only an explicit diagnosis request may pass bounded, source-linked evidence to one independent native analyst; never send a full transcript. In-session friction capture remains "check always, write only a real event," and executor subagents report friction to the orchestrator instead of writing it.
+- Do not collect or delegate session evidence during ordinary friction capture or evaluations. Only an explicit diagnosis request may pass bounded, source-linked evidence to one independent native analyst; never send a full transcript. In-session friction capture remains "check always, write only a real event," and builder subagents report friction to the orchestrator instead of writing it.
 - Skill edits stay human-approved; evals launch paid sessions and run only on explicit approval.
 - Name the ledger "adoptions", not "promotions" (`promotions/` holds plan promotion records).
 
