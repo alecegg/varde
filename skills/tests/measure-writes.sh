@@ -55,7 +55,7 @@ set -e
 grep -q 'warning:.*ledger' <<<"$output"
 
 # Backdate the git metadata so a day sweep counts only the fixture's own writes.
-find "$root/.git" -exec touch -t 200001010000 {} +
+find "$root/.git" -exec touch -t 199912301200 {} +
 today="$(date +%F)"
 empty_day="2000-01-01"
 bash "$script" sweep --root "$root" --day "$today" >/dev/null
