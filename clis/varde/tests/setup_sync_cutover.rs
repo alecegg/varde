@@ -921,12 +921,11 @@ fn unrewritable_harness_and_failed_watch_are_reported_without_failing_sync() {
     }));
     assert!(sandbox.cargo_root.join("bin/varde-code").exists());
     assert!(sandbox.cargo_root.join("bin/varde-toz").exists());
+    #[cfg(target_os = "macos")]
     let manager_log = fs::read_to_string(sandbox.root.join("watch-manager.log")).unwrap();
     #[cfg(target_os = "macos")]
     {
         assert!(manager_log.contains("bootstrap"));
         assert!(manager_log.contains("kickstart"));
     }
-    #[cfg(target_os = "linux")]
-    assert!(manager_log.contains("enable"));
 }

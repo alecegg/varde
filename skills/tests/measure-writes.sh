@@ -54,6 +54,8 @@ set -e
 [[ "$status" == 9 && -f "$failure_root/ledger-ran" ]]
 grep -q 'warning:.*ledger' <<<"$output"
 
+# Backdate the git metadata so a day sweep counts only the fixture's own writes.
+find "$root/.git" -exec touch -t 200001010000 {} +
 today="$(date +%F)"
 empty_day="2000-01-01"
 bash "$script" sweep --root "$root" --day "$today" >/dev/null
