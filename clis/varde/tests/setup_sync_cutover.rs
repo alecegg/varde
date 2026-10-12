@@ -894,14 +894,14 @@ fn unrewritable_harness_and_failed_watch_are_reported_without_failing_sync() {
     let unrewritable = data["unrewritable"].as_array().unwrap();
     let watcher = unrewritable
         .iter()
-        .find(|entry| entry["path"] == repo.to_str().unwrap())
+        .find(|entry| {
+            entry["path"] == repo.to_str().unwrap()
+                && entry["reason"]
+                    .as_str()
+                    .unwrap()
+                    .contains("repo remains unregistered")
+        })
         .expect("failed watcher is reported against its repository");
-    assert!(
-        watcher["reason"]
-            .as_str()
-            .unwrap()
-            .contains("repo remains unregistered")
-    );
     assert_eq!(
         watcher["command"],
         format!("varde setup watch --ensure --repo {}", repo.display())
@@ -922,6 +922,11 @@ fn unrewritable_harness_and_failed_watch_are_reported_without_failing_sync() {
     assert!(sandbox.cargo_root.join("bin/varde-code").exists());
     assert!(sandbox.cargo_root.join("bin/varde-toz").exists());
     let manager_log = fs::read_to_string(sandbox.root.join("watch-manager.log")).unwrap();
-    assert!(manager_log.contains("bootstrap"));
-    assert!(manager_log.contains("kickstart"));
+    #[cfg(target_os = "macos")]
+    {
+        assert!(manager_log.contains("bootstrap"));
+        assert!(manager_log.contains("kickstart"));
+    }
+    #[cfg(target_os = "linux")]
+    assert!(manager_log.contains("enable"));
 }

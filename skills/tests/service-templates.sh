@@ -35,7 +35,12 @@ else
 fi
 
 if command -v systemd-analyze >/dev/null 2>&1; then
-  systemd-analyze verify "$UNIT" "$TIMER" || fail "systemd-analyze rejected the user units"
+  # systemd requires ExecStart to be executable; point the placeholder at a real one.
+  VERIFY_DIR="$(mktemp -d)"
+  trap 'rm -rf "$VERIFY_DIR"' EXIT
+  sed "s|/path/to/varde|$(command -v true)|" "$UNIT" >"$VERIFY_DIR/${UNIT##*/}"
+  cp "$TIMER" "$VERIFY_DIR/"
+  systemd-analyze verify "$VERIFY_DIR/${UNIT##*/}" "$VERIFY_DIR/${TIMER##*/}" || fail "systemd-analyze rejected the user units"
 else
   echo "service-templates: SKIP: systemd-analyze is unavailable"
 fi

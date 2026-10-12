@@ -2009,7 +2009,7 @@ mod tests {
             definition.contains("<string>watch</string><string>--repo</string><string>/r</string>")
         );
         #[cfg(target_os = "linux")]
-        assert!(definition.contains("ExecStart=/opt/bin/varde watch --repo /r\n"));
+        assert!(definition.contains("ExecStart=\"/opt/bin/varde\" watch --repo \"/r\"\n"));
     }
 
     #[test]
