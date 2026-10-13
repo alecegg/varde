@@ -678,36 +678,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dirs"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
-dependencies = [
- "dirs-sys",
-]
-
-[[package]]
-name = "dirs"
-version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d57d423b3c82e89b9a24ca3091fee61f456a26edbd28d26c65906f4bc1dcd8f"
-dependencies = [
- "dirs-sys",
-]
-
-[[package]]
-name = "dirs-sys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
-dependencies = [
- "libc",
- "option-ext",
- "redox_users",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "displaydoc"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1536,15 +1506,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
-name = "libredox"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61ff90caf6077a803a240f62fdbe88645a890bbca49ef8174c3cb0404362171d"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "libsqlite3-sys"
 version = "0.38.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1772,12 +1733,6 @@ name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
-
-[[package]]
-name = "option-ext"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "parking_lot"
@@ -2079,16 +2034,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
  "bitflags 2.13.2",
-]
-
-[[package]]
-name = "redox_users"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60dc65c0ff1a7ae1294b0c67b9f14baf70b644404010370171787bfac1038fc0"
-dependencies = [
- "libredox",
- "thiserror",
 ]
 
 [[package]]
@@ -3447,7 +3392,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "varde"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "assert_cmd",
  "ast-grep-language",
@@ -3477,7 +3422,7 @@ dependencies = [
 
 [[package]]
 name = "varde-code"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "ast-grep-core",
@@ -3504,16 +3449,15 @@ dependencies = [
 
 [[package]]
 name = "varde-contracts"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "varde-core",
 ]
 
 [[package]]
 name = "varde-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
- "dirs 7.0.0",
  "indexmap",
  "libc",
  "regex",
@@ -3524,7 +3468,7 @@ dependencies = [
 
 [[package]]
 name = "varde-doc"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3541,7 +3485,7 @@ dependencies = [
 
 [[package]]
 name = "varde-learn"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3554,7 +3498,7 @@ dependencies = [
 
 [[package]]
 name = "varde-learn-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "fs2",
  "libc",
@@ -3572,12 +3516,11 @@ dependencies = [
 
 [[package]]
 name = "varde-toz"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
  "clap",
- "dirs 7.0.0",
  "insta",
  "libc",
  "regex",
@@ -3593,11 +3536,10 @@ dependencies = [
 
 [[package]]
 name = "varde-toz-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "blake3",
- "dirs 7.0.0",
  "dom_smoothie",
  "getrandom 0.4.3",
  "htmd",
@@ -3618,7 +3560,7 @@ dependencies = [
 
 [[package]]
 name = "varde-workflow"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3636,9 +3578,8 @@ dependencies = [
 
 [[package]]
 name = "varde-workflow-core"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
- "dirs 6.0.0",
  "serde",
  "serde_yaml",
  "sha2",

@@ -185,7 +185,7 @@ fn expand_toz_dir(project_root: &Path, value: &str) -> Option<PathBuf> {
         .unwrap_or_default();
     let value = value.replace("{project}", &project_name);
     let expanded = if value == "~" || value.starts_with("~/") {
-        let home = dirs::home_dir()?;
+        let home = std::env::home_dir()?;
         home.join(value.trim_start_matches('~').trim_start_matches('/'))
     } else {
         PathBuf::from(value)

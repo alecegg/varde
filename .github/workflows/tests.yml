@@ -20,6 +20,17 @@ jobs:
           tool: just
       - run: just test-agents
 
+  licenses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install stable --profile minimal
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - run: just test-licenses
+
   clis:
     runs-on: ubuntu-latest
     timeout-minutes: 30

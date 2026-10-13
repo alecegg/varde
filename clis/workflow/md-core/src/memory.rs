@@ -1331,7 +1331,7 @@ fn expand(root: &Path, label: &str, value: &str) -> Result<PathBuf, MemoryError>
         .unwrap_or_default();
     let value = value.replace("{project}", &project);
     let expanded = if value == "~" || value.starts_with("~/") {
-        let home = dirs::home_dir().ok_or_else(|| MemoryError::NoHome {
+        let home = std::env::home_dir().ok_or_else(|| MemoryError::NoHome {
             label: label.to_string(),
             value: value.clone(),
         })?;
@@ -1350,7 +1350,7 @@ fn expand(root: &Path, label: &str, value: &str) -> Result<PathBuf, MemoryError>
 fn expand_global(path: &Path, label: &str) -> Result<PathBuf, MemoryError> {
     let mut components = path.components();
     let expanded = if components.next() == Some(Component::Normal(OsStr::new("~"))) {
-        let home = dirs::home_dir().ok_or_else(|| MemoryError::NoHome {
+        let home = std::env::home_dir().ok_or_else(|| MemoryError::NoHome {
             label: label.to_owned(),
             value: path.to_string_lossy().into_owned(),
         })?;

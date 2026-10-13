@@ -259,7 +259,7 @@ fn is_shell_tool(tool: &str) -> bool {
 /// `<varde config>/toz`. Before its migration marker exists, existing legacy roots under
 /// `$XDG_CONFIG_HOME` (or `~/.config`) remain authoritative in their historical precedence.
 ///
-/// Deliberately not `dirs::config_dir()`: on macOS that resolves to `~/Library/Application Support`,
+/// Deliberately not the platform config dir: on macOS that resolves to `~/Library/Application Support`,
 /// which is neither where the docs say the store lives nor readable from inside the Claude Code
 /// bash sandbox (so the hook could write captures the agent then couldn't `toz query`).
 /// Canonical environment inputs take precedence over compatibility aliases.
@@ -280,7 +280,7 @@ pub fn config_dir() -> Result<PathBuf> {
     }
     let base = match std::env::var_os("XDG_CONFIG_HOME") {
         Some(x) if !x.is_empty() => PathBuf::from(x),
-        _ => dirs::home_dir()
+        _ => std::env::home_dir()
             .context("could not determine home directory")?
             .join(".config"),
     };

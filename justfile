@@ -8,7 +8,7 @@ test:
     #!/usr/bin/env bash
     set -uo pipefail
     failed=()
-    for suite in test-skills test-agents test-root test-clis test-pi; do
+    for suite in test-skills test-agents test-root test-licenses test-clis test-pi; do
       "{{just_executable()}}" "$suite" || failed+=("$suite")
     done
     if [ "${#failed[@]}" -gt 0 ]; then
@@ -34,6 +34,11 @@ test-root:
       echo "FAIL: ${failed[*]}" >&2
       exit 1
     fi
+
+# The release license gate: fails on a dependency outside the permissive allow-list.
+test-licenses:
+    cargo fetch --locked --manifest-path clis/Cargo.toml
+    python3 clis/code/scripts/gen-third-party-licenses.py
 
 test-cli module:
     #!/usr/bin/env bash

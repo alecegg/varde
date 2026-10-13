@@ -1580,7 +1580,7 @@ fn doctor_store(
 fn doctor_sandbox_access(checks: &mut Vec<(bool, String)>) {
     let mut ok = |pass: bool, msg: String| checks.push((pass, msg));
     // An actual open above is authoritative; config text alone cannot prove sandbox access.
-    if let (Some(home), Ok(store_root)) = (dirs::home_dir(), toz_core::config::config_dir()) {
+    if let (Some(home), Ok(store_root)) = (std::env::home_dir(), toz_core::config::config_dir()) {
         let cfg_path = home.join(".codex").join("config.toml");
         if let Ok(text) = std::fs::read_to_string(&cfg_path) {
             let root = store_root.to_string_lossy();
@@ -1608,7 +1608,7 @@ fn doctor_sandbox_access(checks: &mut Vec<(bool, String)>) {
 fn doctor_context_mode(checks: &mut Vec<(bool, String)>) {
     let mut ok = |pass: bool, msg: String| checks.push((pass, msg));
     // context-mode conflict.
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = std::env::home_dir() {
         let settings = home.join(".claude").join("settings.json");
         if let Ok(text) = std::fs::read_to_string(&settings) {
             if let Ok(v) = serde_json::from_str::<Value>(&text) {
@@ -2683,10 +2683,10 @@ fn trusted_truncation_path(harness: &str, path: &str) -> Option<std::path::PathB
             let mut roots = Vec::new();
             if let Some(dir) = std::env::var_os("XDG_DATA_HOME").filter(|d| !d.is_empty()) {
                 roots.push(std::path::PathBuf::from(dir));
-            } else if let Some(home) = dirs::home_dir() {
+            } else if let Some(home) = std::env::home_dir() {
                 roots.push(home.join(".local").join("share"));
             }
-            if let Some(dir) = dirs::data_dir() {
+            if let Some(dir) = varde_core::paths::data_dir() {
                 roots.push(dir);
             }
             roots
