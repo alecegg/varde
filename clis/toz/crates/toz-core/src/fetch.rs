@@ -498,15 +498,13 @@ pub fn to_text(mime: &str, body: &str, url: &str) -> (String, Option<String>) {
     }
 }
 
-/// Readability extraction then markdown. Falls back to converting the whole document (minus
+/// Readability extraction (legible) then markdown. Falls back to converting the whole document (minus
 /// obvious chrome) when extraction fails or yields almost nothing.
 pub fn html_to_markdown(html: &str, url: &str) -> (String, Option<String>) {
     let converter = htmd::HtmlToMarkdown::builder()
         .skip_tags(vec!["script", "style", "noscript", "svg", "iframe"])
         .build();
-    let article = dom_smoothie::Readability::new(html, Some(url), None)
-        .ok()
-        .and_then(|mut r| r.parse().ok());
+    let article = legible::parse(html, Some(url), None).ok();
     if let Some(a) = article {
         if let Ok(md) = converter.convert(&a.content) {
             let md = tidy(&md);

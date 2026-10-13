@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Understanding Ownership in Rust | Example Blog</title>
+<meta name="author" content="Ada Writer"><style>.x{color:red}</style></head>
+<body>
+<div id="cookie-banner" class="cookie-consent">We use cookies. <button>Accept all cookies</button></div>
+<header class="site-header"><a href="/">Example Blog</a>
+<nav><ul><li><a href="/">Home</a></li><li><a href="/about">About</a></li><li><a href="/archive">Archive</a></li><li><a href="/contact">Contact</a></li></ul></nav></header>
+<div class="layout">
+<aside class="sidebar"><h3>Related posts</h3><ul><li><a href="/p/1">Ten tips for Cargo</a></li><li><a href="/p/2">Async in practice</a></li><li><a href="/p/3">Choosing a web framework</a></li></ul><div class="ad">Sponsored: buy our hosting</div></aside>
+<main><article>
+<h1>Understanding Ownership in Rust</h1>
+<p class="byline">By Ada Writer, 12 October 2026</p>
+<p>Rust's ownership model lets a program manage memory without a garbage collector. Every value has a single owner, and the value is dropped when its owner goes out of scope. This rule removes whole classes of bugs, including use-after-free and double free, at compile time rather than at run time.</p>
+<p>Borrowing extends ownership with references. A shared reference allows many readers, while a mutable reference allows exactly one writer and no readers. The compiler checks these rules on every build, so data races cannot slip into safe code.</p>
+<h2>Borrowing in practice</h2>
+<pre><code>fn longest&lt;'a&gt;(a: &amp;'a str, b: &amp;'a str) -&gt; &amp;'a str {
+    if a.len() &gt; b.len() { a } else { b }
+}</code></pre>
+<p>Lifetimes name the scope for which a reference is valid. Most of the time the compiler infers them, but function signatures that return references sometimes need explicit annotations so that the relationship between inputs and outputs is clear to the reader and to the checker.</p>
+<p>Traits describe shared behavior. A generic function can accept any type that implements a trait, and the compiler generates specialized code for each concrete type. This static dispatch keeps abstractions free at run time while still allowing flexible APIs.</p>
+<ul><li>Static dispatch by default</li><li>Trait objects when you need them</li><li>Generics with bounds</li></ul>
+<p>Error handling uses the Result type instead of exceptions. Functions that can fail return a Result, and callers decide whether to handle the error, convert it, or propagate it with the question mark operator. The approach makes failure paths visible in the type signature.</p>
+</article>
+<section id="comments" class="comments"><h2>Comments (3)</h2>
+<div class="comment"><b>bob</b>: Great post, thanks!</div>
+<div class="comment"><b>carol</b>: I would add a section on interior mutability.</div>
+<div class="comment"><b>dave</b>: First!</div>
+<form><textarea>Leave a comment</textarea><button>Post comment</button></form></section>
+</main></div>
+<footer><p>Copyright 2026 Example Blog. All rights reserved.</p><a href="/privacy">Privacy policy</a> <a href="/terms">Terms of service</a></footer>
+<script>window.analytics = {track: function(){ return 1; }};</script>
+</body></html>
