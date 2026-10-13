@@ -18,7 +18,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 signal-hook = "0.4.4"
 tempfile = "3.27.0"
-toz-core = { package = "varde-toz-core", path = "../toz-core", version = "2.0.1" }
+toz-core = { package = "varde-toz-core", path = "../toz-core", version = "2.0.2" }
 varde-contracts.workspace = true
 varde-core.workspace = true
 walkdir = "2.5.0"

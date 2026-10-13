@@ -21,7 +21,7 @@ varde-workflow = { path = "../workflow/varde-workflow" }
 varde-toz = { path = "../toz/crates/toz" }
 varde-learn = { path = "../learn/crates/varde-learn" }
 varde-doc = { path = "../doc/crates/varde-doc" }
-toz-core = { package = "varde-toz-core", path = "../toz/crates/toz-core", version = "2.0.1" }
+toz-core = { package = "varde-toz-core", path = "../toz/crates/toz-core", version = "2.0.2" }
 varde-learn-core = { path = "../learn/crates/varde-learn-core" }
 varde-workflow-core = { path = "../workflow/md-core" }
 toml = "0.8"

@@ -15,15 +15,15 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2.0.1"
+version = "2.0.2"
 edition = "2024"
 license = "MIT"
 rust-version = "1.88.0"
 
 [workspace.dependencies]
 anyhow = "1"
-varde-core = { path = "varde-core", version = "2.0.1" }
-varde-contracts = { path = "varde-contracts", version = "2.0.1" }
+varde-core = { path = "varde-core", version = "2.0.2" }
+varde-contracts = { path = "varde-contracts", version = "2.0.2" }
 
 # Dev builds omit debug info (panics keep file:line); a debugger session opts in with CARGO_PROFILE_DEV_DEBUG=true.
 [profile.dev]

@@ -3255,7 +3255,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "varde"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "assert_cmd",
  "ast-grep-language",
@@ -3285,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "varde-code"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "ast-grep-core",
@@ -3312,14 +3312,14 @@ dependencies = [
 
 [[package]]
 name = "varde-contracts"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "varde-core",
 ]
 
 [[package]]
 name = "varde-core"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "indexmap",
  "libc",
@@ -3331,7 +3331,7 @@ dependencies = [
 
 [[package]]
 name = "varde-doc"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -3348,7 +3348,7 @@ dependencies = [
 
 [[package]]
 name = "varde-learn"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -3361,7 +3361,7 @@ dependencies = [
 
 [[package]]
 name = "varde-learn-core"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "fs2",
  "libc",
@@ -3379,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "varde-toz"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3399,7 +3399,7 @@ dependencies = [
 
 [[package]]
 name = "varde-toz-core"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3423,7 +3423,7 @@ dependencies = [
 
 [[package]]
 name = "varde-workflow"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -3441,7 +3441,7 @@ dependencies = [
 
 [[package]]
 name = "varde-workflow-core"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "serde",
  "serde_yaml",
