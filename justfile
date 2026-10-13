@@ -37,6 +37,7 @@ test-root:
 
 # The release license gate: fails on a dependency outside the permissive allow-list.
 test-licenses:
+    PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s clis/code/scripts
     cargo fetch --locked --manifest-path clis/Cargo.toml
     python3 clis/code/scripts/gen-third-party-licenses.py
 

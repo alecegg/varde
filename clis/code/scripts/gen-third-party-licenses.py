@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate THIRD-PARTY-LICENSES.md — the attribution bundle for the crates
-that `varde-code` release binaries statically link (including every bundled
+that `varde` release binaries statically link (including every bundled
 tree-sitter grammar).
 
 Reproducible and tool-free: it reads the *actual* link-time dependency set
@@ -30,7 +30,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CRATE = "varde-code"
+CRATE = "varde"
+TARGETS = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+]
 
 # SPDX identifiers permitted in a redistributed binary. Every one is a
 # permissive (attribution-only) license — no copyleft (GPL/LGPL/MPL/AGPL/EPL/
@@ -51,21 +56,22 @@ def run(*args: str) -> str:
 
 
 def link_time_crates() -> set[tuple[str, str]]:
-    """The (name, version) set that actually links into the binary — runtime
-    and build dependencies, excluding dev-only crates."""
-    out = run(
-        "cargo", "tree", "--locked", "-p", CRATE,
-        "-e", "normal,build", "--prefix", "none", "--no-dedupe",
-    )
+    """The (name, version) set that links into the shipped `varde` binary on
+    any release target: runtime and build dependencies, no dev-only crates."""
     crates: set[tuple[str, str]] = set()
-    for line in out.splitlines():
-        toks = line.split()
-        if len(toks) < 2:
-            continue
-        name = toks[0]
-        ver = next((t for t in toks[1:] if t.startswith("v") and t[1:2].isdigit()), None)
-        if name and ver:
-            crates.add((name, ver.lstrip("v")))
+    for target in TARGETS:
+        out = run(
+            "cargo", "tree", "--locked", "-p", CRATE, "--target", target,
+            "-e", "normal,build", "--prefix", "none", "--no-dedupe",
+        )
+        for line in out.splitlines():
+            toks = line.split()
+            if len(toks) < 2:
+                continue
+            name = toks[0]
+            ver = next((t for t in toks[1:] if t.startswith("v") and t[1:2].isdigit()), None)
+            if name and ver:
+                crates.add((name, ver.lstrip("v")))
     return crates
 
 
@@ -86,28 +92,77 @@ def license_files(pkg: dict) -> dict[str, str]:
     return found
 
 
-def spdx_ids(expr: str) -> list[str]:
-    """The bare SPDX identifiers in a license expression (drops OR/AND/WITH
-    operators and parentheses). `A/B` slash-form is treated like `A OR B`."""
-    tokens = re.split(r"[()/\s]+|(?<=\s)(?:OR|AND|WITH)(?=\s)", expr)
-    ops = {"OR", "AND", "WITH", ""}
-    return [t for t in tokens if t and t not in ops]
+def spdx_allowed(expr: str) -> bool:
+    """Whether an SPDX expression can be satisfied using only ALLOWED_LICENSES:
+    an OR needs one allowed branch, an AND needs every term allowed, and a WITH
+    exception is accepted when its base id is allowed. `A/B` is `A OR B`.
+    Raises ValueError for an expression that does not parse."""
+    tokens = re.findall(r"\(|\)|[^\s()]+", expr.replace("/", " OR "))
+    pos = 0
+
+    def peek() -> str:
+        return tokens[pos] if pos < len(tokens) else ""
+
+    def take() -> str:
+        nonlocal pos
+        token = peek()
+        pos += 1
+        return token
+
+    def parse_or() -> bool:
+        result = parse_and()
+        while peek() == "OR":
+            take()
+            result = parse_and() or result
+        return result
+
+    def parse_and() -> bool:
+        result = parse_term()
+        while peek() == "AND":
+            take()
+            result = parse_term() and result
+        return result
+
+    def parse_term() -> bool:
+        if peek() == "(":
+            take()
+            result = parse_or()
+            if take() != ")":
+                raise ValueError(f"unbalanced parentheses in {expr!r}")
+            return result
+        token = take()
+        if token in ("", ")", "OR", "AND", "WITH"):
+            raise ValueError(f"unexpected {token!r} in {expr!r}")
+        if peek() == "WITH":
+            take()
+            if take() in ("", "(", ")", "OR", "AND", "WITH"):
+                raise ValueError(f"missing exception id in {expr!r}")
+        return token in ALLOWED_LICENSES
+
+    result = parse_or()
+    if pos != len(tokens):
+        raise ValueError(f"trailing {tokens[pos]!r} in {expr!r}")
+    return result
 
 
 def check_policy(pkgs: list[dict]) -> list[str]:
-    """Violations: a link-time crate whose license is unspecified or carries an
-    SPDX identifier outside ALLOWED_LICENSES."""
+    """Violations: a link-time crate with no SPDX `license` (a `license_file`
+    alone is not accepted) or whose expression cannot be satisfied with
+    ALLOWED_LICENSES."""
     violations: list[str] = []
     for p in pkgs:
+        label = f"{p['name']} {p['version']}"
         expr = p.get("license")
         if not expr:
-            if p.get("license_file"):
-                continue  # non-SPDX custom file — reviewed via the bundle
-            violations.append(f"{p['name']} {p['version']}: no license declared")
+            violations.append(f"{label}: no SPDX license declared")
             continue
-        bad = [i for i in spdx_ids(expr) if i not in ALLOWED_LICENSES]
-        if bad:
-            violations.append(f"{p['name']} {p['version']}: disallowed {bad} in {expr!r}")
+        try:
+            allowed = spdx_allowed(expr)
+        except ValueError as error:
+            violations.append(f"{label}: unparseable license: {error}")
+            continue
+        if not allowed:
+            violations.append(f"{label}: no allowed option in {expr!r}")
     return violations
 
 
@@ -158,8 +213,8 @@ def main() -> int:
     lines.append("# Third-party licenses")
     lines.append("")
     lines.append(
-        "`varde-code` release binaries statically link the Rust crates listed "
-        "below, including every bundled tree-sitter grammar. Their licenses are "
+        "`varde` release binaries statically link the Rust crates listed below, "
+        "including every bundled tree-sitter grammar. Their licenses are "
         "permissive (MIT / Apache-2.0 / BSD / ISC / Unicode-3.0 / Unlicense / "
         "CC0) and require reproducing the copyright and license notices when "
         "redistributed in binary form. Those notices are included verbatim here."
