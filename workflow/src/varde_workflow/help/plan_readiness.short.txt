@@ -1,0 +1,10 @@
+Report blockers and available workflow actions
+
+Usage: varde plan readiness [OPTIONS] <PLAN>
+
+Arguments:
+  <PLAN>  
+
+Options:
+      --json  
+  -h, --help  Print help (see more with '--help')

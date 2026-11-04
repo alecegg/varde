@@ -1,0 +1,3 @@
+Report delivery status and inbox lag
+
+Usage: varde msg status [--json] [--now <TIMESTAMP>]

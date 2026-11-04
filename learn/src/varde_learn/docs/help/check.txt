@@ -1,0 +1,21 @@
+Check skill Markdown: prose units, sentence length, sections and layout; SKILL.md frontmatter against the agentskills.io spec; FLOW.md freshness; and a document's typed blocks
+
+Usage: varde learn check [OPTIONS] <PATH>...
+
+Arguments:
+  <PATH>...  Skill directories or SKILL.md files (lint, frontmatter and FLOW.md freshness), or Markdown documents (lint and typed blocks)
+
+Options:
+      --json   Print the shared JSON envelope for lint and frontmatter, one per line; the FLOW.md check stays text
+      --write  Write each skill's FLOW.md instead of checking it
+  -h, --help   Print help
+
+Exit status is 1 when any check reports an error and 2 for a usage error. A glob over a non-skill directory aborts the lint check.
+
+Page quality warnings (`varde learn check <doc.md>`, never fail):
+
+- `quality-first-block` the first block after the title and headings is not prose
+- `quality-stale-reference` prose says "see above" or "as noted earlier" and the like
+- `quality-open-choice` an open choice block sits before the last heading
+- `quality-covers` a covers id matches no block, heading or task id
+- `quality-bare-run` a recap page has more than 3 blocks in a row without prose

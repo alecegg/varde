@@ -1,0 +1,11 @@
+Print a step-sized how-topic for a skill or agent, or list its topics
+
+Usage: varde learn how [OPTIONS] <SKILL> [STEP]
+
+Arguments:
+  <SKILL>  Skill or agent id; lists one "<step> - <summary>" line per topic
+  [STEP]   Step id; prints the topic body
+
+Options:
+      --json  Print the shared JSON envelope instead of text
+  -h, --help  Print help

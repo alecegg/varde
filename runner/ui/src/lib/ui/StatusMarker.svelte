@@ -1,0 +1,1 @@
+<script lang="ts">import Badge from './Badge.svelte';let {status,label}:{status:'running'|'success'|'waiting'|'blocked'|'needs-input'|'idle';label:string}=$props();</script><Badge tone={status}><span aria-hidden="true">{status==='success'?'✓':status==='blocked'?'!':status==='waiting'?'◷':'●'}</span> {label}</Badge>

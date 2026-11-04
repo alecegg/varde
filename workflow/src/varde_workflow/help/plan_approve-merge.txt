@@ -1,0 +1,11 @@
+Check the user's merge approval for a plan (read-only)
+
+Usage: varde plan approve-merge <PLAN>
+
+The user records approval in the dashboard; this command only checks it and syncs the plan display.
+
+Arguments:
+  <PLAN>  Plan path or identifier
+
+Options:
+  -h, --help  Print help

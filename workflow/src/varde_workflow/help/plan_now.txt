@@ -1,0 +1,28 @@
+Set or clear a plan's current progress line
+
+Usage: varde plan now [OPTIONS] <PLAN> [TEXT]
+
+Arguments:
+  <PLAN>
+          
+
+  [TEXT]
+          
+
+Options:
+      --clear
+          
+
+      --waiting <REASON>
+          Store `waiting: <reason>`, which holds off stale events for a while
+
+      --repo <REPO>
+          Repository whose commits and `owns` paths `reviewed_commit` refers to
+
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Sets or clears a plan's current progress line; `msg` carries free text between agents, while `watch` reports plan state.

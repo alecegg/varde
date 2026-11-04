@@ -1,0 +1,14 @@
+Import friction Markdown files from a directory, or a portable event export file
+
+Usage: varde learn friction import [OPTIONS] [--repository <ROOT>] <SOURCE>
+
+Arguments:
+  <SOURCE>  Markdown event export file, or directory containing friction Markdown files
+
+Options:
+      --repository <ROOT>  Repository root to associate with imported legacy occurrences (directory mode)
+      --dry-run            Validate and report without creating or changing the friction store
+      --offset <OFFSET>    Number of file results to skip in the report [default: 0]
+      --limit <LIMIT>      Maximum file results to return (1 to 1000) [default: 100]
+      --json               Print the shared machine-readable output envelope
+  -h, --help               Print help

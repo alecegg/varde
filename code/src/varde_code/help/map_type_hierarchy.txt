@@ -1,0 +1,8 @@
+Query: type hierarchy for a symbol. (see `type_hierarchy` help for inputs)
+
+Usage: varde map type_hierarchy [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, name?, filePath? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

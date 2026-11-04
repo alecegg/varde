@@ -1,0 +1,39 @@
+/* Ranking widget (inputs_ordered), owned by dw-ranking. Tokens only.
+   The li stays display:list-item; the rank number is a CSS counter drawn as a
+   badge on the inner .ranking-line (list-style is none, the badge replaces it). */
+.ranking-group { min-inline-size: 0; }
+.ranking-list { list-style: none; counter-reset: rank; margin-block: var(--vd-space-2); padding: 0; }
+.ranking-row { display: list-item; counter-increment: rank; margin-block: var(--vd-space-1); touch-action: pan-y; }
+.ranking-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--vd-space-3); min-block-size: var(--vd-control-height); padding: var(--vd-space-1) var(--vd-space-2); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); background: var(--vd-surface-elevated); box-shadow: var(--vd-shadow-1); }
+.ranking-line::before { content: counter(rank); flex: none; box-sizing: border-box; min-inline-size: var(--vd-space-7); block-size: var(--vd-space-7); display: grid; place-items: center; border-radius: var(--vd-radius-full); background: var(--vd-surface-sunk); border: 1px solid var(--vd-border-interactive); font-size: var(--vd-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--vd-text); }
+.ranking-grip { display: none; flex: none; inline-size: var(--vd-space-4); block-size: var(--vd-space-5); background: radial-gradient(circle, var(--vd-ink-50) 1.5px, transparent 1.6px) 0 0 / 6px 6px; touch-action: none; }
+.ranking-text { display: flex; flex-direction: column; flex: 1 1 calc(var(--vd-space-7) * 4); min-inline-size: 0; overflow-wrap: anywhere; }
+.ranking-text .choice-detail { color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.ranking-buttons { display: flex; gap: var(--vd-space-1); flex: none; margin-inline-start: auto; }
+.ranking-move { padding: 0; line-height: 1; touch-action: manipulation; }
+.ranking .vb-card { overflow: visible; }
+.ranking-live, .ranking-hint { color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+
+/* Pointer drag exists only for a fine pointer; touch uses the buttons. */
+@media (pointer: fine) {
+  .ranking-row[draggable="true"] { cursor: grab; }
+  .ranking-row[draggable="true"] .ranking-grip { display: block; }
+}
+.ranking-row.dragging > .ranking-line { background: var(--vd-surface-elevated); opacity: 0.85; cursor: grabbing; }
+/* drop indicator: a line on the side the dragged row will land */
+.ranking-row.over-before > .ranking-line { box-shadow: 0 -3px 0 0 var(--vd-accent); }
+.ranking-row.over-after > .ranking-line { box-shadow: 0 3px 0 0 var(--vd-accent); }
+
+@media (forced-colors: active) {
+  .ranking-line::before { forced-color-adjust: auto; border-color: CanvasText; }
+  .ranking-grip { background: radial-gradient(circle, CanvasText 1.5px, transparent 1.6px) 0 0 / 6px 6px; }
+  .ranking-row.over-before > .ranking-line { border-block-start: 4px solid Highlight; }
+  .ranking-row.over-after > .ranking-line { border-block-end: 4px solid Highlight; }
+  .ranking-row.dragging > .ranking-line { border-style: dashed; }
+}
+
+/* print: nothing scrolls or clips; the label takes its natural width */
+@media print {
+  .ranking .vb-card, .ranking-row, .ranking-line { overflow: visible; min-inline-size: 0; }
+  .ranking-text { flex-basis: auto; }
+}

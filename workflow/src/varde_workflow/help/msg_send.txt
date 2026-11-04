@@ -1,0 +1,31 @@
+Append one message line to the inbox store
+
+Usage: varde msg send [OPTIONS] --from <FROM> --to <TO> --kind <KIND> <TEXT>
+
+Arguments:
+  <TEXT>
+          One-line message text
+
+Options:
+      --from <FROM>
+          Sender name
+
+      --to <TO>
+          Recipient address: `main`, an agent name, or a plan id
+
+      --kind <KIND>
+          Message kind: blocked, needs-user, done, info, info-failure, stale, or merge-ready
+
+      --notes <NOTES>
+          Optional absolute path to a longer note
+
+      --reply-to <ID>
+          Message ID this message answers
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+`msg` carries free text between agents; `watch` reports plan state. Text is one line of at most 300 characters (the encoded line must stay within
+1000 bytes). `main` is the address the per-prompt hook reads. `varde plan watch`
+writes its own events here as from `varde-watch`, kinds stale, blocked,
+merge-ready, needs-user, done and info.

@@ -1,0 +1,25 @@
+/* 30-menu: per-block action menu. Tokens only; logical properties. */
+/* text-flow blocks reserve a side gutter; wide blocks (visual, widget, code, table...) reserve a top row so their width is untouched */
+.block.has-menu { padding-block-start: var(--vd-control-height); min-block-size: var(--vd-control-height); }
+.block.has-menu:is([data-block-type="prose"], [data-block-type="heading"], [data-block-type="list"], :not([data-block-type])) { padding-block-start: var(--vd-space-1); padding-inline-end: var(--vd-control-height); }
+.menu-btn { position: absolute; inset-block-start: 0; inset-inline-end: 0; inline-size: var(--vd-control-height); block-size: var(--vd-control-height); box-sizing: border-box; min-inline-size: 44px; min-block-size: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); background: var(--vd-surface); color: var(--vd-text); font-size: var(--vd-text-lg); font-weight: 700; line-height: 1; }
+.block[data-block-type="heading"] > .menu-btn { inset-block-start: auto; inset-block-end: 0; }
+.menu-btn:focus-visible, .menu-btn[aria-expanded="true"] { border-color: var(--vd-text); color: var(--vd-text); }
+.menu-btn[aria-expanded="true"] { background: var(--vd-pressed); }
+@media (hover: hover) { .menu-btn:hover { border-color: var(--vd-text); background: var(--vd-hover); } }
+.menu-popup { position: fixed; z-index: 1000; display: flex; flex-direction: column; min-inline-size: 11rem; max-inline-size: calc(100vw - var(--vd-space-4)); padding: var(--vd-space-1); background: var(--vd-surface-elevated); color: var(--vd-text); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); box-shadow: var(--vd-shadow-3); }
+.menu-item { justify-content: flex-start; text-align: start; border-color: transparent; border-radius: var(--vd-radius-s); }
+.menu-item:focus-visible { outline-offset: -2px; }
+.menu-live { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.menu-copy-buffer { position: fixed; inset-block-start: 0; inset-inline-start: 0; inline-size: 1px; block-size: 1px; opacity: 0; }
+@media (forced-colors: active) {
+  .menu-btn:focus-visible, .menu-btn[aria-expanded="true"] { border-color: ButtonBorder; }
+  .menu-btn { color: ButtonText; }
+  .menu-popup { border-color: CanvasText; }
+  .menu-item[aria-selected="true"], .menu-item:focus-visible { outline: 2px solid Highlight; }
+}
+@media (prefers-reduced-motion: reduce) { .menu-btn, .menu-item { transition: none; } }
+@media print {
+  .menu-btn, .menu-popup, .menu-live, .menu-copy-buffer { display: none; }
+  .block.has-menu { padding-inline-end: 0; padding-block-start: var(--vd-space-1); min-block-size: 0; }
+}

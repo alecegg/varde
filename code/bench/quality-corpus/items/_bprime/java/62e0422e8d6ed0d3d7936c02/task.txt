@@ -1,0 +1,2 @@
+Read an uppercase roman numeral in standard subtractive notation and return its value.
+Input domain: uppercase letters M, D, C, L, X, V and I in standard subtractive notation, up to 3999; empty text means zero.

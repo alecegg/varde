@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+
+[ "${1:-0}" = 1 ] && exit 0
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/justfile" ] && [ -d "$root/.githooks" ] || exit 0
+cd "$root"
+. "$(dirname "$0")/lib.sh"
+record_guardrail_on_exit hook-post-merge
+
+old_head=$(git rev-parse --verify ORIG_HEAD 2>/dev/null || true)
+new_head=$(git rev-parse --verify HEAD 2>/dev/null || true)
+current_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+if [ "$current_branch" = main ] && [ -n "$old_head" ] && [ -n "$new_head" ] && [ "$old_head" != "$new_head" ]; then
+    if ! check_new_main_commits "$old_head..$new_head"; then
+        echo "Post-merge approval check failed; record approval in the dashboard Mailbox." >&2
+    fi
+fi
+
+# pre-merge-commit already checked a non-fast-forward merge commit.
+merge_subject=$(git reflog -1 --format=%gs HEAD)
+case "$merge_subject" in
+    *"Merge made by"*) exit 0 ;;
+esac
+
+if ! run_pyright_at_stage pre-merge-commit; then
+    echo "Post-merge pyright check failed; fix the reported errors before pushing." >&2
+    exit 1
+fi

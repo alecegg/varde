@@ -1,0 +1,78 @@
+/* Data-model graph layout: server-laid-out SVG drawing in a scroll region, a relation text list and entity cards. Colours come only from --vd-* tokens; change tones from 47-change.css. */
+.vd-er { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-3); min-inline-size: 0; }
+.vd-er-view { overflow: auto; max-inline-size: 100%; max-block-size: 40rem; border: 1px solid var(--vd-border); border-radius: var(--vd-radius-m); background: var(--vd-surface); scroll-padding: 8px; }
+.vd-er-view:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-er-svg { display: block; max-inline-size: none; overflow: visible; }
+.vd-er-node:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-er-box { fill: var(--vd-surface); stroke: var(--vd-text-secondary); stroke-width: 1.5; }
+.vd-er-box.vd-change-added, .vd-er-box.vd-change-modified, .vd-er-box.vd-change-removed, .vd-er-box.vd-change-renamed { stroke: var(--vd-change-edge); stroke-width: 2.5; }
+.vd-er-head { fill: var(--vd-surface-sunk); stroke: none; }
+.vd-er-name, .vd-er-field, .vd-er-more, .vd-er-end { fill: var(--vd-text); font: 13px var(--vd-font-body); pointer-events: none; }
+.vd-er-name { font-weight: 600; }
+.vd-er-field { font-family: var(--vd-font-mono); font-size: 12px; }
+.vd-er-keyed { font-weight: 700; }
+.vd-er-field.vd-change-added, .vd-er-field.vd-change-modified, .vd-er-field.vd-change-renamed { fill: var(--vd-change-text); }
+.vd-er-field.vd-change-removed { fill: var(--vd-change-text); text-decoration: line-through; }
+.vd-er-more { fill: var(--vd-text-secondary); font-size: 12px; font-style: italic; }
+.vd-er-end { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.vd-er-line { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.5; }
+.vd-er-inferred { stroke-dasharray: 6 4; }
+.vd-er-active .vd-er-edge:not(.vd-er-hot) { opacity: 0.35; }
+.vd-er-edge.vd-er-hot .vd-er-line { stroke: var(--vd-accent); stroke-width: 3; }
+.vd-er-node.vd-er-on .vd-er-box { stroke: var(--vd-accent); stroke-width: 3.5; }
+.vd-er-node.vd-er-near .vd-er-box { stroke: var(--vd-accent); stroke-width: 2.5; stroke-dasharray: 5 3; }
+.vd-er-relations { margin: 0; padding-inline-start: var(--vd-space-5); min-inline-size: 0; }
+.vd-er-rel { overflow-wrap: anywhere; padding-block: var(--vd-space-1); }
+.vd-er-rel.vd-er-hot { font-weight: 600; text-decoration: underline; }
+.vd-er-none { margin: 0; color: var(--vd-text-secondary); }
+.vd-er-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: var(--vd-space-3); min-inline-size: 0; }
+.vd-er-card > .vb-card { min-inline-size: 0; }
+.vd-er-card { min-inline-size: 0; border-radius: var(--vd-radius-l); }
+.vd-er-card:target > .vb-card, .vd-er-card.vd-er-on > .vb-card { border-color: var(--vd-accent); border-width: 3px; }
+.vd-er-card.vd-er-near > .vb-card { border-color: var(--vd-accent); border-style: dashed; }
+.vd-er-fk { display: inline-flex; align-items: center; min-block-size: 44px; box-sizing: border-box; color: var(--vd-accent); text-decoration: underline; overflow-wrap: anywhere; }
+.vd-er-fk:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+@container vd-doc (max-width: 44rem) {
+  .vd-er-view { display: none; }
+  .vd-er-cards { grid-template-columns: minmax(0, 1fr); }
+}
+@media (forced-colors: active) {
+  .vd-er-view, .vd-er-card > .vb-card { border-color: CanvasText; }
+  .vd-er-box, .vd-er-head { fill: Canvas; stroke: CanvasText; }
+  .vd-er-name, .vd-er-field, .vd-er-more, .vd-er-end { fill: CanvasText; }
+  .vd-er-line { stroke: CanvasText; }
+  .vd-er-edge.vd-er-hot .vd-er-line, .vd-er-node.vd-er-on .vd-er-box, .vd-er-node.vd-er-near .vd-er-box { stroke: Highlight; }
+  .vd-er-card.vd-er-on > .vb-card, .vd-er-card.vd-er-near > .vb-card, .vd-er-card:target > .vb-card { border-color: Highlight; }
+  .vd-er-fk { color: LinkText; }
+}
+@media print {
+  .vb-sr { position: static; clip-path: none; inline-size: auto; block-size: auto; overflow: visible; white-space: normal; }
+  .vd-er-view { display: block; overflow: visible; max-block-size: none; }
+  .vd-er-svg { max-inline-size: 100%; inline-size: 100%; block-size: auto; }
+  .vd-er-cards, .vd-er-card, .vd-er-card > .vb-card, .vd-er-rel { overflow: visible; block-size: auto; max-block-size: none; contain: none; white-space: normal; overflow-wrap: anywhere; }
+  .vd-er-card { break-inside: auto; }
+  .vd-er-active .vd-er-edge:not(.vd-er-hot) { opacity: 1; }
+}
+
+/* vb-fields: the field, request and response tables of data-model and endpoint cards. Words never break mid-word; a narrow card scrolls sideways. */
+.vb-fields-scroll { position: relative; overflow-x: auto; inline-size: 100%; max-inline-size: 100%; min-inline-size: 0; }
+.vb-fields-scroll:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vb-fields { display: table; table-layout: auto; inline-size: 100%; min-inline-size: min-content; font-size: var(--vd-text-sm); border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.vb-fields th, .vb-fields td { padding: 0.4rem 0.6rem; line-height: 1.3; text-align: start; vertical-align: top; hyphens: none; border-block-end: 1px solid var(--vd-border); }
+.vb-fields th, .vb-fields td, .vb-fields .vd-change-name, .vb-fields .vd-change-old, .vb-fields .vd-change-was { overflow-wrap: normal; word-break: normal; }
+.vb-fields td { min-inline-size: 6ch; vertical-align: top; }
+.vb-fields th:first-child, .vb-fields td:first-child { min-inline-size: 10ch; }
+.vb-fields th:nth-child(2), .vb-fields td:nth-child(2) { min-inline-size: 8ch; }
+.vb-sr { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.vb-fields thead th { white-space: nowrap; font-weight: 600; border-block-end: 2px solid var(--vd-border-interactive); background: var(--vd-surface-elevated); }
+.vb-fields code, .vb-fields .vb-badge, .vb-fields .vd-change-badge { white-space: nowrap; }
+.vb-fields td a { display: inline-flex; align-items: center; box-sizing: border-box; min-block-size: 44px; min-inline-size: 44px; white-space: nowrap; }
+@media (forced-colors: active) {
+  .vb-fields th, .vb-fields td { border-block-end-color: CanvasText; }
+}
+@media print {
+  .vb-fields-scroll { overflow: visible; }
+  .vb-fields .vb-sr { position: static; clip-path: none; inline-size: auto; block-size: auto; overflow: visible; white-space: normal; }
+  .vb-fields { inline-size: 100%; max-inline-size: 100%; min-inline-size: 0; table-layout: fixed; }
+  .vb-fields thead th, .vb-fields th, .vb-fields td, .vb-fields td a, .vb-fields code, .vb-fields .vb-badge, .vb-fields .vd-change-badge, .vb-fields .vd-change-name, .vb-fields .vd-change-old, .vb-fields .vd-change-was { white-space: normal; overflow-wrap: anywhere; word-break: break-word; min-inline-size: 0; min-block-size: 0; }
+}

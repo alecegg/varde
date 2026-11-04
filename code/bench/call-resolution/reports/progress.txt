@@ -1,0 +1,20 @@
+Baseline run 2 (comparable target keys) finished 2026-10-18. Existing adapter, dev split only, 26 pinned repos, serial nice, 60-minute per-repo export cap. No --split test run.
+
+Harness fix: ground-truth ids are parsed into canonical (file, declared name, line) keys by audit/targets.py per group grammar, and the existing adapter now emits callee_file/callee_name/callee_line for every resolved edge. Match rule: same repo-relative file and same declared name; if the ground-truth id carries a line, equal lines are required. Java/C# ids carry no line, so same-file overloads collapse (their precision is an upper bound). Unmatched resolved targets are recorded as index:<file>:<line>:<name>. Adapter build failures now raise with the last 4 KB of inner stderr.
+
+Sanity gate before the full rerun (single repo, non-zero matches): sharkdp/fd precision 0.7059, pytest-dev/pytest 0.7931, apache/commons-io 0.4839, google/leveldb two matches.
+
+Full dev results (all 300 sites per language, failed sites counted unresolved):
+python: precision=0.8000 recall=0.4826 resolved_share=0.3000 depth_error_le1=0.9757
+typescript: precision=0.9286 recall=0.1327 resolved_share=0.0933 depth_error_le1=0.9902
+java: precision=0.5181 recall=0.3166 resolved_share=0.2767 depth_error_le1=0.9927
+csharp: precision=0.7143 recall=0.0721 resolved_share=0.0467 depth_error_le1=0.9963
+go: precision=0.9231 recall=0.4998 resolved_share=0.3900 depth_error_le1=0.9966
+rust: precision=0.6029 recall=0.3200 resolved_share=0.2267 depth_error_le1=0.9956
+cpp: precision=0.6364 recall=0.2059 resolved_share=0.0803 depth_error_le1=0.9948
+
+Exported edges are cached per repo and pinned SHA at /Users/alec/.cache/qsca-edges/<repo>__<sha>.jsonl (20 repos, 433 MB). Metrics can be recomputed without re-indexing: `uv run python -m run.runner --adapter existing --split dev --repo-cache /Users/alec/.cache/qsca-repos --metrics-only --records-dir reports --metrics-json <tmp>/metrics.json`.
+
+Four worker failures are index crashes in read-only code/**: JabRef AttributeError NoneType.named_children at extract/langs/kotlin.py:40 on build-logic/src/main/kotlin/org/jabref/gradle/Toolchains.kt; roslyn RecursionError in entity walk (entity.py:106) on src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs; runtime RecursionError at extract/langs/c.py:97; prettier RecursionError at extract/langs/javascript.py:232 on tests/format/flow/flow-repo/union-intersection/gen_big_disjoint_union.js. Timeouts unchanged: simdjson (>5h, skipped on rerun) and dotnet/aspnetcore (60m adapter cap). Full evidence in repo-failures.jsonl and timeouts.jsonl.
+
+reports/baseline-metrics.json now stores all-sites metrics plus metrics_successful_repos_only (replaces the old metrics_failure_sites_unresolved variant) and depth_error_le1 cluster intervals.

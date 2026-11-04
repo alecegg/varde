@@ -1,0 +1,2 @@
+Fold an integer index into the range from zero up to but excluding the size.
+Input domain: integer indices and an integer size; for a size above zero an index below zero or at or above the size is folded by adding or removing multiples of the size, and a size of zero or less yields zero.

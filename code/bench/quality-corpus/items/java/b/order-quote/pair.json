@@ -1,0 +1,13 @@
+{
+  "pair_group_id": "7f08e368d17420bd5fbc4772",
+  "task": "order-quote",
+  "language": "java",
+  "part": "b",
+  "pairs": [
+    {"pair_id":"da14fd9ca486d762a6ae805a","left_id":"6079dca0057689b34e898156","right_id":"43dfae6af51202de78af67a1","left":"sensible.java","right":"monolith.java","left_role":"sensible","right_role":"over-monolith"},
+    {"pair_id":"c042fac9d26a2ee119c93efa","left_id":"6079dca0057689b34e898156","right_id":"c5fe82d0c57fce580d885f30","left":"sensible.java","right":"tiny.java","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"b8d6a2e9ef9b233eaa2b6731","left_id":"6079dca0057689b34e898156","right_id":"a36b70e96918d75c4d7920e8","left":"sensible.java","right":"padded.java","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"61887620ccd9b09d9edf4a14","left_id":"6079dca0057689b34e898156","right_id":"2f2829ac33536c97b2637149","left":"sensible.java","right":"sizematched.java","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"f41a9d7d9e27643735cd8e19","left_id":"6079dca0057689b34e898156","right_id":"d56f184d19d4d8db81788f2a","left":"sensible.java","right":"namematched.java","left_role":"sensible","right_role":"over-split"}
+  ]
+}

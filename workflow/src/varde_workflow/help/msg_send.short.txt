@@ -1,0 +1,14 @@
+Append one message line to the inbox store
+
+Usage: varde msg send [OPTIONS] --from <FROM> --to <TO> --kind <KIND> <TEXT>
+
+Arguments:
+  <TEXT>  One-line message text
+
+Options:
+      --from <FROM>    Sender name
+      --to <TO>        Recipient address: `main`, an agent name, or a plan id
+      --kind <KIND>    Message kind: blocked, needs-user, done, info, info-failure, stale, or merge-ready
+      --notes <NOTES>  Optional absolute path to a longer note
+      --reply-to <ID>  Message ID this message answers
+  -h, --help           Print help (see more with '--help')

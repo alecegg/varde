@@ -1,0 +1,48 @@
+{
+  "classification": "unchanged",
+  "stdout_stderr": {
+    "bind": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "list": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"bindings\": [{\"address\": \"worker\", \"bound_at\": \"2026-10-22T12:00:00Z\", \"cwd\": \"<TMP>/working\", \"harness\": \"claude\", \"last_seen\": \"2026-10-22T12:00:00Z\", \"session_id\": \"session\", \"stale\": false, \"token_id\": \"00000002\", \"wake_context\": {\"agent_id\": \"agent-fixed\", \"cwd\": \"<TMP>/working\", \"harness\": \"codex\", \"paseo_id\": \"paseo-fixed\", \"runner_endpoint\": \"endpoint-fixed\", \"session_id\": \"session\"}}], \"store\": \"<TMP>/working/.cache/inbox\"}\n"
+    },
+    "new": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "[varde-address: worker vt1.AEAQCAIBAEAQCAIBAEAQCAIBAE]\n"
+    },
+    "refresh": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "unbind": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "store": {
+    ".cache/inbox/addresses/worker/current": {
+      "bytes": "",
+      "mode": null
+    },
+    ".cache/inbox/addresses/worker/tokens/00000002.json": {
+      "bytes": "{\"token_id\":\"00000002\",\"name\":\"worker\",\"sha256\":\"0fbb3d282e08771ac7186c1be226eb3d33d355ed26999dd04ec3a595b8701852\",\"issued_at\":\"2026-10-22T12:00:00Z\",\"expires_at\":\"2026-10-23T12:00:00Z\",\"uses_left\":0,\"supersede\":false,\"issuer\":\"cli\"}",
+      "mode": "0600"
+    },
+    ".cache/inbox/bindings/claude-3f3af1ecebbd1410ab417ec0d27bbfcb5d340e177ae159b59fc8626c2dfd9175.json": {
+      "bytes": "{\"address\":\"worker\",\"harness\":\"claude\",\"session_id\":\"session\",\"bound_at\":\"2026-10-22T12:00:00Z\",\"cwd\":\"<TMP>/working\",\"token_id\":\"00000002\",\"last_seen\":\"2026-10-22T12:00:00Z\",\"wake_context\":{\"harness\":\"codex\",\"session_id\":\"session\",\"cwd\":\"<TMP>/working\",\"paseo_id\":\"paseo-fixed\",\"agent_id\":\"agent-fixed\",\"runner_endpoint\":\"endpoint-fixed\"}}",
+      "mode": "0600"
+    },
+    ".cache/inbox/events.jsonl": {
+      "bytes": "{\"event\":\"bind\",\"at\":\"2026-10-22T12:00:00Z\",\"address\":\"worker\",\"session_key\":\"claude-3f3af1ecebbd1410ab417ec0d27bbfcb5d340e177ae159b59fc8626c2dfd9175\"}\n{\"event\":\"unbind\",\"at\":\"2026-10-22T12:00:00Z\",\"address\":\"worker\"}\n",
+      "mode": "0644"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "pair_group_id": "caf82108c219a611f01b4302",
+  "task": "invoice-aging",
+  "language": "python",
+  "pairs": [
+    {
+      "pair_id": "c034b69678b67fbe2ad1c4b7",
+      "left_id": "863437eb4e1343777d67769b",
+      "right_id": "f88c810e70a5d2a5af1c6053",
+      "left": "sensible.py",
+      "right": "tiny.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "bdc8a6ceb5be4924318f0cd7",
+      "left_id": "886cfbf6c7ec167669d57513",
+      "right_id": "e809f89798910d5b7e3c51cf",
+      "left": "sensible.py",
+      "right": "padded.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "267c09b08b99a3f539365eb0",
+      "left_id": "e1b79bf1c5445bdb0c0deed3",
+      "right_id": "52d15c961d9940e68e0c1e9c",
+      "left": "sensible.py",
+      "right": "sizematched.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "ffc495aec48e89ebcd60536f",
+      "left_id": "4445debe452e1aab573629e4",
+      "right_id": "a7bed50efd129e6d251dfcc8",
+      "left": "sensible.py",
+      "right": "namematched.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "4d35027faa56db78e331ecd9",
+      "left_id": "bae8193afa04f8917f5adfaf",
+      "right_id": "9c39a87b5cfb430455ea8b5f",
+      "left": "sensible.py",
+      "right": "monolith.py",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "pair_group_id": "32169bcc16cea7be5bc3a90c",
+  "task": "clinic-booking",
+  "language": "csharp",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "8a3669ee8ba3c05e1cb6c64c",
+      "left_id": "16cf5c249c0068f8bf24e0e2",
+      "right_id": "2e464ec87ce554952828ee76",
+      "left": "sensible.cs",
+      "right": "monolith.cs",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    },
+    {
+      "pair_id": "90635812327316b29347dadb",
+      "left_id": "16cf5c249c0068f8bf24e0e2",
+      "right_id": "270dabcf1950b2a9c4448ca3",
+      "left": "sensible.cs",
+      "right": "tiny.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "58d8ebc0ccd80aba8006710b",
+      "left_id": "16cf5c249c0068f8bf24e0e2",
+      "right_id": "2071fc3d2d6239ac5a9915ae",
+      "left": "sensible.cs",
+      "right": "padded.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "b102c6ab99f20f38951cce08",
+      "left_id": "16cf5c249c0068f8bf24e0e2",
+      "right_id": "5a045dddd43839632b10354f",
+      "left": "sensible.cs",
+      "right": "sizematched.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "a15e5cfef04fd3d83012fa78",
+      "left_id": "16cf5c249c0068f8bf24e0e2",
+      "right_id": "85b31054c7ff271d5d4cc3fb",
+      "left": "sensible.cs",
+      "right": "namematched.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    }
+  ]
+}

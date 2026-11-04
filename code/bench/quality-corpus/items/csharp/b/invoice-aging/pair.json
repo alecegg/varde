@@ -1,0 +1,33 @@
+{
+  "task": "invoice-aging",
+  "pair_group": "invoice-aging",
+  "language": "csharp",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "4d432b320ea40b4e1d8b19ee",
+      "left": "sensible.cs",
+      "right": "monolith.cs"
+    },
+    {
+      "pair_id": "0c11e8c46c5b3d271d3fdb84",
+      "left": "sensible.cs",
+      "right": "tiny.cs"
+    },
+    {
+      "pair_id": "77a8ef2c365229066b821ada",
+      "left": "sensible.cs",
+      "right": "padded.cs"
+    },
+    {
+      "pair_id": "e56cb70160cc35dcdd172597",
+      "left": "sensible.cs",
+      "right": "sizematched.cs"
+    },
+    {
+      "pair_id": "71b27ea086879dc5d37009b5",
+      "left": "sensible.cs",
+      "right": "namematched.cs"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "pair_group_id": "3e8c32a5dc3d5ba7b6a04d44",
+  "task": "clinic-booking",
+  "language": "go",
+  "part": "b",
+  "pairs": [
+    {"pair_id":"9f0b58a273daa788124744b1","left_id":"da6c04f68ae228affa435422","right_id":"5eafb0dd8fb72ab3f3298e14","left":"sensible.go","right":"monolith.go","left_role":"sensible","right_role":"over-monolith"},
+    {"pair_id":"a78d48fc68d7e67ff30390d2","left_id":"da6c04f68ae228affa435422","right_id":"02111f3c02a5bb8d9a7fadd9","left":"sensible.go","right":"tiny.go","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"9f72fdf8cffd22c7a7c7531d","left_id":"da6c04f68ae228affa435422","right_id":"8ecab09ed49d3245782fc527","left":"sensible.go","right":"padded.go","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"3d1ce191a9fd680ba8c434d0","left_id":"da6c04f68ae228affa435422","right_id":"34f22c075497af259f033597","left":"sensible.go","right":"sizematched.go","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"1945453cc81e7bb86e0e8949","left_id":"da6c04f68ae228affa435422","right_id":"93f0ad1b1619ec48ca6dcfb1","left":"sensible.go","right":"namematched.go","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"9651fe8dd6d22cfca4fcfd82","left_id":"da6c04f68ae228affa435422","right_id":"70f08cb1960eb7fc71923a87","left":"sensible.go","right":"alt-pipeline.go","left_role":"sensible","right_role":"alt-good","preference_neutral":true},
+    {"pair_id":"d41826932224d57f65e513cb","left_id":"da6c04f68ae228affa435422","right_id":"d77e8901d8e5826fdf04c20a","left":"sensible.go","right":"alt-table.go","left_role":"sensible","right_role":"alt-good","preference_neutral":true},
+    {"pair_id":"2e8dc440a59c8eb7aa89dee2","left_id":"da6c04f68ae228affa435422","right_id":"868631500a5c0b8d38ee17c9","left":"sensible.go","right":"alt-class.go","left_role":"sensible","right_role":"alt-good","preference_neutral":true}
+  ]
+}

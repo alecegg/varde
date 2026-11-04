@@ -1,0 +1,206 @@
+[calibration]
+id = "cal-2"
+formula = "vq2"
+validated = false
+anchors = "installed S curve (smap.PLACEHOLDER_ANCHORS), unchanged"
+
+[global]
+A = "0.45"
+wL = "0.4"
+w = "0.6"
+lam = "0.3"
+cFs = "6.0"
+dps = "2.0"
+ks = "6.0"
+ts = "8.0"
+H = 6
+kappa_F = "0.0"
+structure = "1.0"
+dominance = "2.00"
+sn = "0.0"
+sm = "0.0"
+sd = "1.0"
+
+[language.python]
+Plo = 32
+t_frag = 60
+Phi = 258
+c0 = 12
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 8
+t0 = 5
+p0 = 6
+cmin = 3
+X = "76.2"
+Y = "46.7"
+cap = "15.36"
+n0 = 1
+nm0 = 0
+dg0 = "0.333333"
+
+[language.typescript]
+Plo = 32
+t_frag = 60
+Phi = 765
+c0 = 51
+cs = 29
+ss = 170
+dp0 = 6
+k0 = 18
+t0 = 29
+p0 = 5
+cmin = 3
+X = "78.4"
+Y = "48.0"
+cap = "15.78"
+n0 = 1
+nm0 = 0
+dg0 = "0.333333"
+
+[language.csharp]
+Plo = 32
+t_frag = 60
+Phi = 483
+c0 = 36
+cs = 29
+ss = 170
+dp0 = 6
+k0 = 15
+t0 = 15
+p0 = 7
+cmin = 3
+X = "76.2"
+Y = "46.7"
+cap = "15.36"
+n0 = 0
+nm0 = 0
+dg0 = "0.333333"
+
+[language.java]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+n0 = 1
+nm0 = 0
+dg0 = "0.333333"
+
+[language.go]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+n0 = 1
+nm0 = 0
+dg0 = "0.333333"
+
+[language.rust]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+n0 = 1
+nm0 = 0
+dg0 = "0.333333"
+
+[language.cpp]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+n0 = 1
+nm0 = 0
+dg0 = "0.333333"
+
+[language.python.validation]
+state = "report-only"
+reason = "resolver verdict missing"
+provenance = "corpus-derived default region: q99 of 3041 verified-corpus dev-split functions in 251 files (python); k=4 agreed examples (t11 calibrate, clamped to corpus q50-q99); X is the 10th percentile of 255 good-set scores; Y and cap keep the installed ratios; not validated"
+
+[language.typescript.validation]
+state = "report-only"
+reason = "resolver verdict missing; agreement 0/3 agreed cells; Q5 0.8333 below threshold"
+provenance = "corpus-derived default region: q99 of 1888 verified-corpus dev-split functions in 295 files (typescript); k=0 agreed examples (t11 calibrate, clamped to corpus q50-q99); X is the 10th percentile of 295 good-set scores; Y and cap keep the installed ratios; not validated"
+
+[language.csharp.validation]
+state = "report-only"
+reason = "resolver verdict missing; agreement 0/3 agreed cells; constraints tune check FAIL; Q5 0.8 below threshold"
+provenance = "corpus-derived default region: q99 of 1081 verified-corpus dev-split functions in 180 files (csharp); k=0 agreed examples (t11 calibrate, clamped to corpus q50-q99); X is the 10th percentile of 180 good-set scores; Y and cap keep the installed ratios; not validated"
+
+[language.java.validation]
+state = "report-only"
+reason = "pending constraints"
+provenance = "copied from the placeholder; not calibrated"
+
+[language.go.validation]
+state = "report-only"
+reason = "pending constraints"
+provenance = "copied from the placeholder; not calibrated"
+
+[language.rust.validation]
+state = "report-only"
+reason = "pending constraints"
+provenance = "copied from the placeholder; not calibrated"
+
+[language.cpp.validation]
+state = "report-only"
+reason = "pending constraints"
+provenance = "copied from the placeholder; not calibrated"
+
+[limits.strength]
+cognitive = ["0.05", "2.0"]
+long_side = ["0.05", "2.0"]
+small_side = ["0.05", "2.0"]
+structure = ["0.05", "2.0"]
+names = ["0.05", "2.0"]
+
+[limits.thresholds]
+X = ["0", "100"]
+Y = ["0", "100"]
+cap = ["0", "100"]
+
+[limits.measures]
+n0 = ["0", "50"]
+nm0 = ["0", "50"]
+dg0 = ["0", "1"]
+sn = ["0", "2.0"]
+sm = ["0", "2.0"]
+sd = ["0", "2.0"]

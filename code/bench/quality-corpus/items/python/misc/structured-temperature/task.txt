@@ -1,0 +1,2 @@
+Convert Celsius to Fahrenheit and round to one decimal place.
+Input domain: Input is a decimal Celsius temperature; compute C*9/5+32 and round half up away from zero to one decimal. Supplied cases avoid ties.

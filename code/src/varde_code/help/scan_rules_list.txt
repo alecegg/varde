@@ -1,0 +1,8 @@
+List the rules that would run for a repo (built-in + user + repo scope, with override provenance) — no DB required, never scans. Example: `varde scan rules list --json '{"repoRoot":"."}'`. Repo and user scopes override built-ins by rule id; a higher-scope definition replaces the lower-scope definition. The repository scope defaults to `.varde-code/rules/`; user rules use the Varde config root. Run this first to see what `scan` would use before seeding or customizing anything. (see `rules_list` help for inputs)
+
+Usage: varde scan rules rules_list [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

@@ -1,0 +1,38 @@
+{
+  "code-extract": [
+    "code/src/varde_code/cli_extract.py"
+  ],
+  "code-index": [
+    "code/src/varde_code/cli_index.py"
+  ],
+  "code-query": [
+    "code/src/varde_code/cli_query.py"
+  ],
+  "code-rules": [],
+  "code-langs": [],
+  "code-scan": [
+    "code/src/varde_code/cli_scan.py",
+    "code/src/varde_code/cli_edit.py"
+  ],
+  "code-gate": [],
+  "knowledge": [
+    "learn/src/varde_learn/knowledge/module.py",
+    "learn/src/varde_learn/knowledge/help/.gitkeep"
+  ],
+  "workflow": [
+    "workflow/src/varde_workflow/module.py",
+    "workflow/src/varde_workflow/help/.gitkeep"
+  ],
+  "learn-friction": [
+    "learn/src/varde_learn/loop/cli_friction.py"
+  ],
+  "learn-diagnose": [
+    "learn/src/varde_learn/loop/cli_diagnose.py"
+  ],
+  "app-shell": [
+    "app/src/varde/module.py",
+    "app/src/varde/help/.gitkeep"
+  ],
+  "app-setup": [],
+  "app-glue": []
+}

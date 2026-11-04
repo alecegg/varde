@@ -1,0 +1,150 @@
+{
+  "skill_name": "varde-orchestrate",
+  "evals": [
+    {
+      "id": 5,
+      "prompt": "Build out the whole notifications feature.",
+      "expected_output": "Follows varde-orchestrate. With no group named, finds the notifications group because its frontmatter is shape: group and its nested children remain incomplete. Presents that group for selection, then stops without dispatching children or editing source until the user selects it.",
+      "assertions": [
+        "Identifies the request as orchestration of the existing notifications group without creating a new plan",
+        "Discovers the notifications group and names both nested child plans (schema and delivery)",
+        "Asks the user to select the discovered group without claiming any child ran",
+        "Leaves group plans and production source unchanged before selection"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 7,
+      "prompt": "Run the named notifications group end to end.",
+      "expected_output": "Follows varde-orchestrate and resolves the named notifications group from its shape: group plan and nested children. Orders schema before delivery from depends_on, builds the schema child first, and finds its one task already `blocked` on a product decision. Halts immediately: runs no later child, merges nothing, and reports the blocked child, its task, and the reason.",
+      "assertions": [
+        "Orders the schema child before delivery using the declared dependency",
+        "Builds the schema child and finds its task blocked, halting immediately",
+        "Never builds or edits the delivery child",
+        "Reports the blocked child, task, and reason without merging anything"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 8,
+      "prompt": "Build the existing 2026-09-20-retry-policy plan.",
+      "expected_output": "Dispatches to varde-orchestrate and selects the named existing plan without creating a replacement. Decomposes the plan into task files, executes them sequentially, creates src/retry-policy.ts with maxAttempts returning 5, verifies both plan acceptance criteria, marks every task done, checks every criterion, and completes the plan. Uses the supplied independent pre-edit approval; does not self-approve. Carries the verdict through execution and always performs implementation review; reviewer chosen per tier.",
+      "assertions": [
+        "Builds the named existing plan without creating a replacement plan",
+        "Decomposes the plan specification into task files before implementation",
+        "Creates src/retry-policy.ts with maxAttempts returning 5",
+        "Marks every generated task done and the plan completed",
+        "Verifies and checks every plan acceptance criterion",
+        "Uses the supplied independent pre-edit approval; does not self-approve"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 20,
+      "prompt": "Run the named notifications group with two ready children in sequence. Both build successfully in a varde-created feature worktree. The first child has finished; what finish choice is shown before the second child, and what happens after both complete?",
+      "expected_output": "Each child has independent pre-edit approval; the first child completes acceptance, conclusion, and lessons, then returns its diff/branch state to orchestrate without showing or executing a finish choice. Orchestrate builds the second child. Implementation review is always performed once on the aggregate applicable scope, rather than after every task. After the group completes, it shows the aggregate diff and one applicable Merge / Push and open PR / Keep as is menu, recommending Merge for the created worktree; it waits for the user's choice before merging or pushing.",
+      "assertions": [
+        "No per-child finish choice interrupts the unattended group build",
+        "The second child runs after the first succeeds",
+        "Exactly one aggregate finish menu offers applicable Merge, Push and open PR, and Keep as is choices",
+        "No merge, push, PR creation, or worktree cleanup happens before the user chooses",
+        "Trace shows one implementation review on the aggregate scope, not a per-task review loop"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 23,
+      "prompt": "Build the existing 2026-10-06-parallel-wave plan through the finish choice.",
+      "expected_output": "Builds the named backlog plan in varde-orchestrate. Dispatches independent ready tasks a and b in one parallel wave, waits for both to complete, then builds dependent task c after both results are integrated. Each task creates its assigned source module and focused node:test, and all three tasks finish as done after verification. Runs node --test on the resulting branch, completes the plan, and presents the finish choice while leaving the fixture target branch at its seed commit.",
+      "assertions": [
+        "Marks all three parallel-wave task files done",
+        "Creates one source module and one node:test file for each task",
+        "Makes the c task commit descend from the a and b task commits",
+        "Leaves the fixture target branch at the seed commit through the finish choice",
+        "Passes the fixture tests with node --test on the resulting branch",
+        "Dispatches independent ready tasks a and b in the same parallel wave before dependent task c"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh",
+      "environment_limited": true
+    },
+    {
+      "id": 24,
+      "prompt": "Build the existing 2026-09-20-retry-policy plan. Use execution=inline.",
+      "expected_output": "Builds the named existing plan in varde-orchestrate using execution=inline, without spawning an builder. Decomposes the plan into task files, executes them sequentially inline, creates src/retry-policy.ts with maxAttempts returning 5, verifies both plan acceptance criteria, marks every task done, checks every criterion, and completes the plan. Uses the supplied independent pre-edit approval; does not self-approve. Carries the verdict through execution and always performs implementation review; reviewer chosen per tier.",
+      "assertions": [
+        "Builds the named existing plan without creating a replacement plan",
+        "Decomposes the plan specification into task files before implementation",
+        "Creates src/retry-policy.ts with maxAttempts returning 5",
+        "Marks every generated task done and the plan completed",
+        "Verifies and checks every plan acceptance criterion",
+        "Uses the supplied independent pre-edit approval; does not self-approve"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 25,
+      "prompt": "Build the existing 2026-10-06-parallel-wave plan through the finish choice. Use execution=inline.",
+      "expected_output": "Builds the named backlog plan in varde-orchestrate using execution=inline, without spawning builder agents. Completes independent tasks a and b inline, then builds dependent task c after both results are available. Each task creates its assigned source module and focused node:test, and all three tasks finish as done after verification. Runs node --test on the resulting branch, completes the plan, and presents the finish choice while leaving the fixture target branch at its seed commit.",
+      "assertions": [
+        "Marks all three parallel-wave task files done",
+        "Creates one source module and one node:test file for each task",
+        "Makes the c task commit descend from the a and b task commits",
+        "Leaves the fixture target branch at the seed commit through the finish choice",
+        "Passes the fixture tests with node --test on the resulting branch"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh",
+      "environment_limited": true
+    },
+    {
+      "id": 28,
+      "prompt": "Three approved, related plans are ready in the working folder (2026-10-01-api, 2026-10-02-ui, 2026-10-03-docs). Get them built.",
+      "expected_output": "Does not load or recommend varde-swarm. Runs the plans one at a time through varde-orchestrate, or asks the user which order or whether to run them in parallel, and waits for the answer before launching more than one plan.",
+      "assertions": [
+        "Runs one plan at a time or asks the user to decide",
+        "Launches no more than one plan orchestrator before the user decides"
+      ]
+    }
+  ]
+}

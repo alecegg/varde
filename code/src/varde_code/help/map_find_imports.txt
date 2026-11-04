@@ -1,0 +1,8 @@
+Query: resolved import edges of a file. (see `find_imports` help for inputs)
+
+Usage: varde map find_imports [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, filePath }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

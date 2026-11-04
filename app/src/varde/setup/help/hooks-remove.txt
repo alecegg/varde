@@ -1,0 +1,11 @@
+Remove the Varde hooks installed by `setup hooks install`
+
+Usage: varde setup hooks remove [OPTIONS]
+
+Options:
+      --harness <HARNESS>    Harness to change; repeat for several (default: all) [possible values: claude, codex, opencode, pi]
+      --features <FEATURES>  Features to install (change,toz,learn,code,knowledge; default: all) [possible values: change, toz, learn, code, knowledge]
+      --force                Replace or remove entries and files you edited
+  -h, --help                 Print help
+
+If sandbox denial blocks a target, other selected targets may already be installed. Retry the denied target. Watcher registration may time out; check setup doctor afterward.

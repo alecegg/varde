@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Article title</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--muted:#525252;--line:#d4d4d4;--surface:#f5f5f5;--accent:#1d4ed8;--on-accent:#fff;--danger:#b91c1c;--font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--t-sm:.875rem;--t-md:1rem;--t-lg:1.25rem;--t-xl:1.75rem;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s6:24px;--s8:32px;--s12:48px;--r:8px;--target:44px;--ring:2px solid var(--accent)}
+*{box-sizing:border-box}
+body{margin:0;font:var(--t-lg)/1.7 var(--font);color:var(--fg);background:var(--bg)}
+header,main,footer{max-width:40rem;margin:0 auto;padding:var(--s4)}
+header{display:flex;justify-content:space-between;align-items:center}
+a{color:var(--accent);text-underline-offset:3px}
+nav a{display:inline-flex;align-items:center;min-height:var(--target);padding:0 var(--s2)}
+a:focus-visible{outline:var(--ring);outline-offset:2px}
+h1{font-size:var(--t-xl);line-height:1.2;margin:var(--s8) 0 var(--s2)}
+h2{font-size:var(--t-lg);line-height:1.3;margin:var(--s12) 0 var(--s3)}
+p{margin:0 0 var(--s6)}
+.meta,figcaption,footer{color:var(--muted);font-size:var(--t-sm)}
+blockquote{margin:var(--s8) 0;padding-left:var(--s4);border-left:1px solid var(--line);color:var(--muted)}
+figure{margin:var(--s8) 0}
+svg{width:100%;height:auto;border-radius:var(--r);background:var(--surface)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+<strong>Journal</strong>
+<nav aria-label="Main"><a href="#top">Home</a><a href="#about">About</a></nav>
+</header>
+<main id="top">
+<article>
+<h1>A clear title that states the point</h1>
+<p class="meta">By Author Name &middot; <time datetime="2026-01-15">15 January 2026</time></p>
+<p>Open with the main idea in one or two sentences. Replace this text with real content before publishing.</p>
+<h2>First section</h2>
+<p>Keep lines between forty-five and seventy-five characters. Use the type scale for headings and leave generous space between blocks.</p>
+<figure>
+<svg viewBox="0 0 320 120" role="img" aria-label="Placeholder illustration"><circle cx="160" cy="60" r="36" fill="none" stroke="#525252" stroke-width="4"/></svg>
+<figcaption>Describe the image for every reader.</figcaption>
+</figure>
+<blockquote><p>A quotation, set apart from the body text.</p></blockquote>
+<h2>Second section</h2>
+<p>Close with what the reader can do next.</p>
+</article>
+</main>
+<footer id="about">Published by Site Name.</footer>
+</body>
+</html>

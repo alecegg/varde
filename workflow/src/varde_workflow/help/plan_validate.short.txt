@@ -1,0 +1,10 @@
+Validate one workflow artifact without mutation
+
+Usage: varde plan validate [OPTIONS] <ARTIFACT>
+
+Arguments:
+  <ARTIFACT>  
+
+Options:
+      --json  
+  -h, --help  Print help (see more with '--help')

@@ -1,0 +1,31 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "src/main/java/org/apache/commons/lang3/CharSequenceUtils.java"
+  ],
+  "changed_functions": [
+    "indexOf",
+    "lastIndexOf"
+  ],
+  "child_sha": "079cf8b020b598b934a4d4703afbbae5777394cc",
+  "file_licenses": {
+    "apache/commons-lang:src/main/java/org/apache/commons/lang3/CharSequenceUtils.java": "Apache-2.0"
+  },
+  "id": "6936505d4bf66ab86fb54878",
+  "intent": {
+    "linked_issues": [],
+    "message": "Simplify code; Javadoc\n\ngit-svn-id: https://svn.apache.org/repos/asf/commons/proper/lang/trunk@1091471 13f79535-47bb-0310-9956-ffa450edef68"
+  },
+  "label_source": "developer-intent",
+  "language": "java",
+  "left": "a.java",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-b46cddd90f285787",
+  "parent_sha": "47132a3fcc7ba92e2f8028ac5261c03fcf94d67b",
+  "pin_sha": "9c86ffe308e7c682df3b1cf76f27dfc5bb6a2243",
+  "repo": "apache/commons-lang",
+  "right": "b.java",
+  "split": "dev",
+  "upstream_url": "https://github.com/apache/commons-lang.git"
+}

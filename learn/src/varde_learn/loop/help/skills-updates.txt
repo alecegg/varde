@@ -1,0 +1,7 @@
+Show which synced skills differ from their packaged copy. With a skill, print the diff from the local copy to the packaged copy. Read-only: applies nothing.
+
+Usage: varde learn skills updates [SKILL] [OPTIONS]
+
+Options:
+      --json  Print machine-readable output
+  -h, --help  Print help

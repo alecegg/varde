@@ -1,0 +1,30 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "src/test/java/org/apache/commons/lang3/function/FunctionsTest.java"
+  ],
+  "changed_functions": [
+    "testApply"
+  ],
+  "child_sha": "074fbefa5dfd69abc817e304204e0a7cd041baa7",
+  "file_licenses": {
+    "apache/commons-lang:src/test/java/org/apache/commons/lang3/function/FunctionsTest.java": "Apache-2.0"
+  },
+  "id": "d151d4460b835052084559ff",
+  "intent": {
+    "linked_issues": [],
+    "message": "Simplify test and add missing cases"
+  },
+  "label_source": "developer-intent",
+  "language": "java",
+  "left": "a.java",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-b54ffec5a46a52c5",
+  "parent_sha": "e9bd1832321e1fe3bc851de2e07393e311ff9506",
+  "pin_sha": "9c86ffe308e7c682df3b1cf76f27dfc5bb6a2243",
+  "repo": "apache/commons-lang",
+  "right": "b.java",
+  "split": "dev",
+  "upstream_url": "https://github.com/apache/commons-lang.git"
+}

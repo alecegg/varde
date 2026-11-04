@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/justfile" ] && [ -d "$root/.githooks" ] || exit 0
+cd "$root"
+. "$(dirname "$0")/lib.sh"
+record_guardrail_on_exit hook-pre-merge-commit
+require_plan_merge_approval
+run_pyright_at_stage pre-merge-commit

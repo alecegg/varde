@@ -1,0 +1,34 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "src/compiler/sys.ts"
+  ],
+  "changed_functions": [
+    "createWatchedFileSet",
+    "reduceDirWatcherRefCount",
+    "reduceDirWatcherRefCountForFile",
+    "removeFile",
+    "removeFileWatcherCallback"
+  ],
+  "child_sha": "067573b0c3e387835452f1d703b877f055f4cbc5",
+  "file_licenses": {
+    "microsoft/TypeScript:src/compiler/sys.ts": "Apache-2.0"
+  },
+  "id": "2a472d145b58b84f539a2525",
+  "intent": {
+    "linked_issues": [],
+    "message": "cr feedback: simplify the removeFile function"
+  },
+  "label_source": "developer-intent",
+  "language": "typescript",
+  "left": "a.ts",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-a7e7fcbdcedf5406",
+  "parent_sha": "02531af991ff3c7d420f5ff804d0806626ff11d7",
+  "pin_sha": "2e9fb00f5f5c9186d09aabd78cced5ce2497456d",
+  "repo": "microsoft/TypeScript",
+  "right": "b.ts",
+  "split": "dev",
+  "upstream_url": "https://github.com/microsoft/TypeScript.git"
+}

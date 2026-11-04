@@ -1,0 +1,11 @@
+Set or clear the harness-neutral owner for one plan
+
+Usage: varde plan owner [OPTIONS] <PLAN> [HARNESS:ID]
+
+Arguments:
+  <PLAN>        Plan path or identifier
+  [HARNESS:ID]  Owner identifier in opaque `<harness>:<id>` form
+
+Options:
+      --clear  Remove the plan owner
+  -h, --help   Print help (see more with '--help')

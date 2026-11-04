@@ -1,0 +1,35 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "absl/synchronization/mutex_test.cc",
+    "absl/time/internal/test_util.cc"
+  ],
+  "changed_functions": [
+    "RunTest",
+    "TestMu",
+    "TestRW",
+    "TestTry"
+  ],
+  "child_sha": "029795a9b5281379f892fbbe3f9a400d5a33f5cc",
+  "file_licenses": {
+    "abseil/abseil-cpp:absl/synchronization/mutex_test.cc": "Apache-2.0",
+    "abseil/abseil-cpp:absl/time/internal/test_util.cc": "Apache-2.0"
+  },
+  "id": "46cf93806c4ca16f23eb3b67",
+  "intent": {
+    "linked_issues": [],
+    "message": "Changes imported from Abseil \"staging\" branch:\n\n  - 3e05f2c346a9faf07088c49d590d49a9199e7edd Simplify Duration's operator-() by Jorg Brown <jorg@google.com>\n  - 3c4942375a6d17e887bb6ab7cf2d0e763d58a511 Rewrite `noexcept(noexcept(allocator_type()))` to instead... by Matt Calabrese <calabrese@google.com>\n  - 02f35a684201a6aa9f70e8b0a041993676f2d230 Fix comment on remove_prefix since the function is not re... by Abseil Team <absl-team@google.com>\n  - ceb40aba8031e0ccec9cd49da844882df100c56f Fix mutex_test under TSAN. by Derek Mauro <dmauro@google.com>\n  - 7bd12e7ddc5d074e1b9c9f037879211fa1d81f8c Slight wording tweaks for \"adopting\" wrappers by Abseil Team <absl-team@google.com>\n  - c3580afe092e0357d40b1769314f36da1b887c65 Internal cleanup. by Greg Miller <jgm@google.com>\n\nGitOrigin-RevId: 3e05f2c346a9faf07088c49d590d49a9199e7edd\nChange-Id: If3df72fba3803398cfcbb323fb4cb84ec55511aa"
+  },
+  "label_source": "developer-intent",
+  "language": "cpp",
+  "left": "a.h",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-b7e995b26f7122c4",
+  "parent_sha": "962e9931d546cd6f062894e15283cea02c7d3220",
+  "pin_sha": "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c",
+  "repo": "abseil/abseil-cpp",
+  "right": "b.h",
+  "split": "regression",
+  "upstream_url": "https://github.com/abseil/abseil-cpp.git"
+}

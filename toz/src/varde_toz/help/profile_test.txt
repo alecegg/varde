@@ -1,0 +1,11 @@
+Run each profile's `[[profile.test]]` cases against an in-memory store
+
+Usage: varde setup profile test [OPTIONS]
+
+Options:
+      --fallback-dir <FALLBACK_DIR>  External store to try after primary-store access fails
+      --file <FILE>                  Load only this file's profiles (as user scope, so scripts run) instead of every scope
+      --project <PROJECT>            Project directory (default: git root of cwd, else cwd)
+      --json                         Machine-readable JSON output
+      --quiet                        Print only the handle line on overflow
+  -h, --help                         Print help

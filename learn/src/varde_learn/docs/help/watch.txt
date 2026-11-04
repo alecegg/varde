@@ -1,0 +1,14 @@
+Print one line per new open comment on a served page until interrupted
+
+Usage: varde learn docs watch [OPTIONS] <DOC>
+
+Arguments:
+  <DOC>  Markdown file whose comment log to watch
+
+Options:
+      --all                  Also print the open backlog first
+      --interval <INTERVAL>  Poll interval as <N>s or <N>m (default 2s)
+  -h, --help                 Print help
+
+A decision answer prints as `decision <comment-id> <block-id> <verdict> <text>`;
+other comments print as `<kind> <comment-id> <anchor> <text>`.

@@ -1,0 +1,36 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "django/db/models/base.py",
+    "tests/basic/tests.py",
+    "tests/properties/tests.py"
+  ],
+  "changed_functions": [
+    "__init__",
+    "test_cannot_create_instance_with_invalid_kwargs",
+    "test_setter"
+  ],
+  "child_sha": "08d8bccbf1b0764a0de68325569ee47da256e206",
+  "file_licenses": {
+    "django/django:django/db/models/base.py": "BSD-3-Clause",
+    "django/django:tests/basic/tests.py": "BSD-3-Clause",
+    "django/django:tests/properties/tests.py": "BSD-3-Clause"
+  },
+  "id": "e14490e49a89596896dba7e9",
+  "intent": {
+    "linked_issues": [],
+    "message": "Improved Model.__init__() properties loop.\n\nThis improves readability, accumulates unrecognized arguments raise an\nexception with all of them, and avoids refetching the values."
+  },
+  "label_source": "developer-intent",
+  "language": "python",
+  "left": "a.py",
+  "license": "BSD-3-Clause",
+  "pair_group_id": "refactor-184bf1daea7b2b64",
+  "parent_sha": "0a4a5e5bacc354df3132d0fcf706839c21afb89d",
+  "pin_sha": "d430084791a61b31cecec132bce3dca19194f7f2",
+  "repo": "django/django",
+  "right": "b.py",
+  "split": "dev",
+  "upstream_url": "https://github.com/django/django.git"
+}

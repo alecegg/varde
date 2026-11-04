@@ -1,0 +1,6 @@
+{"v":1,"id":"0000000000000001","ts":"2025-01-01T00:00:00.000Z","kind":"item_added","body":{"title":"Fixture","source":"test","repo_root":"/repo"}}
+{"v":1,"id":"0000000000000002","ts":"2025-01-01T00:00:00.000Z","kind":"occurrence_appended","body":{"item":"0123456789abcdef","at":"2025-01-01T00:00:00.000Z","cwd":"/repo","evidence":"seen"}}
+{"v":1,"id":"0000000000000003","ts":"2025-01-01T00:00:00.000Z","kind":"item_tags_changed","body":{"item":"0123456789abcdef","tags":["fixture"]}}
+{"v":1,"id":"0000000000000004","ts":"2025-01-01T00:00:00.000Z","kind":"status_changed","body":{"item":"0123456789abcdef","at":"2025-01-01T00:00:00.000Z","from":"open","to":"resolved","reason":"fixed"}}
+{"v":1,"id":"0000000000000005","ts":"2025-01-01T00:00:00.000Z","kind":"adoption_recorded","body":{"at":"2025-01-01T00:00:00.000Z","summary":"fixture adoption","files":["a.py"],"items":["0123456789abcdef"]}}
+{"v":1,"torn":

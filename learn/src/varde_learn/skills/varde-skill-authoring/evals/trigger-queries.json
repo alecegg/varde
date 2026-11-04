@@ -1,0 +1,12 @@
+[
+  {"query": "Look over the SKILL.md we just wrote for the deploy skill and tell me what is wrong with it.", "should_trigger": true},
+  {"query": "The varde-build SKILL.md feels bloated and agents get lost in it. Audit it and rank what to cut.", "should_trigger": true},
+  {"query": "Turn the completed-task notes in release-notes.md into a skill whose description triggers on 'cut a release'.", "should_trigger": true},
+  {"query": "Review the description of this new skill for trigger confusion with varde-build and recommend wording only.", "should_trigger": true},
+  {"query": "Rebuild this skill so it states its desired outcomes and how to validate each.", "should_trigger": true},
+  {"query": "Write the AGENTS.md for this new module so an agent knows the local conventions.", "should_trigger": false},
+  {"query": "Trim our CLAUDE.md so it only holds what the agent would fail without.", "should_trigger": false},
+  {"query": "Bring the README's API section up to date with the v2 endpoint rename.", "should_trigger": false},
+  {"query": "Create a trigger query set and evals.json for this skill; do not run any sessions.", "should_trigger": false},
+  {"query": "Review the diff on this branch for bugs in the token handling.", "should_trigger": false}
+]

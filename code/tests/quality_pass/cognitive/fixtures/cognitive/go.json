@@ -1,0 +1,217 @@
+{
+  "language": "go",
+  "source": "package fixture\nfunc c00_simple_if(a, b, c, d bool) bool { if a { return true }; return false }\nfunc c01_nested_if(a, b, c, d bool) bool { if a { if b { return true } }; return false }\nfunc c02_triple_nested_if(a, b, c, d bool) bool { if a { if b { if c { return true } } }; return false }\nfunc c03_if_else(a, b, c, d bool) bool { if a { return true } else { return false }; return false }\nfunc c04_if_elif_else(a, b, c, d bool) bool { if a { return true } else if b { return false } else { return true }; return false }\nfunc c05_three_way_chain(a, b, c, d bool) bool { if a { return true } else if b { return false } else if c { return true } else { return false }; return false }\nfunc c06_and_sequence(a, b, c, d bool) bool { if a && b { return true }; return false }\nfunc c07_or_sequence(a, b, c, d bool) bool { if a || b { return true }; return false }\nfunc c08_mixed_boolean(a, b, c, d bool) bool { if a && b || c && d { return true }; return false }\nfunc c09_assigned_boolean(a, b, c, d bool) bool { value := a && b; return value; return false }\nfunc c10_while_loop(a, b, c, d bool) bool { for a { a = false }; return false }\nfunc c11_for_loop(a, b, c, d bool) bool { for _, item := range []bool{a,b} { _ = item }; return false }\nfunc c12_if_with_loop(a, b, c, d bool) bool { if a { for _, item := range []bool{b,c} { _ = item } }; return false }\nfunc c13_nested_loops(a, b, c, d bool) bool { for _, item := range []bool{a,b} { for item { break } }; return false }\nfunc c14_switch_or_match(a, b, c, d bool) bool { switch a { case true: return true; default: return false }; return false }\nfunc c15_select_with_nested_if(a, b, c, d bool) bool { select { case <-left: if a { return true }; case <-right: return false }; return false }\nfunc c16_try_one_catch(a, b, c, d bool) bool { defer func() { if recover() != nil { _ = false } }(); if a { panic(\"x\") }; return false }\nfunc c17_try_two_catches(a, b, c, d bool) bool { defer func() { if recover() != nil { _ = false }; if recover() != nil { _ = true } }(); return false }\nfunc c18_recursive_call(a, b, c, d bool) bool { if a { return true }; return c18_recursive_call(b, a, c, d); return false }\nfunc c19_labeled_goto(a, b, c, d bool) bool { if a { goto done }; done: return b }\nfunc c20_defer_cleanup(a, b, c, d bool) bool { defer cleanup(); return a }\nfunc c21_lambda_decision(a, b, c, d bool) bool { check := func(value bool) bool { if value { return true }; return false }; return check(a); return false }\nfunc c22_if_lambda_decision(a, b, c, d bool) bool { if a { check := func(value bool) bool { if value { return true }; return false }; return check(b) }; return false }\nfunc c23_nested_callable(a, b, c, d bool) bool { inner := func() bool { if a { return true }; return false }; return inner(); return false }\nfunc c24_comprehension(a, b, c, d bool) bool { for _, value := range []bool{a,b} { if value { return true } }; return false }\nfunc c25_labeled_jump(a, b, c, d bool) bool { outer: for a { break outer }; return false }\nfunc c26_boolean_operator_sequences(a, b, c, d bool) bool { return !(a || b) && c }\nfunc c27_language_idiom(err error) bool { if err != nil { return false }; if err != nil { return false }; if err != nil { return false }; return true }\nfunc c28_loop_if_boolean(a, b, c, d bool) bool { for _, item := range []bool{a,b} { if item && a { return true } }; return false }\nfunc c29_else_loop(a, b, c, d bool) bool { if a { return true } else { for b { break } }; return false }\n",
+  "functions": [
+    {
+      "name": "c00_simple_if",
+      "construct": "simple_if",
+      "source": "func c00_simple_if(a, b, c, d bool) bool { if a { return true }; return false }\n",
+      "expected": 1,
+      "derivation": "One top-level if adds one structural increment."
+    },
+    {
+      "name": "c01_nested_if",
+      "construct": "nested_if",
+      "source": "func c01_nested_if(a, b, c, d bool) bool { if a { if b { return true } }; return false }\n",
+      "expected": 3,
+      "derivation": "The outer if adds 1; the nested if adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c02_triple_nested_if",
+      "construct": "triple_nested_if",
+      "source": "func c02_triple_nested_if(a, b, c, d bool) bool { if a { if b { if c { return true } } }; return false }\n",
+      "expected": 6,
+      "derivation": "Three nested ifs add 1, 2, and 3 respectively."
+    },
+    {
+      "name": "c03_if_else",
+      "construct": "if_else",
+      "source": "func c03_if_else(a, b, c, d bool) bool { if a { return true } else { return false }; return false }\n",
+      "expected": 2,
+      "derivation": "The if and its else each add one; else is hybrid."
+    },
+    {
+      "name": "c04_if_elif_else",
+      "construct": "if_elif_else",
+      "source": "func c04_if_elif_else(a, b, c, d bool) bool { if a { return true } else if b { return false } else { return true }; return false }\n",
+      "expected": 3,
+      "derivation": "The if, else-if, and else each add one; else-if is hybrid."
+    },
+    {
+      "name": "c05_three_way_chain",
+      "construct": "three_way_chain",
+      "source": "func c05_three_way_chain(a, b, c, d bool) bool { if a { return true } else if b { return false } else if c { return true } else { return false }; return false }\n",
+      "expected": 4,
+      "derivation": "One if, two else-if branches, and one else add four total."
+    },
+    {
+      "name": "c06_and_sequence",
+      "construct": "and_sequence",
+      "source": "func c06_and_sequence(a, b, c, d bool) bool { if a && b { return true }; return false }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator && sequence adds 1."
+    },
+    {
+      "name": "c07_or_sequence",
+      "construct": "or_sequence",
+      "source": "func c07_or_sequence(a, b, c, d bool) bool { if a || b { return true }; return false }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator || sequence adds 1."
+    },
+    {
+      "name": "c08_mixed_boolean",
+      "construct": "mixed_boolean",
+      "source": "func c08_mixed_boolean(a, b, c, d bool) bool { if a && b || c && d { return true }; return false }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; &&, ||, && form three logical sequences, adding 3."
+    },
+    {
+      "name": "c09_assigned_boolean",
+      "construct": "assigned_boolean",
+      "source": "func c09_assigned_boolean(a, b, c, d bool) bool { value := a && b; return value; return false }\n",
+      "expected": 1,
+      "derivation": "A binary logical sequence in an assignment adds one fundamental increment."
+    },
+    {
+      "name": "c10_while_loop",
+      "construct": "while_loop",
+      "source": "func c10_while_loop(a, b, c, d bool) bool { for a { a = false }; return false }\n",
+      "expected": 1,
+      "derivation": "One top-level while adds one structural increment."
+    },
+    {
+      "name": "c11_for_loop",
+      "construct": "for_loop",
+      "source": "func c11_for_loop(a, b, c, d bool) bool { for _, item := range []bool{a,b} { _ = item }; return false }\n",
+      "expected": 1,
+      "derivation": "One top-level loop adds one structural increment."
+    },
+    {
+      "name": "c12_if_with_loop",
+      "construct": "if_with_loop",
+      "source": "func c12_if_with_loop(a, b, c, d bool) bool { if a { for _, item := range []bool{b,c} { _ = item } }; return false }\n",
+      "expected": 3,
+      "derivation": "The if adds 1; the loop nested inside it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c13_nested_loops",
+      "construct": "nested_loops",
+      "source": "func c13_nested_loops(a, b, c, d bool) bool { for _, item := range []bool{a,b} { for item { break } }; return false }\n",
+      "expected": 3,
+      "derivation": "The outer loop adds 1; the inner loop adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c14_switch_or_match",
+      "construct": "switch_or_match",
+      "source": "func c14_switch_or_match(a, b, c, d bool) bool { switch a { case true: return true; default: return false }; return false }\n",
+      "expected": 1,
+      "derivation": "The switch/match/select construct adds one; its alternatives add no further points."
+    },
+    {
+      "name": "c15_select_with_nested_if",
+      "construct": "select_with_nested_if",
+      "source": "func c15_select_with_nested_if(a, b, c, d bool) bool { select { case <-left: if a { return true }; case <-right: return false }; return false }\n",
+      "expected": 3,
+      "derivation": "The select adds 1; the if inside a select case adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c16_try_one_catch",
+      "construct": "try_one_catch",
+      "source": "func c16_try_one_catch(a, b, c, d bool) bool { defer func() { if recover() != nil { _ = false } }(); if a { panic(\"x\") }; return false }\n",
+      "expected": 3,
+      "derivation": "Defer itself adds nothing; outer if adds 1; closure nesting makes its if add 1 + 1 nesting."
+    },
+    {
+      "name": "c17_try_two_catches",
+      "construct": "try_two_catches",
+      "source": "func c17_try_two_catches(a, b, c, d bool) bool { defer func() { if recover() != nil { _ = false }; if recover() != nil { _ = true } }(); return false }\n",
+      "expected": 4,
+      "derivation": "Defer itself adds nothing; two ifs inside its closure each add 1 + 1 callable nesting."
+    },
+    {
+      "name": "c18_recursive_call",
+      "construct": "recursive_call",
+      "source": "func c18_recursive_call(a, b, c, d bool) bool { if a { return true }; return c18_recursive_call(b, a, c, d); return false }\n",
+      "expected": 2,
+      "derivation": "The base-case if adds 1; one direct recursive call adds 1 fundamental recursion increment.",
+      "overlay": true
+    },
+    {
+      "name": "c19_labeled_goto",
+      "construct": "labeled_goto",
+      "source": "func c19_labeled_goto(a, b, c, d bool) bool { if a { goto done }; done: return b }\n",
+      "expected": 2,
+      "derivation": "The top-level if adds 1 and the goto adds 1 fundamental increment for a jump to a label."
+    },
+    {
+      "name": "c20_defer_cleanup",
+      "construct": "defer_cleanup",
+      "source": "func c20_defer_cleanup(a, b, c, d bool) bool { defer cleanup(); return a }\n",
+      "expected": 0,
+      "derivation": "A defer statement and its call do not break linear flow; there is no structural flow increment."
+    },
+    {
+      "name": "c21_lambda_decision",
+      "construct": "lambda_decision",
+      "source": "func c21_lambda_decision(a, b, c, d bool) bool { check := func(value bool) bool { if value { return true }; return false }; return check(a); return false }\n",
+      "expected": 2,
+      "derivation": "The lambda adds no structural point but raises nesting; its if adds 1 + 1 nesting."
+    },
+    {
+      "name": "c22_if_lambda_decision",
+      "construct": "if_lambda_decision",
+      "source": "func c22_if_lambda_decision(a, b, c, d bool) bool { if a { check := func(value bool) bool { if value { return true }; return false }; return check(b) }; return false }\n",
+      "expected": 4,
+      "derivation": "Outer if adds 1; lambda if adds 1 + 2 nesting levels (outer if and lambda)."
+    },
+    {
+      "name": "c23_nested_callable",
+      "construct": "nested_callable",
+      "source": "func c23_nested_callable(a, b, c, d bool) bool { inner := func() bool { if a { return true }; return false }; return inner(); return false }\n",
+      "expected": 2,
+      "derivation": "Nested callable adds no structural point but one nesting level to its if (1 + 1)."
+    },
+    {
+      "name": "c24_comprehension",
+      "construct": "comprehension",
+      "source": "func c24_comprehension(a, b, c, d bool) bool { for _, value := range []bool{a,b} { if value { return true } }; return false }\n",
+      "expected": 3,
+      "derivation": "The range loop adds 1; its nested if adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c25_labeled_jump",
+      "construct": "labeled_jump",
+      "source": "func c25_labeled_jump(a, b, c, d bool) bool { outer: for a { break outer }; return false }\n",
+      "expected": 2,
+      "derivation": "One loop adds 1; the labeled jump adds one fundamental increment."
+    },
+    {
+      "name": "c26_boolean_operator_sequences",
+      "construct": "boolean_operator_sequences",
+      "source": "func c26_boolean_operator_sequences(a, b, c, d bool) bool { return !(a || b) && c }\n",
+      "expected": 2,
+      "derivation": "The expression has an || sequence followed by an && sequence, for two fundamental increments; negation adds none."
+    },
+    {
+      "name": "c27_language_idiom",
+      "construct": "repeated_error_check",
+      "source": "func c27_language_idiom(err error) bool { if err != nil { return false }; if err != nil { return false }; if err != nil { return false }; return true }\n",
+      "expected": 0,
+      "derivation": "SonarGo exempts an if err != nil guard without else (sonar-go CognitiveComplexity.isErrorCheckGuard; test error_check_guard_not_counted), so the three guards add nothing. The score-grade engine still counts 3; recorded as a Sonar-rule difference for review."
+    },
+    {
+      "name": "c28_loop_if_boolean",
+      "construct": "loop_if_boolean",
+      "source": "func c28_loop_if_boolean(a, b, c, d bool) bool { for _, item := range []bool{a,b} { if item && a { return true } }; return false }\n",
+      "expected": 4,
+      "derivation": "Loop adds 1; nested if adds 1 + 1 nesting; its && sequence adds 1."
+    },
+    {
+      "name": "c29_else_loop",
+      "construct": "else_loop",
+      "source": "func c29_else_loop(a, b, c, d bool) bool { if a { return true } else { for b { break } }; return false }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; its else adds 1. The loop in the else body is at nesting level 1, so it adds 1 structural + 1 nesting, totaling 4."
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "skill_name": "varde-explore",
+  "evals": [
+    {
+      "id": 4,
+      "prompt": "Should we move session validation into middleware, or keep it in each route handler? Not asking you to build anything yet.",
+      "expected_output": "Resolves to explore mode: an open design question with no artifact requested. Reads the actual route handlers and any existing middleware before comparing options, states the tradeoffs against project constraints, and ends with a recommendation and what remains uncertain. Writes no HTML file, no plan, and no production code. May offer planning as a next step, but does not start it without the user confirming.",
+      "assertions": [
+        "No HTML artifact is written for a chat options comparison",
+        "No plan or task file is created",
+        "No source changes are made",
+        "The chat answer ends with a recommendation and states what remains uncertain."
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      },
+      "verification_script": "evals/verify-explore-eval.sh"
+    },
+    {
+      "id": 6,
+      "prompt": "Thanks for explaining the retry logic. Go ahead and plan the new backoff policy and implement it now.",
+      "expected_output": "The explicit follow-up authorizes starting planning and then implementation in this turn. The agent uses the source-grounded exploration as context and does not ask the user to confirm the same request again; unresolved choices still follow the plan's own gates. Transcript graded: the assistant response starts planning then implementation without asking the user to confirm again.",
+      "assertions": [
+        "No explanation artifact is written during an explicit change request",
+        "The assistant starts planning then implementation in the same turn without asking for confirmation again."
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      },
+      "verification_script": "evals/verify-explore-eval.sh"
+    }
+  ]
+}

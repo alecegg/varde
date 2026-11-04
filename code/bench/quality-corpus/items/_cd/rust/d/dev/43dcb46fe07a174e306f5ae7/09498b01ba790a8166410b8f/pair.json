@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "invariant",
+  "id": "09498b01ba790a8166410b8f",
+  "label_source": "construction",
+  "language": "rust",
+  "left": "a.rs",
+  "license": "MIT",
+  "mutant_file": "09498b01ba790a8166410b8f-b.rs",
+  "operator": "add-dead-branches",
+  "provenance": {
+    "end_line": 62,
+    "file": "007-burntsushi_ripgrep-fmt.rs",
+    "function": "fmt",
+    "license": "MIT",
+    "license_header": "",
+    "lines": 19,
+    "parse_language": "rust",
+    "path": "crates/cli/src/process.rs",
+    "pin_sha": "3fce3b5bb0236da2df6d99672afb8a719642eca7",
+    "repo": "BurntSushi/ripgrep",
+    "start_line": 44,
+    "test_path": false
+  },
+  "right": "b.rs",
+  "seed": 3325200008402865113,
+  "source_file": "09498b01ba790a8166410b8f-a.rs",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "parse"
+}

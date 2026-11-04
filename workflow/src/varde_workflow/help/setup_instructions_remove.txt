@@ -1,0 +1,7 @@
+Remove the managed instruction block from configured targets
+
+Usage: varde setup instructions remove [OPTIONS]
+
+Options:
+      --dry-run  Print the planned file changes without writing
+  -h, --help     Print help

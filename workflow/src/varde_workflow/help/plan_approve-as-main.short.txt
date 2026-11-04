@@ -1,0 +1,3 @@
+Record a checked merge approval as main.
+
+Usage: varde plan approve-as-main <PLAN> --note <TEXT> --plan-followed --gate-result pass --abnormal-events <TEXT>

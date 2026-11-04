@@ -1,0 +1,18 @@
+Set a single frontmatter field, rejecting stale versions
+
+Usage: varde learn knowledge set-field [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG> <KEY> <VALUE>
+
+Arguments:
+  <SLUG>   Concept slug, e.g. `my-concept` or `pattern/my-concept`
+  <KEY>    Frontmatter key to set, e.g. `status`, `type`, or any extension key
+  <VALUE>  New value; `status` is validated against `draft|stable|deprecated` and the structured §5/§10 fields reject bare-scalar writes
+
+Options:
+      --bundle <BUNDLE>
+          Knowledge Bundle root directory (holds the Concept `.md` files)
+      --expected-version <EXPECTED_VERSION>
+          OCC version hash last read; a mismatch is rejected as a conflict
+      --json
+          Machine-readable JSON output
+  -h, --help
+          Print help

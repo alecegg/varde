@@ -1,0 +1,53 @@
+{
+  "pair_group_id": "26faa8e2a747f2ab720cf852",
+  "task": "csv-summary",
+  "language": "java",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "bdbb2a7a40a10a8739a1696a",
+      "left_id": "720606a44d53c11a406c91b0",
+      "right_id": "52604394525b53a410a80c17",
+      "left": "sensible.java",
+      "right": "tiny.java",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "38dd8f85bbbc884ae592da28",
+      "left_id": "720606a44d53c11a406c91b0",
+      "right_id": "63f00797eff52d488ffab4cb",
+      "left": "sensible.java",
+      "right": "padded.java",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "36afae0a5dfb29e07ae818f2",
+      "left_id": "720606a44d53c11a406c91b0",
+      "right_id": "49c0097e74c177d632ea3a14",
+      "left": "sensible.java",
+      "right": "sizematched.java",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "206c5fac73f825b61bdb5efe",
+      "left_id": "720606a44d53c11a406c91b0",
+      "right_id": "23c145e4a230be870c163efc",
+      "left": "sensible.java",
+      "right": "namematched.java",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "0f3b104632e719ce61109535",
+      "left_id": "720606a44d53c11a406c91b0",
+      "right_id": "eef0a5527e02c8104f6a3be0",
+      "left": "sensible.java",
+      "right": "monolith.java",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    }
+  ]
+}

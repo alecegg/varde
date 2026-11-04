@@ -1,0 +1,11 @@
+{
+  "pair_id": "26bd682983ee6982f9d8264e",
+  "pair_group_id": "76ea594dcb6affb8d1bcdf16",
+  "left_id": "870fb554c34319a05f6a39b0",
+  "right_id": "095f88aeed274d78494a7c8e",
+  "left": "good.go",
+  "right": "bad.go",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "mutable-flags"
+}

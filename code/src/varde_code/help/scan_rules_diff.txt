@@ -1,0 +1,9 @@
+Show a seeded rule pack against its current built-in version
+
+Usage: varde scan rules diff <ID>
+
+Arguments:
+  <ID>  
+
+Options:
+  -h, --help  Print help

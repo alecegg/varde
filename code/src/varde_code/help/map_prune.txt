@@ -1,0 +1,8 @@
+Prune index folders under the code config root whose recorded source folder is gone. Dry run by default: nothing is deleted unless the JSON input sets `apply: true`
+
+Usage: varde map prune [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { apply?, unknownOlderThanDays? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

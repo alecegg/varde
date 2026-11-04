@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "tasks": [
+    {
+      "id": "structured-booking",
+      "pair_group": "structured-booking",
+      "category": "a",
+      "behaviour": "Compute the final booking charge from the nightly rate, nights, and a fixed cleaning fee.",
+      "cases": [
+        {
+          "input": {
+            "rate": 50,
+            "nights": 1,
+            "fee": 10
+          },
+          "expected": 60
+        },
+        {
+          "input": {
+            "rate": 80,
+            "nights": 2,
+            "fee": 15
+          },
+          "expected": 175
+        },
+        {
+          "input": {
+            "rate": 0,
+            "nights": 3,
+            "fee": 0
+          },
+          "expected": 0
+        }
+      ],
+      "input_domain": "Rate, nights, and fee are nonnegative integers; return rate*nights + fee."
+    },
+    {
+      "id": "structured-allowance",
+      "pair_group": "structured-allowance",
+      "category": "a",
+      "behaviour": "Compute the remaining allowance after subtracting recorded expenses from a starting amount.",
+      "cases": [
+        {
+          "input": {
+            "start": 100,
+            "expenses": [
+              10,
+              20
+            ]
+          },
+          "expected": 70
+        },
+        {
+          "input": {
+            "start": 50,
+            "expenses": []
+          },
+          "expected": 50
+        },
+        {
+          "input": {
+            "start": 20,
+            "expenses": [
+              5,
+              5,
+              2
+            ]
+          },
+          "expected": 8
+        }
+      ],
+      "input_domain": "Starting amount and each expense are nonnegative integers; return starting amount minus the sum of expenses."
+    },
+    {
+      "id": "structured-gratuity",
+      "pair_group": "structured-gratuity",
+      "category": "a",
+      "behaviour": "Calculate a gratuity as a percentage of a meal bill and return the bill plus gratuity.",
+      "cases": [
+        {
+          "input": {
+            "bill": 20,
+            "percent": 10
+          },
+          "expected": {
+            "gratuity": 2,
+            "total": 22
+          }
+        },
+        {
+          "input": {
+            "bill": 45,
+            "percent": 20
+          },
+          "expected": {
+            "gratuity": 9,
+            "total": 54
+          }
+        },
+        {
+          "input": {
+            "bill": 0,
+            "percent": 15
+          },
+          "expected": {
+            "gratuity": 0,
+            "total": 0
+          }
+        }
+      ],
+      "input_domain": "Bill and percentage are nonnegative integers; gratuity is bill*percent/100 and total is bill plus gratuity. Cases use values with whole-number gratuities."
+    },
+    {
+      "id": "structured-distance",
+      "pair_group": "structured-distance",
+      "category": "a",
+      "behaviour": "Convert kilometres to miles using 0.621371 miles per kilometre and round to two decimal places.",
+      "cases": [
+        {
+          "input": 0,
+          "expected": 0
+        },
+        {
+          "input": 1,
+          "expected": 0.62
+        },
+        {
+          "input": 10,
+          "expected": 6.21
+        }
+      ],
+      "input_domain": "Input is a nonnegative decimal number of kilometres; multiply by 0.621371 and round the result half up away from zero to two decimals. Supplied cases avoid ties."
+    },
+    {
+      "id": "structured-cart-count",
+      "pair_group": "structured-cart-count",
+      "category": "a",
+      "behaviour": "Return the total number of units represented by item quantity values.",
+      "cases": [
+        {
+          "input": [],
+          "expected": 0
+        },
+        {
+          "input": [
+            1,
+            2,
+            3
+          ],
+          "expected": 6
+        },
+        {
+          "input": [
+            4
+          ],
+          "expected": 4
+        }
+      ],
+      "input_domain": "Input is a list of nonnegative integer quantities; return their sum, or zero for an empty list."
+    },
+    {
+      "id": "structured-temperature",
+      "pair_group": "structured-temperature",
+      "category": "a",
+      "behaviour": "Convert Celsius to Fahrenheit and round to one decimal place.",
+      "cases": [
+        {
+          "input": 0,
+          "expected": 32
+        },
+        {
+          "input": 100,
+          "expected": 212
+        },
+        {
+          "input": -40,
+          "expected": -40
+        }
+      ],
+      "input_domain": "Input is a decimal Celsius temperature; compute C*9/5+32 and round half up away from zero to one decimal. Supplied cases avoid ties."
+    },
+    {
+      "id": "anchor-ledger",
+      "pair_group": "anchor-ledger",
+      "category": "anchor",
+      "behaviour": "Return the account balance after applying a sequence of signed ledger entries.",
+      "cases": [
+        {
+          "input": {
+            "opening": 10,
+            "entries": [
+              5,
+              -3
+            ]
+          },
+          "expected": 12
+        },
+        {
+          "input": {
+            "opening": 0,
+            "entries": []
+          },
+          "expected": 0
+        },
+        {
+          "input": {
+            "opening": 100,
+            "entries": [
+              -20,
+              -30
+            ]
+          },
+          "expected": 50
+        }
+      ],
+      "input_domain": "Opening balance and signed integer entries are integers; return their sum."
+    },
+    {
+      "id": "anchor-queue",
+      "pair_group": "anchor-queue",
+      "category": "anchor",
+      "behaviour": "Return the names of jobs whose priority meets or exceeds the requested minimum.",
+      "cases": [
+        {
+          "input": {
+            "jobs": [
+              {
+                "name": "a",
+                "priority": 1
+              }
+            ],
+            "minimum": 1
+          },
+          "expected": [
+            "a"
+          ]
+        },
+        {
+          "input": {
+            "jobs": [],
+            "minimum": 2
+          },
+          "expected": []
+        },
+        {
+          "input": {
+            "jobs": [
+              {
+                "name": "a",
+                "priority": 1
+              },
+              {
+                "name": "b",
+                "priority": 3
+              }
+            ],
+            "minimum": 2
+          },
+          "expected": [
+            "b"
+          ]
+        }
+      ],
+      "input_domain": "Job names are unique ASCII strings with integer priorities; return qualifying names in input order when priority >= minimum."
+    }
+  ]
+}

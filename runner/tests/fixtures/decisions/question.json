@@ -1,0 +1,10 @@
+{
+  "type": "question",
+  "title": "Choose a dashboard default",
+  "asked": "Which default should the dashboard use?",
+  "why": "The UI needs one stable starting point.",
+  "plan_id": "dashboard-decisions",
+  "options": [{"id": "compact", "label": "Compact", "reason": "Keeps more work visible."}],
+  "recommendation": "compact",
+  "evidence": [{"kind": "shot", "caption": "Mailbox overview", "path": "mailbox.jpg"}, {"kind": "note", "caption": "Design note", "path": "design.md"}, {"kind": "diff", "caption": "Change summary", "text": "3 files changed, 42 insertions(+), 8 deletions(-)"}]
+}

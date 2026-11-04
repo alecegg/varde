@@ -1,0 +1,12 @@
+Run deterministic checks on a task commit before integration
+
+Usage: varde plan gate <TASK> [--commit <SHA>]
+
+Arguments:
+  <TASK>                 Task markdown file
+
+Options:
+      --commit <SHA>     Task commit (defaults to HEAD)
+  -h, --help             Print help
+
+Checks task ownership (parallel plans) or the plan `scope` on the net diff (serial plans), review size, plan gate commands, varde scan, and varde learn check for changed skill or agent documents. Prints check, status, detail lines and GATE-NNN high findings; exits nonzero when a check fails.

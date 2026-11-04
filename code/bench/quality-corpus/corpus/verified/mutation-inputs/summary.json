@@ -1,0 +1,55 @@
+{
+  "languages": {
+    "cpp": {
+      "inputs": 24,
+      "license_headers": 22,
+      "repositories": [
+        "fmtlib/fmt"
+      ]
+    },
+    "csharp": {
+      "inputs": 24,
+      "license_headers": 0,
+      "repositories": [
+        "App-vNext/Polly"
+      ]
+    },
+    "go": {
+      "inputs": 24,
+      "license_headers": 24,
+      "repositories": [
+        "spf13/cobra"
+      ]
+    },
+    "java": {
+      "inputs": 24,
+      "license_headers": 24,
+      "repositories": [
+        "lysine-dev/okhttp"
+      ]
+    },
+    "python": {
+      "inputs": 24,
+      "license_headers": 0,
+      "repositories": [
+        "pytest-dev/pytest"
+      ]
+    },
+    "rust": {
+      "inputs": 24,
+      "license_headers": 0,
+      "repositories": [
+        "BurntSushi/ripgrep"
+      ]
+    },
+    "typescript": {
+      "inputs": 24,
+      "license_headers": 0,
+      "repositories": [
+        "vuejs/core"
+      ]
+    }
+  },
+  "target": 20,
+  "total": 168
+}

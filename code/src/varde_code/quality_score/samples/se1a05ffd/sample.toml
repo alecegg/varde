@@ -1,0 +1,17 @@
+language = "go"
+task = "Implement an inventory order module in Go, package `original`."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.go" = "fd3e4cd924ec531e67eb9332aac0bf5218a8fd0bcd0e7ce14861f1de28af28bb"
+"go.mod" = "117f3b74b5fcfedd933450c6dd250cfadde2d42f9e677dc3226365c66c9d9b03"
+"judge-classes.go" = "86c8fa0240c43cb8e4108d4e6f1b3a73f2e92844331609e9927eec64d993df6a"
+"judge-defensive.go" = "edade599f614e665a309fa36f4a5e16df7efa219dfe8b953035caf4ce959e995"
+"judge-extract.go" = "017af34e42f03e0c48fa0124c6eff67c02541d753b8799fb0a29066777b7154c"
+"judge-inline.go" = "cd981144c29744a7034596380925c4762f6b4bf1762e117c3ce647a464e376f3"
+"judge-names.go" = "4b1738e6a639c5d6bf4fd04ae2b86bdb794e78576fc7e17920943a4b80bedb8b"
+"original.go" = "1750efa18cb6fcbbd2e27559712988a8fdc52c27d28da942736eea121e41f86f"
+"smoothed.go" = "e1a05ffd915829a13fda9dec0805598319bc18291ef15a8ef6166b6c6ec2452f"
+"smoothing.md" = "e687cbfc45d4b4c4f3cd16a9547b8383dea5e1f1c5e67bb8e2d6b120fc47b921"
+"task.md" = "1c1cbe4abf2d137cbaaadb5dca5d7059dcce8518da768507b411090522dafb0c"

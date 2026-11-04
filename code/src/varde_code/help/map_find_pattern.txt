@@ -1,0 +1,8 @@
+Query: find AST nodes matching a $VAR / $$$VAR pattern. (see `find_pattern` help for inputs)
+
+Usage: varde map find_pattern [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot?, path? (or filePath), pattern, language?, matchesLimit?, matchesOffset?, fullMatches? }. Relative path/filePath resolves against repoRoot; repoRoot alone searches the repo. Directories need language. Needs no index. Examples: {"repoRoot":".","pattern":"console.log($ARG)","language":"typescript"}; {"repoRoot":".","path":"src/","pattern":"console.log($ARG)","language":"typescript"}; {"repoRoot":".","filePath":"src/main.ts","pattern":"console.log($ARG)"}. These search the repo, a directory, or one file. A single file can infer language from its extension. Call patterns: `<name>($$$ARGS)`; methods `$RECV.<name>($$$ARGS)`; qualified calls need the full path
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

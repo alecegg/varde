@@ -1,0 +1,53 @@
+{
+  "pair_group_id": "ce31cc49d12751412769f462",
+  "task": "order-quote",
+  "language": "csharp",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "45cae87d5764ffb3aee8a93d",
+      "left_id": "58b42a96b01df41f8b4de3ef",
+      "right_id": "70784a153f6cce53d57d36da",
+      "left": "sensible.cs",
+      "right": "monolith.cs",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    },
+    {
+      "pair_id": "03b9b7b578a19328874b12dc",
+      "left_id": "58b42a96b01df41f8b4de3ef",
+      "right_id": "e1d5eadcce0a3590387cddf2",
+      "left": "sensible.cs",
+      "right": "tiny.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "17360a1668873f3a3df15e74",
+      "left_id": "58b42a96b01df41f8b4de3ef",
+      "right_id": "d375ad8e5afd1b28bad3a3a4",
+      "left": "sensible.cs",
+      "right": "padded.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "d601a6548d0bd4b79684828c",
+      "left_id": "58b42a96b01df41f8b4de3ef",
+      "right_id": "6ed7e6fcc7e53fdaea6aee83",
+      "left": "sensible.cs",
+      "right": "sizematched.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "7188d2d65a566a07ef8e8d20",
+      "left_id": "58b42a96b01df41f8b4de3ef",
+      "right_id": "b3d3a3a0e3ebb1abf3f28543",
+      "left": "sensible.cs",
+      "right": "namematched.cs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    }
+  ]
+}

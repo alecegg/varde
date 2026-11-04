@@ -1,0 +1,9 @@
+Print a reader's unread messages and advance its cursor
+
+Usage: varde msg read [OPTIONS]
+
+Options:
+      --as <ADDRESS>  Address to read as [default: main]
+      --all           Print every message without moving the cursor
+      --json          Print the messages as one JSON document
+  -h, --help          Print help

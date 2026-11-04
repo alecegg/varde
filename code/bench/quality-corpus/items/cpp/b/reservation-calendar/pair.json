@@ -1,0 +1,33 @@
+{
+  "task": "reservation-calendar",
+  "pair_group": "reservation-calendar",
+  "language": "cpp",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "69dc9cb6347bc5487d010858",
+      "left": "sensible.cpp",
+      "right": "monolith.cpp"
+    },
+    {
+      "pair_id": "419ed539891ab0a70c5b08c3",
+      "left": "sensible.cpp",
+      "right": "tiny.cpp"
+    },
+    {
+      "pair_id": "2a720e64138ed4a379e91e55",
+      "left": "sensible.cpp",
+      "right": "padded.cpp"
+    },
+    {
+      "pair_id": "b972a30a0a5723bdaa599ea7",
+      "left": "sensible.cpp",
+      "right": "sizematched.cpp"
+    },
+    {
+      "pair_id": "445d13422d9dbdebd36404d5",
+      "left": "sensible.cpp",
+      "right": "namematched.cpp"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+Refresh the current session wake context
+
+Usage: varde msg address refresh [OPTIONS]
+
+Options:
+      --session <SESSION>  Session id to refresh
+      --harness <HARNESS>  Session harness (default: detected)
+  -h, --help               Print help

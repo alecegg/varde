@@ -1,0 +1,50 @@
+/* Code panel: header (title, language, marked lines, Copy), a focusable scroll region, a numbered gutter. Colours come only from --vd-* tokens. */
+.vd-code { margin-inline: 0; min-inline-size: 0; }
+.vd-code > .vd-code-head { gap: var(--vd-space-3); flex-wrap: wrap; }
+.vd-code-title { font-weight: 600; color: var(--vd-text); overflow-wrap: anywhere; }
+.vd-code-lang { color: var(--vd-text-secondary); text-transform: uppercase; letter-spacing: var(--vd-label-tracking); }
+.vd-code-marks { color: var(--vd-text); }
+.vd-code-marks::before { content: "\25B8\00a0"; }
+.vd-code-head .vd-code-copy { margin-inline-start: auto; }
+.vd-code-copy { min-block-size: 44px; min-inline-size: 44px; padding-inline: var(--vd-space-3); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); background: var(--vd-surface); color: var(--vd-text); font: inherit; font-size: var(--vd-label-size); cursor: pointer; }
+@media (hover: hover) { .vd-code-copy:hover { background: var(--vd-accent-subtle); } }
+.vd-code-copy:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-code-scratch { position: fixed; inset-block-start: 0; inset-inline-start: 0; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+.vd-code-status { color: var(--vd-text); font-size: var(--vd-label-size); }
+.vd-code-scroll { overflow: auto; max-block-size: 36rem; }
+.vd-code-scroll:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vd-code .vd-code-pre { display: block; margin: 0; padding: var(--vd-space-3) 0; background: none; border-radius: 0; inline-size: max-content; min-inline-size: 100%; overflow: visible; font-family: var(--vd-font-mono); line-height: 1.55; tab-size: 4; }
+.vd-code-pre code { display: block; font-size: var(--vd-code-size); }
+.vd-code-line { display: block; padding-inline: var(--vd-space-3) var(--vd-space-4); border-inline-start: 3px solid transparent; }
+.vd-code-d1 { --vd-code-gutter: 3ch; }
+.vd-code-d2 { --vd-code-gutter: 4ch; }
+.vd-code-d3 { --vd-code-gutter: 5ch; }
+.vd-code-d4 { --vd-code-gutter: 6ch; }
+.vd-code-d5 { --vd-code-gutter: 7ch; }
+.vd-code-d6 { --vd-code-gutter: 8ch; }
+.vd-code-line::before { content: attr(data-line); display: inline-block; inline-size: var(--vd-code-gutter); margin-inline-end: var(--vd-space-3); text-align: end; text-indent: 0; color: var(--vd-text-secondary); user-select: none; -webkit-user-select: none; }
+.vd-code:not(.vd-code-nonum) .vd-code-line { padding-inline-start: calc(var(--vd-code-gutter) + var(--vd-space-3) * 2); text-indent: calc(-1 * (var(--vd-code-gutter) + var(--vd-space-3))); }
+.vd-code-nonum .vd-code-line::before { content: none; }
+.vd-code-line[data-mark] { background: var(--vd-tone-warning-tint); border-inline-start-color: var(--vd-tone-warning-edge); }
+.vd-code-line[data-mark]::before { content: "\25B8\00a0" attr(data-line); color: var(--vd-text); font-weight: 700; }
+.vd-code-nonum .vd-code-line[data-mark]::before { content: "\25B8\00a0"; inline-size: auto; }
+.vd-code-wrap .vd-code-pre { inline-size: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.vd-code-pre { white-space: pre; }
+.vd-code-k { color: var(--vd-tone-decision-text); font-weight: 600; }
+.vd-code-s { color: var(--vd-tone-success-text); }
+.vd-code-n { color: var(--vd-tone-warning-text); }
+.vd-code-c { color: var(--vd-text-secondary); font-style: italic; }
+@media (forced-colors: active) {
+  .vd-code { border: 1px solid CanvasText; }
+  .vd-code > .vd-code-head { border-block-end: 1px solid CanvasText; }
+  .vd-code-copy { border: 1px solid ButtonText; }
+  .vd-code-line[data-mark] { background: none; border-inline-start-color: Highlight; }
+  .vd-code-k, .vd-code-s, .vd-code-n, .vd-code-c { color: CanvasText; }
+}
+@media print {
+  .vd-code { break-inside: auto; }
+  .vd-code-scroll { overflow: visible; max-block-size: none; }
+  .vd-code .vd-code-pre { inline-size: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .vd-code-copy, .vd-code-status { display: none; }
+  .vd-code-line[data-mark] { background: none; border-inline-start-color: CanvasText; }
+}

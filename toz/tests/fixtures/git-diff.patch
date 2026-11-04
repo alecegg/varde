@@ -1,0 +1,333 @@
+diff --git a/crates/toz-core/src/store.rs b/crates/toz-core/src/store.rs
+index b8a1083..4d0aaf5 100644
+--- a/crates/toz-core/src/store.rs
++++ b/crates/toz-core/src/store.rs
+@@ -144,6 +144,17 @@ pub struct ChunkRow {
+     pub body: String,
+ }
+ 
++/// Best-effort chmod; the store still works if it fails (e.g. exotic filesystems).
++fn restrict_perms(path: &Path, mode: u32) {
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::PermissionsExt;
++        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
++    }
++    #[cfg(not(unix))]
++    let _ = (path, mode);
++}
++
+ pub fn now() -> i64 {
+     SystemTime::now()
+         .duration_since(UNIX_EPOCH)
+@@ -156,8 +167,14 @@ impl Store {
+         if let Some(parent) = path.parent() {
+             std::fs::create_dir_all(parent)
+                 .with_context(|| format!("creating {}", parent.display()))?;
++            restrict_perms(parent, 0o700);
+         }
++        let existed = path.exists();
+         let conn = Connection::open(path).with_context(|| format!("opening {}", path.display()))?;
++        if !existed {
++            // The store holds raw command output; keep it private to the user.
++            restrict_perms(path, 0o600);
++        }
+         conn.busy_timeout(std::time::Duration::from_secs(5))?;
+         conn.pragma_update(None, "journal_mode", "WAL")?;
+         conn.pragma_update(None, "synchronous", "NORMAL")?;
+diff --git a/crates/toz/src/install.rs b/crates/toz/src/install.rs
+index a7dbc25..76acc91 100644
+--- a/crates/toz/src/install.rs
++++ b/crates/toz/src/install.rs
+@@ -23,6 +23,44 @@ pub struct Bundle {
+     pub files: &'static [(&'static str, &'static str, Mode)],
+     /// Printed after a successful install.
+     pub after: &'static str,
++    /// Executable to probe for the harness version, and the minimum the shim needs.
++    pub binary: &'static str,
++    pub min_version: (u64, u64, u64),
++    pub why_min: &'static str,
++}
++
++/// Run `<binary> --version` and pull the first `x.y.z` out of it.
++pub fn installed_version(binary: &str) -> Option<(u64, u64, u64)> {
++    let out = std::process::Command::new(binary)
++        .arg("--version")
++        .stdin(std::process::Stdio::null())
++        .output()
++        .ok()?;
++    let text = format!(
++        "{}{}",
++        String::from_utf8_lossy(&out.stdout),
++        String::from_utf8_lossy(&out.stderr)
++    );
++    parse_version(&text)
++}
++
++pub fn parse_version(text: &str) -> Option<(u64, u64, u64)> {
++    for token in text.split(|c: char| c.is_whitespace() || c == '(' || c == ')') {
++        let t = token.trim_start_matches('v');
++        let mut parts = t.split('.');
++        let (Some(a), Some(b), Some(c)) = (parts.next(), parts.next(), parts.next()) else {
++            continue;
++        };
++        let c = c.trim_end_matches(|ch: char| !ch.is_ascii_digit());
++        if let (Ok(a), Ok(b), Ok(c)) = (a.parse(), b.parse(), c.parse()) {
++            return Some((a, b, c));
++        }
++    }
++    None
++}
++
++pub fn fmt_version(v: (u64, u64, u64)) -> String {
++    format!("{}.{}.{}", v.0, v.1, v.2)
+ }
+ 
+ const CLAUDE_CODE: Bundle = Bundle {
+@@ -46,6 +84,9 @@ const CLAUDE_CODE: Bundle = Bundle {
+         ),
+     ],
+     after: "Loads as toz@skills-dir on the next Claude Code session (requires ≥ 2.1.236).",
++    binary: "claude",
++    min_version: (2, 1, 236),
++    why_min: "PostToolUse.updatedToolOutput",
+ };
+ 
+ const PI: Bundle = Bundle {
+@@ -64,6 +105,9 @@ const PI: Bundle = Bundle {
+         ),
+     ],
+     after: "Loaded as a global pi extension (+ /skill:toz) on the next pi session.",
++    binary: "pi",
++    min_version: (0, 84, 0),
++    why_min: "tool_result content patches",
+ };
+ 
+ const OPENCODE: Bundle = Bundle {
+@@ -82,6 +126,9 @@ const OPENCODE: Bundle = Bundle {
+         ),
+     ],
+     after: "Loaded from ~/.config/opencode/plugin on the next opencode session (`opencode plugin list` to confirm).",
++    binary: "opencode",
++    min_version: (2, 0, 0),
++    why_min: "the 2.x { id, setup(ctx) } plugin API",
+ };
+ 
+ const CODEX: Bundle = Bundle {
+@@ -106,6 +153,9 @@ const CODEX: Bundle = Bundle {
+     ],
+     after: "Codex needs `hooks = true` in ~/.codex/config.toml and will ask you to trust the new hooks. \
+ Codex can't replace shell output post-hoc, so toz only stores it and adds a handle hint.",
++    binary: "codex",
++    min_version: (0, 140, 0),
++    why_min: "hooks.json with PostToolUse additionalContext",
+ };
+ 
+ pub const BUNDLES: &[&Bundle] = &[&CLAUDE_CODE, &PI, &OPENCODE, &CODEX];
+@@ -174,6 +224,133 @@ pub fn install(b: &Bundle, dir: &Path) -> Result<Vec<(PathBuf, bool)>> {
+     Ok(out)
+ }
+ 
++/// Reverse `install`. Owned files are deleted (and empty parent dirs up to `dir` pruned);
++/// merged files have toz's entries/block removed and are deleted only if that leaves them
++/// empty. Returns (path, what happened).
++pub fn uninstall(b: &Bundle, dir: &Path) -> Result<Vec<(PathBuf, &'static str)>> {
++    let mut out = Vec::new();
++    for (rel, _, mode) in b.files {
++        let path = dir.join(rel);
++        let Ok(current) = std::fs::read_to_string(&path) else {
++            out.push((path, "absent"));
++            continue;
++        };
++        let remaining: Option<String> = match mode {
++            Mode::Own => None,
++            Mode::MergeHooks => {
++                let stripped = strip_hooks(&current)?;
++                if stripped.trim().is_empty() {
++                    None
++                } else {
++                    Some(stripped)
++                }
++            }
++            Mode::MergeBlock => {
++                let stripped = strip_block(&current);
++                if stripped.trim().is_empty() {
++                    None
++                } else {
++                    Some(stripped)
++                }
++            }
++        };
++        match remaining {
++            Some(text) if text == current => out.push((path, "untouched")),
++            Some(text) => {
++                std::fs::write(&path, text)
++                    .with_context(|| format!("writing {}", path.display()))?;
++                out.push((path, "toz entries removed"));
++            }
++            None => {
++                std::fs::remove_file(&path)
++                    .with_context(|| format!("removing {}", path.display()))?;
++                prune_empty_dirs(path.parent(), dir);
++                out.push((path, "removed"));
++            }
++        }
++    }
++    // The Claude Code bundle owns its whole plugin dir.
++    if b.harness == "claude-code"
++        && dir.exists()
++        && std::fs::read_dir(dir)
++            .map(|mut d| d.next().is_none())
++            .unwrap_or(false)
++    {
++        let _ = std::fs::remove_dir(dir);
++    }
++    Ok(out)
++}
++
++fn prune_empty_dirs(mut cur: Option<&Path>, stop: &Path) {
++    while let Some(d) = cur {
++        if d == stop || !d.starts_with(stop) {
++            break;
++        }
++        if std::fs::remove_dir(d).is_err() {
++            break;
++        }
++        cur = d.parent();
++    }
++}
++
++/// Remove toz's entries from a hooks file; returns "" when no hooks remain at all.
++fn strip_hooks(current: &str) -> Result<String> {
++    let mut doc: Value =
++        serde_json::from_str(current).context("existing hooks.json is not valid JSON")?;
++    let Some(events) = doc["hooks"].as_object_mut() else {
++        return Ok(current.to_string());
++    };
++    let mut changed = false;
++    let mut empty_events = Vec::new();
++    for (event, list) in events.iter_mut() {
++        if let Some(arr) = list.as_array_mut() {
++            let before = arr.len();
++            arr.retain(|entry| !mentions_toz(entry));
++            changed |= arr.len() != before;
++            if arr.is_empty() {
++                empty_events.push(event.clone());
++            }
++        }
++    }
++    for ev in empty_events {
++        events.remove(&ev);
++    }
++    if !changed {
++        return Ok(current.to_string());
++    }
++    let only_hooks = doc.as_object().map(|o| o.len() == 1).unwrap_or(false);
++    if only_hooks
++        && doc["hooks"]
++            .as_object()
++            .map(|o| o.is_empty())
++            .unwrap_or(false)
++    {
++        return Ok(String::new());
++    }
++    Ok(serde_json::to_string_pretty(&doc)? + "\n")
++}
++
++/// Remove the toz block (and the blank line before it) from a markdown file.
++fn strip_block(current: &str) -> String {
++    match (current.find(BLOCK_START), current.find(BLOCK_END)) {
++        (Some(a), Some(b)) if b > a => {
++            let end = b + BLOCK_END.len();
++            let head = current[..a].trim_end();
++            let tail = current[end..].trim_start_matches('\n');
++            let mut s = head.to_string();
++            if !s.is_empty() {
++                s.push('\n');
++                if !tail.is_empty() {
++                    s.push('\n');
++                }
++            }
++            s.push_str(tail);
++            s
++        }
++        _ => current.to_string(),
++    }
++}
++
+ /// Merge toz's hook entries into an existing Claude-Code-style hooks file. For each event,
+ /// any existing entry whose command mentions `toz ` is replaced; others are kept.
+ fn merge_hooks(current: &str, ours: &str) -> Result<String> {
+@@ -283,6 +460,36 @@ mod tests {
+         assert_eq!(merge_block("", block), format!("{block}\n"));
+     }
+ 
++    #[test]
++    fn strip_hooks_and_block_reverse_merge() {
++        let existing =
++            r#"{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo bye"}]}]}}"#;
++        let ours = render(include_str!("../../../harness/codex/hooks.json")).unwrap();
++        let merged = merge_hooks(existing, &ours).unwrap();
++        let back: Value = serde_json::from_str(&strip_hooks(&merged).unwrap()).unwrap();
++        assert_eq!(back, serde_json::from_str::<Value>(existing).unwrap());
++        // Only toz hooks → file becomes empty → caller deletes it.
++        let only = merge_hooks("", &ours).unwrap();
++        assert_eq!(strip_hooks(&only).unwrap(), "");
++
++        let block = "<!-- toz:start -->\nnew\n<!-- toz:end -->";
++        let doc = merge_block("# Mine\n\nkeep\n", block);
++        assert_eq!(strip_block(&doc), "# Mine\n\nkeep\n");
++        assert_eq!(strip_block(&merge_block("", block)), "");
++        let mid = format!("top\n\n{block}\n\nbottom\n");
++        assert_eq!(strip_block(&mid), "top\n\nbottom\n");
++    }
++
++    #[test]
++    fn parses_harness_version_strings() {
++        assert_eq!(parse_version("2.1.267 (Claude Code)"), Some((2, 1, 267)));
++        assert_eq!(parse_version("opencode v2.0.12\n"), Some((2, 0, 12)));
++        assert_eq!(parse_version("codex-cli 0.147.0"), Some((0, 147, 0)));
++        assert_eq!(parse_version("Warning: blah\n0.84.2"), Some((0, 84, 2)));
++        assert_eq!(parse_version("1.2.3-beta.1"), Some((1, 2, 3)));
++        assert_eq!(parse_version("nope"), None);
++    }
++
+     #[test]
+     fn note_json_renders_as_string_literal() {
+         let r = render("const N = {{TOZ_NOTE_JSON}};").unwrap();
+diff --git a/crates/toz/src/main.rs b/crates/toz/src/main.rs
+index 8fb1d3a..44b8403 100644
+--- a/crates/toz/src/main.rs
++++ b/crates/toz/src/main.rs
+@@ -1,3 +1,7 @@
++#![cfg_attr(not(unix), allow(unused))]
++#[cfg(not(unix))]
++compile_error!("toz supports macOS and Linux only (process groups, isatty, and hook plumbing are Unix-specific)");
++
+ mod cli;
+ mod commands;
+ mod exec;
+@@ -7,8 +11,22 @@ use clap::Parser;
+ 
+ fn main() {
+     let args = cli::Cli::parse();
+-    match commands::dispatch(args) {
++    // Hook mode must never fail the harness: a non-zero exit from a Claude Code PostToolUse hook
++    // is reported to the model, which is worse than silently passing the original output through.
++    let hook_mode = matches!(&args.cmd, cli::Command::Capture(a) if a.hook);
++    let result = if hook_mode {
++        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| commands::dispatch(args)))
++            .unwrap_or_else(|_| Err(anyhow::anyhow!("panic inside hook")))
++    } else {
++        commands::dispatch(args)
++    };
++    match result {
++        Ok(_) if hook_mode => std::process::exit(0),
+         Ok(code) => std::process::exit(code),
++        Err(e) if hook_mode => {
++            commands::log_hook_error(&e);
++            std::process::exit(0);
++        }
+         Err(e) => {
+             eprintln!("toz: {e:#}");
+             std::process::exit(2);

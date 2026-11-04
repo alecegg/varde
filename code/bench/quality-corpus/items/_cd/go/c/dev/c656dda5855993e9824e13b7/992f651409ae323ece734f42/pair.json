@@ -1,0 +1,30 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "gin_integration_test.go"
+  ],
+  "changed_functions": [
+    "TestUnixSocket"
+  ],
+  "child_sha": "4427ca4a607802d2cd45268d83a180ef6aa0b5d4",
+  "file_licenses": {
+    "gin-gonic/gin:gin_integration_test.go": "MIT"
+  },
+  "id": "992f651409ae323ece734f42",
+  "intent": {
+    "linked_issues": [],
+    "message": "Update gin_integration_test.go (#2341)\n\n* Update gin_integration_test.go\n\nTestUnixSocket fails if you run it twice in a row.  This is due to the unix socket file persisting.  Added defer to clean up.\n\nWhats unclear is the following test TestBadUnixSocket I suspect is just looking for cruft maybe from a prior test or defaults not working, I have not enough background to say.\n\n* Update gin_integration_test.go\n\nI believe there is some tab issue here, tried to manual overwrite it now.\n\n* Update gin_integration_test.go\n\nsquash you dang spaces!!!"
+  },
+  "label_source": "developer-intent",
+  "language": "go",
+  "left": "a.go",
+  "license": "MIT",
+  "pair_group_id": "refactor-0d4df81fd7b85324",
+  "parent_sha": "be4ba7d9df52a96c34715a89a75197aeff2f921a",
+  "pin_sha": "0f09c3a9b4626d9fe9979cf4d0521d6ae32ab646",
+  "repo": "gin-gonic/gin",
+  "right": "b.go",
+  "split": "dev",
+  "upstream_url": "https://github.com/gin-gonic/gin.git"
+}

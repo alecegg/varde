@@ -1,0 +1,48 @@
+{
+  "name": "varde-runner-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --experimental-strip-types --test src/lib/plans.test.js src/lib/mailSoak.test.js src/lib/mail/thread.test.js src/lib/jobs.test.js src/lib/agentsApi.test.js src/lib/agentsPage.test.js src/lib/identities.test.js src/lib/chat/chatState.test.js src/lib/chat/pins.test.js src/lib/chat/conversationRows.test.js src/lib/chat/needsYouRows.test.js src/lib/profileForm.test.js src/lib/pairing.test.js src/lib/botApi.test.js src/lib/threadsApi.test.js src/lib/runnerConfigApi.test.js src/lib/needsYouShort.test.js src/routes/roles/roles.test.js",
+    "test:markdown": "node --experimental-strip-types --test src/lib/markdown.test.js",
+    "test:ux-a": "vitest run src/routes/settings/runnerItems.test.js",
+    "test:settings": "vitest run src/routes/settings/types.test.js src/routes/settings/settingsNav.test.js",
+    "test:ux-b": "vitest run src/routes/settings/types.test.js src/routes/settings/settingsNav.test.js src/routes/settings/savedMessage.test.js",
+    "test:ux-c": "vitest run src/lib/agentsOrder.test.js src/lib/approvalCard.test.js src/routes/settings/firstRun.test.js src/lib/launchForm.test.js",
+    "test:ux-d": "vitest run src/lib/agentConfig.test.js src/lib/rosterLabel.test.js",
+    "test:ux-e": "vitest run src/lib/agentRow.test.js src/lib/agentPins.test.js src/lib/dragReorder.test.js src/lib/rosterCounts.test.js",
+    "test:ux2-c": "vitest run src/lib/agentRow.test.js",
+    "test:ux-f": "vitest run src/lib/agentFilter.test.js src/lib/agentStatus.test.js",
+    "test:ux2-e": "vitest run src/lib/launchForm.test.js",
+    "test:ux2-f": "vitest run src/lib/roleStatus.test.js",
+    "test:queue-page": "vitest run src/lib/homeList.test.js src/lib/roleStatus.test.js",
+    "test:ux2-a": "vitest run src/lib/homeList.test.js src/lib/roleStatus.test.js",
+    "test:chat-ui": "vitest run src/lib/chat/inlineApproval.test.js src/lib/chat/delegationRows.test.js && node --experimental-strip-types --test src/lib/chat/chatState.test.js",
+    "test:chat-mobile": "node src/lib/chat/test-mobile.mjs",
+    "test:nav-safe-area": "node scripts/nav-safe-area.test.mjs",
+    "test:webkit-viewport": "node --test scripts/webkit-viewport.test.mjs",
+    "test:ux2-b": "vitest run src/lib/chat/inlineApproval.test.js src/lib/approvalCard.test.js",
+    "test:ux2-d": "vitest run src/lib/homeList.test.js src/lib/managerEntry.test.js src/lib/homeApprove.test.js",
+    "test:ux2-g": "vitest run src/routes/settings/settingsNav.test.js src/routes/settings/firstRun.test.js",
+    "check": "svelte-kit sync && svelte-check --threshold error"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "4.0.0",
+    "@sveltejs/kit": "3.1.0",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tailwindcss/vite": "4.3.3",
+    "playwright": "1.64.0",
+    "svelte": "5.57.2",
+    "svelte-check": "4.7.7",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  },
+  "dependencies": {
+    "bits-ui": "2.19.5"
+  }
+}

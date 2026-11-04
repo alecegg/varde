@@ -1,0 +1,132 @@
+[[mutants]]
+id="empty-allowed"
+description="Accepts an empty order"
+find='if len(lines) == 0 || len(lines) > 20 {'
+replace='if len(lines) > 20 {'
+[[mutants]]
+id="row-cap-21"
+description="Allows twenty-one rows"
+find='len(lines) > 20'
+replace='len(lines) > 21'
+equivalent=true
+reason="With only three valid SKUs, any 21-row order necessarily contains a duplicate. The changed cap still rejects it, as required, so observable behavior is unchanged."
+
+[[mutants]]
+id="quantity-min-zero"
+description="Allows zero quantity"
+find='quantity < 1 || quantity > 99'
+replace='quantity < 0 || quantity > 99'
+[[mutants]]
+id="quantity-max-100"
+description="Allows quantity one hundred"
+find='quantity < 1 || quantity > 99'
+replace='quantity < 1 || quantity > 100'
+[[mutants]]
+id="quantity-parse-prefix"
+description="Accepts a numeric prefix"
+find='quantity, err := strconv.Atoi(parts[1])'
+replace='quantity, err := strconv.Atoi(strings.TrimSpace(parts[1]))'
+[[mutants]]
+id="sku-pen-unknown"
+description="Rejects PEN"
+find='return sku == "PEN" || sku == "BOOK" || sku == "BAG"'
+replace='return sku == "PENX" || sku == "BOOK" || sku == "BAG"'
+[[mutants]]
+id="sku-book-unknown"
+description="Rejects BOOK"
+find='return sku == "PEN" || sku == "BOOK" || sku == "BAG"'
+replace='return sku == "PEN" || sku == "BOOKX" || sku == "BAG"'
+[[mutants]]
+id="sku-bag-unknown"
+description="Rejects BAG"
+find='return sku == "PEN" || sku == "BOOK" || sku == "BAG"'
+replace='return sku == "PEN" || sku == "BOOK" || sku == "BAGX"'
+[[mutants]]
+id="duplicate-check-removed"
+description="Allows duplicate SKUs"
+find='if seen[parts[0]] {'
+replace='if false {'
+[[mutants]]
+id="pen-price"
+description="Changes PEN unit price"
+find='return 125'
+replace='return 126'
+[[mutants]]
+id="book-price"
+description="Changes BOOK unit price"
+find='return 850'
+replace='return 851'
+[[mutants]]
+id="bag-price"
+description="Changes BAG unit price"
+find='return 2400'
+replace='return 2401'
+[[mutants]]
+id="discount-tier-low"
+description="Moves lower discount threshold"
+find='subtotal >= 2500'
+replace='subtotal >= 2499'
+equivalent=true
+reason="Every valid merchandise subtotal is a sum of catalog prices in 25-cent increments, so 2499 cents is unreachable; changing the threshold from 2500 to 2499 cannot affect a valid order."
+
+[[mutants]]
+id="discount-tier-high"
+description="Moves upper discount threshold"
+find='subtotal >= 7500'
+replace='subtotal >= 7499'
+equivalent=true
+reason="Every valid merchandise subtotal is a sum of catalog prices in 25-cent increments, so 7499 cents is unreachable; changing the threshold from 7500 to 7499 cannot affect a valid order."
+
+[[mutants]]
+id="discount-rate-low"
+description="Changes five percent discount"
+find='roundedPercent(subtotal, 5)'
+replace='roundedPercent(subtotal, 6)'
+[[mutants]]
+id="discount-rate-high"
+description="Changes ten percent discount"
+find='roundedPercent(subtotal, 10)'
+replace='roundedPercent(subtotal, 11)'
+[[mutants]]
+id="tax-rate"
+description="Changes tax percentage"
+find='roundedPercent(discountedSubtotal, 8)'
+replace='roundedPercent(discountedSubtotal, 9)'
+[[mutants]]
+id="tax-order"
+description="Taxes subtotal before discount"
+find='roundedPercent(discountedSubtotal, 8)'
+replace='roundedPercent(subtotal, 8)'
+[[mutants]]
+id="shipping-low"
+description="Changes first shipping threshold"
+find='if discountedSubtotal < 2500 {'
+replace='if discountedSubtotal < 2499 {'
+equivalent=true
+reason="For valid orders, discounted subtotals cannot equal 2499 cents: below 2500 they remain 25-cent multiples, and the discounted bands jump over 2499. The threshold change cannot alter shipping."
+
+[[mutants]]
+id="shipping-high"
+description="Changes upper shipping threshold"
+find='if discountedSubtotal < 7500 {'
+replace='if discountedSubtotal < 7499 {'
+equivalent=true
+reason="For valid orders, discounted subtotals cannot equal 7499 cents: 5% tier values remain below the boundary and 10% tier values jump from below to above it. The threshold change cannot alter shipping."
+
+[[mutants]]
+id="tax-rounding"
+description="Rounds ties down"
+find='(amount*rate + 50) / 100'
+replace='(amount*rate + 49) / 100'
+[[mutants]]
+id="row-split"
+description="Accepts extra fields"
+find='if len(parts) != 2 {'
+replace='if len(parts) < 2 {'
+[[mutants]]
+id="equivalent-validation"
+description="Equivalent validation lookup"
+find='if !known(parts[0]) {'
+replace='if known(parts[0]) == false {'
+equivalent=true
+reason="Boolean negation preserves the same known-SKU condition"

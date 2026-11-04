@@ -1,0 +1,64 @@
+# Error-swallowing rules for go.
+# Severity evidence: error needs zero false positives across this repository and
+# at least three reference repositories per language; tighten on a false positive.
+#
+# Go has no exceptions, so the swallow shape is a blank-identifier discard.
+# Three rules cover the shapes the plan decided on (2026-10-08): the named error
+# variable (`_ = err`), a discarded single-result call (`_ = f(...)`), and a
+# discarded two-result call (`_, _ = f(...)`). Unchecked returns (`f()` as a
+# statement, `v, _ := f()`) need type facts and belong to the follow-up audit
+# plan, so no rule matches them.
+#
+# Severity is measured, not assumed. `_ = err` discards a value the author has
+# already named as an error, so it ships at `error`. The call rules ship at
+# `warning`: Go's blank identifier is the language's documented way to ignore a
+# result, so most corpus hits are deliberate (`_ = conn.Close()`, `_, _ =
+# w.Write(...)`) and patterns cannot tell an error result from a non-error one
+# (`_ = ctx.PopPid()`, `_, _ = stack.Pop()`) without type facts. Measured on
+# caddy, hugo and traefik: of 224 non-test call-discard hits, 218 discard an
+# error-returning result and 6 discard a non-error value (`menus.Value` x3,
+# `RedirectStdLog`, `DrainEvictedIdentitiesMatching`, `PopPid`); the two-value
+# rule's 77 hits all discard an error. Raising either call rule to `error`
+# waits for the audit plan.
+#
+# `exclude_test_paths` drops `_test.go` findings: Go tests discard results
+# deliberately to keep assertions terse, and 404 of the 628 raw corpus hits were
+# in test-path files. The contract fixtures are path-independent, so every rule
+# has positive and negative coverage, and this repository's five Go files
+# produce no finding at any severity.
+
+[[rule]]
+id = "error-swallow-go"
+kind = "pattern"
+severity = "error"
+name = "Discarded Go error variable"
+description = "A blank identifier assignment discards a variable named `err`."
+message = "discarded error: `_ = err` throws away a captured error"
+remediation = "handle or return the error, or document the intentional suppression in a comment"
+pattern = "_ = err"
+languages = ["go"]
+exclude_test_paths = true
+
+[[rule]]
+id = "error-swallow-go-call"
+kind = "pattern"
+severity = "warning"
+name = "Discarded Go call result"
+description = "A blank identifier assignment discards the only result of a call."
+message = "discarded call result: `_ = f(...)` may be hiding an error"
+remediation = "check the returned error, or document the intentional discard; `_ =` is Go's explicit-ignore idiom"
+pattern = "_ = $CALL($$$ARGS)"
+languages = ["go"]
+exclude_test_paths = true
+
+[[rule]]
+id = "error-swallow-go-two-value"
+kind = "pattern"
+severity = "warning"
+name = "Discarded Go two-value call result"
+description = "A blank identifier assignment discards both results of a call."
+message = "discarded call results: `_, _ = f(...)` may be hiding an error"
+remediation = "check the returned error, or document the intentional discard; `_, _ =` is Go's explicit-ignore idiom"
+pattern = "_, _ = $CALL($$$ARGS)"
+languages = ["go"]
+exclude_test_paths = true

@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/justfile" ] && [ -d "$root/.githooks" ] || exit 0
+cd "$root"
+. "$(dirname "$0")/lib.sh"
+record_guardrail_on_exit hook-pre-commit
+
+run_pyright_at_stage pre-commit
+
+paths=$(mktemp)
+guardrail_cleanup_path=$paths
+trap 'exit 1' HUP INT TERM
+git diff --cached --name-only --diff-filter=d -z -- '*.py' >"$paths"
+[ -s "$paths" ] || exit 0
+
+run_ruff_xargs ruff check --force-exclude <"$paths"
+run_ruff_xargs ruff format --check --force-exclude <"$paths"

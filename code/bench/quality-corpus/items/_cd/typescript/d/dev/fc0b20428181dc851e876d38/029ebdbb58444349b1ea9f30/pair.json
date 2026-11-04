@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "invariant",
+  "id": "029ebdbb58444349b1ea9f30",
+  "label_source": "construction",
+  "language": "typescript",
+  "left": "a.ts",
+  "license": "MIT",
+  "mutant_file": "029ebdbb58444349b1ea9f30-b.ts",
+  "operator": "add-dead-branches",
+  "provenance": {
+    "end_line": 65,
+    "file": "010-vuejs_core-parsewithelementtransform.ts",
+    "function": "parseWithElementTransform",
+    "license": "MIT",
+    "license_header": "",
+    "lines": 22,
+    "parse_language": "typescript",
+    "path": "packages/compiler-core/__tests__/transforms/transformElement.spec.ts",
+    "pin_sha": "bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c",
+    "repo": "vuejs/core",
+    "start_line": 44,
+    "test_path": false
+  },
+  "right": "b.ts",
+  "seed": 8567000949475028831,
+  "source_file": "029ebdbb58444349b1ea9f30-a.ts",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "compile"
+}

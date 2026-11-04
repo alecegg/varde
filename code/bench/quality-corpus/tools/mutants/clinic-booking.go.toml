@@ -1,0 +1,5 @@
+[[mutants]]
+id = "permit-fifth-daily-booking"
+description = "The daily cap mistakenly allows a fifth booking for one doctor."
+find = "return count < dailyCap"
+replace = "return count <= dailyCap"

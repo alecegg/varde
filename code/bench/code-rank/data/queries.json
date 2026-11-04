@@ -1,0 +1,1072 @@
+[
+  {
+    "id": "varde-commit-11ab6e0a56",
+    "repo": "varde",
+    "query": "review-fix(T1): apply dashboard decision findings",
+    "relevant_files": [
+      "runner/CHANGELOG.md",
+      "runner/src/varde_runner/evidence.py",
+      "runner/src/varde_runner/intake.py",
+      "runner/src/varde_runner/web/app.py",
+      "runner/tests/test_decisions.py",
+      "runner/tests/test_evidence.py"
+    ],
+    "source": "commit",
+    "commit": "11ab6e0a5618ac7baa23b6941b442fa4a59e0d72"
+  },
+  {
+    "id": "varde-commit-5cc6b900a0",
+    "repo": "varde",
+    "query": "T3 fix dashboard decision docs",
+    "relevant_files": [
+      "workflow/src/varde_workflow/skills/varde-orchestrate/references/build-orchestrate-tasks.md",
+      "workflow/src/varde_workflow/skills/varde-orchestrate/references/orchestrate.md",
+      "workflow/src/varde_workflow/skills/varde-orchestrate/references/status.md"
+    ],
+    "source": "commit",
+    "commit": "5cc6b900a07f32987be02031cb7ccdd9dc65535f"
+  },
+  {
+    "id": "varde-commit-5a7044f00a",
+    "repo": "varde",
+    "query": "T3 document dashboard decisions",
+    "relevant_files": [
+      "workflow/src/varde_workflow/skills/varde-orchestrate/references/build-orchestrate-tasks.md",
+      "workflow/src/varde_workflow/skills/varde-orchestrate/references/orchestrate.md",
+      "workflow/src/varde_workflow/skills/varde-orchestrate/references/status.md"
+    ],
+    "source": "commit",
+    "commit": "5a7044f00af40e0781aae3bf6f6647e96c06f8a4"
+  },
+  {
+    "id": "varde-commit-59a6752bbe",
+    "repo": "varde",
+    "query": "2026-10-20-dashboard-ux: review round 1 fixes (H1, M1, M2, L1-L4, L6)",
+    "relevant_files": [
+      "runner/tests/test_queue_browser.py",
+      "runner/ui/src/lib/Mailbox.svelte",
+      "runner/ui/src/lib/markdown.ts",
+      "runner/ui/src/lib/ui/Section.svelte",
+      "runner/ui/src/lib/ui/TabBar.svelte",
+      "runner/ui/src/routes/+layout.svelte",
+      "runner/ui/src/routes/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "59a6752bbeb164f650ef64ba72be2c5f8c4ba03b"
+  },
+  {
+    "id": "varde-commit-a7f43254d5",
+    "repo": "varde",
+    "query": "2026-10-20-dashboard-ux T1: clamp first-sentence thread title, reason as own line",
+    "relevant_files": [
+      "runner/ui/src/lib/Mailbox.svelte"
+    ],
+    "source": "commit",
+    "commit": "a7f43254d55bada405d250de7e5533d190635a1c"
+  },
+  {
+    "id": "varde-commit-ed4fedf48d",
+    "repo": "varde",
+    "query": "2026-10-20-dashboard-ux T2: split orchestrators into attention and running sections, wrap filters",
+    "relevant_files": [
+      "runner/tests/test_connection_browser.py",
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/lib/ui/SummaryStrip.svelte",
+      "runner/ui/src/routes/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "ed4fedf48dd025cc311baf5c3176d62d465d999a"
+  },
+  {
+    "id": "varde-commit-704e45c792",
+    "repo": "varde",
+    "query": "Keep mailbox actions successful when refresh fails",
+    "relevant_files": [
+      "runner/src/varde_runner/web/app.py",
+      "runner/tests/test_web.py"
+    ],
+    "source": "commit",
+    "commit": "704e45c79277094c9933ff77474767cfa72fa81e"
+  },
+  {
+    "id": "varde-commit-31c8e9ef4a",
+    "repo": "varde",
+    "query": "T4 document queue pickup rules",
+    "relevant_files": [
+      "workflow/src/varde_workflow/skills/varde-build/FLOW.md",
+      "workflow/src/varde_workflow/skills/varde-orchestrate/references/orchestrate.md",
+      "workflow/src/varde_workflow/skills/varde-build/references/plan.md"
+    ],
+    "source": "commit",
+    "commit": "31c8e9ef4ad4011a2c24b3329caf000c0670a115"
+  },
+  {
+    "id": "varde-commit-d970218994",
+    "repo": "varde",
+    "query": "T2 fix: hide unknown owner/now values on Orchestrators, fix Owner/Model separator",
+    "relevant_files": [
+      "runner/tests/test_ui_craft.py",
+      "runner/ui/src/routes/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "d97021899465b7291e1821b648f8f2ca66aae26d"
+  },
+  {
+    "id": "varde-commit-f8015bb601",
+    "repo": "varde",
+    "query": "T1 retheme dashboard tokens",
+    "relevant_files": [
+      "runner/CHANGELOG.md",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "f8015bb6019db892878f6e70fd0ac833be3684f4"
+  },
+  {
+    "id": "varde-commit-e411f9ede5",
+    "repo": "varde",
+    "query": "T8: keep long role model values visible",
+    "relevant_files": [
+      "runner/tests/test_mailbox_ui.py",
+      "runner/tests/test_roles_web.py",
+      "runner/ui/src/routes/roles/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "e411f9ede5cdfc1b56df85a75a5081f138fc141f"
+  },
+  {
+    "id": "varde-commit-214dd68adf",
+    "repo": "varde",
+    "query": "T7: fix dashboard evidence defects",
+    "relevant_files": [
+      "runner/tests/test_roles_web.py",
+      "runner/ui/src/lib/Mailbox.svelte",
+      "runner/ui/src/routes/roles/+page.svelte",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "214dd68adf296f999379ba34aeb619b3a9fe8b0e"
+  },
+  {
+    "id": "varde-commit-011e10117c",
+    "repo": "varde",
+    "query": "T4: integrate dashboard redesign",
+    "relevant_files": [
+      "runner/tests/test_mailbox_ui.py",
+      "runner/tests/test_newitem_browser.py",
+      "runner/ui/src/lib/Mailbox.svelte",
+      "runner/ui/src/routes/+layout.svelte",
+      "runner/ui/src/routes/+page.svelte",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "011e10117ce5c309cb686214bac875b759b7d9e3"
+  },
+  {
+    "id": "varde-commit-185f7e56f5",
+    "repo": "varde",
+    "query": "Fix dashboard helper typing",
+    "relevant_files": [
+      "runner/src/varde_runner/web/app.py"
+    ],
+    "source": "commit",
+    "commit": "185f7e56f5e5ca981fa794ba5e7c6b395af3aec2"
+  },
+  {
+    "id": "varde-commit-d7a70399db",
+    "repo": "varde",
+    "query": "review-fix(dashboard-followups): apply selected findings",
+    "relevant_files": [
+      "runner/CHANGELOG.md",
+      "runner/src/varde_runner/harness_map.py",
+      "runner/src/varde_runner/supervisor.py",
+      "runner/src/varde_runner/web/app.py",
+      "runner/tests/test_roles_web.py",
+      "runner/tests/test_runner_delivery.py",
+      "runner/tests/test_supervisor.py",
+      "runner/tests/test_workitems.py"
+    ],
+    "source": "commit",
+    "commit": "d7a70399dbd468d88f6dba72d5697f35979479ef"
+  },
+  {
+    "id": "varde-commit-88dfa13b89",
+    "repo": "varde",
+    "query": "Fix open mailbox fixtures for bound senders",
+    "relevant_files": [
+      "runner/tests/test_dashboard_connectors.py",
+      "runner/tests/test_newitem_browser.py"
+    ],
+    "source": "commit",
+    "commit": "88dfa13b899d84f1105e82882896db269ae64a57"
+  },
+  {
+    "id": "varde-commit-3c662ff0c0",
+    "repo": "varde",
+    "query": "review-fix(dashboard-dark): improve contrast checks",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/routes/roles/+page.svelte",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "3c662ff0c047d357d6852517738e6a7caad206bf"
+  },
+  {
+    "id": "varde-commit-0ba126626c",
+    "repo": "varde",
+    "query": "T2: verify dark and light contrast",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "0ba126626c62ea6000516150522befa065a26691"
+  },
+  {
+    "id": "varde-commit-5b2d6d617b",
+    "repo": "varde",
+    "query": "dark-tokens: use semantic shared theme tokens",
+    "relevant_files": [
+      "runner/ui/src/lib/Mailbox.svelte",
+      "runner/ui/src/routes/new-item/+page.svelte",
+      "runner/ui/src/routes/roles/+page.svelte",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "5b2d6d617b74cd06098a6d4535c27dc4c7f0ed87"
+  },
+  {
+    "id": "varde-commit-eec32988e1",
+    "repo": "varde",
+    "query": "Fix dashboard list follow-ups (t1-list-fixes)",
+    "relevant_files": [
+      "runner/src/varde_runner/web/app.py",
+      "runner/tests/test_web.py",
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/lib/Mailbox.svelte"
+    ],
+    "source": "commit",
+    "commit": "eec32988e13cbc24f3bca9c81063114c81454f9c"
+  },
+  {
+    "id": "varde-commit-b67fe2dbf5",
+    "repo": "varde",
+    "query": "review-fix(dashboard-functional): release failed launch claim",
+    "relevant_files": [
+      "runner/src/varde_runner/web/newitem.py",
+      "runner/src/varde_runner/workitems.py",
+      "runner/tests/test_newitem_browser.py"
+    ],
+    "source": "commit",
+    "commit": "b67fe2dbf50af8a6cb2b7a118119d1c133080d66"
+  },
+  {
+    "id": "varde-commit-af9d773ce5",
+    "repo": "varde",
+    "query": "dashboard-functional: show plans and filter mailbox candidates",
+    "relevant_files": [
+      "runner/src/varde_runner/web/newitem.py",
+      "runner/tests/test_newitem_browser.py",
+      "runner/ui/src/routes/new-item/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "af9d773ce5544166098aa1f79e8230e0f6afa880"
+  },
+  {
+    "id": "varde-commit-09e0b9b102",
+    "repo": "varde",
+    "query": "review-fix(dashboard-functional): fix permission and launch retries",
+    "relevant_files": [
+      "runner/src/varde_runner/decisions.py",
+      "runner/src/varde_runner/web/app.py",
+      "runner/src/varde_runner/web/newitem.py",
+      "runner/src/varde_runner/workitems.py",
+      "runner/tests/test_newitem_browser.py",
+      "runner/tests/test_paseo_delivery.py",
+      "runner/tests/test_web.py"
+    ],
+    "source": "commit",
+    "commit": "09e0b9b102ae045de42e651990e0d6a24195ffe8"
+  },
+  {
+    "id": "varde-commit-e22aacd3ac",
+    "repo": "varde",
+    "query": "t3: stream dashboard live status",
+    "relevant_files": [
+      "runner/src/varde_runner/web/app.py",
+      "runner/src/varde_runner/web/newitem.py",
+      "runner/tests/test_web.py",
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/lib/Mailbox.svelte",
+      "runner/ui/src/routes/+page.svelte",
+      "runner/ui/src/routes/new-item/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "e22aacd3ac65bc47f6e00c9c58fd0ead2f96216f"
+  },
+  {
+    "id": "varde-commit-f5a1880ada",
+    "repo": "varde",
+    "query": "t2: publish work item launch requests",
+    "relevant_files": [
+      "runner/src/varde_runner/web/newitem.py",
+      "runner/src/varde_runner/workitems.py",
+      "runner/tests/test_newitem_browser.py"
+    ],
+    "source": "commit",
+    "commit": "f5a1880adae383b55d5d411f8be112a67fcc0d6a"
+  },
+  {
+    "id": "varde-commit-855413a958",
+    "repo": "varde",
+    "query": "Fix dashboard permission answer flow t1-answer-flows",
+    "relevant_files": [
+      "runner/src/varde_runner/decisions.py",
+      "runner/src/varde_runner/web/app.py",
+      "runner/tests/test_decisions.py",
+      "runner/tests/test_paseo_delivery.py"
+    ],
+    "source": "commit",
+    "commit": "855413a95806bebad4177daa4f6aca5201c5f487"
+  },
+  {
+    "id": "varde-commit-0ab740af6d",
+    "repo": "varde",
+    "query": "dashboard-polish: type fake paseo hooks",
+    "relevant_files": [
+      "runner/tests/test_newitem_browser.py",
+      "runner/tests/test_roles_web.py"
+    ],
+    "source": "commit",
+    "commit": "0ab740af6deb612ee0ee58ec2e330a5cf416fee4"
+  },
+  {
+    "id": "varde-commit-003e445b8c",
+    "repo": "varde",
+    "query": "fix(dashboard-polish): remove legacy task status dots",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "003e445b8c2d51287bbfeb4514ae517c4f5072ed"
+  },
+  {
+    "id": "varde-commit-e59d6b2a57",
+    "repo": "varde",
+    "query": "dashboard-polish: distinguish task status indicators",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/routes/+page.svelte",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "e59d6b2a571a4aca11b64d16bae0f319c72f479d"
+  },
+  {
+    "id": "varde-commit-7ecaaa135b",
+    "repo": "varde",
+    "query": "P3: bound default dashboard agent list",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/lib/agents.ts",
+      "runner/ui/src/routes/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "7ecaaa135b4af043ee223ca03c8264938c2f8259"
+  },
+  {
+    "id": "varde-commit-ac00c25013",
+    "repo": "varde",
+    "query": "review-fix(P7): verify accessible dashboard states",
+    "relevant_files": [
+      "runner/tests/test_newitem_browser.py",
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/routes/+page.svelte",
+      "runner/ui/src/routes/new-item/+page.svelte",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "ac00c2501310c49ea6703a35d384ee6d5e5b98b6"
+  },
+  {
+    "id": "varde-commit-d9fdf49e76",
+    "repo": "varde",
+    "query": "review-fix(P6): verify model catalog handling",
+    "relevant_files": [
+      "runner/tests/fixtures/paseo-list-models-codex.json",
+      "runner/tests/test_roles_web.py",
+      "runner/ui/src/routes/roles/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "d9fdf49e7611e91641d5066e2ab60b8ebafeca55"
+  },
+  {
+    "id": "varde-commit-68947fd3c8",
+    "repo": "varde",
+    "query": "P7: accessible mobile dashboard polish",
+    "relevant_files": [
+      "runner/ui/src/lib/Mailbox.svelte",
+      "runner/ui/src/routes/+page.svelte",
+      "runner/ui/src/routes/new-item/+page.svelte",
+      "runner/ui/src/routes/roles/+page.svelte",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "68947fd3c824d6ea45596163de26fe3ee956cada"
+  },
+  {
+    "id": "varde-commit-48facafcbd",
+    "repo": "varde",
+    "query": "P4: clarify legacy mail context status",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/lib/Mailbox.svelte"
+    ],
+    "source": "commit",
+    "commit": "48facafcbd32620d064f4a6fdbe574801e520163"
+  },
+  {
+    "id": "varde-commit-7c2b412573",
+    "repo": "varde",
+    "query": "P2: constrain dashboard mobile grid overflow",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/style.css"
+    ],
+    "source": "commit",
+    "commit": "7c2b412573c2f32fa468f34d9e5f3ba2acd2201e"
+  },
+  {
+    "id": "varde-commit-59a503bd74",
+    "repo": "varde",
+    "query": "P5 resolve current infrastructure bindings",
+    "relevant_files": [
+      "runner/src/varde_runner/web/app.py",
+      "runner/tests/test_dashboard_connectors.py"
+    ],
+    "source": "commit",
+    "commit": "59a503bd74bec9d9ed62af689f23016a75bc2453"
+  },
+  {
+    "id": "varde-commit-4b2fdc4134",
+    "repo": "varde",
+    "query": "P3 filter and collapse dashboard agent list",
+    "relevant_files": [
+      "runner/tests/test_web_browser.py",
+      "runner/ui/src/routes/+page.svelte"
+    ],
+    "source": "commit",
+    "commit": "4b2fdc4134bff78ccf84b110c04be19c70241190"
+  },
+  {
+    "id": "varde-commit-d12c8bd03a",
+    "repo": "varde",
+    "query": "review-fix(M5-L6): restrict and cache notes text",
+    "relevant_files": [
+      "runner/src/varde_runner/intake.py",
+      "runner/src/varde_runner/web/app.py",
+      "runner/tests/test_dashboard_connectors.py"
+    ],
+    "source": "commit",
+    "commit": "d12c8bd03a2ef3cc8c488e2a0c5628697d136817"
+  },
+  {
+    "id": "varde-commit-9a45db4959",
+    "repo": "varde",
+    "query": "B2 accept fresh sidecar status after restart",
+    "relevant_files": [
+      "runner/tests/test_paseo_delivery.py"
+    ],
+    "source": "commit",
+    "commit": "9a45db49595021b9a1819129555692ef39fc56cd"
+  },
+  {
+    "id": "varde-commit-d9be5d4e1c",
+    "repo": "varde",
+    "query": "B2 use explicit sandbox approval prompt",
+    "relevant_files": [
+      "runner/tests/test_paseo_delivery.py"
+    ],
+    "source": "commit",
+    "commit": "d9be5d4e1cebfdf6a3f66b2e28ac439ae096320d"
+  },
+  {
+    "id": "varde-commit-d4c0a65233",
+    "repo": "varde",
+    "query": "B2 use explicit Codex permission probe",
+    "relevant_files": [
+      "runner/tests/test_paseo_delivery.py"
+    ],
+    "source": "commit",
+    "commit": "d4c0a65233bdb53b3cafc89d62b64d28ee9f4adb"
+  },
+  {
+    "id": "varde-commit-d7d032a438",
+    "repo": "varde",
+    "query": "1E: fall back for unix probe temp directory",
+    "relevant_files": [
+      "runner/tests/conftest.py",
+      "runner/tests/test_sandbox_probes.py"
+    ],
+    "source": "commit",
+    "commit": "d7d032a438281d78ed84026f665e68d88425c846"
+  },
+  {
+    "id": "varde-commit-e8d9045f89",
+    "repo": "varde",
+    "query": "fix(qs-call-resolver): track imported type owners",
+    "relevant_files": [
+      "code/src/varde_code/quality_resolve/langs/csharp/__init__.py",
+      "code/src/varde_code/quality_resolve/langs/java/__init__.py",
+      "code/tests/quality_resolve/langs/csharp/test_qr_cs_imports.py",
+      "code/tests/quality_resolve/langs/java/test_qr_java_imports.py"
+    ],
+    "source": "commit",
+    "commit": "e8d9045f8915f04a29dc9117a5ae0557b5eb0c58"
+  },
+  {
+    "id": "varde-commit-4caddf518a",
+    "repo": "varde",
+    "query": "fix(qs-call-resolver): constrain local owner resolution",
+    "relevant_files": [
+      "code/src/varde_code/quality_resolve/core/DUPLICATION.md",
+      "code/src/varde_code/quality_resolve/core/__init__.py",
+      "code/tests/quality_resolve/core/test_qr_core_digest.py",
+      "code/tests/quality_resolve/core/test_qr_core_namespace_owners.py"
+    ],
+    "source": "commit",
+    "commit": "4caddf518aeb164d074254ee40498f19df653267"
+  },
+  {
+    "id": "varde-commit-30c00d66cc",
+    "repo": "varde",
+    "query": "fix(qs-call-resolver): bind imported types without wildcard methods",
+    "relevant_files": [
+      "code/src/varde_code/quality_resolve/langs/csharp/__init__.py",
+      "code/src/varde_code/quality_resolve/langs/java/__init__.py",
+      "code/tests/quality_resolve/langs/csharp/test_qr_cs_imports.py",
+      "code/tests/quality_resolve/langs/java/test_qr_java_imports.py"
+    ],
+    "source": "commit",
+    "commit": "30c00d66cc5ccb8b4b0a2a597700c2e48d68b70d"
+  },
+  {
+    "id": "varde-commit-64752837b0",
+    "repo": "varde",
+    "query": "1E: add plan-then-queue work items",
+    "relevant_files": [
+      "runner/src/varde_runner/supervisor.py",
+      "runner/src/varde_runner/web/app.py",
+      "runner/src/varde_runner/web/newitem.py",
+      "runner/src/varde_runner/workitems.py",
+      "runner/tests/test_newitem_browser.py",
+      "runner/tests/test_workitems.py"
+    ],
+    "source": "commit",
+    "commit": "64752837b0df7be64143c1e7e3c4a54e6cbe993b"
+  },
+  {
+    "id": "varde-commit-1f9ed9bfbc",
+    "repo": "varde",
+    "query": "fix(qs-call-resolver): index global resolver lookups",
+    "relevant_files": [
+      "code/src/varde_code/quality_resolve/core/__init__.py",
+      "code/tests/quality_resolve/core/test_qr_core_perf_indexes.py"
+    ],
+    "source": "commit",
+    "commit": "1f9ed9bfbcb82f35ae58df5965d59b4d3ae943e1"
+  },
+  {
+    "id": "varde-commit-004deb1325",
+    "repo": "varde",
+    "query": "review-fix(1A): make decision delivery recoverable",
+    "relevant_files": [
+      "runner/src/varde_runner/decisions.py",
+      "runner/src/varde_runner/intake.py",
+      "runner/src/varde_runner/varde_cli.py",
+      "runner/tests/test_decisions.py",
+      "runner/tests/test_text_entry.py"
+    ],
+    "source": "commit",
+    "commit": "004deb13258b25c618dfe9a9a1a1c182f003f4c6"
+  },
+  {
+    "id": "varde-commit-5038ef1a33",
+    "repo": "varde",
+    "query": "fix(0A): propagate Codex mode and inspect permissions",
+    "relevant_files": [
+      "runner/sidecar/index.mjs",
+      "runner/src/varde_runner/plugins/__init__.py",
+      "runner/src/varde_runner/plugins/paseo.py",
+      "runner/tests/test_paseo_adapter.py"
+    ],
+    "source": "commit",
+    "commit": "5038ef1a33632d379bc62bfb20ee1473c8897581"
+  },
+  {
+    "id": "varde-commit-adf1273dca",
+    "repo": "varde",
+    "query": "Build 1A decision queue and inbox projection",
+    "relevant_files": [
+      "runner/src/varde_runner/decisions.py",
+      "runner/src/varde_runner/intake.py",
+      "runner/src/varde_runner/varde_cli.py",
+      "runner/tests/test_decisions.py",
+      "runner/tests/test_text_entry.py"
+    ],
+    "source": "commit",
+    "commit": "adf1273dca050aed5078617fbc5010ce024743e7"
+  },
+  {
+    "id": "varde-commit-bcc9807ff2",
+    "repo": "varde",
+    "query": "feat(qs-call-resolver): map C# type aliases",
+    "relevant_files": [
+      "code/src/varde_code/quality_resolve/langs/csharp/__init__.py",
+      "code/tests/quality_resolve/langs/csharp/test_qr_cs_imports.py",
+      "code/tests/quality_resolve/langs/java/test_qr_java_imports.py"
+    ],
+    "source": "commit",
+    "commit": "bcc9807ff2c234d690ab611876fcfd1e5e93d0b7"
+  },
+  {
+    "id": "varde-commit-c0bf9925ae",
+    "repo": "varde",
+    "query": "review-fix(CORRECTNESS-003): remove no-binding expiry",
+    "relevant_files": [
+      "workflow/src/varde_workflow/relay_state.py",
+      "workflow/tests/test_relay_state.py"
+    ],
+    "source": "commit",
+    "commit": "c0bf9925aecf0d6f837a4134f9322b31faeff16d"
+  },
+  {
+    "id": "varde-commit-61d5e2bc4e",
+    "repo": "varde",
+    "query": "fix(qs-call-resolver): honor qualified type resolution",
+    "relevant_files": [
+      "code/src/varde_code/quality_resolve/core/__init__.py",
+      "code/tests/quality_resolve/core/test_qr_core_facts_types.py",
+      "code/tests/quality_resolve/core/test_qr_core_scopes.py"
+    ],
+    "source": "commit",
+    "commit": "61d5e2bc4e665b692fbc8d8ef82aed104afdd749"
+  },
+  {
+    "id": "varde-commit-7a51cb16e5",
+    "repo": "varde",
+    "query": "msg-relay-slice4b-w1 t07: pi.md from live probe",
+    "relevant_files": [
+      "workflow/src/varde_workflow/commands/address.py"
+    ],
+    "source": "commit",
+    "commit": "7a51cb16e5e36c939177ca66fd60e89ca9765893"
+  },
+  {
+    "id": "varde-hand-001",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/__init__.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-002",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/cli_query.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-003",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/extract/langs/base.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-004",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/extract/langs/haskell.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-005",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/extract/langs/ruby.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-006",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/extract/preproc.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-007",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/index/_refresh_fastpath.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-008",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/index/persist/__init__.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-009",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/index/resolve/aux.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-010",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/model.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-011",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/quality_pass/cognitive/logical.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-012",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/quality_pass/langs/csharp/__init__.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-013",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/quality_pass/pass_/index_read.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-014",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/quality_pass/store/__init__.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "varde-hand-015",
+    "repo": "varde",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "code/src/varde_code/quality_resolve/langs/java/__init__.py"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-001",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/cli/index.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-002",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/commands/feedback.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-003",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/commands/store.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-004",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/commands/workflow/shared.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-005",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/archive.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-006",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/artifact-graph/schema.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-007",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/change-status-policy.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-008",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/command-generation/adapters/cline.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-009",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/command-generation/adapters/crush.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-010",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/command-generation/adapters/iflow.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-011",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/command-generation/adapters/oh-my-pi.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-012",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/command-generation/adapters/trae.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-013",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/command-generation/types.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-014",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/completions/factory.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "openspec-hand-015",
+    "repo": "openspec",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "src/core/completions/installers/fish-installer.ts"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-001",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "cmd/agent-deck-test-server/main.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-002",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "cmd/agent-deck/file_close.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-003",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "cmd/agent-deck/issue1978_queued_delivery_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-004",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "cmd/agent-deck/native_tui_ssh_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-005",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "cmd/agent-deck/session_cleanup_cmd_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-006",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "cmd/agent-deck/telemetry_features.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-007",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/core/mutation_lock.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-008",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/ctxinspect/sessionhost/testmain_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-009",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/git/setup.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-010",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/procowner/prober_darwin_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-011",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/selfheal/policy.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-012",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/session/claude_tool_turn_without_prompt_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-013",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/session/cross_harness_supersession_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-014",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/session/group_move_target_test.go"
+    ],
+    "source": "handwritten"
+  },
+  {
+    "id": "agent-deck-hand-015",
+    "repo": "agent-deck",
+    "query": "How are invalid values handled and reported to the caller?",
+    "relevant_files": [
+      "internal/session/isolate_home_tool_dirs_test.go"
+    ],
+    "source": "handwritten"
+  }
+]

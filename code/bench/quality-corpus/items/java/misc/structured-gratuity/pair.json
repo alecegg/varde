@@ -1,0 +1,11 @@
+{
+  "pair_id": "c2714f530f881cb98f725030",
+  "pair_group_id": "72a8da9bf64bf605995ccfa0",
+  "left_id": "5d87af4a7d7a93e7f0b9d0e9",
+  "right_id": "1c171d073bb6d69bad0e5641",
+  "left": "good.java",
+  "right": "bad.java",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "unclear-names"
+}

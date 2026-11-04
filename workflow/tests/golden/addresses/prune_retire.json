@@ -1,0 +1,37 @@
+{
+  "classification": "unchanged",
+  "stdout_stderr": {
+    "prune": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"addresses\": [\"old\", \"stale\"], \"tokens\": [\"expired-token\"]}\n"
+    },
+    "retire": {
+      "exit": 2,
+      "stderr": "error: unrecognized arguments: closed\n",
+      "stdout": ""
+    }
+  },
+  "store": {
+    ".cache/inbox/addresses/stale/.lock": {
+      "bytes": "",
+      "mode": "0644"
+    },
+    ".cache/inbox/addresses/stale/current": {
+      "bytes": "{\"session_key\":\"claude-729c541bbdfe320b607107141f7976f91d846de45a082e94fd8615a8483ab7dd\",\"token_id\":\"00000003\"}",
+      "mode": "0600"
+    },
+    ".cache/inbox/addresses/stale/tokens/00000003.json": {
+      "bytes": "{\"token_id\":\"00000003\",\"name\":\"stale\",\"sha256\":\"4ef8885f9795d02c7e006cee936674cbab6f39fae3a5ef9254da045aa31c5273\",\"issued_at\":\"2026-10-20T12:00:00Z\",\"expires_at\":\"2026-10-21T12:00:00Z\",\"uses_left\":0,\"supersede\":false,\"issuer\":\"unknown\"}",
+      "mode": "0600"
+    },
+    ".cache/inbox/bindings/claude-729c541bbdfe320b607107141f7976f91d846de45a082e94fd8615a8483ab7dd.json": {
+      "bytes": "{\"address\":\"stale\",\"harness\":\"claude\",\"session_id\":\"stale-session\",\"bound_at\":\"2026-10-20T12:00:00Z\",\"cwd\":\"<TMP>/working\",\"token_id\":\"00000003\",\"last_seen\":\"2026-10-20T12:00:00Z\",\"wake_context\":{\"harness\":\"codex\",\"session_id\":\"stale-session\",\"cwd\":\"<TMP>/working\",\"paseo_id\":\"paseo-fixed\",\"agent_id\":\"agent-fixed\",\"runner_endpoint\":\"endpoint-fixed\"}}",
+      "mode": "0600"
+    },
+    ".cache/inbox/relay/state.json": {
+      "bytes": "{\"current_mailman\":\"expired-token\",\"mailman_started\":{\"expired-token\":\"2026-10-20T12:00:00Z\"},\"mailman_instances\":{\"expired-token\":\"paseo-fixed:12345\"},\"events\":[{\"event\":\"ended\",\"at\":\"2026-10-20T12:00:00Z\",\"token_id\":\"expired-token\",\"expect_return_by\":\"\"}],\"retired\":{\"mailman:expired-token\":\"2026-10-22T12:00:00Z\",\"old\":\"2026-10-22T12:00:00Z\",\"stale\":\"2026-10-22T12:00:00Z\"}}",
+      "mode": "0644"
+    }
+  }
+}

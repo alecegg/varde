@@ -1,0 +1,25 @@
+{
+  "classification": "unchanged",
+  "stdout_stderr": {
+    "not_delivered": {
+      "exit": 1,
+      "stderr": "Error: message does not exist for this reader\n",
+      "stdout": ""
+    },
+    "ok": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "wrong_reader": {
+      "exit": 1,
+      "stderr": "Error: message does not exist for this reader\n",
+      "stdout": ""
+    }
+  },
+  "store": {
+    ".cache/inbox/deliveries.jsonl": "{\"message_id\":\"m-00000001\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000001\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"acked\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000002\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000002\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"acked\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000001\",\"reader\":\"worker\",\"session\":\"\",\"via\":\"cli\",\"event\":\"acked\",\"at\":\"2026-10-22T12:00:00Z\"}\n",
+    ".cache/inbox/index/worker.json": "{\"watermark\": 225}",
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"worker\",\"kind\":\"info\",\"text\":\"delivered\",\"id\":\"m-00000001\"}\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"worker\",\"kind\":\"info\",\"text\":\"wrong reader\",\"id\":\"m-00000002\"}\n"
+  }
+}

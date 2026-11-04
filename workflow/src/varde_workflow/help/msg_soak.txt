@@ -1,0 +1,14 @@
+Evaluate mail reliability criteria over a rolling window
+
+Usage: varde msg soak [--window-days N] [--threshold KEY=VALUE]... [--write] [--json]
+
+Options:
+      --window-days N  Number of days to evaluate (default: 3)
+      --threshold KEY=VALUE  Override a named threshold; repeatable
+      --write           Store or replace today's JSON report
+      --json            Print the report as JSON
+  -h, --help            Print this help
+
+Exit codes: 0 when all criteria pass, 1 when the report fails, and 70 on error.
+An empty store exits 1 because no orchestrator was active today. relay_state
+prunes slept events after one day, so the daily report run must keep up.

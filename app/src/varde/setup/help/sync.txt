@@ -1,0 +1,23 @@
+Preview with --dry-run, choose explicit targets, then apply skill and agent setup
+
+Usage: varde setup sync [OPTIONS]
+
+Options:
+      --skills-dir <DIR>            Canonical directory for installed skills
+      --agents-dir <DIR>            Canonical directory for installed agents
+      --link-mode <MODE>            Link mode for this run (default: symlink)
+      --skills <NAMES>              Comma-separated skill names to install (use all for every skill)
+      --preset <NAME>               Preset of skills to install (combines with --skills): {presets}
+      --harnesses <IDS>             Comma-separated harness ids or none (default: detected)
+      --dry-run                     Print the resolved setup (and the repo-map step summary) without applying changes
+      --no-packs                    Skip the repo-map step
+      --yes                         Skip the repo-map step's Proceed? prompt
+      --save                        Persist sync flags and presets; pin the resolved Toz store
+      --instructions-target <FILE>  Install the shared instruction block at this file (repeatable)
+      --json                        Print the migration report in a machine-output envelope
+  -h, --help                        Print help
+
+At the top of a git main checkout, setup also edits AGENTS.md (a managed pointer block only) and, if docs/repo-map/README.md is absent, runs `varde map packs build --all`; it prints a summary first, asks Proceed? [Y/n] on a TTY, and skips linked worktrees and --json.
+
+Recommended layout: keep one canonical central copy (for example ~/.agents/skills and ~/.agents/agents, or a private Git repo) and symlink it into each detected harness's skill and agent directories.
+Sandbox denial can leave earlier targets installed; retry the denied target. Watcher registration can time out; check setup doctor afterward.

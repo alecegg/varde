@@ -1,0 +1,11 @@
+Bind the current session to an address marker
+
+Usage: varde msg address bind [OPTIONS] <MARKER>
+
+Arguments:
+  <MARKER>  One-time `[varde-address: <name> <token>]` marker
+
+Options:
+      --session <SESSION>  Session id to bind
+      --harness <HARNESS>  Session harness (default: unknown)
+  -h, --help               Print help

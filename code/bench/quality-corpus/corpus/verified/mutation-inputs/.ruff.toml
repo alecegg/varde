@@ -1,0 +1,5 @@
+# Function slices copied verbatim from pinned upstream repositories: corpus
+# data, not repository code (the same reason pyproject.toml excludes
+# code/bench/quality-corpus/items/**). Ruff reads this closest config for the
+# subtree and skips it for lint and format checks.
+exclude = ["*"]

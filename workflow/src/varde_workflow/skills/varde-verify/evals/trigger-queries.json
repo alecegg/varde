@@ -1,0 +1,12 @@
+[
+  {"query": "Did we actually finish 2026-08-10-manage-command? Show me the evidence.", "should_trigger": true},
+  {"query": "Verify that the completed retry-policy plan meets its acceptance criteria. Do not change anything.", "should_trigger": true},
+  {"query": "Check each assert: line in the plan's acceptance criteria and report which pass.", "should_trigger": true},
+  {"query": "Confirm the work in this branch is really done against the plan, read-only.", "should_trigger": true},
+  {"query": "The task says done. Grade it against its criteria without trusting the checkboxes.", "should_trigger": true},
+  {"query": "Fix the failing criterion in the retry-policy plan.", "should_trigger": false},
+  {"query": "Review the diff on this branch for bugs.", "should_trigger": false},
+  {"query": "Implement the remaining task in the plan.", "should_trigger": false},
+  {"query": "Define acceptance criteria for a new rate-limiting feature.", "should_trigger": false},
+  {"query": "Run visual QA on the running app.", "should_trigger": false}
+]

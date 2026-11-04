@@ -1,0 +1,7 @@
+Retire unused inbox addresses and stale mailman tokens
+
+Usage: varde msg prune [--dry-run]
+
+Options:
+      --dry-run  Show retirements without writing them
+  -h, --help    Print help

@@ -1,0 +1,27 @@
+[project]
+name = "varde-design"
+version = "0.1.0"
+requires-python = ">=3.14"
+license = "MIT"
+readme = "README.md"
+dependencies = []
+
+[project.optional-dependencies]
+render = ["playwright>=1.50,<2"]
+
+[dependency-groups]
+dev = ["playwright>=1.50,<2"]
+
+[project.entry-points."varde.skills"]
+design = "varde_design"
+
+[project.entry-points."varde.modules"]
+design = "varde_design.module:register"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "varde_design"
+module-root = "src"

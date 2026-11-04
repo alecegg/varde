@@ -1,0 +1,391 @@
+{
+  "dev": {
+    "class_counts": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "records": 300,
+    "repo_class_breakdown": [
+      {
+        "call_class": "constructor",
+        "records": 10,
+        "repo": "abseil/abseil-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "dynamic",
+        "records": 8,
+        "repo": "abseil/abseil-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "higher_order",
+        "records": 17,
+        "repo": "abseil/abseil-cpp",
+        "unknown_records": 15
+      },
+      {
+        "call_class": "imported",
+        "records": 10,
+        "repo": "abseil/abseil-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 8,
+        "repo": "abseil/abseil-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 10,
+        "repo": "abseil/abseil-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "constructor",
+        "records": 10,
+        "repo": "assimp/assimp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "dynamic",
+        "records": 14,
+        "repo": "assimp/assimp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "higher_order",
+        "records": 17,
+        "repo": "assimp/assimp",
+        "unknown_records": 15
+      },
+      {
+        "call_class": "imported",
+        "records": 10,
+        "repo": "assimp/assimp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 8,
+        "repo": "assimp/assimp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 10,
+        "repo": "assimp/assimp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "constructor",
+        "records": 1,
+        "repo": "fmtlib/fmt",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 9,
+        "repo": "fmtlib/fmt",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 2,
+        "repo": "fmtlib/fmt",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "constructor",
+        "records": 10,
+        "repo": "google/leveldb",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "dynamic",
+        "records": 14,
+        "repo": "google/leveldb",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "higher_order",
+        "records": 15,
+        "repo": "google/leveldb",
+        "unknown_records": 15
+      },
+      {
+        "call_class": "imported",
+        "records": 10,
+        "repo": "google/leveldb",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 8,
+        "repo": "google/leveldb",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 10,
+        "repo": "google/leveldb",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "constructor",
+        "records": 9,
+        "repo": "jbeder/yaml-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "dynamic",
+        "records": 14,
+        "repo": "jbeder/yaml-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "higher_order",
+        "records": 1,
+        "repo": "jbeder/yaml-cpp",
+        "unknown_records": 1
+      },
+      {
+        "call_class": "imported",
+        "records": 10,
+        "repo": "jbeder/yaml-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 9,
+        "repo": "jbeder/yaml-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 9,
+        "repo": "jbeder/yaml-cpp",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "constructor",
+        "records": 10,
+        "repo": "simdjson/simdjson",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "imported",
+        "records": 10,
+        "repo": "simdjson/simdjson",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 8,
+        "repo": "simdjson/simdjson",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 9,
+        "repo": "simdjson/simdjson",
+        "unknown_records": 0
+      }
+    ],
+    "repo_counts": {
+      "abseil/abseil-cpp": 63,
+      "assimp/assimp": 69,
+      "fmtlib/fmt": 12,
+      "google/leveldb": 67,
+      "jbeder/yaml-cpp": 52,
+      "simdjson/simdjson": 37
+    },
+    "repos": [
+      "abseil/abseil-cpp",
+      "assimp/assimp",
+      "fmtlib/fmt",
+      "google/leveldb",
+      "jbeder/yaml-cpp",
+      "simdjson/simdjson"
+    ],
+    "test_path_sites": 0,
+    "unknown_by_class": {
+      "higher_order": 46
+    },
+    "unknown_by_repo": {
+      "abseil/abseil-cpp": 15,
+      "assimp/assimp": 15,
+      "google/leveldb": 15,
+      "jbeder/yaml-cpp": 1
+    },
+    "unknown_records": 46
+  },
+  "files": [
+    {
+      "bytes": 135141,
+      "path": "notes/restricted/call-audit/cpp/test-sites.jsonl",
+      "records": 300,
+      "sha256": "c7affa414f462a0af3c841d61772f8b96c0d04944748c3c54c8d6453431d82b1",
+      "unknown_records": 46
+    },
+    {
+      "bytes": 11337,
+      "path": "notes/restricted/call-audit/cpp/review-stubs.jsonl",
+      "records": 46,
+      "sha256": "9777f3ececbbf0d13500d6c3645eeeb88d346b47f720dc24810930ffb9ae8611",
+      "unknown_records": 0
+    }
+  ],
+  "frozen": {
+    "class_counts": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "records": 300,
+    "repo_class_breakdown": [
+      {
+        "call_class": "constructor",
+        "records": 17,
+        "repo": "google/filament",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "dynamic",
+        "records": 22,
+        "repo": "google/filament",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "higher_order",
+        "records": 17,
+        "repo": "google/filament",
+        "unknown_records": 17
+      },
+      {
+        "call_class": "imported",
+        "records": 17,
+        "repo": "google/filament",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 16,
+        "repo": "google/filament",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 17,
+        "repo": "google/filament",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "constructor",
+        "records": 17,
+        "repo": "opencv/opencv",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "dynamic",
+        "records": 5,
+        "repo": "opencv/opencv",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "higher_order",
+        "records": 16,
+        "repo": "opencv/opencv",
+        "unknown_records": 12
+      },
+      {
+        "call_class": "imported",
+        "records": 16,
+        "repo": "opencv/opencv",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 17,
+        "repo": "opencv/opencv",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 17,
+        "repo": "opencv/opencv",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "constructor",
+        "records": 16,
+        "repo": "qpdf/qpdf",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "dynamic",
+        "records": 23,
+        "repo": "qpdf/qpdf",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "higher_order",
+        "records": 17,
+        "repo": "qpdf/qpdf",
+        "unknown_records": 17
+      },
+      {
+        "call_class": "imported",
+        "records": 17,
+        "repo": "qpdf/qpdf",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "member",
+        "records": 17,
+        "repo": "qpdf/qpdf",
+        "unknown_records": 0
+      },
+      {
+        "call_class": "same_file",
+        "records": 16,
+        "repo": "qpdf/qpdf",
+        "unknown_records": 0
+      }
+    ],
+    "repo_counts": {
+      "google/filament": 106,
+      "opencv/opencv": 88,
+      "qpdf/qpdf": 106
+    },
+    "repos": [
+      "google/filament",
+      "opencv/opencv",
+      "qpdf/qpdf"
+    ],
+    "test_path_sites": 0,
+    "unknown_by_class": {
+      "higher_order": 46
+    },
+    "unknown_by_repo": {
+      "google/filament": 17,
+      "opencv/opencv": 12,
+      "qpdf/qpdf": 17
+    },
+    "unknown_records": 46
+  },
+  "language": "cpp",
+  "partially_validated": false,
+  "records": 300,
+  "sample_size": 300,
+  "seed": 26017,
+  "unknown_records": 46
+}

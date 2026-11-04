@@ -1,0 +1,6 @@
+Manage role queues.
+
+Usage: varde plan queue <COMMAND> [OPTIONS]
+
+Commands: pull, renew, finish, release, status, metrics, enqueue, check, merge-role-inbox, rollback-role-inbox
+Slot operations require --slot and --epoch. Use --json for machine-readable output.

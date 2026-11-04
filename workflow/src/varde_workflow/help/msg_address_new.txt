@@ -1,0 +1,18 @@
+Issue a one-time address marker
+
+Usage: varde msg address new [OPTIONS] <SLOT>
+
+Arguments:
+  <SLOT>  Stable slot name (letters, digits, `.`, `_` or `-`)
+
+Options:
+      --ttl <DURATION>  Token lifetime (default: 24h)
+      --uses <USES>     Maximum redemptions (default: 1)
+      --supersede       Allow replacing a current or main address binding
+      --plan <PLAN>     Add a plan identifier as an alias for the slot
+  -h, --help            Print help
+
+The marker is printed as one line for inclusion in a session's first prompt.
+The `mailman` address cannot be replaced while its current holder is alive
+(heartbeat within 90 seconds or return within 5 minutes) unless `--supersede`
+is used. An ended or stale holder can be replaced without `--supersede`.

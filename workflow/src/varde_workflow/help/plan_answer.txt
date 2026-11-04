@@ -1,0 +1,20 @@
+Record an answer to an open question
+
+Usage: varde plan answer [OPTIONS] <PLAN> --question <TEXT-OR-INDEX> --answer <TEXT>
+
+Arguments:
+  <PLAN>
+          Plan path or identifier
+
+Options:
+      --question <TEXT-OR-INDEX>
+          Exact open question bullet text or its 1-based position
+
+      --answer <TEXT>
+          Answer to record (newlines are collapsed to one line)
+
+      --json
+          Print a JSON result envelope
+
+  -h, --help
+          Print help

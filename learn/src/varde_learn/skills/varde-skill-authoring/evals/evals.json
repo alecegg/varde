@@ -1,0 +1,51 @@
+{
+  "skill_name": "varde-skill-authoring",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Can you do a report-only audit of the included text copy of our varde-build SKILL.md at evals/fixtures/varde-build/skill-source.txt? It feels bloated and a couple people said the agent gets lost in it. Audit the instructions and the references and process visible in that source. The referenced files are not included, so say when that limits claims about them. Rank the aspects from 1 (strongest cut candidate) to the most valuable load-bearing element last. Save the audit as reports/skill-review.md in this workspace and link it, with a top-level summary of the highest-value changes.",
+      "expected_output": "The included file contains the target varde-build SKILL.md source text; no referenced files are included. The report audits its instructions and visible reference routing, explicitly noting that cross-file duplication and the referenced files' contents cannot be verified from this fixture. It asks whether each instruction is needed, whether its benefit earns its load and execution cost, and whether useful behavior could be specified more cheaply. It diagnoses the 'gets lost' complaint as navigation/reference fan-out based on the visible routes and mandatory follow-up guidance, distinguishes consolidation from condensation, and applies at least one review criterion to wording in the target. It saves the Markdown report at reports/skill-review.md in the workspace with a numbered ranking from strongest cut candidate to load-bearing items, links it with a short summary, and leaves the target unchanged because the user explicitly requested a report-only audit. Each finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation; retained items need no invented fixes.",
+      "files": [
+        "evals/fixtures/varde-build/skill-source.txt"
+      ],
+      "verification_script": "evals/verify-review-report.sh",
+      "assertions": [
+        "The target is not edited because the user explicitly requested a report-only audit",
+        "The report exists as a new markdown file in the workspace and contains a sequentially numbered inventory beginning at 1",
+        "The final response links the report and includes a top-level summary of the highest-value changes",
+        "The review questions whether instructions are needed at all and whether their benefit earns their load and execution cost, accounting for load frequency and per-run cost",
+        "The 'gets lost' complaint is diagnosed as navigation/reference fan-out using routes and follow-up guidance visible in the target, and consolidation is distinguished from condensation",
+        "At least one review criterion is applied to wording visible in the target, and claims about unavailable referenced files are identified as unverified",
+        "No edit is proposed that condenses prose when the diagnosed problem is fan-out",
+        "Each finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation; retained items need no invented fixes"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Write me a skill for deploying microservices to Kubernetes with best practices for rollbacks and health checks.",
+      "expected_output": "The request has no real source material — no completed task in the conversation, no project docs, runbooks, or version history to draw from. The skill declines to draft from generic LLM knowledge and instead says so and asks for grounding (a completed task, an existing runbook/style guide/incident history, or an interview of the user's own expertise) before producing a SKILL.md. It does not fabricate a plausible-looking Kubernetes deployment skill from general knowledge.",
+      "assertions": [
+        "No SKILL.md body is drafted from generic best-practice knowledge in this turn",
+        "The skill explicitly states it lacks grounding and requests a real source (completed task, existing artifact, or an interview) before drafting",
+        "If it offers to interview the user, it asks one question at a time about the environment and tools actually used, failures or near-misses and how they were fixed, or team conventions a newcomer gets wrong — before drafting",
+        "The interview asks for environment or failure specifics, not generic preferences"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Use the completed-task notes in evals/fixtures/deploy-release/release-notes.md as the source. Turn them into a skill in the relative workspace path deploy-release/SKILL.md, and make sure its description triggers when someone says 'cut a release'.",
+      "expected_output": "The included task notes provide concrete grounding. The skill is authored with an ordered numbered ## Workflow, captures the validate-before-push correction as a Gotcha or verification loop with its rationale, and phrases instructions as positive targets rather than prohibitions. The description is written for the model, front-loaded with the user's leading trigger ('cut a release'/'release'), leads with the user's likely request, and targets the multi-step release task. Frontmatter name matches the directory (deploy-release) and is validated with varde learn check. The output is written to deploy-release/SKILL.md inside the workspace.",
+      "files": [
+        "evals/fixtures/deploy-release/release-notes.md"
+      ],
+      "verification_script": "evals/verify-release-skill.sh",
+      "assertions": [
+        "The validate-manifest-before-push correction is captured as a Gotcha or verification loop paired with its rationale, not dropped or stated generically",
+        "The description front-loads the user's leading trigger word ('release'/'cut a release') and leads with the user's likely request rather than a 'This skill does...' summary",
+        "The frontmatter name equals the directory name 'deploy-release' (lowercase+hyphens) and passes varde learn check",
+        "Multi-step release procedure is expressed as a numbered ## Workflow checklist with an inline Gotchas section, not narrative prose",
+        "The skill file exists at deploy-release/SKILL.md inside the evaluation workspace"
+      ]
+    }
+  ]
+}

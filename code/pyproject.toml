@@ -1,0 +1,21 @@
+[project]
+name = "varde-code"
+version = "0.1.0"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = ["varde-core", "tree-sitter==0.26.0", "tree-sitter-language-pack==1.22.1", "ast-grep-py==0.50.0", "watchdog>=6,<7"]
+
+[project.entry-points."varde.skills"]
+code = "varde_code"
+
+[project.entry-points."varde.modules"]
+code = "varde_code.module:register"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "varde_code"
+wheel-exclude = ["**/evals", "**/evals/**", "**/*-workspace/**"]
+source-exclude = ["**/evals/**"]

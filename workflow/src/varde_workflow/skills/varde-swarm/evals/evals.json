@@ -1,0 +1,66 @@
+{
+  "skill_name": "varde-swarm",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What's in flight right now?",
+      "expected_output": "Reports current status without asking the user which mode to use. Finds every plan.md at any depth under working/plans/, lists working/session-notes/*/notes.md first, then the legacy working/handoffs/*/handoff.md, and shows a **Progress** HH:MM block with compact numbered plan rows, group counts, at most five top-level plans and children, and a remaining count, followed by the open session notes and legacy handoffs panel. When Progress is unchanged from its previous block, shows exactly **Progress** HH:MM: no change since last check. Uses the compact reply layout with a **Reply** section between rules, numbered **My work** and **Needed from you** sections with literal 1a.-style sublabels, and only the four Reply rules. Then names exactly one recommended next step. Reads only — no plan, task, session note, or legacy handoff file is written or modified.",
+      "assertions": [
+        "Reports status without asking the user to choose a mode",
+        "Derives status from files on disk, not from conversation memory or inference",
+        "Leaves every plan, task, session note, and legacy handoff file byte-identical",
+        "Recommends exactly one next mode and stops there rather than running it"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 26,
+      "prompt": "SessionStart context: session ID `fixture-session-2026-10-07`; the hook reserved `working/session-notes/2026-10-06-session-<sha256(session-id)>/notes.md`. At this first approval milestone, create session notes using varde-knowledge's session-notes format.",
+      "expected_output": "Creates exactly one correctly formatted session note at the reserved path derived from the session ID and first UTC date. Uses the standard session-notes frontmatter and body headings, and records the current state and next step without personal fields.",
+      "assertions": [
+        "Uses the original reserved first-date path keyed by the SHA-256 session ID",
+        "Uses the session-notes frontmatter and body format",
+        "Leaves exactly one session note for this session"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 27,
+      "prompt": "SessionStart context: session ID `fixture-session-2026-10-07`; the hook reserved `working/session-notes/2026-10-06-session-<sha256(session-id)>/notes.md`. The existing session note was created just before midnight UTC. At this later milestone after the date changed, refresh that note in place with the current state and next step.",
+      "expected_output": "Updates the existing session note at its originally reserved path, including its timestamp and current state, even though the UTC date changed. Creates no second note for the session.",
+      "assertions": [
+        "Uses the original reserved first-date path keyed by the SHA-256 session ID",
+        "Uses the session-notes frontmatter and body format",
+        "Changes the existing note timestamp and milestone content",
+        "Leaves exactly one session note for this session"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    },
+    {
+      "id": 29,
+      "prompt": "Three approved, related plans are ready in the working folder (2026-10-01-api, 2026-10-02-ui, 2026-10-03-docs). Get them built.",
+      "expected_output": "Does not start a swarm because the user did not ask for swarm or a parallel plan set. Runs one plan at a time or asks the user to decide.",
+      "assertions": [
+        "Launches no more than one plan orchestrator before the user decides"
+      ]
+    }
+  ]
+}

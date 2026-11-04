@@ -1,0 +1,40 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: 0.12.19
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            runner/ui/package-lock.json
+            runner/sidecar/package-lock.json
+            runner/node-host/engines/durable/package-lock.json
+      - run: npm ci --ignore-scripts --prefix runner/sidecar
+      - run: node --test runner/sidecar/*.test.mjs
+      - run: npm ci --ignore-scripts --prefix runner/ui
+      - run: npm run build --prefix runner/ui
+      - run: npm ci --ignore-scripts --prefix runner/node-host/engines/durable
+      - run: uv build --package varde-runner --wheel --out-dir /tmp/varde-runner-wheel
+      - run: python -c 'import glob, zipfile; z=zipfile.ZipFile(glob.glob("/tmp/varde-runner-wheel/*.whl")[0]); assert any(n.endswith("/static/ui/index.html") for n in z.namelist()), "wheel missing static/ui/index.html"'
+      - run: uv sync --locked --all-packages --all-groups
+      - run: uv run playwright install --with-deps chromium
+      - run: just test-all
+      - run: just test-licenses

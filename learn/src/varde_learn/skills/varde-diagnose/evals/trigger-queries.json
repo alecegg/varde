@@ -1,0 +1,12 @@
+[
+  {"query": "Here is a session transcript from yesterday. Find what went wrong and where the agent lost time.", "should_trigger": true},
+  {"query": "Run a multi-session retrospective over the last two weeks of agent sessions and tell me which obstacles recur.", "should_trigger": true},
+  {"query": "Run a friction cycle over the new sessions since last Tuesday.", "should_trigger": true},
+  {"query": "One tool result from a session says the upload timed out. What can we infer from just this excerpt?", "should_trigger": true},
+  {"query": "Why did this agent run keep retrying the same failing command? Use the session evidence.", "should_trigger": true},
+  {"query": "Record this obstacle as a friction item: the build step failed because the lockfile was stale.", "should_trigger": false},
+  {"query": "Reconcile friction item 12 against the current repository state.", "should_trigger": false},
+  {"query": "Propose an improvement for the friction item about missing fixtures.", "should_trigger": false},
+  {"query": "Review the diff on this branch for bugs.", "should_trigger": false},
+  {"query": "Write a handoff so the next session can continue this work.", "should_trigger": false}
+]

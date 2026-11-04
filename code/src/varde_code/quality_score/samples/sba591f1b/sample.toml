@@ -1,0 +1,17 @@
+language = "csharp"
+task = "Implement a parking garage fee module in C#; each nonblank input line describes one parking session as `vehicleClass,hours,validated`."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.cs" = "dc990ed241d334a0c689ae3a68d569cfea5448ad9e0a32dc5a98793195422b0c"
+"judge-classes.cs" = "714448c6fd7143677172041c961fc6b30ba6d2668b6f4b17ec3de757f126061c"
+"judge-defensive.cs" = "adba1f2fd4dbf502e38ec2086dc84fdc41cc6ce75d2640ab5eaf8a1f729260d3"
+"judge-extract.cs" = "e0557796667682e3a8e15b3e450d306e1af83e7c7ded95777f759b2a9bb4047b"
+"judge-inline.cs" = "cedc06b9802ca1160be970e28109460ff11622f95b8e66cc374aa624a2a377bb"
+"judge-names.cs" = "b44b99296a6a96a03dc91fb1a18167fbbd841425257c4516948c78a87a0782db"
+"original.cs" = "abffc2760626c4f936b699d87b67aa468a0c4a0d7eac3b95f9def8ff1a35b723"
+"qssample.csproj" = "c299ec65c19b75d1f4fd4ce516c09ee667a141b87a68a37ec76169cc3f86df2c"
+"smoothed.cs" = "ba591f1b9914a24ada826e362975a330c295164d1993e14e058c7ec21568a72f"
+"smoothing.md" = "bb96200352f0af2c79f08801fd678ac4915abbe3d89ca0abc3ad188f243e0834"
+"task.md" = "efc170e045de84ea6782f78b515a5cb02334dee226b4543d17e270fc7b03211f"

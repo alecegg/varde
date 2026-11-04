@@ -1,0 +1,108 @@
+# Quality-score gate rules (design section 10). Every rule reads TEMP tables that
+# scan materializes before run_rules and only when a quality-* rule is active:
+#   quality_scores      one flat row per scope, file and function (scan/quality_scores.py)
+#   quality_thresholds  (scope, language, mean_x, file_floor_y, function_cap) in micro
+#                       units from the calibration; language is NULL for the scope mean
+#   quality_suppressions (scope, rule_id, suppressed) counts of suppressed quality findings
+# Scope-level findings use file "." and line 1.
+
+[[rule]]
+id = "quality-file-floor"
+kind = "sql"
+severity = "error"
+name = "Quality file floor"
+description = "A file scores below the language floor Y. Files whose fixed overhead alone makes Y unreachable are exempt."
+message = "file quality {score_points} is below the floor {floor_points} ({language}); worst offender first"
+remediation = "reduce the file's debt: split, simplify, or rename its worst functions"
+query = """
+SELECT f.path AS file, 1 AS line, f.scope, f.language,
+ f.score, t.file_floor_y AS threshold, f.tokens, f.debt,
+ printf('%.1f', f.score / 1000000.0) AS score_points,
+ printf('%.1f', t.file_floor_y / 1000000.0) AS floor_points,
+ f.calibration_id, f.metric_version
+FROM quality_scores f
+JOIN quality_thresholds t ON t.scope = f.scope AND t.language = f.language
+WHERE f.level = 'file' AND f.exempt = 0 AND f.exempt_reason IS NULL
+ AND f.score IS NOT NULL AND f.score < t.file_floor_y
+ORDER BY f.score, f.path
+"""
+
+[[rule]]
+id = "quality-function-cap"
+kind = "sql"
+severity = "error"
+name = "Quality function cap"
+description = "A function's intrinsic debt exceeds the language cap. The cap applies in every file, including floor-exempt ones."
+message = "function {function_id} debt {debt_points} exceeds the cap {cap_points} ({language})"
+remediation = "split or simplify the function, or reduce its depth, fan-out and size"
+query = """
+SELECT fn.path AS file, COALESCE(fn.line, 1) AS line, fn.scope, fn.language, fn.function_id,
+ fn.debt, t.function_cap AS threshold,
+ printf('%.1f', fn.debt / 1000000.0) AS debt_points,
+ printf('%.1f', t.function_cap / 1000000.0) AS cap_points,
+ fn.calibration_id, fn.metric_version
+FROM quality_scores fn
+JOIN quality_thresholds t ON t.scope = fn.scope AND t.language = fn.language
+WHERE fn.level = 'function' AND fn.exempt = 0 AND fn.debt > t.function_cap
+ORDER BY fn.debt DESC, fn.path, fn.line
+"""
+
+[[rule]]
+id = "quality-scope-mean"
+kind = "sql"
+severity = "warning"
+name = "Quality scope mean"
+description = "A scope's token-weighted mean quality score is below X. The root scope is always evaluated; tests and tooling are their own scopes."
+message = "scope {scope} quality {score_points} is below the mean threshold {mean_points}"
+remediation = "improve the worst files and functions in the scope first"
+query = """
+SELECT '.' AS file, 1 AS line, s.scope, s.score, t.mean_x AS threshold, s.tokens, s.debt,
+ printf('%.1f', s.score / 1000000.0) AS score_points,
+ printf('%.1f', t.mean_x / 1000000.0) AS mean_points,
+ s.calibration_id, s.metric_version
+FROM quality_scores s
+JOIN quality_thresholds t ON t.scope = s.scope AND t.language IS NULL
+WHERE s.level = 'scope' AND s.score IS NOT NULL AND s.score < t.mean_x
+ORDER BY s.scope
+"""
+
+[[rule]]
+id = "quality-unscored-share"
+kind = "sql"
+severity = "warning"
+name = "Quality unscored share"
+description = "More than 10% of a scope's tokens are in no scored file (generated, vendored, unparsed). Above 20% the finding carries blocking = 1. Not-applicable languages are not counted."
+message = "{unscored_percent}% of scope {scope} tokens are unscored"
+remediation = "check exclusions and parse errors; unscored code is not covered by the quality gate"
+query = """
+SELECT '.' AS file, 1 AS line, scope,
+ SUM(CASE WHEN exempt = 0 AND exempt_reason IS NOT NULL THEN tokens ELSE 0 END) AS unscored_tokens,
+ SUM(CASE WHEN score IS NULL AND exempt_reason IS NULL THEN 0 ELSE tokens END) AS counted_tokens,
+ printf('%.1f', 100.0 * SUM(CASE WHEN exempt = 0 AND exempt_reason IS NOT NULL THEN tokens ELSE 0 END)
+  / SUM(CASE WHEN score IS NULL AND exempt_reason IS NULL THEN 0 ELSE tokens END)) AS unscored_percent,
+ CASE WHEN 5 * SUM(CASE WHEN exempt = 0 AND exempt_reason IS NOT NULL THEN tokens ELSE 0 END)
+  > SUM(CASE WHEN score IS NULL AND exempt_reason IS NULL THEN 0 ELSE tokens END) THEN 1 ELSE 0 END AS blocking
+FROM quality_scores
+WHERE level = 'file'
+GROUP BY scope
+HAVING SUM(CASE WHEN score IS NULL AND exempt_reason IS NULL THEN 0 ELSE tokens END) > 0
+ AND 10 * SUM(CASE WHEN exempt = 0 AND exempt_reason IS NOT NULL THEN tokens ELSE 0 END)
+  > SUM(CASE WHEN score IS NULL AND exempt_reason IS NULL THEN 0 ELSE tokens END)
+ORDER BY scope
+"""
+
+[[rule]]
+id = "quality-suppressed"
+kind = "sql"
+severity = "warning"
+name = "Quality findings suppressed"
+description = "Quality findings were suppressed inline or by configuration. They stay counted so a suppression cannot hide debt silently."
+message = "{suppressed} quality findings suppressed in scope {scope}"
+remediation = "review the suppressions; quality-* findings should be fixed or turned down with a recorded reason"
+query = """
+SELECT '.' AS file, 1 AS line, scope, SUM(suppressed) AS suppressed
+FROM quality_suppressions
+GROUP BY scope
+HAVING SUM(suppressed) > 0
+ORDER BY scope
+"""

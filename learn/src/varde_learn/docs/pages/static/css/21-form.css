@@ -1,0 +1,45 @@
+/* 21-form: stacked fields (label, control, hint) at 8px gaps; one column unless
+   the widget container is wide (container query). Controls are 44px+, 16px+ font
+   (no iOS zoom), 1px border and 8px radius; focus is a 2px ring; an invalid
+   control gets a 2px danger border plus the error text. Tokens only. */
+.form-title { margin: 0 0 var(--vd-space-4); font-weight: 600; font-size: var(--vd-text-lg); line-height: var(--vd-leading-heading); overflow-wrap: anywhere; }
+.form-body { container-type: inline-size; min-inline-size: 0; }
+.form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-5) var(--vd-space-4); }
+@container (min-width: 40rem) { .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.form-row { display: flex; flex-direction: column; gap: var(--vd-space-2); min-inline-size: 0; }
+.form-field { display: flex; flex-direction: column; gap: var(--vd-space-2); min-inline-size: 0; }
+.form-label { font-weight: 600; font-size: var(--vd-text-md); line-height: var(--vd-leading-heading); overflow-wrap: anywhere; }
+.form-hint { font-size: var(--vd-text-sm); color: var(--vd-text-secondary); overflow-wrap: anywhere; }
+
+.form-field > input:not([type="checkbox"]), .form-field > select {
+  --form-pad: var(--vd-space-3);
+  inline-size: 100%; max-inline-size: 100%; box-sizing: border-box; min-block-size: var(--vd-control-height);
+  padding: var(--vd-space-2) var(--form-pad); font: inherit; font-size: max(1rem, 16px); line-height: var(--vd-leading-heading);
+  color: var(--vd-text); background: var(--vd-surface); border: 1px solid var(--vd-border-interactive);
+  border-radius: var(--vd-radius-l); transition: border-color var(--vd-dur) ease;
+}
+.form-field > input, .form-field > select { scroll-margin-block: var(--vd-space-4); }
+.form-field > input:focus-visible, .form-field > select:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; border-color: var(--vd-border-selected); }
+.form-field > input[aria-invalid="true"], .form-field > select[aria-invalid="true"] { border-width: 2px; border-color: var(--vd-error); padding-inline: calc(var(--vd-space-3) - 1px); }
+.form-field > input[aria-invalid="true"]:focus-visible, .form-field > select[aria-invalid="true"]:focus-visible { border-color: var(--vd-error); outline-color: var(--vd-focus-ring); }
+.form-field > input:disabled, .form-field > select:disabled { background: var(--vd-readonly); color: var(--vd-text-secondary); cursor: default; }
+@media (hover: hover) {
+  .form-field > input:not([type="checkbox"]):not(:disabled):not(:focus):hover, .form-field > select:not(:disabled):not(:focus):hover { border-color: var(--vd-text); }
+}
+
+/* checkbox: the whole row is the 44px target, native box kept and tinted */
+.form-checkbox .form-field { flex-direction: row; align-items: flex-start; gap: var(--vd-space-3); min-block-size: var(--vd-control-height); padding-block: var(--vd-space-2); cursor: pointer; }
+.form-field > input[type="checkbox"] { flex: none; margin: 0.125rem 0 0; inline-size: 1.25rem; block-size: 1.25rem; accent-color: var(--vd-accent); }
+.form-field > input[type="checkbox"]:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.form-field > input[type="checkbox"][aria-invalid="true"] { outline: 2px solid var(--vd-error); outline-offset: 1px; }
+.form-field > input[type="checkbox"]:disabled ~ .form-label { color: var(--vd-text-secondary); }
+.form-checkbox .form-label { font-weight: 400; }
+
+.form-remaining { margin: var(--vd-space-5) 0 0; font-size: var(--vd-text-sm); color: var(--vd-text-secondary); }
+.form-remaining:empty { display: none; }
+.form-send { margin-block-start: var(--vd-space-4); scroll-margin-block: var(--vd-space-3); }
+.form-remaining + .form-send { margin-block-start: var(--vd-space-2); }
+.form-state { margin-inline-start: var(--vd-space-3); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.form-error { margin: var(--vd-space-2) 0 0; color: var(--vd-error); font-size: var(--vd-text-sm); }
+.form-error:empty { display: none; }
+@media (pointer: coarse) { .form-grid { gap: var(--vd-space-6) var(--vd-space-4); } }

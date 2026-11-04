@@ -1,0 +1,23 @@
+Send and read one-line inbox messages between agents
+
+Usage: varde msg <COMMAND>
+
+Commands:
+  send     Append one message line to the inbox store
+  read     Print a reader's unread messages and advance its cursor
+  show     Show a message and its delivery state (`--json`)
+  status   Report delivery lag and message status (`--json`, `--now <TIMESTAMP>`)
+  prune    Retire unused inbox addresses and stale mailman tokens
+  nudge    Record a main-agent nudge without sending a message
+  migrate  Recover legacy urgent messages and mark old history once
+  ack      Acknowledge a delivered message by ID (`--as <ADDRESS>`)
+  address  Create, bind, refresh, unbind, and list reader addresses
+  relay    Wait for due inbox work and record delivery results
+  soak     Evaluate mail reliability criteria over a rolling window
+  help     Print this message or the help of the given subcommand(s)
+
+Sending `merge-ready` or `needs-user` to `main` requires `--notes <path>` naming
+an existing decision file.
+
+Options:
+  -h, --help  Print help

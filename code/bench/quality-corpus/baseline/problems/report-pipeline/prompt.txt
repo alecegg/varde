@@ -1,0 +1,1 @@
+A pipeline that parses CSV, aggregates by key and renders a text report.

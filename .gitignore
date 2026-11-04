@@ -1,0 +1,19 @@
+.venv/
+.scratch/
+__pycache__/
+*.py[cod]
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+**/node_modules/
+runner/ui/.svelte-kit/
+runner/src/varde_runner/web/static/ui/
+.claude/
+# Stale in-repo memory-bank (no longer a default).
+memory-bank/
+*-workspace/
+benchmark.json
+runner/ui/node_modules

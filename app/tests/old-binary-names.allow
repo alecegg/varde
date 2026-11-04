@@ -1,0 +1,2 @@
+# Class E records fixtures that intentionally preserve removed CLI evidence.
+C	^core/tests/fixtures/flow-ledger/varde\.json$		Frozen flow-ledger fixture retains removed CLI evidence.

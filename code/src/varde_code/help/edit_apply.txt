@@ -1,0 +1,15 @@
+Apply a saved proposal after validating its source snapshots.
+
+Example: `varde edit apply --proposal <proposal_path> --json`. Changed snapshots or symlinked paths fail validation; inspect per-file diagnostics and preview again against current files. Apply continues past a failed file and reports each file's outcome.
+
+Usage: varde edit apply [OPTIONS] --proposal <FILE>
+
+Options:
+      --proposal <FILE>
+          Proposal JSON to validate and apply
+
+      --json
+          Print the versioned JSON envelope
+
+  -h, --help
+          Print help (see a summary with '-h')

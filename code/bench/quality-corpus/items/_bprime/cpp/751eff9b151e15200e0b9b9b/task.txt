@@ -1,0 +1,2 @@
+Reduce every run of whitespace to one space and remove whitespace from both ends.
+Input domain: short text containing spaces, tabs and newlines; leading, trailing and repeated whitespace all collapse, and all-whitespace text becomes empty.

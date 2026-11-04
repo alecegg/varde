@@ -1,0 +1,8 @@
+Show compact progress for non-terminal plans
+
+Usage: varde plan status [OPTIONS]
+
+Options:
+      --repo <REPO>  Repository whose commits and `owns` paths `reviewed_commit` refers to
+      --json         
+  -h, --help         Print help (see more with '--help')

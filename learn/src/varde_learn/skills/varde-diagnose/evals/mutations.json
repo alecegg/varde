@@ -1,0 +1,12 @@
+{
+  "mutations": [
+    {
+      "id": "remove-retrospective-evidence-threshold",
+      "file": "references/retro.md",
+      "remove": "Candidates are kept only when seen in at least two distinct root sessions, or labelled high-severity single-session.",
+      "evals": [
+        "retro"
+      ]
+    }
+  ]
+}

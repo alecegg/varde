@@ -1,0 +1,69 @@
+/* Wireframe and ui-states blocks. Tokens only; selection and kinds never rely on colour alone. */
+.vw-frames { display: block; }
+.vw-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--vd-space-3); }
+.vw-fig { margin: 0; min-inline-size: 0; }
+.vw-fig > figcaption { font-weight: 600; margin-block: 0 var(--vd-space-1); }
+.vw-view { scroll-padding: 12px; overflow: auto; max-block-size: 34rem; border: 1px solid var(--vd-border); border-radius: var(--vd-radius-m); margin-block: 0 var(--vd-space-2); background: var(--vd-surface); }
+.vw-view:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.vb-wire { display: block; max-inline-size: none; touch-action: pan-x pan-y; user-select: none; }
+.vw-bezel { fill: var(--vd-surface-sunk); stroke: var(--vd-border-interactive); stroke-width: 2; }
+.vw-screen { fill: var(--vd-surface); stroke: var(--vd-border); stroke-width: 1; }
+.vw-dot { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.5; }
+.vw-bar { fill: var(--vd-surface-elevated); stroke: var(--vd-border-interactive); stroke-width: 1; }
+.vb-region { stroke: var(--vd-accent); stroke-width: 1; fill: var(--vd-accent-subtle); }
+.vb-r1 { fill: var(--vd-series-1-fill); stroke: var(--vd-series-1); }
+.vb-r2 { fill: var(--vd-series-2-fill); stroke: var(--vd-series-2); }
+.vb-r3 { fill: var(--vd-series-3-fill); stroke: var(--vd-series-3); }
+.vb-r4 { fill: var(--vd-series-4-fill); stroke: var(--vd-series-4); }
+.vb-r5 { fill: var(--vd-series-5-fill); stroke: var(--vd-series-5); }
+.vw-hatch { stroke: none; pointer-events: none; }
+.vw-svg pattern path { stroke: var(--vd-text-secondary); stroke-width: 1; fill: none; }
+.vw-svg pattern circle { fill: var(--vd-text-secondary); stroke: none; }
+.vw-region-label, .vw-kind { fill: var(--vd-text); font: 11px var(--vd-font-body); pointer-events: none; paint-order: stroke; stroke: var(--vd-surface); stroke-width: 4px; stroke-linejoin: round; }
+.vw-kind { fill: var(--vd-text-secondary); font-size: 10px; font-style: italic; }
+.vw-pin circle { fill: var(--vd-surface); stroke: var(--vd-text); stroke-width: 2; }
+.vw-pin text { fill: var(--vd-text); font: 700 11px var(--vd-font-body); stroke: none; pointer-events: none; }
+.vw-region { cursor: pointer; }
+.vw-region:focus:not(:focus-visible) { outline: none; }
+.vw-region:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vw-region:focus-visible .vw-box { stroke: var(--vd-focus-ring); stroke-width: 3.5; }
+.vw-region.vw-hot .vw-box { stroke: var(--vd-accent); stroke-width: 3; }
+.vw-region.vw-sel .vw-box { stroke: var(--vd-accent); stroke-width: 4; stroke-dasharray: none; }
+.vw-notes { margin: 0 0 var(--vd-space-2); padding-inline-start: var(--vd-space-5); }
+.vw-note { margin-block: var(--vd-space-1); padding-inline-start: var(--vd-space-1); border-inline-start: 3px solid transparent; overflow-wrap: anywhere; }
+.vw-note-on { border-inline-start-color: var(--vd-accent); font-weight: 600; }
+.vw-detail { min-block-size: 1.5em; margin-block: var(--vd-space-1) var(--vd-space-2); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.wireframe .vb-data > summary { display: flex; align-items: center; min-block-size: 44px; cursor: pointer; }
+.wireframe .vb-flowbar { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-block: 0 0.4rem; }
+.vb-state { border: 1px solid var(--vd-border); border-radius: var(--vd-radius-m); padding: 0.3rem 0.6rem; min-inline-size: 0; }
+.vb-state:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vb-state h5 { margin: 0 0 0.2em; font-size: var(--vd-text-sm); color: var(--vd-text-secondary); text-transform: uppercase; }
+.vb-state p { margin: 0; }
+.vb-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-block: 0 0.5rem; }
+.vb-tab { min-block-size: 45px; min-inline-size: 45px; border: 2px solid var(--vd-border-interactive); }
+.vb-tab:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.vb-tab[aria-selected="true"] { background: var(--vd-accent); border-color: var(--vd-accent); color: var(--vd-on-accent); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; font-weight: 600; }
+@media (hover: hover) {
+  .vb-tab:hover { background: var(--vd-hover); }
+  .vb-tab[aria-selected="true"]:hover { background: var(--vd-accent); }
+}
+.vb-state[hidden] { display: none; }
+@media (forced-colors: active) {
+  .vw-bezel, .vw-screen, .vw-bar, .vw-dot, .vw-pin circle, .vb-region, .vw-view { stroke: CanvasText; }
+  .vw-bezel, .vw-screen, .vw-bar, .vb-region, .vw-pin circle { fill: Canvas; }
+  .vw-svg pattern path { stroke: CanvasText; } .vw-svg pattern circle { fill: CanvasText; }
+  .vw-region-label, .vw-kind, .vw-pin text { fill: CanvasText; stroke: Canvas; }
+  .vw-pin text { stroke: none; }
+  .vw-region:focus-visible .vw-box, .vw-region.vw-sel .vw-box, .vw-region.vw-hot .vw-box { stroke: Highlight; }
+  .vw-region { border: 1px solid ButtonText; }
+  .vw-region:focus-visible { outline-color: Highlight; }
+  .vw-view, .vb-tab, .vb-state { border-color: ButtonText; }
+  .vb-tab[aria-selected="true"] { border-color: Highlight; background: ButtonFace; color: ButtonText; }
+  .vw-note-on { border-inline-start-color: Highlight; }
+}
+@media print {
+  .vw-view { max-block-size: none; overflow: visible; }
+  .vb-wire { max-inline-size: 100%; block-size: auto; }
+  .vb-state[hidden] { display: block; }
+  .vb-tabs { display: none; }
+}

@@ -1,0 +1,9 @@
+Set the active message store mode
+
+Usage: varde msg store mode <MODE>
+
+Arguments:
+  <MODE>  files, sqlite, mirror-files, or mirror-sqlite
+  -h, --help  Print help
+
+Use `varde msg store import` and `verify` to transfer and check data before switching modes. Stop the runner before changing the active mode.

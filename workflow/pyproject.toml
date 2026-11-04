@@ -1,0 +1,24 @@
+[project]
+name = "varde-workflow"
+version = "0.1.0"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = ["varde-core", "varde-data", "varde-learn"]
+
+[project.entry-points."varde.modules"]
+workflow = "varde_workflow.module:register"
+
+[project.entry-points."varde.skills"]
+workflow = "varde_workflow"
+
+[project.entry-points."varde.agents"]
+workflow = "varde_workflow"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "varde_workflow"
+wheel-exclude = ["**/evals", "**/evals/**", "**/*-workspace/**"]
+source-exclude = ["**/evals/**"]

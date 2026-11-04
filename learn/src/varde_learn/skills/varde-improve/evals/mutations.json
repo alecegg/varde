@@ -1,0 +1,22 @@
+{
+  "mutations": [
+    {
+      "id": "remove-distill-recurrence-threshold",
+      "file": "references/distill.md",
+      "remove": "Require two real occurrences of the same obstacle and a shared improvement target.",
+      "evals": [
+        "distill"
+      ]
+    },
+    {
+      "id": "negative-remove-small-change-preference",
+      "file": "references/distill.md",
+      "remove": "Prefer a small source change over repeating guidance more loudly.",
+      "negative": true,
+      "evals": [
+        "improve",
+        "removal-option"
+      ]
+    }
+  ]
+}

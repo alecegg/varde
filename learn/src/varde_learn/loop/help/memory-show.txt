@@ -1,0 +1,5 @@
+Show one entry by id.
+
+Usage: varde learn memory show <ID> [--json]
+
+Exit codes: 0 found, 1 no such id, 2 usage error or ambiguous id.

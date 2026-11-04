@@ -1,0 +1,29 @@
+{
+  "classification": "unchanged",
+  "message_ids": [
+    "m-00000001",
+    "m-00000002"
+  ],
+  "stdout_stderr": {
+    "all": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"data\":{\"messages\":[{\"from\":\"sender\",\"id\":\"m-00000001\",\"kind\":\"info\",\"text\":\"first\",\"to\":\"worker\",\"ts\":\"2026-10-22T12:00:00Z\"},{\"from\":\"sender\",\"id\":\"m-00000002\",\"kind\":\"info\",\"text\":\"second\",\"to\":\"worker\",\"ts\":\"2026-10-22T12:00:00Z\"}]},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":true,\"outcome\":\"success\",\"schema_version\":1}\n"
+    },
+    "claim": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"data\":{\"messages\":[{\"from\":\"sender\",\"id\":\"m-00000001\",\"kind\":\"info\",\"text\":\"first\",\"to\":\"worker\",\"ts\":\"2026-10-22T12:00:00Z\"},{\"from\":\"sender\",\"id\":\"m-00000002\",\"kind\":\"info\",\"text\":\"second\",\"to\":\"worker\",\"ts\":\"2026-10-22T12:00:00Z\"}]},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":true,\"outcome\":\"success\",\"schema_version\":1}\n"
+    },
+    "empty": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"data\":{\"messages\":[]},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":true,\"outcome\":\"success\",\"schema_version\":1}\n"
+    }
+  },
+  "store": {
+    ".cache/inbox/deliveries.jsonl": "{\"message_id\":\"m-00000001\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000001\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"acked\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000002\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000002\",\"reader\":\"worker\",\"session\":\"cli\",\"via\":\"cli\",\"event\":\"acked\",\"at\":\"2026-10-22T12:00:00Z\"}\n",
+    ".cache/inbox/index/worker.json": "{\"watermark\": 215}",
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"worker\",\"kind\":\"info\",\"text\":\"first\",\"id\":\"m-00000001\"}\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"worker\",\"kind\":\"info\",\"text\":\"second\",\"id\":\"m-00000002\"}\n"
+  }
+}

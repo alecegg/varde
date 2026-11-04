@@ -1,0 +1,4 @@
+category = "a"
+language = "rust"
+pair_group_id = "1b96f80a47e90ed6dabf53f0"
+dominant_defect = "unclear-names"

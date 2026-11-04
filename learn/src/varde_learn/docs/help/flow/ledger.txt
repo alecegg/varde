@@ -1,0 +1,16 @@
+Validate, check and score a decision ledger in one report; --write rehashes it
+
+Usage: varde learn measure <SKILL> ledger [OPTIONS]
+
+Arguments:
+  <SKILL>  Skill directory (reads <SKILL>/ledger.json) or the ledger JSON file itself
+
+Options:
+      --ledger <FILE>  Ledger JSON file when it is not <SKILL>/ledger.json
+      --root <DIR>     Directory the ledger's source paths resolve against [default: Git top level]
+      --route <NAME>   Score only the phases of this route
+      --write          Rewrite each decision's hash from its cited lines instead of reporting
+      --json           Print the shared JSON envelope instead of text
+  -h, --help           Print help
+
+Exit status is 1 when validation or the drift check reports a problem.

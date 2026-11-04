@@ -1,0 +1,1969 @@
+{
+  "cpp": {
+    "class_counts_all": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "classes": {
+      "constructor": {
+        "correct": 0,
+        "misses": 18,
+        "precision": 0.0,
+        "recall": 0.0,
+        "resolved": 5,
+        "sites": 50,
+        "target_sites": 18
+      },
+      "dynamic": {
+        "correct": 0,
+        "misses": 50,
+        "precision": null,
+        "recall": 0.0,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 50
+      },
+      "higher_order": {
+        "correct": 0,
+        "misses": 3,
+        "precision": null,
+        "recall": 0.0,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 3
+      },
+      "imported": {
+        "correct": 0,
+        "misses": 50,
+        "precision": 0.0,
+        "recall": 0.0,
+        "resolved": 2,
+        "sites": 50,
+        "target_sites": 50
+      },
+      "member": {
+        "correct": 0,
+        "misses": 21,
+        "precision": 0.0,
+        "recall": 0.0,
+        "resolved": 1,
+        "sites": 50,
+        "target_sites": 21
+      },
+      "same_file": {
+        "correct": 14,
+        "misses": 3,
+        "precision": 1.0,
+        "recall": 0.8235294117647058,
+        "resolved": 14,
+        "sites": 50,
+        "target_sites": 17
+      }
+    },
+    "failed_repos": [
+      "simdjson/simdjson"
+    ],
+    "failed_sites": 37,
+    "failed_sites_by_class": {
+      "constructor": 10,
+      "imported": 10,
+      "member": 8,
+      "same_file": 9
+    },
+    "headline_bootstrap_95": {
+      "depth_error": {
+        "lower": 0.13559322033898305,
+        "upper": 0.2823529411764706
+      },
+      "depth_error_le1": {
+        "lower": 0.9873417721518988,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.17307692307692307,
+        "upper": 0.22916666666666666
+      },
+      "precision": {
+        "lower": 0.36363636363636365,
+        "upper": 0.9375
+      },
+      "resolved_share": {
+        "lower": 0.044444444444444446,
+        "upper": 0.11363636363636363
+      }
+    },
+    "headline_bootstrap_95_successful_repos_only": {
+      "depth_error": {
+        "lower": 0.1415929203539823,
+        "upper": 0.2823529411764706
+      },
+      "depth_error_le1": {
+        "lower": 0.9882352941176471,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.17307692307692307,
+        "upper": 0.23076923076923078
+      },
+      "precision": {
+        "lower": 0.36329545454545453,
+        "upper": 0.9375
+      },
+      "resolved_share": {
+        "lower": 0.04964539007092199,
+        "upper": 0.1188118811881188
+      }
+    },
+    "metrics": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.13559322033898305,
+          "upper": 0.2823529411764706
+        },
+        "natural_frequency_recall": {
+          "lower": 0.17307692307692307,
+          "upper": 0.22916666666666666
+        },
+        "precision": {
+          "lower": 0.36363636363636365,
+          "upper": 0.9375
+        },
+        "resolved_share": {
+          "lower": 0.044444444444444446,
+          "upper": 0.11363636363636363
+        }
+      },
+      "depth_error": {
+        "functions": 192,
+        "mean_absolute_error": 0.19791666666666666,
+        "within_one_share": 0.9947916666666666
+      },
+      "external_sites": 95,
+      "natural_frequency_recall": 0.20588235294117646,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": 1.0,
+          "recall": 0.8235294117647058,
+          "sites": 50
+        }
+      },
+      "precision": 0.6363636363636364,
+      "recall_bootstrap_95": {
+        "lower": 0.17307692307692307,
+        "upper": 0.22916666666666666
+      },
+      "resolved_share": 0.08029197080291971,
+      "unknown_sites": 46
+    },
+    "metrics_successful_repos_only": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.1415929203539823,
+          "upper": 0.2823529411764706
+        },
+        "natural_frequency_recall": {
+          "lower": 0.17307692307692307,
+          "upper": 0.23076923076923078
+        },
+        "precision": {
+          "lower": 0.36329545454545453,
+          "upper": 0.9375
+        },
+        "resolved_share": {
+          "lower": 0.04964539007092199,
+          "upper": 0.1188118811881188
+        }
+      },
+      "depth_error": {
+        "functions": 191,
+        "mean_absolute_error": 0.19895287958115182,
+        "within_one_share": 0.9947643979057592
+      },
+      "external_sites": 69,
+      "natural_frequency_recall": 0.20588235294117646,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 40
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 40
+        },
+        "member": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 42
+        },
+        "same_file": {
+          "precision": 1.0,
+          "recall": 0.8235294117647058,
+          "sites": 41
+        }
+      },
+      "precision": 0.6363636363636364,
+      "recall_bootstrap_95": {
+        "lower": 0.17307692307692307,
+        "upper": 0.23076923076923078
+      },
+      "resolved_share": 0.08365019011406843,
+      "unknown_sites": 46
+    },
+    "repos_all": [
+      "abseil/abseil-cpp",
+      "assimp/assimp",
+      "fmtlib/fmt",
+      "google/leveldb",
+      "jbeder/yaml-cpp",
+      "simdjson/simdjson"
+    ],
+    "repos_successful": [
+      "abseil/abseil-cpp",
+      "assimp/assimp",
+      "fmtlib/fmt",
+      "google/leveldb",
+      "jbeder/yaml-cpp"
+    ],
+    "sites_all": 300,
+    "sites_successful": 263,
+    "top_miss_classes": [
+      [
+        "dynamic",
+        50
+      ],
+      [
+        "imported",
+        50
+      ],
+      [
+        "member",
+        21
+      ]
+    ]
+  },
+  "csharp": {
+    "class_counts_all": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "classes": {
+      "constructor": {
+        "correct": 2,
+        "misses": 19,
+        "precision": 1.0,
+        "recall": 0.09523809523809523,
+        "resolved": 2,
+        "sites": 50,
+        "target_sites": 21
+      },
+      "dynamic": {
+        "correct": 0,
+        "misses": 0,
+        "precision": null,
+        "recall": null,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 0
+      },
+      "higher_order": {
+        "correct": 0,
+        "misses": 0,
+        "precision": null,
+        "recall": null,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 0
+      },
+      "imported": {
+        "correct": 1,
+        "misses": 49,
+        "precision": 0.5,
+        "recall": 0.02,
+        "resolved": 2,
+        "sites": 50,
+        "target_sites": 50
+      },
+      "member": {
+        "correct": 1,
+        "misses": 24,
+        "precision": 0.3333333333333333,
+        "recall": 0.04,
+        "resolved": 3,
+        "sites": 50,
+        "target_sites": 25
+      },
+      "same_file": {
+        "correct": 7,
+        "misses": 38,
+        "precision": 1.0,
+        "recall": 0.15555555555555556,
+        "resolved": 7,
+        "sites": 50,
+        "target_sites": 45
+      }
+    },
+    "failed_repos": [
+      "dotnet/aspnetcore",
+      "dotnet/roslyn",
+      "dotnet/runtime"
+    ],
+    "failed_sites": 225,
+    "failed_sites_by_class": {
+      "constructor": 37,
+      "dynamic": 37,
+      "higher_order": 38,
+      "imported": 38,
+      "member": 37,
+      "same_file": 38
+    },
+    "headline_bootstrap_95": {
+      "depth_error": {
+        "lower": 0.21897810218978103,
+        "upper": 0.34074074074074073
+      },
+      "depth_error_le1": {
+        "lower": 0.9924812030075187,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.0,
+        "upper": 0.2892825047467392
+      },
+      "precision": {
+        "lower": 0.7857142857142857,
+        "upper": 0.7857142857142857
+      },
+      "resolved_share": {
+        "lower": 0.0,
+        "upper": 0.14
+      }
+    },
+    "headline_bootstrap_95_successful_repos_only": {
+      "depth_error": null,
+      "depth_error_le1": {
+        "lower": 1.0,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": null,
+      "precision": null,
+      "resolved_share": null
+    },
+    "metrics": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.21897810218978103,
+          "upper": 0.34074074074074073
+        },
+        "natural_frequency_recall": {
+          "lower": 0.0,
+          "upper": 0.2892825047467392
+        },
+        "precision": {
+          "lower": 0.7857142857142857,
+          "upper": 0.7857142857142857
+        },
+        "resolved_share": {
+          "lower": 0.0,
+          "upper": 0.14
+        }
+      },
+      "depth_error": {
+        "functions": 272,
+        "mean_absolute_error": 0.27941176470588236,
+        "within_one_share": 0.9963235294117647
+      },
+      "external_sites": 53,
+      "natural_frequency_recall": 0.0776984126984127,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 1.0,
+          "recall": 0.09523809523809523,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": null,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": null,
+          "recall": null,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.5,
+          "recall": 0.02,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.3333333333333333,
+          "recall": 0.04,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": 1.0,
+          "recall": 0.15555555555555556,
+          "sites": 50
+        }
+      },
+      "precision": 0.7857142857142857,
+      "recall_bootstrap_95": {
+        "lower": 0.0,
+        "upper": 0.2892825047467392
+      },
+      "resolved_share": 0.04666666666666667,
+      "unknown_sites": 106
+    },
+    "metrics_successful_repos_only": {
+      "bootstrap_95": {
+        "depth_error": null,
+        "natural_frequency_recall": null,
+        "precision": null,
+        "resolved_share": null
+      },
+      "depth_error": {
+        "functions": 71,
+        "mean_absolute_error": 0.15492957746478872,
+        "within_one_share": 1.0
+      },
+      "external_sites": 22,
+      "natural_frequency_recall": 0.4458333333333333,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 1.0,
+          "recall": 0.5,
+          "sites": 13
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": null,
+          "sites": 13
+        },
+        "higher_order": {
+          "precision": null,
+          "recall": null,
+          "sites": 12
+        },
+        "imported": {
+          "precision": 0.5,
+          "recall": 0.08333333333333333,
+          "sites": 12
+        },
+        "member": {
+          "precision": 0.3333333333333333,
+          "recall": 0.5,
+          "sites": 13
+        },
+        "same_file": {
+          "precision": 1.0,
+          "recall": 0.7,
+          "sites": 12
+        }
+      },
+      "precision": 0.7857142857142857,
+      "recall_bootstrap_95": null,
+      "resolved_share": 0.18666666666666668,
+      "unknown_sites": 25
+    },
+    "repos_all": [
+      "dotnet/aspnetcore",
+      "dotnet/roslyn",
+      "dotnet/runtime",
+      "umbraco/Umbraco-CMS"
+    ],
+    "repos_successful": [
+      "umbraco/Umbraco-CMS"
+    ],
+    "sites_all": 300,
+    "sites_successful": 75,
+    "top_miss_classes": [
+      [
+        "imported",
+        49
+      ],
+      [
+        "same_file",
+        38
+      ],
+      [
+        "member",
+        24
+      ]
+    ]
+  },
+  "go": {
+    "class_counts_all": {
+      "constructor": 59,
+      "dynamic": 1,
+      "higher_order": 60,
+      "imported": 60,
+      "member": 60,
+      "same_file": 60
+    },
+    "classes": {
+      "constructor": {
+        "correct": 34,
+        "misses": 25,
+        "precision": 0.9444444444444444,
+        "recall": 0.576271186440678,
+        "resolved": 36,
+        "sites": 59,
+        "target_sites": 59
+      },
+      "dynamic": {
+        "correct": 0,
+        "misses": 0,
+        "precision": null,
+        "recall": null,
+        "resolved": 0,
+        "sites": 1,
+        "target_sites": 0
+      },
+      "higher_order": {
+        "correct": 0,
+        "misses": 0,
+        "precision": 0.0,
+        "recall": null,
+        "resolved": 1,
+        "sites": 60,
+        "target_sites": 0
+      },
+      "imported": {
+        "correct": 20,
+        "misses": 40,
+        "precision": 0.8695652173913043,
+        "recall": 0.3333333333333333,
+        "resolved": 23,
+        "sites": 60,
+        "target_sites": 60
+      },
+      "member": {
+        "correct": 14,
+        "misses": 21,
+        "precision": 0.875,
+        "recall": 0.4,
+        "resolved": 16,
+        "sites": 60,
+        "target_sites": 35
+      },
+      "same_file": {
+        "correct": 40,
+        "misses": 18,
+        "precision": 0.975609756097561,
+        "recall": 0.6896551724137931,
+        "resolved": 41,
+        "sites": 60,
+        "target_sites": 58
+      }
+    },
+    "failed_repos": [],
+    "failed_sites": 0,
+    "failed_sites_by_class": {},
+    "headline_bootstrap_95": {
+      "depth_error": {
+        "lower": 0.32323232323232326,
+        "upper": 0.375
+      },
+      "depth_error_le1": {
+        "lower": 0.9895833333333334,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.49181142159451396,
+        "upper": 0.5063500235496898
+      },
+      "precision": {
+        "lower": 0.8809523809523809,
+        "upper": 0.963302752293578
+      },
+      "resolved_share": {
+        "lower": 0.36333333333333334,
+        "upper": 0.42
+      }
+    },
+    "headline_bootstrap_95_successful_repos_only": {
+      "depth_error": {
+        "lower": 0.32323232323232326,
+        "upper": 0.375
+      },
+      "depth_error_le1": {
+        "lower": 0.9895833333333334,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.49181142159451396,
+        "upper": 0.5063500235496898
+      },
+      "precision": {
+        "lower": 0.8809523809523809,
+        "upper": 0.963302752293578
+      },
+      "resolved_share": {
+        "lower": 0.36333333333333334,
+        "upper": 0.42
+      }
+    },
+    "metrics": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.32323232323232326,
+          "upper": 0.375
+        },
+        "natural_frequency_recall": {
+          "lower": 0.49181142159451396,
+          "upper": 0.5063500235496898
+        },
+        "precision": {
+          "lower": 0.8809523809523809,
+          "upper": 0.963302752293578
+        },
+        "resolved_share": {
+          "lower": 0.36333333333333334,
+          "upper": 0.42
+        }
+      },
+      "depth_error": {
+        "functions": 294,
+        "mean_absolute_error": 0.3401360544217687,
+        "within_one_share": 0.9965986394557823
+      },
+      "external_sites": 27,
+      "natural_frequency_recall": 0.49981492304695113,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.9444444444444444,
+          "recall": 0.576271186440678,
+          "sites": 59
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": null,
+          "sites": 1
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 60
+        },
+        "imported": {
+          "precision": 0.8695652173913043,
+          "recall": 0.3333333333333333,
+          "sites": 60
+        },
+        "member": {
+          "precision": 0.875,
+          "recall": 0.4,
+          "sites": 60
+        },
+        "same_file": {
+          "precision": 0.975609756097561,
+          "recall": 0.6896551724137931,
+          "sites": 60
+        }
+      },
+      "precision": 0.9230769230769231,
+      "recall_bootstrap_95": {
+        "lower": 0.49181142159451396,
+        "upper": 0.5063500235496898
+      },
+      "resolved_share": 0.39,
+      "unknown_sites": 61
+    },
+    "metrics_successful_repos_only": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.32323232323232326,
+          "upper": 0.375
+        },
+        "natural_frequency_recall": {
+          "lower": 0.49181142159451396,
+          "upper": 0.5063500235496898
+        },
+        "precision": {
+          "lower": 0.8809523809523809,
+          "upper": 0.963302752293578
+        },
+        "resolved_share": {
+          "lower": 0.36333333333333334,
+          "upper": 0.42
+        }
+      },
+      "depth_error": {
+        "functions": 294,
+        "mean_absolute_error": 0.3401360544217687,
+        "within_one_share": 0.9965986394557823
+      },
+      "external_sites": 27,
+      "natural_frequency_recall": 0.49981492304695113,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.9444444444444444,
+          "recall": 0.576271186440678,
+          "sites": 59
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": null,
+          "sites": 1
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 60
+        },
+        "imported": {
+          "precision": 0.8695652173913043,
+          "recall": 0.3333333333333333,
+          "sites": 60
+        },
+        "member": {
+          "precision": 0.875,
+          "recall": 0.4,
+          "sites": 60
+        },
+        "same_file": {
+          "precision": 0.975609756097561,
+          "recall": 0.6896551724137931,
+          "sites": 60
+        }
+      },
+      "precision": 0.9230769230769231,
+      "recall_bootstrap_95": {
+        "lower": 0.49181142159451396,
+        "upper": 0.5063500235496898
+      },
+      "resolved_share": 0.39,
+      "unknown_sites": 61
+    },
+    "repos_all": [
+      "go-gitea/gitea",
+      "gohugoio/hugo",
+      "tailscale/tailscale"
+    ],
+    "repos_successful": [
+      "go-gitea/gitea",
+      "gohugoio/hugo",
+      "tailscale/tailscale"
+    ],
+    "sites_all": 300,
+    "sites_successful": 300,
+    "top_miss_classes": [
+      [
+        "imported",
+        40
+      ],
+      [
+        "constructor",
+        25
+      ],
+      [
+        "member",
+        21
+      ]
+    ]
+  },
+  "java": {
+    "class_counts_all": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "classes": {
+      "constructor": {
+        "correct": 5,
+        "misses": 18,
+        "precision": 0.8333333333333334,
+        "recall": 0.21739130434782608,
+        "resolved": 6,
+        "sites": 50,
+        "target_sites": 23
+      },
+      "dynamic": {
+        "correct": 0,
+        "misses": 0,
+        "precision": 0.0,
+        "recall": null,
+        "resolved": 13,
+        "sites": 50,
+        "target_sites": 0
+      },
+      "higher_order": {
+        "correct": 0,
+        "misses": 0,
+        "precision": 0.0,
+        "recall": null,
+        "resolved": 12,
+        "sites": 50,
+        "target_sites": 0
+      },
+      "imported": {
+        "correct": 8,
+        "misses": 42,
+        "precision": 0.5,
+        "recall": 0.16,
+        "resolved": 16,
+        "sites": 50,
+        "target_sites": 50
+      },
+      "member": {
+        "correct": 12,
+        "misses": 13,
+        "precision": 0.8,
+        "recall": 0.48,
+        "resolved": 15,
+        "sites": 50,
+        "target_sites": 25
+      },
+      "same_file": {
+        "correct": 18,
+        "misses": 26,
+        "precision": 0.8571428571428571,
+        "recall": 0.4090909090909091,
+        "resolved": 21,
+        "sites": 50,
+        "target_sites": 44
+      }
+    },
+    "failed_repos": [
+      "JabRef/jabref"
+    ],
+    "failed_sites": 75,
+    "failed_sites_by_class": {
+      "constructor": 13,
+      "dynamic": 6,
+      "higher_order": 19,
+      "imported": 13,
+      "member": 12,
+      "same_file": 12
+    },
+    "headline_bootstrap_95": {
+      "depth_error": {
+        "lower": 0.34328358208955223,
+        "upper": 0.45323741007194246
+      },
+      "depth_error_le1": {
+        "lower": 0.9848484848484849,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.10034313725490196,
+        "upper": 0.48129957302069765
+      },
+      "precision": {
+        "lower": 0.4838709677419355,
+        "upper": 0.5454545454545454
+      },
+      "resolved_share": {
+        "lower": 0.10333333333333333,
+        "upper": 0.4266666666666667
+      }
+    },
+    "headline_bootstrap_95_successful_repos_only": {
+      "depth_error": {
+        "lower": 0.4222222222222222,
+        "upper": 0.47058823529411764
+      },
+      "depth_error_le1": {
+        "lower": 0.9705882352941176,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.3599624060150376,
+        "upper": 0.530448717948718
+      },
+      "precision": {
+        "lower": 0.4838709677419355,
+        "upper": 0.5454545454545454
+      },
+      "resolved_share": {
+        "lower": 0.30666666666666664,
+        "upper": 0.44
+      }
+    },
+    "metrics": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.34328358208955223,
+          "upper": 0.45323741007194246
+        },
+        "natural_frequency_recall": {
+          "lower": 0.10034313725490196,
+          "upper": 0.48129957302069765
+        },
+        "precision": {
+          "lower": 0.4838709677419355,
+          "upper": 0.5454545454545454
+        },
+        "resolved_share": {
+          "lower": 0.10333333333333333,
+          "upper": 0.4266666666666667
+        }
+      },
+      "depth_error": {
+        "functions": 273,
+        "mean_absolute_error": 0.3992673992673993,
+        "within_one_share": 0.9926739926739927
+      },
+      "external_sites": 54,
+      "natural_frequency_recall": 0.3166205533596838,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.8333333333333334,
+          "recall": 0.21739130434782608,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.5,
+          "recall": 0.16,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.8,
+          "recall": 0.48,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": 0.8571428571428571,
+          "recall": 0.4090909090909091,
+          "sites": 50
+        }
+      },
+      "precision": 0.5180722891566265,
+      "recall_bootstrap_95": {
+        "lower": 0.10034313725490196,
+        "upper": 0.48129957302069765
+      },
+      "resolved_share": 0.27666666666666667,
+      "unknown_sites": 104
+    },
+    "metrics_successful_repos_only": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.4222222222222222,
+          "upper": 0.47058823529411764
+        },
+        "natural_frequency_recall": {
+          "lower": 0.3599624060150376,
+          "upper": 0.530448717948718
+        },
+        "precision": {
+          "lower": 0.4838709677419355,
+          "upper": 0.5454545454545454
+        },
+        "resolved_share": {
+          "lower": 0.30666666666666664,
+          "upper": 0.44
+        }
+      },
+      "depth_error": {
+        "functions": 203,
+        "mean_absolute_error": 0.43842364532019706,
+        "within_one_share": 0.9901477832512315
+      },
+      "external_sites": 41,
+      "natural_frequency_recall": 0.41775687170424014,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.8333333333333334,
+          "recall": 0.2777777777777778,
+          "sites": 37
+        },
+        "dynamic": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 44
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 31
+        },
+        "imported": {
+          "precision": 0.5,
+          "recall": 0.21621621621621623,
+          "sites": 37
+        },
+        "member": {
+          "precision": 0.8,
+          "recall": 0.631578947368421,
+          "sites": 38
+        },
+        "same_file": {
+          "precision": 0.8571428571428571,
+          "recall": 0.5454545454545454,
+          "sites": 38
+        }
+      },
+      "precision": 0.5180722891566265,
+      "recall_bootstrap_95": {
+        "lower": 0.3599624060150376,
+        "upper": 0.530448717948718
+      },
+      "resolved_share": 0.3688888888888889,
+      "unknown_sites": 77
+    },
+    "repos_all": [
+      "JabRef/jabref",
+      "apache/commons-io",
+      "apache/commons-lang",
+      "google/guava"
+    ],
+    "repos_successful": [
+      "apache/commons-io",
+      "apache/commons-lang",
+      "google/guava"
+    ],
+    "sites_all": 300,
+    "sites_successful": 225,
+    "top_miss_classes": [
+      [
+        "imported",
+        42
+      ],
+      [
+        "same_file",
+        26
+      ],
+      [
+        "constructor",
+        18
+      ]
+    ]
+  },
+  "python": {
+    "class_counts_all": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "classes": {
+      "constructor": {
+        "correct": 0,
+        "misses": 50,
+        "precision": null,
+        "recall": 0.0,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 50
+      },
+      "dynamic": {
+        "correct": 0,
+        "misses": 2,
+        "precision": 0.0,
+        "recall": 0.0,
+        "resolved": 3,
+        "sites": 50,
+        "target_sites": 2
+      },
+      "higher_order": {
+        "correct": 0,
+        "misses": 1,
+        "precision": null,
+        "recall": 0.0,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 1
+      },
+      "imported": {
+        "correct": 17,
+        "misses": 19,
+        "precision": 0.7727272727272727,
+        "recall": 0.4722222222222222,
+        "resolved": 22,
+        "sites": 50,
+        "target_sites": 36
+      },
+      "member": {
+        "correct": 9,
+        "misses": 9,
+        "precision": 0.6,
+        "recall": 0.5,
+        "resolved": 15,
+        "sites": 50,
+        "target_sites": 18
+      },
+      "same_file": {
+        "correct": 46,
+        "misses": 2,
+        "precision": 0.92,
+        "recall": 0.9583333333333334,
+        "resolved": 50,
+        "sites": 50,
+        "target_sites": 48
+      }
+    },
+    "failed_repos": [],
+    "failed_sites": 0,
+    "failed_sites_by_class": {},
+    "headline_bootstrap_95": {
+      "depth_error": {
+        "lower": 0.2857142857142857,
+        "upper": 0.36470588235294116
+      },
+      "depth_error_le1": {
+        "lower": 0.9647058823529412,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.4583333333333333,
+        "upper": 0.5123423374654902
+      },
+      "precision": {
+        "lower": 0.75,
+        "upper": 0.8620689655172413
+      },
+      "resolved_share": {
+        "lower": 0.29,
+        "upper": 0.3137254901960784
+      }
+    },
+    "headline_bootstrap_95_successful_repos_only": {
+      "depth_error": {
+        "lower": 0.2857142857142857,
+        "upper": 0.36470588235294116
+      },
+      "depth_error_le1": {
+        "lower": 0.9647058823529412,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.4583333333333333,
+        "upper": 0.5123423374654902
+      },
+      "precision": {
+        "lower": 0.75,
+        "upper": 0.8620689655172413
+      },
+      "resolved_share": {
+        "lower": 0.29,
+        "upper": 0.3137254901960784
+      }
+    },
+    "metrics": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.2857142857142857,
+          "upper": 0.36470588235294116
+        },
+        "natural_frequency_recall": {
+          "lower": 0.4583333333333333,
+          "upper": 0.5123423374654902
+        },
+        "precision": {
+          "lower": 0.75,
+          "upper": 0.8620689655172413
+        },
+        "resolved_share": {
+          "lower": 0.29,
+          "upper": 0.3137254901960784
+        }
+      },
+      "depth_error": {
+        "functions": 247,
+        "mean_absolute_error": 0.340080971659919,
+        "within_one_share": 0.9757085020242915
+      },
+      "external_sites": 116,
+      "natural_frequency_recall": 0.4826388888888889,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.7727272727272727,
+          "recall": 0.4722222222222222,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.6,
+          "recall": 0.5,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": 0.92,
+          "recall": 0.9583333333333334,
+          "sites": 50
+        }
+      },
+      "precision": 0.8,
+      "recall_bootstrap_95": {
+        "lower": 0.4583333333333333,
+        "upper": 0.5123423374654902
+      },
+      "resolved_share": 0.3,
+      "unknown_sites": 29
+    },
+    "metrics_successful_repos_only": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.2857142857142857,
+          "upper": 0.36470588235294116
+        },
+        "natural_frequency_recall": {
+          "lower": 0.4583333333333333,
+          "upper": 0.5123423374654902
+        },
+        "precision": {
+          "lower": 0.75,
+          "upper": 0.8620689655172413
+        },
+        "resolved_share": {
+          "lower": 0.29,
+          "upper": 0.3137254901960784
+        }
+      },
+      "depth_error": {
+        "functions": 247,
+        "mean_absolute_error": 0.340080971659919,
+        "within_one_share": 0.9757085020242915
+      },
+      "external_sites": 116,
+      "natural_frequency_recall": 0.4826388888888889,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.7727272727272727,
+          "recall": 0.4722222222222222,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.6,
+          "recall": 0.5,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": 0.92,
+          "recall": 0.9583333333333334,
+          "sites": 50
+        }
+      },
+      "precision": 0.8,
+      "recall_bootstrap_95": {
+        "lower": 0.4583333333333333,
+        "upper": 0.5123423374654902
+      },
+      "resolved_share": 0.3,
+      "unknown_sites": 29
+    },
+    "repos_all": [
+      "django/django",
+      "pandas-dev/pandas",
+      "pytest-dev/pytest"
+    ],
+    "repos_successful": [
+      "django/django",
+      "pandas-dev/pandas",
+      "pytest-dev/pytest"
+    ],
+    "sites_all": 300,
+    "sites_successful": 300,
+    "top_miss_classes": [
+      [
+        "constructor",
+        50
+      ],
+      [
+        "imported",
+        19
+      ],
+      [
+        "member",
+        9
+      ]
+    ]
+  },
+  "rust": {
+    "class_counts_all": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "classes": {
+      "constructor": {
+        "correct": 4,
+        "misses": 21,
+        "precision": 0.2857142857142857,
+        "recall": 0.16,
+        "resolved": 14,
+        "sites": 50,
+        "target_sites": 25
+      },
+      "dynamic": {
+        "correct": 0,
+        "misses": 0,
+        "precision": 0.0,
+        "recall": null,
+        "resolved": 1,
+        "sites": 50,
+        "target_sites": 0
+      },
+      "higher_order": {
+        "correct": 0,
+        "misses": 0,
+        "precision": 0.0,
+        "recall": null,
+        "resolved": 10,
+        "sites": 50,
+        "target_sites": 0
+      },
+      "imported": {
+        "correct": 10,
+        "misses": 15,
+        "precision": 0.9090909090909091,
+        "recall": 0.4,
+        "resolved": 11,
+        "sites": 50,
+        "target_sites": 25
+      },
+      "member": {
+        "correct": 9,
+        "misses": 16,
+        "precision": 0.6428571428571429,
+        "recall": 0.36,
+        "resolved": 14,
+        "sites": 50,
+        "target_sites": 25
+      },
+      "same_file": {
+        "correct": 18,
+        "misses": 32,
+        "precision": 1.0,
+        "recall": 0.36,
+        "resolved": 18,
+        "sites": 50,
+        "target_sites": 50
+      }
+    },
+    "failed_repos": [],
+    "failed_sites": 0,
+    "failed_sites_by_class": {},
+    "headline_bootstrap_95": {
+      "depth_error": {
+        "lower": 0.45454545454545453,
+        "upper": 0.5483870967741935
+      },
+      "depth_error_le1": {
+        "lower": 0.989247311827957,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.1842948717948718,
+        "upper": 0.4479166666666667
+      },
+      "precision": {
+        "lower": 0.5333333333333333,
+        "upper": 0.6923076923076923
+      },
+      "resolved_share": {
+        "lower": 0.13291139240506328,
+        "upper": 0.3037974683544304
+      }
+    },
+    "headline_bootstrap_95_successful_repos_only": {
+      "depth_error": {
+        "lower": 0.45454545454545453,
+        "upper": 0.5483870967741935
+      },
+      "depth_error_le1": {
+        "lower": 0.989247311827957,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.1842948717948718,
+        "upper": 0.4479166666666667
+      },
+      "precision": {
+        "lower": 0.5333333333333333,
+        "upper": 0.6923076923076923
+      },
+      "resolved_share": {
+        "lower": 0.13291139240506328,
+        "upper": 0.3037974683544304
+      }
+    },
+    "metrics": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.45454545454545453,
+          "upper": 0.5483870967741935
+        },
+        "natural_frequency_recall": {
+          "lower": 0.1842948717948718,
+          "upper": 0.4479166666666667
+        },
+        "precision": {
+          "lower": 0.5333333333333333,
+          "upper": 0.6923076923076923
+        },
+        "resolved_share": {
+          "lower": 0.13291139240506328,
+          "upper": 0.3037974683544304
+        }
+      },
+      "depth_error": {
+        "functions": 225,
+        "mean_absolute_error": 0.49333333333333335,
+        "within_one_share": 0.9955555555555555
+      },
+      "external_sites": 75,
+      "natural_frequency_recall": 0.32,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.2857142857142857,
+          "recall": 0.16,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.9090909090909091,
+          "recall": 0.4,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.6428571428571429,
+          "recall": 0.36,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": 1.0,
+          "recall": 0.36,
+          "sites": 50
+        }
+      },
+      "precision": 0.6029411764705882,
+      "recall_bootstrap_95": {
+        "lower": 0.1842948717948718,
+        "upper": 0.4479166666666667
+      },
+      "resolved_share": 0.22666666666666666,
+      "unknown_sites": 100
+    },
+    "metrics_successful_repos_only": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.45454545454545453,
+          "upper": 0.5483870967741935
+        },
+        "natural_frequency_recall": {
+          "lower": 0.1842948717948718,
+          "upper": 0.4479166666666667
+        },
+        "precision": {
+          "lower": 0.5333333333333333,
+          "upper": 0.6923076923076923
+        },
+        "resolved_share": {
+          "lower": 0.13291139240506328,
+          "upper": 0.3037974683544304
+        }
+      },
+      "depth_error": {
+        "functions": 225,
+        "mean_absolute_error": 0.49333333333333335,
+        "within_one_share": 0.9955555555555555
+      },
+      "external_sites": 75,
+      "natural_frequency_recall": 0.32,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": 0.2857142857142857,
+          "recall": 0.16,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 50
+        },
+        "imported": {
+          "precision": 0.9090909090909091,
+          "recall": 0.4,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.6428571428571429,
+          "recall": 0.36,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": 1.0,
+          "recall": 0.36,
+          "sites": 50
+        }
+      },
+      "precision": 0.6029411764705882,
+      "recall_bootstrap_95": {
+        "lower": 0.1842948717948718,
+        "upper": 0.4479166666666667
+      },
+      "resolved_share": 0.22666666666666666,
+      "unknown_sites": 100
+    },
+    "repos_all": [
+      "rayon-rs/rayon",
+      "rust-lang/regex",
+      "sharkdp/fd",
+      "sharkdp/hyperfine"
+    ],
+    "repos_successful": [
+      "rayon-rs/rayon",
+      "rust-lang/regex",
+      "sharkdp/fd",
+      "sharkdp/hyperfine"
+    ],
+    "sites_all": 300,
+    "sites_successful": 300,
+    "top_miss_classes": [
+      [
+        "same_file",
+        32
+      ],
+      [
+        "constructor",
+        21
+      ],
+      [
+        "member",
+        16
+      ]
+    ]
+  },
+  "typescript": {
+    "class_counts_all": {
+      "constructor": 50,
+      "dynamic": 50,
+      "higher_order": 50,
+      "imported": 50,
+      "member": 50,
+      "same_file": 50
+    },
+    "classes": {
+      "constructor": {
+        "correct": 0,
+        "misses": 18,
+        "precision": null,
+        "recall": 0.0,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 18
+      },
+      "dynamic": {
+        "correct": 0,
+        "misses": 0,
+        "precision": null,
+        "recall": null,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 0
+      },
+      "higher_order": {
+        "correct": 0,
+        "misses": 1,
+        "precision": 0.0,
+        "recall": 0.0,
+        "resolved": 1,
+        "sites": 50,
+        "target_sites": 1
+      },
+      "imported": {
+        "correct": 0,
+        "misses": 50,
+        "precision": null,
+        "recall": 0.0,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 50
+      },
+      "member": {
+        "correct": 26,
+        "misses": 23,
+        "precision": 0.9629629629629629,
+        "recall": 0.5306122448979592,
+        "resolved": 27,
+        "sites": 50,
+        "target_sites": 49
+      },
+      "same_file": {
+        "correct": 0,
+        "misses": 50,
+        "precision": null,
+        "recall": 0.0,
+        "resolved": 0,
+        "sites": 50,
+        "target_sites": 50
+      }
+    },
+    "failed_repos": [
+      "prettier/prettier"
+    ],
+    "failed_sites": 142,
+    "failed_sites_by_class": {
+      "constructor": 25,
+      "dynamic": 25,
+      "higher_order": 25,
+      "imported": 25,
+      "member": 17,
+      "same_file": 25
+    },
+    "headline_bootstrap_95": {
+      "depth_error": {
+        "lower": 0.2719298245614035,
+        "upper": 0.28888888888888886
+      },
+      "depth_error_le1": {
+        "lower": 0.9824561403508771,
+        "upper": 1.0
+      },
+      "natural_frequency_recall": {
+        "lower": 0.0,
+        "upper": 0.19696969696969696
+      },
+      "precision": {
+        "lower": 0.9285714285714286,
+        "upper": 0.9285714285714286
+      },
+      "resolved_share": {
+        "lower": 0.0,
+        "upper": 0.17721518987341772
+      }
+    },
+    "headline_bootstrap_95_successful_repos_only": {
+      "depth_error": null,
+      "depth_error_le1": {
+        "lower": 0.9824561403508771,
+        "upper": 0.9824561403508771
+      },
+      "natural_frequency_recall": null,
+      "precision": null,
+      "resolved_share": null
+    },
+    "metrics": {
+      "bootstrap_95": {
+        "depth_error": {
+          "lower": 0.2719298245614035,
+          "upper": 0.28888888888888886
+        },
+        "natural_frequency_recall": {
+          "lower": 0.0,
+          "upper": 0.19696969696969696
+        },
+        "precision": {
+          "lower": 0.9285714285714286,
+          "upper": 0.9285714285714286
+        },
+        "resolved_share": {
+          "lower": 0.0,
+          "upper": 0.17721518987341772
+        }
+      },
+      "depth_error": {
+        "functions": 204,
+        "mean_absolute_error": 0.27941176470588236,
+        "within_one_share": 0.9901960784313726
+      },
+      "external_sites": 27,
+      "natural_frequency_recall": 0.1326530612244898,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": null,
+          "sites": 50
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "imported": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        },
+        "member": {
+          "precision": 0.9629629629629629,
+          "recall": 0.5306122448979592,
+          "sites": 50
+        },
+        "same_file": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 50
+        }
+      },
+      "precision": 0.9285714285714286,
+      "recall_bootstrap_95": {
+        "lower": 0.0,
+        "upper": 0.19696969696969696
+      },
+      "resolved_share": 0.09333333333333334,
+      "unknown_sites": 105
+    },
+    "metrics_successful_repos_only": {
+      "bootstrap_95": {
+        "depth_error": null,
+        "natural_frequency_recall": null,
+        "precision": null,
+        "resolved_share": null
+      },
+      "depth_error": {
+        "functions": 114,
+        "mean_absolute_error": 0.2719298245614035,
+        "within_one_share": 0.9824561403508771
+      },
+      "external_sites": 6,
+      "natural_frequency_recall": 0.19696969696969696,
+      "natural_frequency_weights": {
+        "constructor": 0.25,
+        "imported": 0.25,
+        "member": 0.25,
+        "same_file": 0.25
+      },
+      "per_class": {
+        "constructor": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 25
+        },
+        "dynamic": {
+          "precision": null,
+          "recall": null,
+          "sites": 25
+        },
+        "higher_order": {
+          "precision": 0.0,
+          "recall": null,
+          "sites": 25
+        },
+        "imported": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 25
+        },
+        "member": {
+          "precision": 0.9629629629629629,
+          "recall": 0.7878787878787878,
+          "sites": 33
+        },
+        "same_file": {
+          "precision": null,
+          "recall": 0.0,
+          "sites": 25
+        }
+      },
+      "precision": 0.9285714285714286,
+      "recall_bootstrap_95": null,
+      "resolved_share": 0.17721518987341772,
+      "unknown_sites": 53
+    },
+    "repos_all": [
+      "prettier/prettier",
+      "typeorm/typeorm"
+    ],
+    "repos_successful": [
+      "typeorm/typeorm"
+    ],
+    "sites_all": 300,
+    "sites_successful": 158,
+    "top_miss_classes": [
+      [
+        "imported",
+        50
+      ],
+      [
+        "same_file",
+        50
+      ],
+      [
+        "member",
+        23
+      ]
+    ]
+  }
+}

@@ -1,0 +1,217 @@
+{
+  "language": "typescript",
+  "source": "function c00_simple_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; return false; }\nfunction c01_nested_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) { if (b) return true; } return false; }\nfunction c02_triple_nested_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) { if (b) { if (c) return true; } } return false; }\nfunction c03_if_else(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else return false; return false; }\nfunction c04_if_elif_else(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else if (b) return false; else return true; return false; }\nfunction c05_three_way_chain(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else if (b) return false; else if (c) return true; else return false; return false; }\nfunction c06_and_sequence(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a && b) return true; return false; }\nfunction c07_or_sequence(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a || b) return true; return false; }\nfunction c08_mixed_boolean(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a && b || c && d) return true; return false; }\nfunction c09_assigned_boolean(a: boolean, b: boolean, c: boolean, d: boolean): boolean { const value = a && b; return value; return false; }\nfunction c10_while_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { while (a) { a = false; } return false; }\nfunction c11_for_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { void item; } return false; }\nfunction c12_if_with_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) { for (const item of [b, c]) { void item; } } return false; }\nfunction c13_nested_loops(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { while (item) { break; } } return false; }\nfunction c14_switch_or_match(a: boolean, b: boolean, c: boolean, d: boolean): boolean { switch (a) { case true: return true; default: return false; } return false; }\nfunction c15_switch_nested_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { switch (a) { case true: if (b) return true; break; default: return false; } return false; }\nfunction c16_try_one_catch(a: boolean, b: boolean, c: boolean, d: boolean): boolean { try { if (a) return true; } catch (error) { return false; } return false; }\nfunction c17_try_two_catches(a: boolean, b: boolean, c: boolean, d: boolean): boolean { try { if (a) return true; } catch (error) { if (b) return false; } return false; }\nfunction c18_recursive_call(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; return c18_recursive_call(b, a); return false; }\nfunction c19_conditional_expression(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return a ? true : false; return false; }\nfunction c20_nested_conditionals(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return a ? true : (b ? false : true); return false; }\nfunction c21_lambda_decision(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return [a].some(value => { if (value) return true; return false; }); return false; }\nfunction c22_if_lambda_decision(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return [b].some(value => { if (value) return true; return false; }); return false; }\nfunction c23_nested_callable(a: boolean, b: boolean, c: boolean, d: boolean): boolean { function inner() { if (a) return true; return false; } return inner(); return false; }\nfunction c24_try_finally(a: boolean, b: boolean, c: boolean, d: boolean): boolean { try { if (a) return true; } finally { cleanup(); } return false; }\nfunction c25_labeled_jump(a: boolean, b: boolean, c: boolean, d: boolean): boolean { outer: while (a) { break outer; } return false; }\nfunction c26_boolean_operator_sequences(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return a && (b || c); }\nfunction c27_language_idiom(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { if (item) return true; } return false; }\nfunction c28_loop_if_boolean(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { if (item && a) return true; } return false; }\nfunction c29_else_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else { while (b) { break; } } return false; }\n",
+  "functions": [
+    {
+      "name": "c00_simple_if",
+      "construct": "simple_if",
+      "source": "function c00_simple_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; return false; }\n",
+      "expected": 1,
+      "derivation": "One top-level if adds one structural increment."
+    },
+    {
+      "name": "c01_nested_if",
+      "construct": "nested_if",
+      "source": "function c01_nested_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) { if (b) return true; } return false; }\n",
+      "expected": 3,
+      "derivation": "The outer if adds 1; the nested if adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c02_triple_nested_if",
+      "construct": "triple_nested_if",
+      "source": "function c02_triple_nested_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) { if (b) { if (c) return true; } } return false; }\n",
+      "expected": 6,
+      "derivation": "Three nested ifs add 1, 2, and 3 respectively."
+    },
+    {
+      "name": "c03_if_else",
+      "construct": "if_else",
+      "source": "function c03_if_else(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else return false; return false; }\n",
+      "expected": 2,
+      "derivation": "The if and its else each add one; else is hybrid."
+    },
+    {
+      "name": "c04_if_elif_else",
+      "construct": "if_elif_else",
+      "source": "function c04_if_elif_else(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else if (b) return false; else return true; return false; }\n",
+      "expected": 3,
+      "derivation": "The if, else-if, and else each add one; else-if is hybrid."
+    },
+    {
+      "name": "c05_three_way_chain",
+      "construct": "three_way_chain",
+      "source": "function c05_three_way_chain(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else if (b) return false; else if (c) return true; else return false; return false; }\n",
+      "expected": 4,
+      "derivation": "One if, two else-if branches, and one else add four total."
+    },
+    {
+      "name": "c06_and_sequence",
+      "construct": "and_sequence",
+      "source": "function c06_and_sequence(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a && b) return true; return false; }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator && sequence adds 1."
+    },
+    {
+      "name": "c07_or_sequence",
+      "construct": "or_sequence",
+      "source": "function c07_or_sequence(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a || b) return true; return false; }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator || sequence adds 1."
+    },
+    {
+      "name": "c08_mixed_boolean",
+      "construct": "mixed_boolean",
+      "source": "function c08_mixed_boolean(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a && b || c && d) return true; return false; }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; &&, ||, && form three logical sequences, adding 3."
+    },
+    {
+      "name": "c09_assigned_boolean",
+      "construct": "assigned_boolean",
+      "source": "function c09_assigned_boolean(a: boolean, b: boolean, c: boolean, d: boolean): boolean { const value = a && b; return value; return false; }\n",
+      "expected": 1,
+      "derivation": "A binary logical sequence in an assignment adds one fundamental increment."
+    },
+    {
+      "name": "c10_while_loop",
+      "construct": "while_loop",
+      "source": "function c10_while_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { while (a) { a = false; } return false; }\n",
+      "expected": 1,
+      "derivation": "One top-level while adds one structural increment."
+    },
+    {
+      "name": "c11_for_loop",
+      "construct": "for_loop",
+      "source": "function c11_for_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { void item; } return false; }\n",
+      "expected": 1,
+      "derivation": "One top-level loop adds one structural increment."
+    },
+    {
+      "name": "c12_if_with_loop",
+      "construct": "if_with_loop",
+      "source": "function c12_if_with_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) { for (const item of [b, c]) { void item; } } return false; }\n",
+      "expected": 3,
+      "derivation": "The if adds 1; the loop nested inside it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c13_nested_loops",
+      "construct": "nested_loops",
+      "source": "function c13_nested_loops(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { while (item) { break; } } return false; }\n",
+      "expected": 3,
+      "derivation": "The outer loop adds 1; the inner loop adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c14_switch_or_match",
+      "construct": "switch_or_match",
+      "source": "function c14_switch_or_match(a: boolean, b: boolean, c: boolean, d: boolean): boolean { switch (a) { case true: return true; default: return false; } return false; }\n",
+      "expected": 1,
+      "derivation": "The switch/match/select construct adds one; its alternatives add no further points."
+    },
+    {
+      "name": "c15_switch_nested_if",
+      "construct": "switch_nested_if",
+      "source": "function c15_switch_nested_if(a: boolean, b: boolean, c: boolean, d: boolean): boolean { switch (a) { case true: if (b) return true; break; default: return false; } return false; }\n",
+      "expected": 3,
+      "derivation": "The switch adds 1; the if nested in it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c16_try_one_catch",
+      "construct": "try_one_catch",
+      "source": "function c16_try_one_catch(a: boolean, b: boolean, c: boolean, d: boolean): boolean { try { if (a) return true; } catch (error) { return false; } return false; }\n",
+      "expected": 2,
+      "derivation": "Try is ignored; the if adds 1 and each catch adds 1."
+    },
+    {
+      "name": "c17_try_two_catches",
+      "construct": "try_two_catches",
+      "source": "function c17_try_two_catches(a: boolean, b: boolean, c: boolean, d: boolean): boolean { try { if (a) return true; } catch (error) { if (b) return false; } return false; }\n",
+      "expected": 4,
+      "derivation": "Try adds nothing; the if adds 1; catch adds 1 and increases nesting, so its nested if adds 1 + 1 more."
+    },
+    {
+      "name": "c18_recursive_call",
+      "construct": "recursive_call",
+      "source": "function c18_recursive_call(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; return c18_recursive_call(b, a); return false; }\n",
+      "expected": 2,
+      "derivation": "The base-case if adds 1; one direct recursive call adds 1 fundamental recursion increment.",
+      "overlay": true
+    },
+    {
+      "name": "c19_conditional_expression",
+      "construct": "conditional_expression",
+      "source": "function c19_conditional_expression(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return a ? true : false; return false; }\n",
+      "expected": 1,
+      "derivation": "One ternary/conditional expression adds one structural increment."
+    },
+    {
+      "name": "c20_nested_conditionals",
+      "construct": "nested_conditionals",
+      "source": "function c20_nested_conditionals(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return a ? true : (b ? false : true); return false; }\n",
+      "expected": 3,
+      "derivation": "The outer conditional adds 1; its nested conditional adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c21_lambda_decision",
+      "construct": "lambda_decision",
+      "source": "function c21_lambda_decision(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return [a].some(value => { if (value) return true; return false; }); return false; }\n",
+      "expected": 2,
+      "derivation": "The lambda adds no structural point but raises nesting; its if adds 1 + 1 nesting."
+    },
+    {
+      "name": "c22_if_lambda_decision",
+      "construct": "if_lambda_decision",
+      "source": "function c22_if_lambda_decision(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return [b].some(value => { if (value) return true; return false; }); return false; }\n",
+      "expected": 4,
+      "derivation": "Outer if adds 1; lambda if adds 1 + 2 nesting levels (outer if and lambda)."
+    },
+    {
+      "name": "c23_nested_callable",
+      "construct": "nested_callable",
+      "source": "function c23_nested_callable(a: boolean, b: boolean, c: boolean, d: boolean): boolean { function inner() { if (a) return true; return false; } return inner(); return false; }\n",
+      "expected": 2,
+      "derivation": "Nested callable adds no structural point but one nesting level to its if (1 + 1)."
+    },
+    {
+      "name": "c24_try_finally",
+      "construct": "try_finally_if",
+      "source": "function c24_try_finally(a: boolean, b: boolean, c: boolean, d: boolean): boolean { try { if (a) return true; } finally { cleanup(); } return false; }\n",
+      "expected": 1,
+      "derivation": "Try and finally add nothing; the top-level if inside the try adds one structural increment."
+    },
+    {
+      "name": "c25_labeled_jump",
+      "construct": "labeled_jump",
+      "source": "function c25_labeled_jump(a: boolean, b: boolean, c: boolean, d: boolean): boolean { outer: while (a) { break outer; } return false; }\n",
+      "expected": 2,
+      "derivation": "One loop adds 1; the labeled jump adds one fundamental increment."
+    },
+    {
+      "name": "c26_boolean_operator_sequences",
+      "construct": "logical_operator_sequences",
+      "source": "function c26_boolean_operator_sequences(a: boolean, b: boolean, c: boolean, d: boolean): boolean { return a && (b || c); }\n",
+      "expected": 2,
+      "derivation": "The return expression contains one && sequence and one || sequence, for two fundamental increments."
+    },
+    {
+      "name": "c27_language_idiom",
+      "construct": "loop_with_nested_if",
+      "source": "function c27_language_idiom(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { if (item) return true; } return false; }\n",
+      "expected": 3,
+      "derivation": "The loop adds 1; its nested if adds 1 structural + 1 nesting, totaling 3."
+    },
+    {
+      "name": "c28_loop_if_boolean",
+      "construct": "loop_if_boolean",
+      "source": "function c28_loop_if_boolean(a: boolean, b: boolean, c: boolean, d: boolean): boolean { for (const item of [a, b]) { if (item && a) return true; } return false; }\n",
+      "expected": 4,
+      "derivation": "Loop adds 1; nested if adds 1 + 1 nesting; its && sequence adds 1."
+    },
+    {
+      "name": "c29_else_loop",
+      "construct": "else_loop",
+      "source": "function c29_else_loop(a: boolean, b: boolean, c: boolean, d: boolean): boolean { if (a) return true; else { while (b) { break; } } return false; }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; its else adds 1. The loop in the else body is at nesting level 1, so it adds 1 structural + 1 nesting, totaling 4."
+    }
+  ]
+}

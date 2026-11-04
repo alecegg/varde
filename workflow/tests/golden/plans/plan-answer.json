@@ -1,0 +1,4 @@
+{
+  "output": "{\"data\":{\"plan\":\"<TMP>/working/plans/group/nested/plan.md\",\"question\":\"Which option?\",\"updated\":true},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":true,\"outcome\":\"success\",\"schema_version\":1}\n",
+  "bytes": "---\ntype: plan\nid: nested\ntitle: Nested\nstatus: active\n---\n\n## Decisions so far\n\n- Which option? → Keep it (2023-11-14)\n\n## Open Questions\n\nn/a — no open questions\n\n"
+}

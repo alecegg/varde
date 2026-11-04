@@ -1,0 +1,39 @@
+{
+  "accepted": 293,
+  "commits_walked": 39510,
+  "filters": {
+    "file_limit": {
+      "evaluated": 1088,
+      "passed": 687
+    },
+    "function_limit": {
+      "evaluated": 632,
+      "passed": 425
+    },
+    "generated": {
+      "evaluated": 425,
+      "passed": 424
+    },
+    "intent": {
+      "evaluated": 36337,
+      "passed": 1088
+    },
+    "parent": {
+      "evaluated": 39510,
+      "passed": 36337
+    },
+    "parse": {
+      "evaluated": 687,
+      "passed": 632
+    },
+    "public_feature": {
+      "evaluated": 424,
+      "passed": 293
+    }
+  },
+  "intent_matches": 1088,
+  "language": "python",
+  "pin_sha": "03e5d938adbd3ec9314c326b002170b73bde2c9f",
+  "records_bytes": 293586,
+  "repository": "pandas-dev/pandas"
+}

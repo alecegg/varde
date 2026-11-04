@@ -1,0 +1,53 @@
+/* Screen flow: wireframe tiles in lanes, one straight arrow between neighbours. Tokens only; selection never relies on colour alone. */
+.vd-sf { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-3); margin-block: var(--vd-density-gap); min-inline-size: 0; }
+.vd-sf-title { margin: 0; overflow-wrap: break-word; }
+.vd-sf-summary { margin: 0; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: break-word; }
+.vd-sf-views { min-inline-size: 0; }
+.vd-sf-view { position: relative; overflow: auto; inline-size: fit-content; max-inline-size: 100%; min-inline-size: 0; min-block-size: 44px; max-block-size: 40rem; border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); background: var(--vd-surface); scroll-padding: 8px; }
+.vd-sf-view:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-sf-down { display: none; }
+@media (max-width: 30rem) {
+  .vd-sf-across { display: none; }
+  .vd-sf-down { display: block; }
+}
+.vd-sf-svg { direction: ltr; display: block; max-inline-size: none; overflow: visible; touch-action: pan-x pan-y; user-select: none; }
+.vd-sf-band { fill: var(--vd-surface-sunk); stroke: var(--vd-border); stroke-width: 1; }
+.vd-sf-lane-title { fill: var(--vd-text); font: 600 12px var(--vd-font-body); pointer-events: none; }
+.vd-sf-tile { fill: var(--vd-surface-elevated); stroke: var(--vd-border-interactive); stroke-width: 2; }
+.vd-sf-caption, .vd-sf-edge-label { fill: var(--vd-text); font: 12px var(--vd-font-body); pointer-events: none; }
+.vd-sf-thumb { pointer-events: none; }
+.vd-sf-line { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.75; }
+.vd-sf-head { fill: var(--vd-text-secondary); stroke: none; }
+.vd-sf-label-bg { fill: var(--vd-surface-elevated); stroke: var(--vd-border); stroke-width: 1; opacity: 0.95; }
+.vd-sf-screen { cursor: pointer; }
+.vd-sf-screen:focus:not(:focus-visible) { outline: none; }
+.vd-sf-screen:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-sf-screen:focus-visible .vd-sf-tile { stroke: var(--vd-focus-ring); stroke-width: 4; }
+.vd-sf-screen.vd-sf-hot .vd-sf-tile { stroke: var(--vd-accent); stroke-width: 3; }
+.vd-sf-screen.vd-sf-sel .vd-sf-tile { stroke: var(--vd-accent); stroke-width: 5; }
+.vd-sf .vb-flowbar { margin-block: 0; }
+.vd-sf-detail { min-block-size: 1.5em; margin: 0; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: break-word; }
+.vd-sf-list, .vd-sf-notes { margin: 0; padding-inline-start: var(--vd-space-7); min-inline-size: 0; }
+.vd-sf-notes { margin-block: var(--vd-space-1); padding-inline-start: var(--vd-space-5); }
+.vd-sf-item, .vd-sf-note { min-inline-size: 0; margin-block-end: var(--vd-space-2); overflow-wrap: break-word; border-inline-start: 3px solid transparent; padding-inline-start: var(--vd-space-1); }
+.vd-sf-item-on { border-inline-start-color: var(--vd-accent); }
+.vd-sf-item-on > .vd-sf-name { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+@media (forced-colors: active) {
+  .vd-sf-view { border-color: CanvasText; }
+  .vd-sf-screen { border: 1px solid ButtonText; }
+  .vd-sf-band, .vd-sf-tile, .vd-sf-label-bg { fill: Canvas; stroke: CanvasText; }
+  .vd-sf-caption, .vd-sf-edge-label, .vd-sf-lane-title { fill: CanvasText; }
+  .vd-sf-line { stroke: CanvasText; }
+  .vd-sf-head { fill: CanvasText; }
+  .vd-sf-screen:focus-visible .vd-sf-tile, .vd-sf-screen.vd-sf-sel .vd-sf-tile, .vd-sf-screen.vd-sf-hot .vd-sf-tile { stroke: Highlight; }
+  .vd-sf-screen:focus-visible { outline-color: Highlight; }
+  .vd-sf-item-on { border-inline-start-color: Highlight; }
+}
+@media print {
+  .vd-sf, .vd-sf-views, .vd-sf-view, .vd-sf-list, .vd-sf-notes, .vd-sf-item { overflow: visible; max-block-size: none; min-inline-size: 0; min-block-size: 0; white-space: normal; }
+  .vd-sf-across { display: block; }
+  .vd-sf-down { display: none; }
+  .vd-sf-svg { max-inline-size: 100%; inline-size: 100%; block-size: auto; }
+  .vd-sf-item { break-inside: avoid; }
+  .vd-sf .vb-card { overflow: visible; min-inline-size: 0; white-space: normal; }
+}

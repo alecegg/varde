@@ -1,0 +1,21 @@
+Measure a skill description's trigger accuracy against queries
+
+Usage: varde learn measure <SKILL> trigger [OPTIONS] --harness <HARNESS> <QUERIES>
+
+Arguments:
+  <SKILL_NAME>  Name of the skill being evaluated
+  <QUERIES>     Path to a JSON file of `{"query": string, "should_trigger": bool}` queries
+
+Options:
+      --harness <HARNESS>
+          Harness to run the eval against [possible values: claude, codex, opencode]
+      --runs <RUNS>
+          Number of runs per query [default: 3]
+      --timeout-seconds <TIMEOUT_SECONDS>
+          Per-harness timeout in seconds [default: 300]
+      --split <SPLIT>
+          Query subset: a fixed 60/40 label-stratified split [default: all; possible values: all, train, validation]
+      --skill-path <SKILL_PATH>
+          Absolute path to the skill file, used by the Codex substring proxy
+  -h, --help
+          Print help

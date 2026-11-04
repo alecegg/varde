@@ -1,0 +1,53 @@
+{
+  "pair_group_id": "070c0f2095b54b99b6158b8d",
+  "task": "clinic-booking",
+  "language": "cpp",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "f5d35e3c5bf1853d19f7cf05",
+      "left_id": "80a6b4583d47846cd22fac26",
+      "right_id": "d9a5880a7c01aee0b6d065f1",
+      "left": "sensible.cpp",
+      "right": "monolith.cpp",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    },
+    {
+      "pair_id": "e516aa700e006a96b36d6b61",
+      "left_id": "80a6b4583d47846cd22fac26",
+      "right_id": "101b80869fd6ebdd58ce3c67",
+      "left": "sensible.cpp",
+      "right": "tiny.cpp",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "455350887eda4610901a5442",
+      "left_id": "80a6b4583d47846cd22fac26",
+      "right_id": "c46dc1c2e9da78ead9a2af2e",
+      "left": "sensible.cpp",
+      "right": "padded.cpp",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "df3ae4dc990aae1be12a94f6",
+      "left_id": "80a6b4583d47846cd22fac26",
+      "right_id": "76937f13292efe9889f48d95",
+      "left": "sensible.cpp",
+      "right": "sizematched.cpp",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "8effad297253cc81bedf77f3",
+      "left_id": "80a6b4583d47846cd22fac26",
+      "right_id": "072a17bdfdc8b4970c43bdf0",
+      "left": "sensible.cpp",
+      "right": "namematched.cpp",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    }
+  ]
+}

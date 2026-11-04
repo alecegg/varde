@@ -1,0 +1,8 @@
+Query: downstream impact of a unique declaration through resolved calls and inheritance; reports partial coverage explicitly. (see `symbol_blast_radius` help for inputs)
+
+Usage: varde map symbol_blast_radius [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, name, filePath?, kind?, resultsLimit?, resultsOffset?, fullResults? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

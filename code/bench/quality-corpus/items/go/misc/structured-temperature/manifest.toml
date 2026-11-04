@@ -1,0 +1,4 @@
+category = "a"
+language = "go"
+pair_group_id = "76ea594dcb6affb8d1bcdf16"
+dominant_defect = "mutable-flags"

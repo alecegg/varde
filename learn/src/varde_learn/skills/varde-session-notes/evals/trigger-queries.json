@@ -1,0 +1,12 @@
+[
+  {"query": "We're done for the day with work left over. Write session notes so whoever picks this up tomorrow can continue.", "should_trigger": true},
+  {"query": "Resume from the session notes at working/session-notes/abc123 and tell me where we left off.", "should_trigger": true},
+  {"query": "Snapshot the files this session depends on so a later session can tell whether they changed.", "should_trigger": true},
+  {"query": "Tidy the session notes for this session before compaction.", "should_trigger": true},
+  {"query": "Pick up where the previous session left off.", "should_trigger": true},
+  {"query": "Record that we decided to use OCC instead of locks, so nobody re-litigates it.", "should_trigger": false},
+  {"query": "Find the knowledge note on error envelopes.", "should_trigger": false},
+  {"query": "Log this obstacle as a friction item.", "should_trigger": false},
+  {"query": "Resume the plan from yesterday and keep building the remaining tasks.", "should_trigger": false},
+  {"query": "This run finished every task with nothing left; write the closing report.", "should_trigger": false}
+]

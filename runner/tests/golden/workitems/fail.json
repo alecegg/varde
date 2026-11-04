@@ -1,0 +1,41 @@
+[
+  {
+    "returned": {
+      "id": "golden-07",
+      "idempotency_key": "fail-key",
+      "text": "Fail this",
+      "project": "workspace",
+      "state": "failed",
+      "notes_path": "<DATA>/workitem-notes/golden-07/request.md",
+      "planner_session": "planner-fail",
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 20,
+        "item_id": "golden-07",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 21,
+        "item_id": "golden-07",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 22,
+        "item_id": "golden-07",
+        "prior_state": "planning",
+        "new_state": "failed",
+        "detail": "planner crashed"
+      }
+    ]
+  }
+]

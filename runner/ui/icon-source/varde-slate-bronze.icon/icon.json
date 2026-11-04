@@ -1,0 +1,51 @@
+{
+  "features": [
+    "refractivity",
+    "specular-location"
+  ],
+  "fill": "none",
+  "groups": [
+    {
+      "layers": [
+        {
+          "name": "slate-bronze-cairn",
+          "image-name-specializations": [
+            {
+              "appearance": "base",
+              "value": "varde-slate-bronze-light.svg"
+            },
+            {
+              "appearance": "light",
+              "value": "varde-slate-bronze-light.svg"
+            },
+            {
+              "appearance": "dark",
+              "value": "varde-slate-bronze-dark.svg"
+            }
+          ],
+          "glass": false
+        }
+      ],
+      "refractivity": {
+        "enabled": false,
+        "depth": 0,
+        "strength": 0
+      },
+      "shadow": {
+        "kind": "none",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      },
+      "specular": false
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ],
+    "squares": "shared"
+  }
+}

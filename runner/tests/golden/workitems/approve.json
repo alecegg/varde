@@ -1,0 +1,87 @@
+[
+  {
+    "returned": {
+      "id": "golden-05",
+      "idempotency_key": "approve-key",
+      "text": "approve me",
+      "project": "workspace",
+      "state": "ready",
+      "notes_path": "<DATA>/workitem-notes/golden-05/request.md",
+      "planner_session": "planner-approve",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "approve-ready",
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 12,
+        "item_id": "golden-05",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 13,
+        "item_id": "golden-05",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 14,
+        "item_id": "golden-05",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-05",
+      "idempotency_key": "approve-key",
+      "text": "approve me",
+      "project": "workspace",
+      "state": "queued",
+      "notes_path": "<DATA>/workitem-notes/golden-05/request.md",
+      "planner_session": "planner-approve",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "approve-ready",
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 12,
+        "item_id": "golden-05",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 13,
+        "item_id": "golden-05",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 14,
+        "item_id": "golden-05",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      },
+      {
+        "seq": 15,
+        "item_id": "golden-05",
+        "prior_state": "ready",
+        "new_state": "queued",
+        "detail": "user decision"
+      }
+    ]
+  }
+]

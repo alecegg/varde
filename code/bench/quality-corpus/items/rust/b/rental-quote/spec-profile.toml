@@ -1,0 +1,2 @@
+profile = "layered"
+alts = ["alt-pipeline", "alt-table", "alt-class"]

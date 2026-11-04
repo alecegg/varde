@@ -1,0 +1,83 @@
+{
+  "pair_group_id": "38a21dfe77c49b3a0e1d6b52",
+  "task": "order-quote",
+  "language": "typescript",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "17cc2b6a631edf44a91bd725",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "0ef3ac439c18b3cda8612a4f",
+      "left": "sensible.ts",
+      "right": "monolith.ts",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    },
+    {
+      "pair_id": "48f7ceab530d91a0401c7e55",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "33aaf71fd1195cc28a13520e",
+      "left": "sensible.ts",
+      "right": "tiny.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "e0e15188b13f70732d173872",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "0a1d1f7c23f57b81d9a9e2f3",
+      "left": "sensible.ts",
+      "right": "padded.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "aa9c37e48aa18e3ad4382848",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "b21760f40464a8cd665aee07",
+      "left": "sensible.ts",
+      "right": "sizematched.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "10f24429a91b3b5ff641eb2c",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "c0c4fd762a3e7b7a3d2fc8dd",
+      "left": "sensible.ts",
+      "right": "namematched.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "f5a08a1105caea82bb86c901",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "fdf8dd3feb55f51d5634775a",
+      "left": "sensible.ts",
+      "right": "alt-pipeline.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "c26b337e37b2cf7041315b94",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "2ffaafcf44b1fcc95a0e4aea",
+      "left": "sensible.ts",
+      "right": "alt-table.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "c91af8a988783bc15871c0de",
+      "left_id": "745e03c3b595c07846c8f11a",
+      "right_id": "c0f4c48c4d5e454702740eaf",
+      "left": "sensible.ts",
+      "right": "alt-class.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "pair_id": "e4545e2d1975e17a2b5f877a",
+  "pair_group_id": "5df19c346f2ac36fbefba51a",
+  "left_id": "4701e6515c42ab2af707a552",
+  "right_id": "6233e475a64edf6b2759f47f",
+  "left": "a.java",
+  "right": "b.java",
+  "left_role": "before",
+  "right_role": "after"
+}

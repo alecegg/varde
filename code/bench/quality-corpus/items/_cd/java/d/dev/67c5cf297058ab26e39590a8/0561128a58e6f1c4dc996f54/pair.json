@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "invariant",
+  "id": "0561128a58e6f1c4dc996f54",
+  "label_source": "construction",
+  "language": "java",
+  "left": "a.java",
+  "license": "Apache-2.0",
+  "mutant_file": "0561128a58e6f1c4dc996f54-b.java",
+  "operator": "add-dead-branches",
+  "provenance": {
+    "end_line": 56,
+    "file": "020-lysine_dev_okhttp-run.java",
+    "function": "run",
+    "license": "Apache-2.0",
+    "license_header": "020-lysine_dev_okhttp-run.license.txt",
+    "lines": 25,
+    "parse_language": "java",
+    "path": "samples/guide/src/main/java/okhttp3/recipes/HttpsServer.java",
+    "pin_sha": "a66e3d2277932963c75b0cb7502bf181f7863178",
+    "repo": "lysine-dev/okhttp",
+    "start_line": 32,
+    "test_path": true
+  },
+  "right": "b.java",
+  "seed": 6375040728392648646,
+  "source_file": "0561128a58e6f1c4dc996f54-a.java",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "parse"
+}

@@ -1,0 +1,57 @@
+/* 20-choice: option cards. Each option is a bordered card that is the whole
+   label (44px+ target); the native radio/checkbox stays inside it. Selected =
+   tinted fill, a 2px border and a check glyph, so it survives forced colours. */
+.choice-group { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
+.choice-question { padding: 0; margin-block-end: var(--vd-space-2); font-weight: 600; overflow-wrap: anywhere; }
+.choice-question::after { content: " *"; content: " *" / ""; color: var(--vd-text-secondary); }
+.choice-options { container-type: inline-size; min-inline-size: 0; }
+.choice-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-2); }
+@container (min-width: 30rem) { .choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 44rem) { .choice-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.choice-option {
+  --choice-pad: calc(var(--vd-space-3) - 1px);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) 1.25rem; align-items: start;
+  gap: var(--vd-space-3); min-block-size: var(--vd-control-height); box-sizing: border-box;
+  padding: var(--choice-pad); border: 1px solid var(--vd-border-interactive);
+  border-radius: var(--vd-radius-l); background: var(--vd-surface); color: var(--vd-text);
+  cursor: pointer; overflow-wrap: anywhere;
+  transition: border-color var(--vd-dur) ease, background-color var(--vd-dur) ease;
+}
+.choice-option input { margin: 0.125rem 0 0; inline-size: 1.25rem; block-size: 1.25rem; }
+.choice-option input { scroll-margin-block: var(--vd-space-4); }
+.choice-option input:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.choice-body { display: flex; flex-direction: column; gap: var(--vd-space-1); min-inline-size: 0; }
+.choice-label { font-size: var(--vd-text-md); line-height: var(--vd-leading-heading); }
+.choice-rec { display: block; inline-size: fit-content; max-inline-size: 100%; box-sizing: border-box; padding-inline: var(--vd-space-2); border: 1px solid var(--vd-tone-info-edge); border-radius: var(--vd-radius-full); background: var(--vd-tone-info-tint); color: var(--vd-tone-info-text); font-size: var(--vd-text-xs); font-weight: 600; overflow-wrap: break-word; }
+.choice-detail { font-size: var(--vd-text-sm); color: var(--vd-text-secondary); overflow-wrap: anywhere; }
+
+.choice-option:has(input:checked) {
+  --choice-pad: calc(var(--vd-space-3) - 2px);
+  border-width: 2px; border-color: var(--vd-border-selected); background: var(--vd-selected);
+}
+.choice-option:has(input:checked)::after {
+  content: "\2713"; font-weight: 700; line-height: 1.5rem; color: var(--vd-accent); text-align: center;
+}
+.choice-option:has(input:disabled) { cursor: default; background: var(--vd-readonly); }
+@media (hover: hover) {
+  .choice-option:not(:has(input:disabled)):hover { border-color: var(--vd-text); }
+  .choice-option:not(:has(input:disabled)):has(input:checked):hover { border-color: var(--vd-border-selected); }
+}
+@media (pointer: coarse) { .choice-grid { gap: var(--vd-space-3); } }
+@media (forced-colors: active) {
+  .choice-option:has(input:checked) { background: Canvas; }
+  .choice-option:has(input:checked)::after { color: Highlight; }
+}
+
+.choice-note > span { font-weight: 600; }
+.choice-note { display: flex; flex-direction: column; gap: var(--vd-space-2); margin-block-start: var(--vd-space-3); }
+textarea.choice-text { inline-size: 100%; box-sizing: border-box; min-block-size: 6rem; padding: var(--vd-space-2) var(--vd-space-3); font: inherit; font-size: max(1rem, 16px); color: var(--vd-text); background: var(--vd-surface); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); resize: vertical; }
+textarea.choice-text { scroll-margin-block: var(--vd-space-4); }
+textarea.choice-text:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.choice-send { margin-block-start: var(--vd-space-3); scroll-margin-block: var(--vd-space-3); }
+.choice-state { margin-inline-start: var(--vd-space-3); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.choice-error { margin: var(--vd-space-2) 0 0; color: var(--vd-error); font-size: var(--vd-text-sm); }
+.choice-error:empty { display: none; }
+.choice-option input[aria-invalid="true"] { outline: 2px solid var(--vd-error); outline-offset: 1px; }
+.choice-option input[aria-invalid="true"]:focus-visible { outline-color: var(--vd-focus-ring); }

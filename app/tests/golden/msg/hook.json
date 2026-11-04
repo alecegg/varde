@@ -1,0 +1,12 @@
+{
+  "claimed_id": "m-00000007",
+  "classification": "unchanged",
+  "stdout_lines": [
+    "inbox: sender info: hook delivery"
+  ],
+  "store": {
+    ".cache/inbox/deliveries.jsonl": "{\"message_id\":\"m-00000006\",\"reader\":\"worker\",\"session\":\"session\",\"via\":\"receipt\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00Z\",\"action_id\":\"00000008\"}\n{\"message_id\":\"m-00000007\",\"reader\":\"worker\",\"session\":\"session\",\"via\":\"hook\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000007\",\"reader\":\"worker\",\"session\":\"session\",\"via\":\"hook\",\"event\":\"acked\",\"at\":\"2026-10-22T12:00:00Z\"}\n",
+    ".cache/inbox/index/worker.json": "{\"watermark\": 228}",
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"worker\",\"kind\":\"info\",\"text\":\"leased mail\",\"id\":\"m-00000006\"}\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"worker\",\"kind\":\"info\",\"text\":\"hook delivery\",\"id\":\"m-00000007\"}\n"
+  }
+}

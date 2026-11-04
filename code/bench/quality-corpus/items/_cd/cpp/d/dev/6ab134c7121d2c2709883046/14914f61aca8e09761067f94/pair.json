@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "invariant",
+  "id": "14914f61aca8e09761067f94",
+  "label_source": "construction",
+  "language": "cpp",
+  "left": "a.h",
+  "license": "MIT",
+  "mutant_file": "14914f61aca8e09761067f94-b.h",
+  "operator": "add-dead-branches",
+  "provenance": {
+    "end_line": 1328,
+    "file": "018-fmtlib_fmt-parse_nonnegative_int.h",
+    "function": "parse_nonnegative_int",
+    "license": "MIT",
+    "license_header": "018-fmtlib_fmt-parse_nonnegative_int.license.txt",
+    "lines": 21,
+    "parse_language": "cpp",
+    "path": "include/fmt/core.h",
+    "pin_sha": "fdf31252e61ca7efe99af41bb4780353cc2253dd",
+    "repo": "fmtlib/fmt",
+    "start_line": 1308,
+    "test_path": false
+  },
+  "right": "b.h",
+  "seed": 8717751293492265008,
+  "source_file": "14914f61aca8e09761067f94-a.h",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "parse"
+}

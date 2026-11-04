@@ -1,0 +1,16 @@
+List a page's comments with their replies
+
+Usage: varde learn docs comments [OPTIONS] <DOC>
+
+Arguments:
+  <DOC>  Markdown file whose comment log to read
+
+Options:
+      --open         Only open comments
+      --kind <KIND>  Only rows of one kind: comment, suggestion, drift or decision
+      --json         Print the shared JSON envelope instead of text
+  -h, --help         Print help
+
+With --kind decision each row shows its block id, verdict (approved, denied or
+commented), time and text; the newest answer per block id is marked `latest`
+(`"latest": true` in JSON). Earlier answers stay listed as history.

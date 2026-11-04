@@ -1,0 +1,8 @@
+Query: community-detection partition of the resolution graph into densely-interconnected file clusters. (see `clusters` help for inputs)
+
+Usage: varde map clusters [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, minSize?, maxClusters?, seedPath? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

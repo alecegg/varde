@@ -1,0 +1,12 @@
+usage: varde code quality reference [-h] {build,show} ...
+
+Reference scores from the repo's own source files (tests, generated and vendored
+paths excluded), scored with calibration cal-2. A reference states where a file
+stands among the repo's own files; it makes no absolute claim.
+
+commands:
+  build   score the repo's own files at HEAD and store the reference JSON
+          --root DIR  --language python|typescript|csharp  --cap N (default 200)
+          --output PATH (default <root>/.varde/quality/reference-<language>.json)
+  show    print the stored reference summary, or an automatic one built in memory
+          --root DIR  --language L  --cap N  --reference PATH

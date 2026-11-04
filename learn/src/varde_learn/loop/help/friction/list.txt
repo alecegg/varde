@@ -1,0 +1,15 @@
+List friction items with optional filters
+
+Usage: varde learn friction list [OPTIONS]
+
+Options:
+      --status <STATUS>    Filter by open (needs action), resolved (fixed), promoted (adopted), or archived (inactive)
+      --source <SOURCE>    Match the exact skill or tool source value
+      --repository <ROOT>  Filter items scoped to this repository root
+      --global             Filter global items with no repository scope
+      --text <TEXT>        Case-insensitive literal substring of a title or occurrence evidence; use this search before adding a potentially duplicate item
+      --tag <TAG>          Filter by exact tag
+      --offset <OFFSET>    Number of items to skip before returning a page [default: 0]
+      --limit <LIMIT>      Maximum number of items to return (1 to 1000) [default: 100]
+      --json               Print the shared machine-readable output envelope
+  -h, --help               Print help

@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/justfile" ] && [ -d "$root/.githooks" ] || exit 0
+cd "$root"
+. "$(dirname "$0")/lib.sh"
+record_guardrail_on_exit hook-pre-push
+run_pyright_at_stage pre-push
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+    [ "$local_ref" = refs/heads/main ] || continue
+    [ "$local_oid" != 0000000000000000000000000000000000000000 ] || continue
+    if [ "$remote_oid" = 0000000000000000000000000000000000000000 ]; then
+        range=new:$local_oid
+    else
+        range="$remote_oid..$local_oid"
+    fi
+    check_new_main_commits "$range" || {
+        echo "Push blocked: main contains commits without required merge approval." >&2
+        exit 1
+    }
+done
+
+if ! varde scan --report --no-build --repo-root "$root"; then
+    printf 'Warning: scan report failed; run: varde map build --repo-root "%s"\n' "$root" >&2
+fi

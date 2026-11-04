@@ -1,0 +1,47 @@
+/* Diagram block: server-laid-out SVG states, natural size inside a scrolling view. */
+.vd-view { scroll-padding: 8px; overflow: auto; max-block-size: 34rem; border: 1px solid var(--vd-border); border-radius: var(--vd-radius-m); margin-block: 0 0.5rem; background: var(--vd-surface); }
+.vd-view[hidden], .diagram .vb-controls[hidden] { display: none; }
+.vd-view:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.vd-svg { display: block; max-inline-size: none; touch-action: pan-x pan-y; user-select: none; }
+.vd-shape { fill: var(--vd-surface); stroke: var(--vd-text); stroke-width: 1.5; }
+.vd-cap { fill: var(--vd-surface-sunk); }
+.vd-super .vd-shape { stroke-dasharray: 6 3; stroke-width: 2; }
+.vd-label, .vd-elabel, .vd-group-label, .vd-chev { fill: var(--vd-text); font: 13px var(--vd-font-body); pointer-events: none; }
+.vd-group-label { font-weight: 600; }
+.vd-elabel { font-size: 12px; fill: var(--vd-text-secondary); }
+.vd-elabel-bg { fill: var(--vd-surface); stroke: none; opacity: 0.92; }
+.vd-frame { fill: var(--vd-surface-sunk); stroke: var(--vd-border-interactive); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+.vd-head-hit { fill: var(--vd-surface-elevated); stroke: var(--vd-border-interactive); stroke-width: 1; }
+.vd-chev { fill: var(--vd-text); font: 13px var(--vd-font-body); pointer-events: none; }
+.vd-line { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.5; }
+.vd-head { fill: var(--vd-text-secondary); stroke: none; }
+.vd-dashed .vd-line { stroke-dasharray: 7 4; }
+.vd-dotted .vd-line { stroke-dasharray: 1.5 4; stroke-linecap: round; }
+.vd-g1 .vd-shape { stroke: var(--vd-series-1); } .vd-g1 .vd-frame, .vd-g1 .vd-head-hit { stroke: var(--vd-series-1); } .vd-g1 .vd-frame { fill: var(--vd-series-1-fill); }
+.vd-g2 .vd-shape { stroke: var(--vd-series-2); } .vd-g2 .vd-frame, .vd-g2 .vd-head-hit { stroke: var(--vd-series-2); } .vd-g2 .vd-frame { fill: var(--vd-series-2-fill); }
+.vd-g3 .vd-shape { stroke: var(--vd-series-3); } .vd-g3 .vd-frame, .vd-g3 .vd-head-hit { stroke: var(--vd-series-3); } .vd-g3 .vd-frame { fill: var(--vd-series-3-fill); }
+.vd-node, .vd-group-head, .vd-super { cursor: pointer; }
+.vd-node:focus:not(:focus-visible), .vd-group-head:focus:not(:focus-visible) { outline: none; }
+.vd-node:focus-visible, .vd-group-head:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.vd-node:focus-visible .vd-shape, .vd-group-head:focus-visible .vd-head-hit { stroke: var(--vd-focus-ring); stroke-width: 3.5; }
+.vd-node.vd-near .vd-shape { stroke: var(--vd-accent); stroke-width: 3; }
+.vd-node.vd-sel .vd-shape { fill: var(--vd-selected); stroke: var(--vd-accent); stroke-width: 4; }
+.vd-node.vd-dim, .vd-edge.vd-dim { opacity: 0.3; }
+.vd-edge.vd-hot .vd-line { stroke: var(--vd-accent); stroke-width: 3; }
+.vd-edge.vd-hot .vd-head { fill: var(--vd-accent); }
+.diagram .vb-data > summary { display: flex; align-items: center; min-block-size: 44px; cursor: pointer; }
+.vd-detail { margin-block: 0.3em 0.5em; }
+@media (forced-colors: active) {
+  .vd-group-head, .vd-node { border: 1px solid ButtonText; }
+  .vd-node:focus-visible, .vd-group-head:focus-visible { outline-color: Highlight; }
+  .vd-shape, .vd-frame, .vd-head-hit { stroke: CanvasText; fill: Canvas; }
+  .vd-label, .vd-elabel, .vd-group-label, .vd-chev { fill: CanvasText; }
+  .vd-line { stroke: CanvasText; } .vd-head { fill: CanvasText; }
+  .vd-node.vd-sel .vd-shape, .vd-node.vd-near .vd-shape, .vd-node:focus-visible .vd-shape, .vd-group-head:focus-visible .vd-head-hit { stroke: Highlight; }
+  .vd-edge.vd-hot .vd-line { stroke: Highlight; } .vd-edge.vd-hot .vd-head { fill: Highlight; }
+}
+@media print {
+  .vd-view { max-block-size: none; overflow: visible; }
+  .vd-view[hidden] { display: none; }
+  .vd-svg { max-inline-size: 100%; block-size: auto; }
+}

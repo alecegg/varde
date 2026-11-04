@@ -1,0 +1,13 @@
+id = "typescript-sample-03"
+pair_group_id = "sample-typescript-price-order"
+language = "typescript"
+task = "Price an order with quantity validation, a 10% discount above 100, and 8% tax."
+left = "a.ts"
+right = "b.ts"
+behaviour_test = "behaviour_test.ts"
+license = "MIT"
+
+[sha256]
+a = "e3f728bd673c1bec1113c7453d13d5f4c063eae1ba1b291d22adffcee0b6fc77"
+b = "3f887cc3e1445805d3c1108b686466e0d6e4c91701ee53d3964678c0c71c70cd"
+behaviour_test = "2b0dee8a3533cc55177d269e84c5d57690a78f9a4ed765f42b8872355164959b"

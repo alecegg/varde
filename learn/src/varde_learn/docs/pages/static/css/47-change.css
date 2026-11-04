@@ -1,0 +1,24 @@
+/* Change vocabulary on data-model and endpoint: glyph + word badge, start bar, struck removed text. Tones come only from the --vd-tone-* tokens. */
+.vd-change-added { --vd-change-edge: var(--vd-tone-success-edge); --vd-change-tint: var(--vd-tone-success-tint); --vd-change-text: var(--vd-tone-success-text); }
+.vd-change-modified { --vd-change-edge: var(--vd-tone-warning-edge); --vd-change-tint: var(--vd-tone-warning-tint); --vd-change-text: var(--vd-tone-warning-text); }
+.vd-change-removed { --vd-change-edge: var(--vd-tone-risk-edge); --vd-change-tint: var(--vd-tone-risk-tint); --vd-change-text: var(--vd-tone-risk-text); }
+.vd-change-renamed { --vd-change-edge: var(--vd-tone-decision-edge); --vd-change-tint: var(--vd-tone-decision-tint); --vd-change-text: var(--vd-tone-decision-text); }
+.vd-change-badge { display: inline-flex; align-items: center; box-sizing: border-box; min-block-size: 1.5em; gap: var(--vd-space-1); padding-inline: var(--vd-space-2); border: 1px solid var(--vd-change-edge); border-radius: var(--vd-radius-full); background: var(--vd-change-tint); color: var(--vd-change-text); font-size: var(--vd-text-xs); font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.vd-change-glyph { font-family: var(--vd-font-mono); font-weight: 700; }
+.vd-change-was, .vd-change-old { color: var(--vd-text-secondary); font-size: var(--vd-text-xs); overflow-wrap: anywhere; }
+.vd-change-old { font-size: inherit; text-decoration: line-through; }
+.vd-change-name { overflow-wrap: anywhere; }
+.vd-change-row > :first-child { border-inline-start: 3px solid var(--vd-change-edge); }
+.vd-change-removed .vd-change-name, tr.vd-change-removed > td:not(:last-child) { text-decoration: line-through; }
+.vd-change-card { border-inline-start: 3px solid var(--vd-change-edge); }
+.vd-change-legend { margin: var(--vd-space-2) 0 0; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+@media (forced-colors: active) {
+  .vd-change-badge { border-color: ButtonBorder; background: none; color: ButtonText; }
+  .vd-change-row > :first-child, .vd-change-card { border-inline-start-color: CanvasText; }
+}
+@media print {
+  .vd-change-badge { background: none; color: var(--vd-text); }
+  .vd-change-row { break-inside: avoid; }
+  .vd-change-card { overflow: visible; break-inside: auto; }
+  .vd-change-card .vb-table, .vd-change-card .vb-table th, .vd-change-card .vb-table td, .vd-change-badge { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+}

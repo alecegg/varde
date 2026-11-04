@@ -1,0 +1,12 @@
+Print the one-line index (id | scope | summary | tags) of active entries.
+
+Usage: varde learn memory list [--scope <SCOPE>] [--key <KEY>] [--skill <NAME>] [--all] [--expired] [--json]
+
+Options:
+      --scope <SCOPE>  Only this scope
+      --key <KEY>      Only this scope key
+      --skill <NAME>   Same as --scope skill --key <NAME>
+      --all            Include retired and archived entries
+      --expired        Cleanup report: active entries past valid_until (nothing is deleted)
+      --json           Print machine-readable output
+  -h, --help           Print help

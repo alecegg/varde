@@ -1,0 +1,29 @@
+/* File tree: folders are <details>, files carry the change badge, path leaf and note. Colours come only from --vd-* tokens; change tones come from 47-change.css. */
+.vd-file-tree { min-inline-size: 0; }
+.vd-file-tree-title { margin: 0 0 var(--vd-space-1); font-weight: 600; overflow-wrap: anywhere; }
+.vd-file-tree-summary { margin: 0 0 var(--vd-space-2); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.vd-file-tree-list { margin: 0; padding: 0; list-style: none; min-inline-size: 0; }
+.vd-file-tree-list .vd-file-tree-list { margin-inline-start: var(--vd-space-4); border-inline-start: 1px solid var(--vd-border); }
+.vd-file-tree-list.vd-file-tree-flat { margin-inline-start: 0; }
+.vd-file-tree-folder, .vd-file-tree-file { margin: 0; min-inline-size: 0; }
+.vd-file-tree-sum { display: flex; flex-wrap: wrap; align-items: center; gap: var(--vd-space-1) var(--vd-space-2); min-block-size: 44px; box-sizing: border-box; padding-inline: var(--vd-space-2); cursor: pointer; overflow-wrap: anywhere; }
+.vd-file-tree-sum:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-file-tree-dir { font-family: var(--vd-font-mono); font-weight: 600; min-inline-size: 0; overflow-wrap: anywhere; }
+.vd-file-tree-count { color: var(--vd-text-secondary); font-size: var(--vd-text-xs); }
+.vd-file-tree-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--vd-space-1) var(--vd-space-2); min-block-size: 32px; box-sizing: border-box; padding: var(--vd-space-1) var(--vd-space-2); min-inline-size: 0; }
+.vd-file-tree-leaf, .vd-file-tree-link { font-family: var(--vd-font-mono); overflow-wrap: anywhere; }
+.vd-file-tree-link { display: inline-flex; align-items: center; min-block-size: 44px; box-sizing: border-box; color: var(--vd-accent); text-decoration: underline; }
+.vd-file-tree-link:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vd-file-tree-role { padding-inline: var(--vd-space-2); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-full); color: var(--vd-text-secondary); font-size: var(--vd-text-xs); }
+.vd-file-tree-note { color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: anywhere; min-inline-size: 0; }
+@media (forced-colors: active) {
+  .vd-file-tree-list .vd-file-tree-list { border-inline-start-color: CanvasText; }
+  .vd-file-tree-role { border-color: ButtonText; }
+  .vd-file-tree-link { color: LinkText; }
+}
+@media print {
+  .vd-file-tree, .vd-file-tree-list, .vd-file-tree-row, .vd-file-tree-sum { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+  .vd-file-tree details::details-content { content-visibility: visible; display: block; block-size: auto; }
+  .vd-file-tree-file { break-inside: avoid; }
+  .vd-file-tree-sum { cursor: auto; }
+}

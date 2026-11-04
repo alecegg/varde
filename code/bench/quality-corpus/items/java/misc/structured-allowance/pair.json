@@ -1,0 +1,11 @@
+{
+  "pair_id": "9a51892f974436f44dbfc056",
+  "pair_group_id": "99b82417d87650b6e8f2fcf6",
+  "left_id": "3b838fcbb1f3be49d3c30c5c",
+  "right_id": "a6bc93fa07dcca68156ca574",
+  "left": "good.java",
+  "right": "bad.java",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "copy-paste"
+}

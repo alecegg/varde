@@ -1,0 +1,11 @@
+List recent sessions for a repository and group linked workers
+
+Usage: varde learn sessions show --harness <codex|claude|opencode|all> --repository <ROOT> [OPTIONS] --json
+
+Options:
+      --harness <HARNESS>  Native session source to scan [possible values: codex, claude, opencode, all]
+      --repository <ROOT>  Repository root used to filter session working directories
+      --limit <LIMIT>      Maximum top-level sessions to return (1 to 10) [default: 5]
+      --run <RUN>          Return the selected root session and its linked workers
+      --json               Print the shared machine-readable output envelope
+  -h, --help               Print help

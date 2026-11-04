@@ -1,0 +1,5 @@
+Restore the queue tables to the retained SQLite queue database
+
+Usage: varde plan queue rollback-role-inbox
+
+Stop the runner first. The command backs up the retained queue database, copies current queue rows back from the role inbox database, verifies parity, then restores the previous queue marker.

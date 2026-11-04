@@ -1,0 +1,4 @@
+category = "a"
+language = "csharp"
+pair_group_id = "f058b3d6712e4a9c05d7b2e8"
+dominant_defect = "mutable-flags"

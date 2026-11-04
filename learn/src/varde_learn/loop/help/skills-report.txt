@@ -1,0 +1,7 @@
+List the loop records and write the report page with one decision block per open proposal.
+
+Usage: varde learn skills report [OPTIONS]
+
+Options:
+      --json  Print machine-readable output
+  -h, --help  Print help

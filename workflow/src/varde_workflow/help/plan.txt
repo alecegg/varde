@@ -1,0 +1,25 @@
+Plans, tasks and reviews
+
+Usage: varde plan <COMMAND>
+
+Commands:
+  validate              Validate one workflow artifact without mutation
+  graph                 Resolve one artifact dependency graph
+  check-task-ownership  Audit one source commit against its task ownership
+  gate                  Run deterministic checks on a task commit before integration
+  execution-wave        Select the next advisory execution wave without mutation
+  readiness             Report blockers and available workflow actions
+  store                 Inspect and manage the SQLite plan state store
+  status                Show compact progress for non-terminal plans
+  task set              Change a task status using the workflow transitions
+  now                   Set or clear a plan's current progress line
+  owner                 Set or clear the harness-neutral owner for one plan
+  answer                Record an answer to an open question
+  watch                 Watch plans and print one line per stale, blocked, or finished event
+  conclude              Verify the review report and mark a plan completed
+  distill               Print a read-only knowledge skeleton for a plan
+  help                  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version

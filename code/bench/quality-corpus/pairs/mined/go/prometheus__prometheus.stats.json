@@ -1,0 +1,39 @@
+{
+  "accepted": 190,
+  "commits_walked": 18958,
+  "filters": {
+    "file_limit": {
+      "evaluated": 528,
+      "passed": 363
+    },
+    "function_limit": {
+      "evaluated": 340,
+      "passed": 222
+    },
+    "generated": {
+      "evaluated": 222,
+      "passed": 218
+    },
+    "intent": {
+      "evaluated": 13731,
+      "passed": 528
+    },
+    "parent": {
+      "evaluated": 18958,
+      "passed": 13731
+    },
+    "parse": {
+      "evaluated": 363,
+      "passed": 340
+    },
+    "public_feature": {
+      "evaluated": 218,
+      "passed": 190
+    }
+  },
+  "intent_matches": 528,
+  "language": "go",
+  "pin_sha": "c052a79dc7fd0f2df2219ffe336f510b0d149b72",
+  "records_bytes": 219907,
+  "repository": "prometheus/prometheus"
+}

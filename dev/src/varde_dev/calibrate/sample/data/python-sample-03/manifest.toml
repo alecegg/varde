@@ -1,0 +1,13 @@
+id = "python-sample-03"
+pair_group_id = "sample-python-price-order"
+language = "python"
+task = "Price an order with quantity validation, a 10% discount above 100, and 8% tax."
+left = "a.py"
+right = "b.py"
+behaviour_test = "behaviour_test.py"
+license = "MIT"
+
+[sha256]
+a = "131585aa66ab297454f145328934005d2d5c529913d5ae6e2a80e3cca1f8abfe"
+b = "227003b075b8ce82f2e8874624b3a83e15b53fe8c4a27d66388b8ee1ea527d25"
+behaviour_test = "4d6f195f727d8798187f1fb2720f0bb09f7eb4143f3caa11003d51145d831b06"

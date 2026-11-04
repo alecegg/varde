@@ -1,0 +1,27 @@
+Classify domain specifications against current repository sources
+
+reuse means verified cache, inspect needs classification, and stale means source or provenance changed.
+
+Usage: varde learn docs spec [OPTIONS] --repository <REPOSITORY> --knowledge <KNOWLEDGE> --working <WORKING>
+
+Options:
+      --repository <REPOSITORY>
+          
+
+      --knowledge <KNOWLEDGE>
+          
+
+      --working <WORKING>
+          
+
+      --refresh
+          Force full source and provenance validation
+
+      --acknowledge-architecture-path <ACKNOWLEDGE_ARCHITECTURE_PATHS>
+          Record inspected paths as non-architecture inputs at their current content hash
+
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')

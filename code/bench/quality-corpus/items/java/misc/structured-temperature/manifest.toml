@@ -1,0 +1,4 @@
+category = "a"
+language = "java"
+pair_group_id = "64ca41f0d5c6540e3cc5a2e0"
+dominant_defect = "mutable-flags"

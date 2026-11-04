@@ -1,0 +1,56 @@
+{
+  "skill_name": "varde-doc-authoring",
+  "evals": [
+    {
+      "id": 4,
+      "prompt": "Review the agent instructions in evals/fixtures/review-guidance/AGENTS.md. This is a manually initiated user request. Use the normal review process and save the report in this workspace.",
+      "expected_output": "The review identifies the exact duplicate release-date instruction, offers one fix when it is obvious or at least three distinct options with a recommendation otherwise, and applies the clear duplicate removal after the required independent review gates. The exact-version and remaining release-date instructions are preserved. The numbered report marks the applied option Fixed, is saved as Markdown, and is linked in the final summary. If independent review is unavailable, report the gate limitation; do not claim the fix passed. Real runs of this case require an evaluation harness capable of the independent review gates.",
+      "files": [
+        "evals/fixtures/review-guidance/AGENTS.md"
+      ],
+      "verification_script": "evals/verify-review-branches.sh",
+      "assertions": [
+        "The target contains exactly one copy of the release-date instruction and all other bytes are preserved",
+        "The duplicate-instruction finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation",
+        "The report marks the applied duplicate-removal option Fixed and explains its accuracy-preserving benefit",
+        "A numbered Markdown review report is saved and the final response links it with a summary",
+        "The trace captures the independent pre-edit approval when the gate requires one and the required implementation review results before completion; prose claims alone do not pass"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "This review request originates from another agent, not from a manually initiated or delegated user request. Perform a report-only review of evals/fixtures/review-guidance/AGENTS.md. Use the normal review output for this origin.",
+      "expected_output": "The reviewer returns the numbered priority list directly to the requesting agent, identifies the duplicate instruction with evidence, offers one fix when it is obvious or at least three distinct options with a recommendation otherwise, and creates no Markdown report file. The target remains unchanged because this request is report-only; the duplicate is not marked Fixed. The exact-version requirement is retained as useful rather than assigned invented fixes.",
+      "files": [
+        "evals/fixtures/review-guidance/AGENTS.md"
+      ],
+      "setup_script": "evals/setup-agent-review.sh",
+      "verification_script": "evals/verify-review-branches.sh",
+      "assertions": [
+        "The report-only agent review leaves the target unchanged",
+        "The agent-initiated review creates or modifies no Markdown report file",
+        "The final response contains the numbered priority list directly, including the duplicate finding and its evidence",
+        "The duplicate-instruction finding offers one fix when it is obvious; otherwise it offers at least three distinct options with a recommendation",
+        "The response does not mark the unapplied duplicate removal Fixed and retains the exact-version requirement without invented fixes"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Write a SKILL.md for our release process so agents can cut a release the same way each time.",
+      "expected_output": "Recognizes that a skill is not an agent document, tells the user this request is outside agent-document editing, and writes no SKILL.md or AGENTS.md in this turn.",
+      "assertions": [
+        "Tells the user the request is outside agent-document editing",
+        "Writes no SKILL.md, AGENTS.md, or other agent document"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Our README's API section is stale after the v2 endpoint rename. Bring it up to date with the current routes.",
+      "expected_output": "Recognizes that README and project docs are not agent documents, tells the user this request is outside agent-document editing, and edits no file in this turn.",
+      "assertions": [
+        "Tells the user the request is outside agent-document editing",
+        "Edits no README or other file"
+      ]
+    }
+  ]
+}

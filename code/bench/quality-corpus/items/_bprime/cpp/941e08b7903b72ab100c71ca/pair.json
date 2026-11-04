@@ -1,0 +1,10 @@
+{
+  "pair_id": "941e08b7903b72ab100c71ca",
+  "pair_group_id": "ce7dec8d9db4d6d486db76f2",
+  "left_id": "07ee40fa16727d851cde238c",
+  "right_id": "d7fd3416b1fe4e17323a5e13",
+  "left": "a.cpp",
+  "right": "b.cpp",
+  "left_role": "before",
+  "right_role": "after"
+}

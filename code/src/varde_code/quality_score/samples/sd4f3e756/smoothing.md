@@ -1,0 +1,7 @@
+# Style dispute decisions
+
+- **Granularity: `judge-extract.py` wins over `judge-inline.py`.** Parsing, row pricing, totals, and receipt formatting have separate helpers, so each step can be understood without duplicating the full workflow inside both public functions. I kept the helper count modest and combined trivial checks into their owning operation.
+- **Naming length: `judge-extract.py` wins over `judge-names.py`.** Names such as `_records`, `_tier`, `_fine`, and `number` are clear in this small module. The longer variants repeat context already evident from the helper or local scope.
+- **Comments: `judge-extract.py` wins over `judge-defensive.py`.** The operations are direct and their names make the intent clear; comments restating each operation add noise. The defensive version also adds type checks for internal calls that are already fed by the parser.
+- **Abstraction level: `judge-extract.py` wins over `judge-classes.py`.** Plain tuples and dictionaries fit the small, stateless calculation. Parser, policy, and pricing classes introduce indirection and state without a concrete need for extension or substitution.
+- **Receipt calculation: `smoothed.py` merges `judge-extract.py`'s factoring with the original's behavior.** It parses once and shares the totals calculation, avoiding receipt's second parse while preserving physical line numbers, per-record rounding, and the empty-input output.

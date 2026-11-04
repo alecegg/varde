@@ -1,0 +1,4 @@
+{
+  "output": "{\"data\":{\"error\":{\"code\":\"invalid_input\",\"message\":\"task status cannot transition from `done` to `fixing`\"}},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":false,\"outcome\":\"tool-error\",\"schema_version\":1}\n",
+  "bytes": "---\ntype: task\nid: task\ntitle: Task\nstatus: done\n---\n"
+}

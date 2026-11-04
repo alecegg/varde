@@ -1,0 +1,3 @@
+Review, retire, or restore dead-address mail
+
+Usage: varde msg retire (--dry-run <AUDIT_DIR> [--min-age-days N] | --apply <DRY_RUN_FILE> | --restore <AUDIT_FILE>)

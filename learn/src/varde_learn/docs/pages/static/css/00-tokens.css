@@ -1,0 +1,295 @@
+/* Design tokens: the only file that holds colour literals. Light is the default;
+   dark swaps values only. Every other part file reads these through var(). */
+:root {
+  color-scheme: light dark;
+
+  /* ink ramp (alpha steps of the text colour) */
+  --vd-ink: #171717;
+  --vd-ink-4: rgba(23, 23, 23, 0.04);
+  --vd-ink-8: rgba(23, 23, 23, 0.08);
+  --vd-ink-16: rgba(23, 23, 23, 0.16);
+  --vd-ink-36: rgba(23, 23, 23, 0.36);
+  --vd-ink-50: rgba(23, 23, 23, 0.5);
+  --vd-ink-60: rgba(23, 23, 23, 0.6);
+  --vd-ink-70: rgba(23, 23, 23, 0.7);
+  --vd-ink-80: rgba(23, 23, 23, 0.8);
+
+  /* surfaces */
+  --vd-surface: #ffffff;
+  --vd-surface-sunk: #f5f5f5;
+  --vd-surface-elevated: #ffffff;
+
+  /* neutral ramp: text 10%, muted 45%, line 90%, fill 95% lightness; colour is spent on the tones only */
+  --vd-neutral-text: hsl(0 0% 10%);
+  --vd-neutral-muted: hsl(0 0% 45%);
+  --vd-line: hsl(0 0% 90%);
+  --vd-fill: hsl(0 0% 95%);
+
+  /* text */
+  --vd-text: var(--vd-ink);
+  --vd-text-secondary: var(--vd-ink-70);
+
+  /* accent and status hues (text-safe on every surface) */
+  --vd-accent: #0b5fd6;
+  --vd-on-accent: #ffffff;
+  --vd-accent-subtle: rgba(11, 95, 214, 0.12);
+  --vd-info: #0b5fd6;
+  --vd-info-subtle: rgba(11, 95, 214, 0.12);
+  --vd-success: #2e7d32;
+  --vd-success-subtle: rgba(46, 125, 50, 0.08);
+  --vd-warning: #8a5a00;
+  --vd-warning-subtle: rgba(198, 120, 0, 0.14);
+  --vd-danger: #c62828;
+  --vd-danger-subtle: rgba(198, 40, 40, 0.12);
+  --vd-mark: #fff3b0;
+
+  /* chart and region series */
+  --vd-series-1: #2e7d32;
+  --vd-series-2: #c67800;
+  --vd-series-3: #8e24aa;
+  --vd-series-4: #00838f;
+  --vd-series-5: #c62828;
+  --vd-series-1-fill: rgba(46, 125, 50, 0.15);
+  --vd-series-2-fill: rgba(198, 120, 0, 0.15);
+  --vd-series-3-fill: rgba(142, 36, 170, 0.15);
+  --vd-series-4-fill: rgba(0, 131, 143, 0.15);
+  --vd-series-5-fill: rgba(198, 40, 40, 0.15);
+
+  /* borders */
+  --vd-border: var(--vd-line);
+  --vd-border-interactive: var(--vd-ink-50);
+  --vd-border-selected: var(--vd-accent);
+
+  /* control states */
+  --vd-hover: var(--vd-ink-8);
+  --vd-pressed: var(--vd-ink-16);
+  --vd-selected: var(--vd-accent-subtle);
+  --vd-focus-ring: var(--vd-accent);
+  --vd-disabled-text: var(--vd-ink-36);
+  --vd-disabled-surface: var(--vd-ink-4);
+  --vd-error: var(--vd-danger);
+  --vd-readonly: var(--vd-surface-sunk);
+
+  /* type scale; body and label are rem, only headings are fluid */
+  --vd-text-xs: 0.75rem;
+  --vd-text-sm: 0.875rem;
+  --vd-text-md: 1rem;
+  --vd-text-lg: 1.125rem;
+  --vd-text-xl: 1.25rem;
+  --vd-text-2xl: 1.5rem;
+  --vd-font-body: system-ui, sans-serif;
+  --vd-font-mono: ui-monospace, monospace;
+  --vd-leading-body: 1.55;
+  --vd-leading-heading: 1.25;
+  --vd-heading-1: clamp(1.375rem, 1.1rem + 1.2vw, 1.5rem);
+  --vd-heading-2: clamp(1.25rem, 1.05rem + 0.9vw, 1.375rem);
+  --vd-heading-3: clamp(1.125rem, 1rem + 0.5vw, 1.25rem);
+
+  /* spacing on a 4px grid */
+  --vd-space-1: 0.25rem;
+  --vd-space-2: 0.5rem;
+  --vd-space-3: 0.75rem;
+  --vd-space-4: 1rem;
+  --vd-space-5: 1.25rem;
+  --vd-space-6: 1.5rem;
+  --vd-space-7: 2rem;
+  --vd-space-8: 2.5rem;
+  --vd-space-9: 3rem;
+
+  /* radii */
+  --vd-radius-s: 4px;
+  --vd-radius-m: 6px;
+  --vd-radius-l: 8px;
+  --vd-radius-full: 999px;
+
+  /* elevation is hairline only: 1px borders and 95% fills, no shadows */
+  --vd-shadow-0: none;
+  --vd-shadow-1: none;
+  --vd-shadow-2: none;
+  --vd-shadow-3: none;
+
+  /* five tones as bare H S% L% triples; edge, tints and text derive from one triple */
+  --vd-tone-info: 218 85% 57%;
+  --vd-tone-info-edge: hsl(var(--vd-tone-info));
+  --vd-tone-info-tint: hsl(var(--vd-tone-info) / 0.08);
+  --vd-tone-info-tint-2: hsl(var(--vd-tone-info) / 0.02);
+  --vd-tone-info-text: hsl(218 85% 47%);
+  --vd-tone-decision: 262 83% 58%;
+  --vd-tone-decision-edge: hsl(var(--vd-tone-decision));
+  --vd-tone-decision-tint: hsl(var(--vd-tone-decision) / 0.08);
+  --vd-tone-decision-tint-2: hsl(var(--vd-tone-decision) / 0.02);
+  --vd-tone-decision-text: hsl(262 83% 57%);
+  --vd-tone-risk: 0 84% 60%;
+  --vd-tone-risk-edge: hsl(var(--vd-tone-risk));
+  --vd-tone-risk-tint: hsl(var(--vd-tone-risk) / 0.08);
+  --vd-tone-risk-tint-2: hsl(var(--vd-tone-risk) / 0.02);
+  --vd-tone-risk-text: hsl(0 84% 43%);
+  --vd-tone-warning: 25 95% 48%;
+  --vd-tone-warning-edge: hsl(var(--vd-tone-warning));
+  --vd-tone-warning-tint: hsl(var(--vd-tone-warning) / 0.08);
+  --vd-tone-warning-tint-2: hsl(var(--vd-tone-warning) / 0.02);
+  --vd-tone-warning-text: hsl(25 95% 34%);
+  --vd-tone-success: 142 71% 38%;
+  --vd-tone-success-edge: hsl(var(--vd-tone-success));
+  --vd-tone-success-tint: hsl(var(--vd-tone-success) / 0.08);
+  --vd-tone-success-tint-2: hsl(var(--vd-tone-success) / 0.02);
+  --vd-tone-success-text: hsl(142 71% 27%);
+
+  /* block label, code panel, hairline elevation and density (regular is the default) */
+  --vd-label-size: 0.8rem;
+  --vd-label-weight: 600;
+  --vd-label-tracking: 0.04em;
+  --vd-code-radius: 12px;
+  --vd-code-header: 2rem;
+  --vd-code-size: 0.7rem;
+  --vd-doc-width: 60rem;
+  --vd-toc-width: 11rem;
+  --vd-toc-gap: var(--vd-space-7);
+  --vd-body-leading: 1.75;
+  --vd-density-gap: var(--vd-space-3);
+  --vd-density-pad: var(--vd-space-4);
+  --vd-density-font: var(--vd-text-md);
+  --vd-density-radius: var(--vd-radius-l);
+  --vd-density-stroke: 1px;
+
+  /* motion */
+  --vd-dur-fast: 0.12s;
+  --vd-dur: 0.16s;
+  --vd-dur-flash: 4s;
+
+  /* control sizing: 44px, raised to 48px on coarse pointers */
+  --vd-control-height: 2.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --vd-ink: #ececec;
+    --vd-ink-4: rgba(236, 236, 236, 0.04);
+    --vd-ink-8: rgba(236, 236, 236, 0.08);
+    --vd-ink-16: rgba(236, 236, 236, 0.16);
+    --vd-ink-36: rgba(236, 236, 236, 0.36);
+    --vd-ink-50: rgba(236, 236, 236, 0.5);
+    --vd-ink-60: rgba(236, 236, 236, 0.6);
+    --vd-ink-70: rgba(236, 236, 236, 0.7);
+    --vd-ink-80: rgba(236, 236, 236, 0.8);
+    --vd-surface: #171717;
+    --vd-surface-sunk: #0f0f0f;
+    --vd-surface-elevated: #232323;
+    --vd-neutral-text: hsl(0 0% 90%);
+    --vd-neutral-muted: hsl(0 0% 62%);
+    --vd-line: hsl(0 0% 20%);
+    --vd-fill: hsl(0 0% 12%);
+    --vd-accent: #6aa5ff;
+    --vd-on-accent: #0b0b0b;
+    --vd-accent-subtle: rgba(106, 165, 255, 0.18);
+    --vd-info: #6aa5ff;
+    --vd-info-subtle: rgba(106, 165, 255, 0.18);
+    --vd-success: #66bb6a;
+    --vd-success-subtle: rgba(102, 187, 106, 0.16);
+    --vd-warning: #ffb74d;
+    --vd-warning-subtle: rgba(255, 183, 77, 0.16);
+    --vd-danger: #ff8a80;
+    --vd-danger-subtle: rgba(255, 138, 128, 0.16);
+    --vd-mark: #5a4b00;
+    --vd-tone-info: 218 85% 67%;
+    --vd-tone-info-edge: hsl(var(--vd-tone-info));
+    --vd-tone-info-tint: hsl(var(--vd-tone-info) / 0.08);
+    --vd-tone-info-tint-2: hsl(var(--vd-tone-info) / 0.02);
+    --vd-tone-info-text: hsl(218 85% 72%);
+    --vd-tone-decision: 262 83% 68%;
+    --vd-tone-decision-edge: hsl(var(--vd-tone-decision));
+    --vd-tone-decision-tint: hsl(var(--vd-tone-decision) / 0.08);
+    --vd-tone-decision-tint-2: hsl(var(--vd-tone-decision) / 0.02);
+    --vd-tone-decision-text: hsl(262 83% 74%);
+    --vd-tone-risk: 0 84% 70%;
+    --vd-tone-risk-edge: hsl(var(--vd-tone-risk));
+    --vd-tone-risk-tint: hsl(var(--vd-tone-risk) / 0.08);
+    --vd-tone-risk-tint-2: hsl(var(--vd-tone-risk) / 0.02);
+    --vd-tone-risk-text: hsl(0 84% 72%);
+    --vd-tone-warning: 25 95% 58%;
+    --vd-tone-warning-edge: hsl(var(--vd-tone-warning));
+    --vd-tone-warning-tint: hsl(var(--vd-tone-warning) / 0.08);
+    --vd-tone-warning-tint-2: hsl(var(--vd-tone-warning) / 0.02);
+    --vd-tone-warning-text: hsl(25 95% 62%);
+    --vd-tone-success: 142 71% 48%;
+    --vd-tone-success-edge: hsl(var(--vd-tone-success));
+    --vd-tone-success-tint: hsl(var(--vd-tone-success) / 0.08);
+    --vd-tone-success-tint-2: hsl(var(--vd-tone-success) / 0.02);
+    --vd-tone-success-text: hsl(142 71% 52%);
+    --vd-series-1: #66bb6a;
+    --vd-series-2: #ffb74d;
+    --vd-series-3: #ce93d8;
+    --vd-series-4: #4dd0e1;
+    --vd-series-5: #ef9a9a;
+    --vd-series-1-fill: rgba(102, 187, 106, 0.2);
+    --vd-series-2-fill: rgba(255, 183, 77, 0.2);
+    --vd-series-3-fill: rgba(206, 147, 216, 0.2);
+    --vd-series-4-fill: rgba(77, 208, 225, 0.2);
+    --vd-series-5-fill: rgba(239, 154, 154, 0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --vd-dur-fast: 0s;
+    --vd-dur: 0s;
+    --vd-dur-flash: 0s;
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --vd-control-height: 3rem;
+  }
+}
+
+/* Forced colours replace author colours; map borders, selection and focus to
+   system colours and give shadows a real border to stand in for them. */
+@media (forced-colors: active) {
+  :root {
+    --vd-border: CanvasText;
+    --vd-border-interactive: CanvasText;
+    --vd-border-selected: Highlight;
+    --vd-focus-ring: Highlight;
+    --vd-selected: Highlight;
+    --vd-disabled-text: GrayText;
+    --vd-line: CanvasText;
+    --vd-tone-info-edge: CanvasText;
+    --vd-tone-info-tint: transparent;
+    --vd-tone-info-tint-2: transparent;
+    --vd-tone-info-text: CanvasText;
+    --vd-tone-decision-edge: CanvasText;
+    --vd-tone-decision-tint: transparent;
+    --vd-tone-decision-tint-2: transparent;
+    --vd-tone-decision-text: CanvasText;
+    --vd-tone-risk-edge: CanvasText;
+    --vd-tone-risk-tint: transparent;
+    --vd-tone-risk-tint-2: transparent;
+    --vd-tone-risk-text: CanvasText;
+    --vd-tone-warning-edge: CanvasText;
+    --vd-tone-warning-tint: transparent;
+    --vd-tone-warning-tint-2: transparent;
+    --vd-tone-warning-text: CanvasText;
+    --vd-tone-success-edge: CanvasText;
+    --vd-tone-success-tint: transparent;
+    --vd-tone-success-tint-2: transparent;
+    --vd-tone-success-text: CanvasText;
+  }
+}
+
+/* density: one attribute on the page scope switches gap, pad, font, radius and stroke;
+   the wireframe keeps its own scope tokens (44-wireframe) and ignores these */
+[data-density="compact"] {
+  --vd-density-gap: var(--vd-space-2);
+  --vd-density-pad: var(--vd-space-3);
+  --vd-density-font: var(--vd-text-sm);
+  --vd-density-radius: var(--vd-radius-m);
+  --vd-density-stroke: 1px;
+}
+[data-density="roomy"] {
+  --vd-density-gap: var(--vd-space-5);
+  --vd-density-pad: var(--vd-space-6);
+  --vd-density-font: var(--vd-text-lg);
+  --vd-density-radius: var(--vd-radius-l);
+  --vd-density-stroke: 2px;
+}

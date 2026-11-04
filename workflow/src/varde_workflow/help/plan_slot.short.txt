@@ -1,0 +1,3 @@
+Usage: varde plan slot {register,heartbeat,show,park,unpark,handoff,resume,reclaim}
+
+Use --epoch for fenced operations. Resume replaces the agent and prints its checkpoint prompt.

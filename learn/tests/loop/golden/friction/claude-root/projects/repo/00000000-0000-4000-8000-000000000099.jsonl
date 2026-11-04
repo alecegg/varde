@@ -1,0 +1,2 @@
+{"type":"assistant","uuid":"tool-call","sessionId":"00000000-0000-4000-8000-000000000099","timestamp":"2025-01-01T00:00:00Z","cwd":"/repo","message":{"role":"assistant","content":[{"type":"tool_use","id":"tool-1","name":"Bash","input":{"command":"false"}}]}}
+{"type":"user","uuid":"native-result","parentUuid":"tool-call","sessionId":"00000000-0000-4000-8000-000000000099","timestamp":"2025-01-01T00:00:01Z","cwd":"/repo","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool-1","is_error":true,"content":"permission denied"}]}}

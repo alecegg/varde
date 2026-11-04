@@ -1,0 +1,82 @@
+{
+  "pair_group_id": "c1e30a9f6b274d8a91f07c52",
+  "task": "rental-quote",
+  "language": "rust",
+  "pairs": [
+    {
+      "pair_id": "716fd62aaf104aa38390e11b",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "690ec17c9b344fb2b1d33c84",
+      "left": "sensible.rs",
+      "right": "monolith.rs",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    },
+    {
+      "pair_id": "2735a4b01f63443a8e2ea68d",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "3f2d9c8212a14e588fa2c16b",
+      "left": "sensible.rs",
+      "right": "tiny.rs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "6ab89b7e2f724afaa3a86c9d",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "7811d65d9bc24fd28d6092c3",
+      "left": "sensible.rs",
+      "right": "padded.rs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "cf6a2714cf3a49ac8f3077f2",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "94e723dbbb3d4c3e9b567c10",
+      "left": "sensible.rs",
+      "right": "sizematched.rs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "a08d694ec02141d3b285f7c9",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "c342fd71901d4d0aa312b9e8",
+      "left": "sensible.rs",
+      "right": "namematched.rs",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "d5066b49cda44f848f62f787",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "45d9fc8a52214c9ea661c8bb",
+      "left": "sensible.rs",
+      "right": "alt-pipeline.rs",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "ea71fec41bbe4c6d82b5c075",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "6e0714e49c4044f69f1c299e",
+      "left": "sensible.rs",
+      "right": "alt-table.rs",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "bbaab38338d4457fa4997864",
+      "left_id": "8b41976a8a8d4f21ab80cb73",
+      "right_id": "0589a3fa748e4a54b6c001bd",
+      "left": "sensible.rs",
+      "right": "alt-class.rs",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    }
+  ]
+}

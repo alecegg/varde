@@ -1,0 +1,15 @@
+Show compact progress for non-terminal plans
+
+Usage: varde plan status [OPTIONS]
+
+Options:
+      --repo <REPO>
+          Repository whose commits and `owns` paths `reviewed_commit` refers to
+
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Prints a progress block for non-cancelled plans, including task progress and each plan's current `now` line. The block also surfaces blockers and available next actions.

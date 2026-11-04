@@ -1,0 +1,119 @@
+[[mutants]]
+id = "discount-high-threshold"
+description = "High discount starts above the boundary"
+find = "subtotal >= 100m"
+replace = "subtotal > 100m"
+
+[[mutants]]
+id = "discount-low-threshold"
+description = "Low discount starts above the boundary"
+find = "subtotal >= 50m"
+replace = "subtotal > 50m"
+
+[[mutants]]
+id = "discount-rate-high"
+description = "High discount rate changes"
+find = "subtotal * 0.10m"
+replace = "subtotal * 0.11m"
+
+[[mutants]]
+id = "discount-rate-low"
+description = "Low discount rate changes"
+find = "subtotal * 0.05m"
+replace = "subtotal * 0.04m"
+
+[[mutants]]
+id = "tax-rate"
+description = "Tax rate changes"
+find = "discountedSubtotal * 0.0825m"
+replace = "discountedSubtotal * 0.0826m"
+
+[[mutants]]
+id = "shipping-low-edge"
+description = "First shipping edge changes"
+find = "discountedSubtotal < 25m"
+replace = "discountedSubtotal <= 25m"
+
+[[mutants]]
+id = "shipping-high-edge"
+description = "Free shipping edge changes"
+find = "discountedSubtotal < 75m"
+replace = "discountedSubtotal <= 75m"
+
+[[mutants]]
+id = "shipping-low-amount"
+description = "Lowest shipping amount changes"
+find = "? 8.95m"
+replace = "? 9.95m"
+
+[[mutants]]
+id = "shipping-mid-amount"
+description = "Middle shipping amount changes"
+find = "5.95m"
+replace = "6.95m"
+
+[[mutants]]
+id = "rounding-mode"
+description = "Monetary rounding uses ties to even"
+find = "MidpointRounding.AwayFromZero"
+replace = "MidpointRounding.ToEven"
+
+[[mutants]]
+id = "quantity-minimum"
+description = "Zero quantity is accepted"
+find = "quantity < 1"
+replace = "quantity < 0"
+
+[[mutants]]
+id = "quantity-maximum"
+description = "Quantity above 100 is accepted"
+find = "quantity > 100"
+replace = "quantity > 101"
+
+[[mutants]]
+id = "price-negative"
+description = "Negative price is accepted"
+find = "unitPrice < 0m"
+replace = "unitPrice < -1m"
+
+[[mutants]]
+id = "price-maximum"
+description = "Price above the maximum is accepted"
+find = "unitPrice > 10000m"
+replace = "unitPrice > 10001m"
+
+[[mutants]]
+id = "sku-empty"
+description = "Empty SKU passes validation"
+find = "sku.Length == 0"
+replace = "sku.Length < 0"
+
+[[mutants]]
+id = "duplicate-case"
+description = "SKU matching becomes case-sensitive"
+find = "StringComparer.OrdinalIgnoreCase"
+replace = "StringComparer.Ordinal"
+
+[[mutants]]
+id = "row-shape"
+description = "Rows with an extra field are accepted"
+find = "fields.Length != 3"
+replace = "fields.Length < 3"
+
+[[mutants]]
+id = "subtotal-discount-basis"
+description = "Discount is based on discounted subtotal"
+find = "subtotal >= 100m"
+replace = "(subtotal - 1m) >= 100m"
+
+[[mutants]]
+id = "tax-basis"
+description = "Tax applies before discount"
+find = "discountedSubtotal * 0.0825m"
+replace = "subtotal * 0.0825m"
+
+[[mutants]]
+id = "total-omits-shipping"
+description = "Total omits shipping"
+find = "discountedSubtotal + tax + shipping"
+replace = "discountedSubtotal + tax"

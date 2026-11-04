@@ -1,0 +1,33 @@
+{
+  "task": "csv-summary",
+  "pair_group": "csv-summary",
+  "language": "cpp",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "eaaca8f2878351c9aa3a8b73",
+      "left": "sensible.cpp",
+      "right": "monolith.cpp"
+    },
+    {
+      "pair_id": "81dab7ffca0cb3c2a459fa4a",
+      "left": "sensible.cpp",
+      "right": "tiny.cpp"
+    },
+    {
+      "pair_id": "4040cb4aebfd7e0b0aa5da8c",
+      "left": "sensible.cpp",
+      "right": "padded.cpp"
+    },
+    {
+      "pair_id": "4392256ebf5b15fa235df296",
+      "left": "sensible.cpp",
+      "right": "sizematched.cpp"
+    },
+    {
+      "pair_id": "ebb52b96f38ebf7b0380a627",
+      "left": "sensible.cpp",
+      "right": "namematched.cpp"
+    }
+  ]
+}

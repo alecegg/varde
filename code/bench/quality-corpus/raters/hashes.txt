@@ -1,0 +1,4 @@
+f8fdeed7463063ee45a84e1dc93a13f44cb9666d81f1b2474bbb9338de6df498 lens-0-neutral-baseline.md
+b949361bae66e1ed84b7ebc12a8bfdaf0a499b964ba5ae9ae2b709f01656fd8c lens-1-clean-code.md
+bc9430dfff90b856bba7deccf1228a33d9d3665ede8437249d6b947d28dfafad lens-2-philosophy-of-software-design.md
+c720f92cd50862820abf561041a349d76fcd6d5a992f50374d4220cd5ee77bc4 lens-3-modern-practice-cognitive-load.md

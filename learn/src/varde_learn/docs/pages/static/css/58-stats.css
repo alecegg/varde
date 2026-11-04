@@ -1,0 +1,40 @@
+/* Stats block: a grid of cards, each a small label, a large value and an optional change. Tones come only from the --vd-tone-* tokens. */
+.vd-stats { margin-block: var(--vd-density-gap); min-inline-size: 0; }
+.vd-stats-summary { margin: 0 0 var(--vd-space-2); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.vd-stats-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-3); min-inline-size: 0; }
+.vd-stats-card { --vd-stats-edge: var(--vd-border); --vd-stats-text: var(--vd-text-secondary); min-inline-size: 0; padding: var(--vd-space-3) var(--vd-space-4); border: 1px solid var(--vd-border); border-radius: var(--vd-radius-l); }
+.vd-stats-info { --vd-stats-text: var(--vd-tone-info-text); }
+.vd-stats-decision { --vd-stats-text: var(--vd-tone-decision-text); }
+.vd-stats-risk { --vd-stats-text: var(--vd-tone-risk-text); }
+.vd-stats-warning { --vd-stats-text: var(--vd-tone-warning-text); }
+.vd-stats-success { --vd-stats-text: var(--vd-tone-success-text); }
+.vd-stats-body { margin: 0; min-inline-size: 0; }
+.vd-stats-body > dd { margin: 0; min-inline-size: 0; }
+.vd-stats-label { color: var(--vd-text-secondary); font-size: var(--vd-label-size); font-weight: var(--vd-label-weight); letter-spacing: var(--vd-label-tracking); text-transform: uppercase; overflow-wrap: anywhere; }
+.vd-stats-value { margin-block: var(--vd-space-1); font-size: var(--vd-text-2xl); font-weight: 650; line-height: var(--vd-leading-heading); overflow-wrap: anywhere; }
+.vd-stats-delta { color: var(--vd-stats-text); font-size: var(--vd-text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.vd-stats-mark { white-space: nowrap; overflow-wrap: normal; }
+.vd-stats-glyph { font-family: var(--vd-font-mono); }
+.vd-stats-note { margin-block-start: var(--vd-space-1); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: anywhere; }
+@container vd-doc (min-width: 28rem) {
+  .vd-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container vd-doc (min-width: 44rem) {
+  .vd-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .vd-stats-n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container vd-doc (min-width: 64rem) {
+  .vd-stats-n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .vd-stats-n5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .vd-stats-n6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+@media (forced-colors: active) {
+  .vd-stats-card { border-color: CanvasText; }
+  .vd-stats-delta { color: CanvasText; }
+}
+@media print {
+  .vd-stats, .vd-stats-grid, .vd-stats-card { overflow: visible; min-inline-size: 0; }
+  .vd-stats-card { break-inside: avoid; }
+  .vd-stats-mark { white-space: normal; }
+  .vd-stats-delta { color: var(--vd-text); }
+}

@@ -1,0 +1,301 @@
+[module.core]
+dist = "varde-core"
+level = 0
+why = "Base module with shared test support."
+
+[module.data]
+dist = "varde-data"
+level = 1
+why = "Shared storage contracts and configuration."
+
+[module.toz]
+dist = "varde-toz"
+level = 1
+why = "Standalone tool output support."
+
+[module.code]
+dist = "varde-code"
+level = 1
+why = "Standalone code analysis capability."
+
+[module.design]
+dist = "varde-design"
+level = 1
+why = "Leaf frontend design tooling capability."
+
+[module.visualize]
+dist = "varde-visualize"
+level = 1
+why = "Leaf visualization skill capability."
+
+[module.dev]
+dist = "varde-dev"
+level = 1
+why = "Leaf developer tools capability."
+
+[module.learn]
+dist = "varde-learn"
+level = 2
+why = "Friction loop, knowledge, docs and agent-doc authoring; builds on core and shared data."
+
+[module.workflow]
+dist = "varde-workflow"
+level = 3
+why = "Workflow orchestration builds on lower capabilities."
+
+[module.runner]
+dist = "varde-runner"
+level = 4
+why = "Runner depends on workflow and lower capabilities."
+
+[module.serve]
+dist = "varde-serve"
+level = 4
+why = "Serve daemon, local API and MCP shim depend on workflow and lower capabilities."
+
+[module.app]
+dist = "varde"
+level = 4
+why = "Application composition root depends on capability modules."
+
+[exempt]
+paths = ["core/scripts/**", "core/tests/**"]
+why = "Core owns repo-wide gates and tests that inspect every workspace module."
+
+[[coupling]]
+from = "app"
+to = "core"
+path = "app/tests/old-binary-names.sh"
+kind = "shell"
+why = "Legacy-name checks inspect shared core paths."
+
+[[coupling]]
+from = "app"
+to = "workflow"
+path = "app/tests/old-binary-names.sh"
+kind = "shell"
+why = "Legacy-name checks inspect workflow agent paths."
+
+[[coupling]]
+from = "app"
+to = "toz"
+path = "app/tests/test_hook_imports.py"
+kind = "file-read"
+why = "Hook import tests launch the toz module in a subprocess."
+
+[[coupling]]
+from = "app"
+to = "toz"
+path = "app/tests/test_call_recording.py"
+kind = "file-read"
+why = "Call recording tests configure the toz session environment."
+
+[[coupling]]
+from = "app"
+to = "core"
+path = "app/tests/test_installed_wheels.py"
+kind = "file-read"
+why = "Wheel test runs core/scripts/check-refs.sh to check shipped skills."
+
+[[coupling]]
+from = "app"
+to = "code"
+path = "app/tests/test_installed_wheels.py"
+kind = "file-read"
+why = "Wheel test compares shipped baseline_data with code/src/varde_code/quality_score/baseline_data."
+
+[[coupling]]
+from = "code"
+to = "core"
+path = "code/tests/*.py"
+kind = "file-read"
+why = "Code tests exercise shared core repository paths."
+
+[[coupling]]
+from = "app"
+to = "workflow"
+path = "app/scripts/generate.py"
+kind = "file-read"
+why = "Generator reads workflow agent definitions."
+
+[[coupling]]
+from = "app"
+to = "workflow"
+path = "app/tests/agents/*.py"
+kind = "file-read"
+why = "Generated agent checks read workflow agent definitions."
+
+[[coupling]]
+from = "app"
+to = "workflow"
+path = "app/tests/agents/generated-adapters.sh"
+kind = "shell"
+why = "Generated adapter checks use workflow agent definitions."
+
+[[coupling]]
+from = "app"
+to = "code"
+path = "app/tests/test_router.py"
+kind = "file-read"
+why = "Router tests verify a code module help path."
+
+[[coupling]]
+from = "runner"
+to = "workflow"
+path = "runner/tests/test_plans_views_golden.py"
+kind = "sys-path"
+why = "Golden plan tests load workflow test helpers."
+
+[[coupling]]
+from = "runner"
+to = "workflow"
+path = "runner/tests/test_worktrees_script_parity.py"
+kind = "file-read"
+why = "Runner tests compare workflow worktree scripts."
+
+[[coupling]]
+from = "runner"
+to = "workflow"
+path = "runner/tests/test_relay_triggers.py"
+kind = "file-read"
+why = "Runner relay tests read workflow golden fixtures."
+
+[[coupling]]
+from = "runner"
+to = "workflow"
+path = "runner/tests/test_deploy_script.py"
+kind = "file-read"
+why = "Runner deployment tests inspect workflow deployment scripts."
+
+[[coupling]]
+from = "runner"
+to = "core"
+path = "runner/scripts/install-webkit-browsers.sh"
+kind = "shell"
+why = "WebKit setup sources the shared test environment."
+
+[[coupling]]
+from = "runner"
+to = "core"
+path = "runner/tests/worktree-create.sh"
+kind = "shell"
+why = "Worktree-create test sources the shared repo test library."
+
+[[coupling]]
+from = "workflow"
+to = "data"
+path = "workflow/tests/test_golden_relay.py"
+kind = "file-read"
+why = "Workflow relay tests use data module fixtures."
+
+[[coupling]]
+from = "app"
+to = "core"
+path = "app/tests/install-shared-files.sh"
+kind = "shell"
+why = "App shell tests source shared repository test helpers."
+
+[[coupling]]
+from = "learn"
+to = "core"
+path = "learn/tests/docs/*.sh"
+kind = "shell"
+why = "Documentation shell tests source shared repository test helpers."
+
+[[coupling]]
+from = "workflow"
+to = "core"
+path = "workflow/tests/*.sh"
+kind = "shell"
+why = "Workflow shell tests source shared repository test helpers."
+
+[[coupling]]
+from = "learn"
+to = "core"
+path = "learn/tests/knowledge/*.sh"
+kind = "shell"
+why = "Learn knowledge shell tests source shared repository test helpers."
+
+[[coupling]]
+from = "dev"
+to = "core"
+path = "dev/tests/*.sh"
+kind = "shell"
+why = "Developer shell tests source shared repository test helpers."
+
+[[coupling]]
+from = "workflow"
+to = "core"
+path = "workflow/scripts/route-metrics.sh"
+kind = "shell"
+why = "Workflow metrics script sources repository test helpers."
+
+[[coupling]]
+from = "learn"
+to = "data"
+path = "learn/tests/loop/verify_friction_store.py"
+kind = "file-read"
+why = "Friction store verification uses a legacy data fixture."
+
+[[coupling]]
+from = "learn"
+to = "data"
+path = "learn/tests/loop/make_ledger_fixtures.py"
+kind = "file-read"
+why = "Ledger fixture generation reads data-owned ledger records."
+
+[[coupling]]
+from = "learn"
+to = "data"
+path = "learn/tests/loop/test_golden_ledger.py"
+kind = "file-read"
+why = "Golden ledger tests compare against data-owned repository output."
+
+[[coupling]]
+from = "learn"
+to = "data"
+path = "learn/tests/loop/test_friction_store_copy.py"
+kind = "file-read"
+why = "Store copy gate copies data-owned ledger fixtures."
+
+[[coupling]]
+from = "runner"
+to = "data"
+path = "runner/scripts/retire_dead_mail.py"
+kind = "sys-path"
+why = "Mail retirement script reads data module state."
+
+[[coupling]]
+from = "runner"
+to = "workflow"
+path = "runner/scripts/retire_dead_mail.py"
+kind = "sys-path"
+why = "Mail retirement script reads workflow plan data."
+
+[[coupling]]
+from = "runner"
+to = "core"
+path = "runner/scripts/live_role_inbox_verify.py"
+kind = "sys-path"
+why = "Inbox verification checks core-owned artifacts."
+
+[[coupling]]
+from = "runner"
+to = "data"
+path = "runner/scripts/live_role_inbox_verify.py"
+kind = "sys-path"
+why = "Inbox verification checks data-owned store artifacts."
+
+[[coupling]]
+from = "runner"
+to = "workflow"
+path = "runner/scripts/live_role_inbox_verify.py"
+kind = "sys-path"
+why = "Inbox verification checks workflow-owned artifacts."
+
+[[coupling]]
+from = "app"
+to = "workflow"
+path = "app/tests/test_loop_agent_regenerate.py"
+kind = "file-read"
+why = "Regeneration test copies the workflow agents capabilities.json."

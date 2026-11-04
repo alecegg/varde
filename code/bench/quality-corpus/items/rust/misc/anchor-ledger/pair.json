@@ -1,0 +1,10 @@
+{
+  "pair_id": "8ead42246ae6a365a0b9ec3f",
+  "pair_group_id": "ca56b5845e973075ae940bf1",
+  "left_id": "b3975d47885b6e2429ebca77",
+  "right_id": "7d141db4556d6ec80e7e6472",
+  "left": "excellent.rs",
+  "right": "poor.rs",
+  "left_role": "excellent",
+  "right_role": "poor"
+}

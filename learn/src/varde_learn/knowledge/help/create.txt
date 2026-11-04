@@ -1,0 +1,12 @@
+Create a Concept from a complete frontmatter+body document
+
+Usage: varde learn knowledge create [OPTIONS] --bundle <BUNDLE> [SLUG]
+
+Arguments:
+  [SLUG]  Concept slug, e.g. `my-concept` or `pattern/my-concept`; the document is read from stdin
+
+Options:
+      --bundle <BUNDLE>  Knowledge Bundle root directory (holds the Concept `.md` files)
+      --file <FILE>      Read the concept document from this file; the slug derives from its `<slug>.md` filename
+      --json             Machine-readable JSON output
+  -h, --help             Print help

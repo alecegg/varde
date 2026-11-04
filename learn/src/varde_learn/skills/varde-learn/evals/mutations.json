@@ -1,0 +1,20 @@
+{
+  "mutations": [
+    {
+      "id": "remove-recurrence-uncertainty",
+      "file": "references/recurrence.md",
+      "remove": "After an improvement ships, check whether the friction recurred. This reports\nhistorical occurrences; it does not establish that the issue is still present.",
+      "evals": [
+        "recurrence"
+      ]
+    },
+    {
+      "id": "remove-friction-log-source-of-truth",
+      "file": "references/capture.md",
+      "remove": "Keep friction in `<store dir>/friction.jsonl`, the source of truth; `learn.db` is a rebuildable cache.",
+      "evals": [
+        "friction-capture"
+      ]
+    }
+  ]
+}

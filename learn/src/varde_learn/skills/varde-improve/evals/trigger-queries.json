@@ -1,0 +1,12 @@
+[
+  {"query": "Several friction items point at the same unclear rule in varde-build. Distill them into an improvement proposal.", "should_trigger": true},
+  {"query": "Review the recurring friction and propose a small improvement, including an option that removes something.", "should_trigger": true},
+  {"query": "Create a trigger query set and evals.json for this skill with close negative queries; do not run any sessions.", "should_trigger": true},
+  {"query": "Calibrate the output evals for the varde-plan skill and report which mutations the suite fails to catch.", "should_trigger": true},
+  {"query": "This friction item has only one occurrence. Is there enough to propose a skill change?", "should_trigger": true},
+  {"query": "Capture this friction: the focused check failed because the fixture path was missing.", "should_trigger": false},
+  {"query": "Check whether the friction recurred after we shipped the fix.", "should_trigger": false},
+  {"query": "Diagnose why the agent got stuck in yesterday's session.", "should_trigger": false},
+  {"query": "Trim the SKILL.md for varde-orchestrate so it states only outcomes.", "should_trigger": false},
+  {"query": "Implement the change to the retry policy that the proposal describes.", "should_trigger": false}
+]

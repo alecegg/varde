@@ -1,0 +1,36 @@
+:root { color-scheme: light; font: 16px/1.5 system-ui, sans-serif; color: #18212b; background: #f4f6f8; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+a { color: #164b7b; }
+.topbar a { min-height: 44px; display: inline-flex; align-items: center; }
+.topbar { min-height: 60px; padding: 8px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: #fff; border-bottom: 1px solid #d8dee5; }
+.brand { color: #142434; font-size: 20px; font-weight: 700; text-decoration: none; }
+nav { display: flex; align-items: center; gap: 16px; }
+.count { display: inline-grid; min-width: 24px; min-height: 24px; place-items: center; border-radius: 50%; background: #e2edf7; }
+main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+h1 { margin: 0 0 20px; }
+.orchestrator-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
+.orchestrator-card, .mailbox-list, .answer-pane { background: white; border: 1px solid #d8dee5; border-radius: 10px; padding: 18px; }
+.orchestrator-card h2 { margin-top: 0; }
+.mailbox-layout { display: grid; grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.7fr); gap: 18px; align-items: start; min-width: 0; }
+.mailbox-list { display: grid; gap: 8px; }
+.mailbox-item { display: grid; gap: 4px; padding: 12px; border-radius: 8px; text-decoration: none; color: inherit; overflow-wrap: anywhere; }
+.mailbox-item.selected, .mailbox-item:hover { background: #edf4fa; }
+.answer-pane, .answer-pane h2, .answer-pane p { min-width: 0; overflow-wrap: anywhere; }
+.mailbox-item span { color: #536170; font-size: 14px; }
+.needs-context { display: inline-block; margin: 0; border-radius: 4px; padding: 3px 8px; color: #684800; background: #fff0c2; font-weight: 650; }
+.options, .entry-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+button { min-width: 44px; min-height: 44px; padding: 8px 14px; border: 1px solid #8b9aaa; border-radius: 7px; background: white; color: inherit; font: inherit; cursor: pointer; }
+button[type="submit"] { color: white; background: #14588c; border-color: #14588c; }
+.answer-form { display: grid; gap: 8px; }
+textarea { display: block; width: 100%; min-height: 120px; resize: vertical; padding: 12px; border: 1px solid #8998a7; border-radius: 8px; font: 16px/1.45 system-ui, sans-serif; }
+button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px solid #e29b00; outline-offset: 2px; }
+.entry-status { margin: 0; min-height: 24px; color: #536170; }
+.entry-status[data-state="failed"] { color: #a12020; font-weight: 650; }
+@media (max-width: 700px) {
+  .topbar { align-items: flex-start; padding: 10px 14px; }
+  .topbar nav { gap: 12px; }
+  main { padding: 16px 12px; }
+  .mailbox-layout { grid-template-columns: minmax(0, 1fr); }
+  .mailbox-list, .answer-pane { min-width: 0; padding: 14px; }
+}

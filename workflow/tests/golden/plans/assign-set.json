@@ -1,0 +1,4 @@
+{
+  "output": "Assigned <TMP>/working/plans/group/nested/plan.md to orchestrator-1.\n",
+  "bytes": "---\ntype: plan\nid: nested\ntitle: Nested\nstatus: active\nassigned_to: orchestrator-1\n---\n"
+}

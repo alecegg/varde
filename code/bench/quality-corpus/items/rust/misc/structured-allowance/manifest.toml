@@ -1,0 +1,4 @@
+category = "a"
+language = "rust"
+pair_group_id = "7933d161fc8464ec591d0e6f"
+dominant_defect = "copy-paste"

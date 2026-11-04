@@ -1,0 +1,11 @@
+Audit one source commit against its task ownership
+
+Usage: varde plan check-task-ownership [OPTIONS] --task <TASK> --commit <COMMIT>
+
+Options:
+      --task <TASK>                 
+      --commit <COMMIT>             
+      --repo-root <REPO_ROOT>       [default: .]
+      --trusted-tip <TRUSTED_TIPS>  Integration commit already merged into the worker (repeatable)
+      --json                        
+  -h, --help                        Print help

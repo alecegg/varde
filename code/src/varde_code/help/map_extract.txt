@@ -1,0 +1,10 @@
+Extract entities and symbols from a file or directory tree
+
+Usage: varde map extract [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>  Path to a file or directory to extract from
+
+Options:
+  -v, --verbose  Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help     Print help

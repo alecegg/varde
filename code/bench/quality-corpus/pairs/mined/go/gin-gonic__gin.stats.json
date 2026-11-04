@@ -1,0 +1,39 @@
+{
+  "accepted": 14,
+  "commits_walked": 2023,
+  "filters": {
+    "file_limit": {
+      "evaluated": 29,
+      "passed": 28
+    },
+    "function_limit": {
+      "evaluated": 26,
+      "passed": 17
+    },
+    "generated": {
+      "evaluated": 17,
+      "passed": 17
+    },
+    "intent": {
+      "evaluated": 1806,
+      "passed": 29
+    },
+    "parent": {
+      "evaluated": 2023,
+      "passed": 1806
+    },
+    "parse": {
+      "evaluated": 28,
+      "passed": 26
+    },
+    "public_feature": {
+      "evaluated": 17,
+      "passed": 14
+    }
+  },
+  "intent_matches": 29,
+  "language": "go",
+  "pin_sha": "0f09c3a9b4626d9fe9979cf4d0521d6ae32ab646",
+  "records_bytes": 15158,
+  "repository": "gin-gonic/gin"
+}

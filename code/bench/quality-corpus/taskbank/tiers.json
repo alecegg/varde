@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "padded_evidence": {
+    "small": false,
+    "rich": true
+  },
+  "tiers": {
+    "small": [
+      "csv-summary",
+      "inventory-adjustment",
+      "invoice-aging",
+      "price-order",
+      "reservation-calendar",
+      "retry-policy",
+      "scoreboard",
+      "shipment-state",
+      "shipping-quote",
+      "text-template"
+    ],
+    "rich": [
+      "order-quote",
+      "clinic-booking",
+      "shift-pay",
+      "rental-quote"
+    ]
+  },
+  "note": "Calibration must not use the padded variant of small tasks as padding evidence."
+}

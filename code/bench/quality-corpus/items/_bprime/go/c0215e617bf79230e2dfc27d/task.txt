@@ -1,0 +1,2 @@
+Decide whether a name is a valid identifier with an ASCII letter first and letters, digits or underscores afterwards.
+Input domain: ASCII text, including empty text and names that start with a digit or an underscore; a non-ASCII byte makes the name invalid.

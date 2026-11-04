@@ -1,0 +1,10 @@
+Query: session-start repo orientation map — entrypoints, foundational files, module layers, subsystems, symbols, flows, and hotspots assembled from the persisted index. JSON is the canonical output; `--format text` derives a plain-text rendering from the same JSON. Each flow summary carries a deduplicated `files` path table; its tree nodes reference paths by `f` index into that table rather than restating the path per node. (see `nav_map` help for inputs)
+
+Usage: varde map nav_map [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>             JSON object: { repoRoot, dbPath? } Example: {"repoRoot":"."}
+      --format <FORMAT>         Output format: `json` (default) or `text` [default: json] [possible values: json, text]
+      --with-project-knowledge  With `--format text`, prepend a pointer to the project's durable knowledge bundle
+  -v, --verbose                 Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help                    Print help

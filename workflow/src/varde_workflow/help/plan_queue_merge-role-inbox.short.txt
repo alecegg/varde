@@ -1,0 +1,3 @@
+Merge SQLite queue tables into the role inbox database
+
+Usage: varde plan queue merge-role-inbox

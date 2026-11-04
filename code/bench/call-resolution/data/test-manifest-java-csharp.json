@@ -1,0 +1,178 @@
+{
+  "class_shortfalls": {
+    "csharp": {},
+    "java": {
+      "test": {
+        "dynamic": {
+          "actual": 19,
+          "target": 50
+        }
+      }
+    }
+  },
+  "coverage": {
+    "csharp": {
+      "dev": {
+        "constructor": {
+          "available": 53020,
+          "in_repo": 21,
+          "quota": 50,
+          "selected": 50
+        },
+        "dynamic": {
+          "available": 191,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 50
+        },
+        "higher_order": {
+          "available": 2280,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 50
+        },
+        "imported": {
+          "available": 635623,
+          "in_repo": 50,
+          "quota": 50,
+          "selected": 50
+        },
+        "member": {
+          "available": 230168,
+          "in_repo": 25,
+          "quota": 50,
+          "selected": 50
+        },
+        "same_file": {
+          "available": 88321,
+          "in_repo": 45,
+          "quota": 50,
+          "selected": 50
+        }
+      },
+      "test": {
+        "constructor": {
+          "available": 11955,
+          "in_repo": 16,
+          "quota": 50,
+          "selected": 50
+        },
+        "dynamic": {
+          "available": 132,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 50
+        },
+        "higher_order": {
+          "available": 561,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 50
+        },
+        "imported": {
+          "available": 21307,
+          "in_repo": 50,
+          "quota": 50,
+          "selected": 50
+        },
+        "member": {
+          "available": 20719,
+          "in_repo": 25,
+          "quota": 50,
+          "selected": 50
+        },
+        "same_file": {
+          "available": 9011,
+          "in_repo": 47,
+          "quota": 50,
+          "selected": 50
+        }
+      }
+    },
+    "java": {
+      "dev": {
+        "constructor": {
+          "available": 21517,
+          "in_repo": 23,
+          "quota": 50,
+          "selected": 50
+        },
+        "dynamic": {
+          "available": 57,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 50
+        },
+        "higher_order": {
+          "available": 1634,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 50
+        },
+        "imported": {
+          "available": 33103,
+          "in_repo": 50,
+          "quota": 50,
+          "selected": 50
+        },
+        "member": {
+          "available": 59846,
+          "in_repo": 25,
+          "quota": 50,
+          "selected": 50
+        },
+        "same_file": {
+          "available": 27365,
+          "in_repo": 44,
+          "quota": 50,
+          "selected": 50
+        }
+      },
+      "test": {
+        "constructor": {
+          "available": 3236,
+          "in_repo": 18,
+          "quota": 50,
+          "selected": 56
+        },
+        "dynamic": {
+          "available": 19,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 19
+        },
+        "higher_order": {
+          "available": 234,
+          "in_repo": 0,
+          "quota": 50,
+          "selected": 56
+        },
+        "imported": {
+          "available": 4179,
+          "in_repo": 56,
+          "quota": 50,
+          "selected": 56
+        },
+        "member": {
+          "available": 13997,
+          "in_repo": 29,
+          "quota": 50,
+          "selected": 57
+        },
+        "same_file": {
+          "available": 3548,
+          "in_repo": 52,
+          "quota": 50,
+          "selected": 56
+        }
+      }
+    }
+  },
+  "files": {
+    "csharp-human-review.jsonl": "4bf87e576f96f30a6f50db75d11f6fd4401576e223c0e4670a3cab64d4de9b18",
+    "csharp.jsonl": "d227e7e714a22e352d278cd91f51ebce8f028553a3c540319ca9ef96cae532af",
+    "java-human-review.jsonl": "899bc4b3f950a32403d4c9ab1f36909d36a9b6787e6f510e3d2e3cb41bc1ac34",
+    "java.jsonl": "3be019da4638ac9460eed6434485acd552b6367d5a83ebba1010cd0c5bc3d5e4"
+  },
+  "quota": 50
+}

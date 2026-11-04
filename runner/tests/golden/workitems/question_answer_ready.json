@@ -1,0 +1,241 @@
+[
+  {
+    "returned": {
+      "id": "golden-04",
+      "idempotency_key": "question-key",
+      "text": "Need clarification",
+      "project": "workspace",
+      "state": "new",
+      "notes_path": "<DATA>/workitem-notes/golden-04/request.md",
+      "planner_session": null,
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 7,
+        "item_id": "golden-04",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-04",
+      "idempotency_key": "question-key",
+      "text": "Need clarification",
+      "project": "workspace",
+      "state": "planning",
+      "notes_path": "<DATA>/workitem-notes/golden-04/request.md",
+      "planner_session": "planner-question",
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 7,
+        "item_id": "golden-04",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 8,
+        "item_id": "golden-04",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      }
+    ]
+  },
+  {
+    "added": true,
+    "returned": {
+      "id": "golden-04",
+      "idempotency_key": "question-key",
+      "text": "Need clarification",
+      "project": "workspace",
+      "state": "asking",
+      "notes_path": "<DATA>/workitem-notes/golden-04/request.md",
+      "planner_session": "planner-question",
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [
+      {
+        "item_id": "golden-04",
+        "msg_id": "question-1",
+        "payload": {
+          "asked": "Which target?",
+          "options": [
+            "A",
+            "B"
+          ]
+        },
+        "answer": null,
+        "answer_key": null
+      }
+    ],
+    "audit": [
+      {
+        "seq": 7,
+        "item_id": "golden-04",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 8,
+        "item_id": "golden-04",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 9,
+        "item_id": "golden-04",
+        "prior_state": "planning",
+        "new_state": "asking",
+        "detail": "question question-1"
+      }
+    ]
+  },
+  {
+    "answered": true,
+    "returned": {
+      "id": "golden-04",
+      "idempotency_key": "question-key",
+      "text": "Need clarification",
+      "project": "workspace",
+      "state": "planning",
+      "notes_path": "<DATA>/workitem-notes/golden-04/request.md",
+      "planner_session": "planner-question",
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [
+      {
+        "item_id": "golden-04",
+        "msg_id": "question-1",
+        "payload": {
+          "asked": "Which target?",
+          "options": [
+            "A",
+            "B"
+          ]
+        },
+        "answer": "A",
+        "answer_key": "answer-key"
+      }
+    ],
+    "audit": [
+      {
+        "seq": 7,
+        "item_id": "golden-04",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 8,
+        "item_id": "golden-04",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 9,
+        "item_id": "golden-04",
+        "prior_state": "planning",
+        "new_state": "asking",
+        "detail": "question question-1"
+      },
+      {
+        "seq": 10,
+        "item_id": "golden-04",
+        "prior_state": "asking",
+        "new_state": "planning",
+        "detail": "question question-1 answered"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-04",
+      "idempotency_key": "question-key",
+      "text": "Need clarification",
+      "project": "workspace",
+      "state": "ready",
+      "notes_path": "<DATA>/workitem-notes/golden-04/request.md",
+      "planner_session": "planner-question",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "ready-message",
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [
+      {
+        "item_id": "golden-04",
+        "msg_id": "question-1",
+        "payload": {
+          "asked": "Which target?",
+          "options": [
+            "A",
+            "B"
+          ]
+        },
+        "answer": "A",
+        "answer_key": "answer-key"
+      }
+    ],
+    "audit": [
+      {
+        "seq": 7,
+        "item_id": "golden-04",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 8,
+        "item_id": "golden-04",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 9,
+        "item_id": "golden-04",
+        "prior_state": "planning",
+        "new_state": "asking",
+        "detail": "question question-1"
+      },
+      {
+        "seq": 10,
+        "item_id": "golden-04",
+        "prior_state": "asking",
+        "new_state": "planning",
+        "detail": "question question-1 answered"
+      },
+      {
+        "seq": 11,
+        "item_id": "golden-04",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      }
+    ]
+  }
+]

@@ -1,0 +1,91 @@
+/*
+ * Theme tokens (shared with the future component library):
+ * --surface-0/1/2, --surface-input, --surface-hover, --surface-selected,
+ * --border, --border-strong, --focus, --text, --text-muted, --accent,
+ * --status-<state>-bg/-fg. Supporting tokens cover text hierarchy, callouts,
+ * disabled controls, overlays, dialogs, code, and shadows.
+ * Light values preserve the current palette. Dark values are set below.
+ */
+
+:root {
+  --font-size-xs:12px; --font-size-sm:14px; --font-size-md:16px; --font-size-lg:20px;
+  --topbar-height-desktop:68px; --topbar-height-mobile:60px; --topbar-height-desktop-safe:calc(68px + env(safe-area-inset-top)); --topbar-height-mobile-safe:calc(60px + env(safe-area-inset-top)); --nav-item-h:48px; --screen-h:100dvh; --row-min-h:52px; --mail-row-h:72px; --content-max:1320px; --elevation-card:0 1px 2px var(--shadow-card);
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+  --radius-control:8px; --radius-card:12px; --control-h:44px;
+  --radius-pill:999px; --line:1px; --indicator-size:8px; --icon-size:20px; --selected-edge:3px;
+  --textarea-max-height:240px; --return-list-max-height:180px; --badge-height:24px; --dialog-max-width:440px; --menu-min-width:180px;
+  --layer-menu:20;--layer-dialog:30; --motion-fast:160ms; --ring-width:2px; --elevation-dialog:0 20px 70px var(--shadow-dialog); --elevation-menu:0 var(--space-2) var(--space-5) var(--shadow-nav);
+  color-scheme: light;
+  --surface-0:#f5f7fa; --surface-1:#fff; --surface-2:#f1f4f8; --surface-input:#f9fafc;
+  --surface-hover:#f1f4fa; --surface-selected:#e8eef7; --surface-inset:#edf0f4;
+  --surface-disabled:#eef1f5; --surface-warning:#fff8eb; --surface-success:#eff8f4; --surface-accent:#eef3ff;
+  --border:#cbd4df; --border-subtle:#e2e7ed; --border-control:#b9c5d3; --border-strong:#66758b;
+  --focus:#2349a8; --focus-muted:#748de8; --focus-shadow:#617de122;
+  --text:#1e293b; --text-strong:#17253c; --text-body:#334158; --text-secondary:#42516a; --text-on-accent:#fff;
+  --text-muted:#59677d; --text-subtle:#68758a; --text-meta:#59677d; --text-inverse:#fff;
+  --text-warning:#9b6710; --text-success:#2b785e; --text-success-muted:#648779; --text-danger:#a34d4d; --text-blocked:#8a3515; --text-accent-muted:#4c61a1;
+  --accent:#3159d9; --accent-muted:#4561bd; --status-live-fg:#23b685;
+  --status-success-bg:#e7f3ec; --status-success-fg:#145c3b;
+  --status-waiting-bg:#fff1d6; --status-waiting-fg:#754600;
+  --status-running-bg:#e7efff; --status-running-fg:#2349a8;
+  --status-idle-bg:#edf0f4; --status-idle-fg:#465366;
+  --status-blocked-bg:#fff0e8; --status-blocked-fg:#8a3515;
+  --status-needs-input-bg:#f0eaff; --status-needs-input-fg:#55319a;
+  --status-done-bg:#e7f3ec; --status-done-fg:#145c3b;
+  --status-unknown-bg:#edf0f4; --status-unknown-fg:#465366;
+  --surface-waiting:#fff4df; --text-waiting:#ad7412;
+  --surface-code:#f7f8fc; --code:#17253c; --overlay:#14213d66;
+  --shadow-card:#192c4a08; --shadow-nav:#24324c10; --shadow-drawer:#15223f33; --shadow-dialog:#17253c33;
+  --page:var(--surface-0); --card:var(--surface-1); --inset:var(--surface-2); --input:var(--surface-input);
+  --hover:var(--surface-hover); --selected:var(--surface-selected); --button:var(--accent); --disabled:#53627a;
+}
+:root[data-theme="dark"] {
+  color-scheme:dark;
+  --surface-0:#0f1219; --surface-1:#171c26; --surface-2:#212938; --surface-input:#111720;
+  --surface-hover:#252f3d; --surface-selected:#212938; --surface-inset:#252f3d; --surface-disabled:#3a4150;
+  --surface-warning:#3b3020; --surface-success:#173c2d; --surface-accent:#1e3458;
+  --border:#726b60; --border-subtle:#343b48; --border-control:#637681; --border-strong:#788692;
+  --focus:#91c4ff; --focus-muted:#91c4ff; --focus-shadow:#648be044;
+  --text:#c0cedd; --text-strong:#c0cedd; --text-body:#c0cedd; --text-secondary:#acbac9;
+  --text-muted:#acbac9; --text-subtle:#acbac9; --text-meta:#9eafc0; --text-inverse:#fff; --text-on-accent:#111821;
+  --text-warning:#f2c66d; --text-success:#84d6aa; --text-success-muted:#76b29a; --text-danger:#e09696; --text-blocked:#ffad87; --text-accent-muted:#a9cfff;
+  --accent:#80b8f5; --accent-muted:#91c4ff; --status-live-fg:#4bdcac;
+  --status-success-bg:#173c2d; --status-success-fg:#84d6aa;
+  --status-waiting-bg:#42300f; --status-waiting-fg:#f2c66d;
+  --status-running-bg:#1e3458; --status-running-fg:#9abaff;
+  --status-idle-bg:#303b49; --status-idle-fg:#c2ccda;
+  --status-blocked-bg:#45281e; --status-blocked-fg:#ffad87;
+  --status-needs-input-bg:#35264a; --status-needs-input-fg:#d0b1ff;
+  --status-done-bg:#173c2d; --status-done-fg:#84d6aa;
+  --status-unknown-bg:#303b49; --status-unknown-fg:#c2ccda;
+  --surface-waiting:#42300f; --text-waiting:#f2c66d;
+  --surface-code:#0c121a; --code:var(--text-strong); --overlay:#050a12c7;
+  --shadow-card:#00000066; --shadow-nav:#00000066; --shadow-drawer:#00000099; --shadow-dialog:#00000099;
+  --page:var(--surface-0); --card:var(--surface-1); --inset:var(--surface-2); --input:var(--surface-input);
+  --hover:var(--surface-hover); --selected:var(--surface-selected); --button:#527be5; --disabled:#465366;
+}
+:root{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);background:var(--surface-0);font-synthesis:none;text-rendering:optimizeLegibility}*{box-sizing:border-box}button,input,select,textarea{font-family:inherit;font-size:inherit}code{font-size:var(--font-size-sm)}small{font-size:var(--font-size-xs)}body{margin:0;min-width:320px}.brand{display:flex;align-items:center;gap:11px;color:var(--text-strong);text-decoration:none;font-weight:700;letter-spacing:-.02em}.brand-mark{width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--text-on-accent);display:grid;place-items:center;font-weight:800}.mail-list{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;box-shadow:0 3px 12px var(--shadow-card)}.muted{color:var(--text-subtle);font-size:var(--font-size-sm)}.options small,.return-row small{font-size:var(--font-size-xs)}.agent-list{list-style:none;margin:14px 0 0;padding:0}.agent-list li>div{flex:1;min-width:0}.agent-list small{font-size:10px;color:var(--text-subtle);margin-top:3px}.mail-list{overflow:hidden}.recommendation{margin:16px 0;padding:12px 14px;background:var(--surface-success);border-radius:9px;display:grid;gap:5px;color:var(--text-success)}.recommendation span{font-size:9px;font-weight:750;letter-spacing:.1em;color:var(--text-success)}.recommendation p{font-size:var(--font-size-xs);margin:0;color:var(--text-success)}
+@media(max-width:760px){.mail-list{max-height:310px;overflow:auto}}
+.drawer-overlay{position:fixed;inset:var(--topbar-height-mobile-safe) 0 0;background:var(--overlay);z-index:8}.mobile-drawer{position:fixed;inset:var(--topbar-height-mobile-safe) 0 auto 0;z-index:9;background:var(--surface-1);padding:20px 18px 24px;border-radius:0 0 14px 14px;box-shadow:0 14px 32px var(--shadow-drawer);outline:none}.drawer-title{font-size:var(--font-size-xs);letter-spacing:.12em;text-transform:uppercase;color:var(--text-subtle);font-weight:700}.drawer-nav{display:grid;gap:4px;margin-top:14px}.drawer-nav a{min-height:var(--nav-item-h);display:flex;align-items:center;padding:0 12px;color:var(--text-muted);text-decoration:none;border-radius:9px;font-size:var(--font-size-sm);font-weight:600}.drawer-nav a.active,.drawer-nav a:hover{background:var(--surface-selected);color:var(--accent)}
+.mailbox-list{min-width:0}.entry-status{min-height:18px;margin:8px 0 0;color:var(--text-muted);font-size:var(--font-size-xs)}
+:root{scroll-padding-block-start:calc(var(--topbar-height-mobile-safe) + var(--space-3))}
+@media(min-width:761px){:root{scroll-padding-block-start:calc(var(--topbar-height-desktop-safe) + var(--space-3))}}
+.brand{min-height:var(--control-h)}
+.muted,.agent-list small{color:var(--text-muted)}
+:focus-visible{outline:var(--ring-width) solid var(--focus);outline-offset:var(--ring-width)}
+.role-fields select{border-color:var(--border-strong)}
+.app-content,.app-content>*{min-width:0}
+
+.mail-list,.queue-layout>*{min-width:0}
+:root[data-theme="dark"] .role-fields select{background:var(--surface-input);color:var(--text)}
+:root[data-theme="dark"] .mail-list,:root[data-theme="dark"] .mobile-drawer{background:var(--surface-1);border-color:var(--border)}
+
+button,[role=tab],[role=menuitem],a{touch-action:manipulation}
+/* Shared hit target and readable component scale. */
+
+.nav-section-label,.nav-footer,.drawer-title{font-size:var(--font-size-xs)}.desktop-nav>a,.drawer-nav a{font-size:var(--font-size-sm)}.app-menu-toggle{font-size:var(--font-size-lg)}
+.app-content a{display:inline-flex;align-items:center;min-height:var(--control-h);max-width:100%;overflow-wrap:anywhere}
+.app-content summary{display:flex;align-items:center;min-height:var(--control-h);cursor:pointer;color:var(--text-body)}
+.app-content select{min-height:var(--control-h)}
+
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

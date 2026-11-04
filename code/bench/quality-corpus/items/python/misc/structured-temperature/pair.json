@@ -1,0 +1,11 @@
+{
+  "pair_id": "f68030acd9714f14cf7e6889",
+  "pair_group_id": "bf8616dc605b49773360dfb9",
+  "left_id": "6d8ef33ff5d85fa2b5e2025c",
+  "right_id": "03cd0c035da0aa3561eb6b7e",
+  "left": "good.py",
+  "right": "bad.py",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "mutable-flags"
+}

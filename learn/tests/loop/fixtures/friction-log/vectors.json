@@ -1,0 +1,61 @@
+[
+  {
+    "ts": "2026-01-01T00:00:00.000Z",
+    "pid": 1234,
+    "counter": 0,
+    "kind": "item_added",
+    "body": {
+      "title": "Alpha friction",
+      "source": "session"
+    },
+    "id": "7d2c0820f36a8e9d"
+  },
+  {
+    "ts": "2026-01-01T00:00:01.125Z",
+    "pid": 1234,
+    "counter": 1,
+    "kind": "occurrence_appended",
+    "body": {
+      "item": "0123456789abcdef",
+      "at": "2026-01-01T00:00:01.125Z",
+      "cwd": "/work",
+      "repo_root": "/repo",
+      "head_sha": "abc",
+      "evidence": "saw it again",
+      "cost": "$0.01"
+    },
+    "id": "9e815d1b7597d9c9"
+  },
+  {
+    "ts": "2026-01-01T00:00:02.250Z",
+    "pid": 42,
+    "counter": 9,
+    "kind": "status_changed",
+    "body": {
+      "item": "fedcba9876543210",
+      "at": "2026-01-01T00:00:02.250Z",
+      "from": "open",
+      "to": "resolved",
+      "reason": "fixed"
+    },
+    "id": "cefc526c11bdce29"
+  },
+  {
+    "ts": "2026-01-01T00:00:03.500Z",
+    "pid": 42,
+    "counter": 10,
+    "kind": "adoption_recorded",
+    "body": {
+      "at": "2026-01-01T00:00:03.500Z",
+      "summary": "fix",
+      "files": [
+        "a.py"
+      ],
+      "items": [
+        "0123456789abcdef"
+      ],
+      "commit_sha": "deadbeef"
+    },
+    "id": "5a150895173dcd80"
+  }
+]

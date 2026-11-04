@@ -1,0 +1,12 @@
+Export friction items as Markdown files, or export the event log in one Markdown file
+
+Usage: varde learn friction export [OPTIONS] [<DIRECTORY>]
+
+Arguments:
+  <DIRECTORY>  Directory that will receive one Markdown file per friction item
+
+Options:
+      --md      Export the original events in one portable Markdown file
+      --out <FILE>  Output file for --md (defaults to stdout)
+      --json  Print the shared machine-readable output envelope
+  -h, --help  Print help

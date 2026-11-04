@@ -1,0 +1,162 @@
+[
+  {
+    "claimed": true,
+    "returned": {
+      "id": "golden-08",
+      "idempotency_key": "launch-key",
+      "text": "Launch this",
+      "project": "workspace",
+      "state": "queued",
+      "notes_path": "<DATA>/workitem-notes/golden-08/request.md",
+      "planner_session": "planner-launch",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "launch-ready",
+      "launch_request_id": "sending",
+      "launch_request_notes": "<DATA>/launch.md"
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 23,
+        "item_id": "golden-08",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 24,
+        "item_id": "golden-08",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 25,
+        "item_id": "golden-08",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      },
+      {
+        "seq": 26,
+        "item_id": "golden-08",
+        "prior_state": "ready",
+        "new_state": "queued",
+        "detail": "user decision"
+      },
+      {
+        "seq": 27,
+        "item_id": "golden-08",
+        "prior_state": "ready",
+        "new_state": "queued",
+        "detail": "launch request claimed"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-08",
+      "idempotency_key": "launch-key",
+      "text": "Launch this",
+      "project": "workspace",
+      "state": "queued",
+      "notes_path": "<DATA>/workitem-notes/golden-08/request.md",
+      "planner_session": "planner-launch",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "launch-ready",
+      "launch_request_id": "launch-message",
+      "launch_request_notes": "<DATA>/launch.md"
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 23,
+        "item_id": "golden-08",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 24,
+        "item_id": "golden-08",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 25,
+        "item_id": "golden-08",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      },
+      {
+        "seq": 26,
+        "item_id": "golden-08",
+        "prior_state": "ready",
+        "new_state": "queued",
+        "detail": "user decision"
+      },
+      {
+        "seq": 27,
+        "item_id": "golden-08",
+        "prior_state": "ready",
+        "new_state": "queued",
+        "detail": "launch request claimed"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-08",
+      "idempotency_key": "launch-key",
+      "text": "Launch this",
+      "project": "workspace",
+      "state": "queued",
+      "notes_path": "<DATA>/workitem-notes/golden-08/request.md",
+      "planner_session": "planner-launch",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "launch-ready",
+      "launch_request_id": "launch-message",
+      "launch_request_notes": "<DATA>/launch.md"
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 23,
+        "item_id": "golden-08",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 24,
+        "item_id": "golden-08",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 25,
+        "item_id": "golden-08",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      },
+      {
+        "seq": 26,
+        "item_id": "golden-08",
+        "prior_state": "ready",
+        "new_state": "queued",
+        "detail": "user decision"
+      },
+      {
+        "seq": 27,
+        "item_id": "golden-08",
+        "prior_state": "ready",
+        "new_state": "queued",
+        "detail": "launch request claimed"
+      }
+    ]
+  }
+]

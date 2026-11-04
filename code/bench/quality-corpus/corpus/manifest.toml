@@ -1,0 +1,816 @@
+schema_version = 1
+manifest_digest = "d79f3d0ee696916022451bf1d04f694e79cc65bc33166573701ce5724104097b"
+pair_groups = []
+
+[[repositories]]
+name = "pallets/flask"
+url = "https://github.com/pallets/flask.git"
+spdx = "BSD-3-Clause"
+languages = ["Python"]
+pin_sha = "d086db856be187255b8ec61ef409357393020f32"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "psf/requests"
+url = "https://github.com/psf/requests.git"
+spdx = "Apache-2.0"
+languages = ["Python"]
+pin_sha = "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60"
+history_cutoffs = []
+roles = []
+status = "verified"
+
+[[repositories]]
+name = "django/django"
+url = "https://github.com/django/django.git"
+spdx = "BSD-3-Clause"
+languages = ["Python"]
+pin_sha = "d430084791a61b31cecec132bce3dca19194f7f2"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "scikit-learn/scikit-learn"
+url = "https://github.com/scikit-learn/scikit-learn.git"
+spdx = "BSD-3-Clause"
+languages = ["Python"]
+pin_sha = "85593ca7a07a9956ac891f6bfc3fedca53b74f72"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "pandas-dev/pandas"
+url = "https://github.com/pandas-dev/pandas.git"
+spdx = "BSD-3-Clause"
+languages = ["Python"]
+pin_sha = "03e5d938adbd3ec9314c326b002170b73bde2c9f"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "pytest-dev/pytest"
+url = "https://github.com/pytest-dev/pytest.git"
+spdx = "MIT"
+languages = ["Python"]
+pin_sha = "cb6ff97bcb147f2bb5d9e0072c424dc03a452ba1"
+history_cutoffs = []
+roles = ["mutation-base"]
+status = "verified"
+
+[[repositories]]
+name = "expressjs/express"
+url = "https://github.com/expressjs/express.git"
+spdx = "MIT"
+languages = ["JavaScript"]
+pin_sha = "a419aa7350389a275ab45fde2e849ed1f02449ef"
+history_cutoffs = []
+roles = []
+status = "verified"
+
+[[repositories]]
+name = "lodash/lodash"
+url = "https://github.com/lodash/lodash.git"
+spdx = "MIT"
+languages = ["JavaScript"]
+pin_sha = "2b5e6f7399a7b48005140b5d5c6bc6c0e62919a8"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "prettier/prettier"
+url = "https://github.com/prettier/prettier.git"
+spdx = "MIT"
+languages = ["JavaScript"]
+pin_sha = "344d6dc42c8057fbf5573326b52dbc8a43635e7e"
+history_cutoffs = []
+roles = []
+status = "verified"
+
+[[repositories]]
+name = "eslint/eslint"
+url = "https://github.com/eslint/eslint.git"
+spdx = "MIT"
+languages = ["JavaScript"]
+pin_sha = "e06fe87c41cc6210269260a097c61cefb92f456a"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "microsoft/TypeScript"
+url = "https://github.com/microsoft/TypeScript.git"
+spdx = "Apache-2.0"
+languages = ["TypeScript"]
+pin_sha = "2e9fb00f5f5c9186d09aabd78cced5ce2497456d"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "vuejs/core"
+url = "https://github.com/vuejs/core.git"
+spdx = "MIT"
+languages = ["TypeScript"]
+pin_sha = "bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c"
+history_cutoffs = []
+roles = ["mutation-base"]
+status = "verified"
+
+[[repositories]]
+name = "typeorm/typeorm"
+url = "https://github.com/typeorm/typeorm.git"
+spdx = "MIT"
+languages = ["TypeScript"]
+pin_sha = "fe92394287516feeada6e9c308ebe22deca2458e"
+history_cutoffs = []
+roles = []
+status = "verified"
+
+[[repositories]]
+name = "nestjs/nest"
+url = "https://github.com/nestjs/nest.git"
+spdx = "MIT"
+languages = ["TypeScript"]
+pin_sha = "2eb7be8dc3410ac5b89aa84fd334e6813b53059c"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "shadcn-ui/ui"
+url = "https://github.com/shadcn-ui/ui.git"
+spdx = "MIT"
+languages = ["TSX"]
+pin_sha = "d2fba50ee5b9113008b5bb908563527b7efd2f27"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "mantinedev/mantine"
+url = "https://github.com/mantinedev/mantine.git"
+spdx = "MIT"
+languages = ["TSX"]
+pin_sha = "2d0a040f42011e791caf0bc56b9fbdd36ce55cef"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "excalidraw/excalidraw"
+url = "https://github.com/excalidraw/excalidraw.git"
+spdx = "MIT"
+languages = ["TSX"]
+pin_sha = "4c37956ba5f04ec342a9d9d5891a38f22c5b7b4e"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "google/guava"
+url = "https://github.com/google/guava.git"
+spdx = "Apache-2.0"
+languages = ["Java"]
+pin_sha = "5e82f2f528fbbd970e00748025b48e3eb42ed702"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "apache/commons-lang"
+url = "https://github.com/apache/commons-lang.git"
+spdx = "Apache-2.0"
+languages = ["Java"]
+pin_sha = "9c86ffe308e7c682df3b1cf76f27dfc5bb6a2243"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "lysine-dev/okhttp"
+url = "https://github.com/lysine-dev/okhttp.git"
+redirected_from = "square/okhttp"
+spdx = "Apache-2.0"
+languages = ["Java"]
+pin_sha = "a66e3d2277932963c75b0cb7502bf181f7863178"
+history_cutoffs = []
+roles = ["mutation-base"]
+status = "verified"
+
+[[repositories]]
+name = "junit-team/junit-framework"
+url = "https://github.com/junit-team/junit-framework.git"
+redirected_from = "junit-team/junit5"
+spdx = "EPL-2.0"
+languages = ["Java"]
+pin_sha = "58516a5a0f41c50d58578fc86e805151c7b4b25c"
+history_cutoffs = []
+roles = []
+status = "unverified"
+
+[[repositories]]
+name = "ktorio/ktor"
+url = "https://github.com/ktorio/ktor.git"
+spdx = "Apache-2.0"
+languages = ["Kotlin"]
+pin_sha = "4016bdfe32256ff82723af7259e294908e48be75"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "Kotlin/kotlinx.coroutines"
+url = "https://github.com/Kotlin/kotlinx.coroutines.git"
+spdx = "Apache-2.0"
+languages = ["Kotlin"]
+pin_sha = "7e0d1b3e9ca83652427ae00dda7d1673f058a743"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "JetBrains/Exposed"
+url = "https://github.com/JetBrains/Exposed.git"
+spdx = "Apache-2.0"
+languages = ["Kotlin"]
+pin_sha = "09f814c61c22851b76840ccb65c1ac2c4db97452"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "scala/scala"
+url = "https://github.com/scala/scala.git"
+spdx = "Apache-2.0"
+languages = ["Scala"]
+pin_sha = "d47c7568353f5ad3a97229f55f87ec3204dec876"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "playframework/playframework"
+url = "https://github.com/playframework/playframework.git"
+spdx = "Apache-2.0"
+languages = ["Scala"]
+pin_sha = "9f9c0cdc52e13b3c956739b4d93756ed3a32bbfc"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "typelevel/cats"
+url = "https://github.com/typelevel/cats.git"
+spdx = "MIT"
+languages = ["Scala"]
+pin_sha = "4a2ea736632c64aaf2e4915e6922e3585379382f"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "spf13/cobra"
+url = "https://github.com/spf13/cobra.git"
+spdx = "Apache-2.0"
+languages = ["Go"]
+pin_sha = "adbc8813901bba65827259daa8e22ff94ec1f30e"
+history_cutoffs = []
+roles = ["mutation-base"]
+status = "verified"
+
+[[repositories]]
+name = "gin-gonic/gin"
+url = "https://github.com/gin-gonic/gin.git"
+spdx = "MIT"
+languages = ["Go"]
+pin_sha = "0f09c3a9b4626d9fe9979cf4d0521d6ae32ab646"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "prometheus/prometheus"
+url = "https://github.com/prometheus/prometheus.git"
+spdx = "Apache-2.0"
+languages = ["Go"]
+pin_sha = "c052a79dc7fd0f2df2219ffe336f510b0d149b72"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "BurntSushi/ripgrep"
+url = "https://github.com/BurntSushi/ripgrep.git"
+spdx = "MIT"
+languages = ["Rust"]
+pin_sha = "3fce3b5bb0236da2df6d99672afb8a719642eca7"
+history_cutoffs = []
+roles = ["mutation-base"]
+status = "verified"
+
+[[repositories]]
+name = "serde-rs/serde"
+url = "https://github.com/serde-rs/serde.git"
+spdx = "MIT"
+languages = ["Rust"]
+pin_sha = "0db9b3b504bcb0a7fa9cf001429869519afd3e9a"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "tokio-rs/tokio"
+url = "https://github.com/tokio-rs/tokio.git"
+spdx = "MIT"
+languages = ["Rust"]
+pin_sha = "cdd9dae3aa5056e23dc4d5bc4f852ab8fbf27aff"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "clap-rs/clap"
+url = "https://github.com/clap-rs/clap.git"
+spdx = "MIT"
+languages = ["Rust"]
+pin_sha = "ccc89b83875474399e9d9d70841163f6319d1a41"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "redis/redis"
+url = "https://github.com/redis/redis.git"
+spdx = "BSD-3-Clause"
+languages = ["C"]
+pin_sha = "ae987404da76a8c288b3cb94bff8bf47ac1a6b2f"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "curl/curl"
+url = "https://github.com/curl/curl.git"
+spdx = "curl"
+languages = ["C"]
+pin_sha = "629646d9b798a90fdc6d35497c8cab2d7f196588"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "jqlang/jq"
+url = "https://github.com/jqlang/jq.git"
+spdx = "MIT"
+languages = ["C"]
+pin_sha = "633ae6058a05b0240c798f6b7b60d3b0a87cab8e"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "libuv/libuv"
+url = "https://github.com/libuv/libuv.git"
+spdx = "MIT"
+languages = ["C"]
+pin_sha = "a267f5688be25e8d4628e296245a041adc2ca072"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "nlohmann/json"
+url = "https://github.com/nlohmann/json.git"
+spdx = "MIT"
+languages = ["C++"]
+pin_sha = "0e95fe8200adbf0e033d0c0818eea473e1d4d346"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "fmtlib/fmt"
+url = "https://github.com/fmtlib/fmt.git"
+spdx = "MIT"
+languages = ["C++"]
+pin_sha = "fdf31252e61ca7efe99af41bb4780353cc2253dd"
+history_cutoffs = []
+roles = ["mutation-base"]
+status = "verified"
+
+[[repositories]]
+name = "abseil/abseil-cpp"
+url = "https://github.com/abseil/abseil-cpp.git"
+spdx = "Apache-2.0"
+languages = ["C++"]
+pin_sha = "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "google/leveldb"
+url = "https://github.com/google/leveldb.git"
+spdx = "BSD-3-Clause"
+languages = ["C++"]
+pin_sha = "bb74ef739973a70ca9f0d90788a1da89b788c0ad"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "JamesNK/Newtonsoft.Json"
+url = "https://github.com/JamesNK/Newtonsoft.Json.git"
+spdx = "MIT"
+languages = ["C#"]
+pin_sha = "52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "App-vNext/Polly"
+url = "https://github.com/App-vNext/Polly.git"
+spdx = "BSD-3-Clause"
+languages = ["C#"]
+pin_sha = "3f3adad9d5af85658fc3585018f02a2d8c2173e8"
+history_cutoffs = []
+roles = ["mutation-base"]
+status = "verified"
+
+[[repositories]]
+name = "dotnet/roslyn"
+url = "https://github.com/dotnet/roslyn.git"
+spdx = "MIT"
+languages = ["C#"]
+pin_sha = "3645b6aa36ad41775a73e57a620787a3d38327a0"
+history_cutoffs = []
+roles = ["pairs"]
+status = "verified"
+
+[[repositories]]
+name = "laravel/framework"
+url = "https://github.com/laravel/framework.git"
+spdx = "MIT"
+languages = ["PHP"]
+pin_sha = "e51b5fe16d6f0e547137087e52c6106118c319f1"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "symfony/symfony"
+url = "https://github.com/symfony/symfony.git"
+spdx = "MIT"
+languages = ["PHP"]
+pin_sha = "1eae1802fba5e9247f682effedeadc76e467e6a0"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "composer/composer"
+url = "https://github.com/composer/composer.git"
+spdx = "MIT"
+languages = ["PHP"]
+pin_sha = "43f74517021a59ed4054a801c1472ef66355c49a"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "rails/rails"
+url = "https://github.com/rails/rails.git"
+spdx = "MIT"
+languages = ["Ruby"]
+pin_sha = "e9aab74b131fbc15cd07332315b836c760fbf4f0"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "rubocop/rubocop"
+url = "https://github.com/rubocop/rubocop.git"
+spdx = "MIT"
+languages = ["Ruby"]
+pin_sha = "a3b99c7c5944cd203d79a0b6558e634ac656994f"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "sinatra/sinatra"
+url = "https://github.com/sinatra/sinatra.git"
+spdx = "MIT"
+languages = ["Ruby"]
+pin_sha = "cb22afd7902b566b6eaba6c4ea89739494a65d12"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "Alamofire/Alamofire"
+url = "https://github.com/Alamofire/Alamofire.git"
+spdx = "MIT"
+languages = ["Swift"]
+pin_sha = "bda9ed57d72988a3a2ada33d824583541f86eac6"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "apple/swift-nio"
+url = "https://github.com/apple/swift-nio.git"
+spdx = "Apache-2.0"
+languages = ["Swift"]
+pin_sha = "eabcc14f9dcb2bdba7efecdcc343e7bb5f29fce1"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "vapor/vapor"
+url = "https://github.com/vapor/vapor.git"
+spdx = "MIT"
+languages = ["Swift"]
+pin_sha = "4245e700c86970fb0cfc77035f50f17f88e4c3ef"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "dart-lang/http"
+url = "https://github.com/dart-lang/http.git"
+spdx = "BSD-3-Clause"
+languages = ["Dart"]
+pin_sha = "6e91ce3e73ab079114de3684367318287b08d893"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "rrousselGit/riverpod"
+url = "https://github.com/rrousselGit/riverpod.git"
+spdx = "MIT"
+languages = ["Dart"]
+pin_sha = "87aad84b1afcd592c7313768d23d391f1441d586"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "flutter/flutter"
+url = "https://github.com/flutter/flutter.git"
+spdx = "BSD-3-Clause"
+languages = ["Dart"]
+pin_sha = "84a33147edb0a7bbd3c5b315d0e3e66cf71df3a1"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "elixir-lang/elixir"
+url = "https://github.com/elixir-lang/elixir.git"
+spdx = "Apache-2.0"
+languages = ["Elixir"]
+pin_sha = "e8c706061f1e07d4e638b2f05da7067d476214bc"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "phoenixframework/phoenix"
+url = "https://github.com/phoenixframework/phoenix.git"
+spdx = "MIT"
+languages = ["Elixir"]
+pin_sha = "1bae3a639f84cd97ccb6b984a8ef4fcdc7aa48ae"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "elixir-ecto/ecto"
+url = "https://github.com/elixir-ecto/ecto.git"
+spdx = "Apache-2.0"
+languages = ["Elixir"]
+pin_sha = "ad8fda5dea763fb2e9ddaf22d6e566066568e54e"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "haskell/cabal"
+url = "https://github.com/haskell/cabal.git"
+spdx = "BSD-3-Clause"
+languages = ["Haskell"]
+pin_sha = "f7ad3aa5ca69aa93cf2aae857bbde00d71ed38d6"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "PostgREST/postgrest"
+url = "https://github.com/PostgREST/postgrest.git"
+spdx = "MIT"
+languages = ["Haskell"]
+pin_sha = "c042567494b1cbb5009005b82c78d9e5da8b4a2a"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "yesodweb/yesod"
+url = "https://github.com/yesodweb/yesod.git"
+spdx = "MIT"
+languages = ["Haskell"]
+pin_sha = "4d3fcc460fabc0b1f85ee4cc705cc79c5753ccfc"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "Kong/kong"
+url = "https://github.com/Kong/kong.git"
+spdx = "Apache-2.0"
+languages = ["Lua"]
+pin_sha = "6605dd81630d5f239514cf0dcdf77b51b878bd24"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "LuaRocks/luarocks"
+url = "https://github.com/LuaRocks/luarocks.git"
+spdx = "MIT"
+languages = ["Lua"]
+pin_sha = "f0916086ea5bc5e260cbe813bae222a0a149cdb3"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "folke/lazy.nvim"
+url = "https://github.com/folke/lazy.nvim.git"
+spdx = "Apache-2.0"
+languages = ["Lua"]
+pin_sha = "306a05526ada86a7b30af95c5cc81ffba93fef97"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "nvm-sh/nvm"
+url = "https://github.com/nvm-sh/nvm.git"
+spdx = "MIT"
+languages = ["Bash"]
+pin_sha = "b1b3a0038c0666c7436cb5d383608b4b72c8300b"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "bats-core/bats-core"
+url = "https://github.com/bats-core/bats-core.git"
+spdx = "MIT"
+languages = ["Bash"]
+pin_sha = "f2a9f7449df1701429a2541499e925a5fa6966d2"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "ohmyzsh/ohmyzsh"
+url = "https://github.com/ohmyzsh/ohmyzsh.git"
+spdx = "MIT"
+languages = ["Bash"]
+pin_sha = "964ddf789b022b6958b27d02d7fa54f552de21e9"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "pyenv/pyenv"
+url = "https://github.com/pyenv/pyenv.git"
+spdx = "MIT"
+languages = ["Bash"]
+pin_sha = "702ac01121aa09a9c0bb563a13b19f1189e4ff01"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "OpenZeppelin/openzeppelin-contracts"
+url = "https://github.com/OpenZeppelin/openzeppelin-contracts.git"
+spdx = "MIT"
+languages = ["Solidity"]
+pin_sha = "b04d141ba4fec9b0f970ce4c7746b0a02e50000b"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "Vectorized/solady"
+url = "https://github.com/Vectorized/solady.git"
+spdx = "MIT"
+languages = ["Solidity"]
+pin_sha = "2afba69bf67b78dd4abeadcc696052b3a6f71499"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "foundry-rs/forge-std"
+url = "https://github.com/foundry-rs/forge-std.git"
+spdx = "MIT"
+languages = ["Solidity"]
+pin_sha = "b013eff2ac4fce26f34d789e6f5c49021c5ee817"
+history_cutoffs = []
+roles = ["held-out"]
+status = "verified"
+
+[[repositories]]
+name = "pallets/click"
+url = "https://github.com/pallets/click.git"
+spdx = "BSD-3-Clause"
+languages = ["Python"]
+pin_sha = "2247b35ea1c47c727d7a06e51fa280e12a863ff6"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "encode/httpx"
+url = "https://github.com/encode/httpx.git"
+spdx = "BSD-3-Clause"
+languages = ["Python"]
+pin_sha = "b5addb64f0161ff6bfe94c124ef76f6a1fba5254"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "python-attrs/attrs"
+url = "https://github.com/python-attrs/attrs.git"
+spdx = "MIT"
+languages = ["Python"]
+pin_sha = "ee66e7274852438cc23d4240a1a9cd632fda8b52"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "pydantic/pydantic"
+url = "https://github.com/pydantic/pydantic.git"
+spdx = "MIT"
+languages = ["Python"]
+pin_sha = "5adfeaaaea947f81f0f01868604f219084ec151a"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "axios/axios"
+url = "https://github.com/axios/axios.git"
+spdx = "MIT"
+languages = ["JavaScript"]
+pin_sha = "326843a3902d73c9f6af9bad7b55e2412566a251"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "colinhacks/zod"
+url = "https://github.com/colinhacks/zod.git"
+spdx = "MIT"
+languages = ["TypeScript"]
+pin_sha = "680d19f7d1e042e55934209caeb79bc843b94f44"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "fastify/fastify"
+url = "https://github.com/fastify/fastify.git"
+spdx = "MIT"
+languages = ["TypeScript"]
+pin_sha = "e03b48ba3cd92dcbdafcb624579318e0f22176d2"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+
+[[repositories]]
+name = "sindresorhus/got"
+url = "https://github.com/sindresorhus/got.git"
+spdx = "MIT"
+languages = ["TypeScript"]
+pin_sha = "05b4476913da39a47dd8e20d29e250f28b0a6dca"
+history_cutoffs = []
+roles = ["calibration"]
+status = "verified"
+

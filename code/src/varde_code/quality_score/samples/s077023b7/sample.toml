@@ -1,0 +1,16 @@
+language = "typescript"
+task = "Build a subscription invoicing module in `original.ts` with no third-party dependencies."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.ts" = "7b2e208487669fabc20ad990d97361595d6158e061b4c06812f23d94a42e19d7"
+"judge-classes.ts" = "8ff637aafc108dcda4ad9caefb95642f489a44e66f29dc73545510a63f616dbb"
+"judge-defensive.ts" = "9b2996d2934f5c5cc7148fedac450a74611fac36b5c76189d948ce34b0df02d7"
+"judge-extract.ts" = "256c2094bf0c0b77e168d4d0267d1c12496a5634591efa9d6b396a3e465f3870"
+"judge-inline.ts" = "4795ebe2e128d8e54d24ae2dd428dae7e785cf817a604b993df1505c70963ab4"
+"judge-names.ts" = "de6099c87b06b1f34d87ec00638db6502cf98aa9c51f297d435d7adf6cb587a9"
+"original.ts" = "ac1063a0ce06ceb5e71da0b110d65d860cada56f6fed0ecc5a21b2bbaf9f553d"
+"smoothed.ts" = "077023b768b7b76522b43784efec16f033a5c4f3bbdd4f1891fcb3e1a9a3f5ed"
+"smoothing.md" = "17139337ab0af1b0560707136e80aab392c187e3bacd2c0b4f9cc02b22ca5461"
+"task.md" = "8282343fa93ba75564f6bf8ed57464d58910e9cc2a844e8f9098e4dda4b0927d"

@@ -1,0 +1,5 @@
+{"v":1,"id":"fad2bddf518e1fe7","ts":"2025-01-01T00:00:00.000Z","kind":"item_added","repo":"/repo","body":{"title":"Golden","source":"pytest","repo_root":"/repo","target":"docs/guide.md","tags":["golden"]}}
+{"v":1,"id":"a1f2685ad41d1d9d","ts":"2025-01-01T00:00:00.001Z","kind":"occurrence_appended","body":{"item":"fad2bddf518e1fe7","at":"2025-01-01T00:00:00.000Z","cwd":"/golden/work","repo_root":"/repo","head_sha":"abc","evidence":"first evidence"}}
+{"v":1,"id":"37fafe04da758921","ts":"2025-01-01T00:00:00.002Z","kind":"occurrence_appended","body":{"item":"fad2bddf518e1fe7","at":"2025-01-01T00:00:06.000Z","cwd":"/golden/work","repo_root":"/repo","head_sha":"abc","evidence":"again"}}
+{"v":1,"id":"8381007d2e9a42b2","ts":"2025-01-01T00:00:00.003Z","kind":"status_changed","body":{"item":"fad2bddf518e1fe7","at":"2025-01-01T00:00:02.000Z","from":"open","to":"resolved","reason":"fixed"}}
+{"v":1,"id":"6c8f6a85480f1f4b","ts":"2025-01-01T00:00:00.004Z","kind":"status_changed","body":{"item":"fad2bddf518e1fe7","at":"2025-01-01T00:00:03.000Z","from":"resolved","to":"promoted","reason":"Recorded adoption 1"}}

@@ -1,0 +1,11 @@
+{
+  "pair_id": "d9e6ef274a2d0dc0fa88b923",
+  "pair_group_id": "e6d210b2e704f1cdf24cf1c7",
+  "left_id": "76a907ff03b9bac0e2ce850c",
+  "right_id": "58f9f29230a1a538f152832f",
+  "left": "good.py",
+  "right": "bad.py",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "unclear-names"
+}

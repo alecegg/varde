@@ -1,0 +1,30 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "clap_complete/src/shells/fish.rs"
+  ],
+  "changed_functions": [
+    "gen_fish_inner"
+  ],
+  "child_sha": "b16f987ad7076c8a375c78efaea8f0b9a5e57817",
+  "file_licenses": {
+    "clap-rs/clap:clap_complete/src/shells/fish.rs": "MIT"
+  },
+  "id": "9a4fcfef590f93d2d2e88e40",
+  "intent": {
+    "linked_issues": [],
+    "message": "style: Escaping tab as \\t for more readability for fish"
+  },
+  "label_source": "developer-intent",
+  "language": "rust",
+  "left": "a.rs",
+  "license": "MIT",
+  "pair_group_id": "refactor-ecf17dc4cb0af636",
+  "parent_sha": "cf151fd46b444d1afbda5c279f769b36e9ccc3ec",
+  "pin_sha": "ccc89b83875474399e9d9d70841163f6319d1a41",
+  "repo": "clap-rs/clap",
+  "right": "b.rs",
+  "split": "dev",
+  "upstream_url": "https://github.com/clap-rs/clap.git"
+}

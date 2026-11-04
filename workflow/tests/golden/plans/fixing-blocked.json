@@ -1,0 +1,4 @@
+{
+  "output": "{\"data\":{\"path\":\"<TMP>/working/plans/group/nested/tasks/task.md\",\"status\":\"blocked\"},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":true,\"outcome\":\"success\",\"schema_version\":1}\n",
+  "bytes": "---\ntype: task\nid: task\ntitle: Task\nstatus: blocked\nstatus_at: 2023-11-14T22:15:00Z\n---\n"
+}

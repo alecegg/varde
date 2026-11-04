@@ -1,0 +1,39 @@
+{
+  "accepted": 324,
+  "commits_walked": 35026,
+  "filters": {
+    "file_limit": {
+      "evaluated": 689,
+      "passed": 519
+    },
+    "function_limit": {
+      "evaluated": 467,
+      "passed": 365
+    },
+    "generated": {
+      "evaluated": 365,
+      "passed": 364
+    },
+    "intent": {
+      "evaluated": 34434,
+      "passed": 689
+    },
+    "parent": {
+      "evaluated": 35026,
+      "passed": 34434
+    },
+    "parse": {
+      "evaluated": 519,
+      "passed": 467
+    },
+    "public_feature": {
+      "evaluated": 364,
+      "passed": 324
+    }
+  },
+  "intent_matches": 689,
+  "language": "python",
+  "pin_sha": "d430084791a61b31cecec132bce3dca19194f7f2",
+  "records_bytes": 318012,
+  "repository": "django/django"
+}

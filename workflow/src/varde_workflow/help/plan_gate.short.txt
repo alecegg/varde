@@ -1,0 +1,3 @@
+Run deterministic checks on a task commit before integration
+
+Usage: varde plan gate <TASK> [--commit <SHA>]

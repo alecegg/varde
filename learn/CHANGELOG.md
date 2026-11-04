@@ -1,0 +1,29 @@
+# Changelog
+
+- Absorb the `doc` and `knowledge` modules as the `docs` and `knowledge` subpackages and regroup the commands (see `AGENTS.md`). Add `varde learn knowledge map`. Store commands: `varde learn calls` is now `varde learn sessions calls`, and `how-report` is `varde learn skills demand`.
+- Add `varde learn store prune --domain calls [--days N] [--dry-run] [--vacuum]` and a used-through watermark: call rows older than the retention window (`[retention] calls_days` in `sweep.toml`, default 30) and older than the watermark set by `calls`, `how-report` and `guardrails list` are deleted. `store status` shows the watermark and oldest `ts`, the sweep prunes and reports `calls_pruned`, and a report window longer than the retention warns and adds `retention_days` to its meta.
+- Add `varde learn store status|migrate|verify|retire` to move friction, the analyzed ledger with digests, and the CLI call log from files into `learn.sqlite3`, one domain at a time, with verified one-way migration (see `docs/learn-store.md`). Domains stay on files until migrated and `--json` output is unchanged.
+- Read and write the analyzed-session ledger and sweep digests through `varde-data`; files and formats are unchanged. The copied-store gate now also checks `analyzed.jsonl` and `digests/`.
+- Friction storage (event log, cache database, schema migrations, store path resolution) now lives in `varde-data`; `learn friction` and `adopt` are the CLI over `FrictionRepository`. Files, formats and `--json` output are unchanged.
+- Add redacted token-spend tables, usage coverage, comparisons, and measured waste findings to daily reviews.
+- Add `varde learn run` for windowed daily session reviews with configurable sources in `sources.toml`, a reviewed-session ledger, and separate setup and project findings.
+- Add Pi session discovery to learn review and include Claude subagents in review coverage.
+- Report review sweep warnings separately from session failures, and handle oversized OpenCode sessions without failing the sweep.
+- Add a versioned append-only ledger for daily session review, with growth detection, retry limits, and sweep imports.
+- Register 15 routed CLI steps as learn guardrails and verify their recorded routes.
+- Preserve original tool output byte lengths in diagnosis snapshots and flag only uncaptured outputs of at least 4096 bytes.
+- Register and count blocked worktree tool-install and pending-inbox hook firings.
+- Record every `varde` call (command, status, duration, session) in `cli_calls.jsonl`; add `varde learn calls` (failure and retry rates) and `varde learn guardrails` (guardrail registry, firing counts, `--dead` report, `fire`). Git hook stages record firings.
+- Exclude environment-limited output evals from runs and scoring, and list their IDs in run summaries.
+- Fix diagnosis summary adapter discovery, usage and tool-result accounting, trace anchors, and analyzed-session ledger records; fix friction triage edge cases.
+- Add a skill procedure for summarizing new sessions, capturing recurring friction, and triaging items.
+- Friction triage supports multi-item `show --brief` and multi-ID `set-status`.
+- Friction additions confirm the created or updated item ID on one line.
+- `diagnose summary` reports compact multi-session metrics and waste patterns.
+- Learn tracks analyzed sessions in an append-only JSONL ledger.
+- Learn diagnosis exposes per-session token and time metrics with traceable waste signals.
+- Learn subprocess timeouts now cover blocking stdin delivery.
+- Codex diagnosis verifies 0.162.1 and 0.162.0-alpha.17.2 rollout readers and reports unverified versions separately from oversized headers.
+- Codex diagnosis reports exit 2 for unknown subcommands even when `--help` is present.
+- Codex diagnosis skips empty Codex rollouts.
+- Mark only successfully inspected sessions as analyzed, so failed sessions are retried; add friction tags with list filtering and store migration.

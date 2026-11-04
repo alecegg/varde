@@ -1,0 +1,21 @@
+/* Contents nav (pages/toc.py): a <details> below 64rem, a sticky rail from 64rem (rail rules: 01-base).
+   Links are 44px hit areas; the active link carries a bar as well as colour. */
+:root { scroll-padding-block-start: var(--vd-space-9); }
+.block, h1, h2, h3, h4, h5, h6 { scroll-margin-block-start: var(--vd-space-9); }
+.doc-toc summary { display: flex; align-items: center; min-block-size: 2.75rem; padding-inline: var(--vd-space-3); cursor: pointer; font-weight: 600; border: 1px solid var(--vd-border); border-radius: var(--vd-radius-s); }
+.doc-toc ol { list-style: none; margin: 0; padding: 0; }
+.doc-toc a { display: flex; align-items: center; min-block-size: 2.75rem; padding-inline: var(--vd-space-3); border-inline-start: 3px solid transparent; color: var(--vd-text); text-decoration: none; overflow-wrap: anywhere; }
+@media (hover: hover) { .doc-toc a:hover { background: var(--vd-hover); text-decoration: underline; } }
+.doc-toc a:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.doc-toc summary:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.doc-toc .toc-l3 a { padding-inline-start: var(--vd-space-6); color: var(--vd-text-secondary); }
+.doc-toc a[aria-current="location"] { border-inline-start-color: var(--vd-accent); font-weight: 700; color: var(--vd-text); }
+@container vd-doc (min-width: 64rem) {
+  .doc-toc summary { display: none; }
+  .doc-toc details::details-content { content-visibility: visible; display: block; }
+}
+@media (forced-colors: active) {
+  .doc-toc a[aria-current="location"] { border-inline-start-color: Highlight; }
+  .doc-toc summary { border-color: CanvasText; }
+}
+@media print { .doc-toc { display: none; } }

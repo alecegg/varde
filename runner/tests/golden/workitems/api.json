@@ -1,0 +1,52 @@
+{
+  "list": {
+    "work_items": [
+      {
+        "id": "golden-10",
+        "idempotency_key": "api-key",
+        "text": "API request",
+        "project": "workspace",
+        "state": "new",
+        "notes_path": "<DATA>/workitem-notes/golden-10/request.md",
+        "planner_session": null,
+        "plan_path": null,
+        "plan_ready_id": null,
+        "launch_request_id": null,
+        "launch_request_notes": null,
+        "questions": [],
+        "audit": [
+          {
+            "seq": 1,
+            "item_id": "golden-10",
+            "prior_state": null,
+            "new_state": "new",
+            "detail": "submitted"
+          }
+        ]
+      }
+    ]
+  },
+  "detail": {
+    "id": "golden-10",
+    "idempotency_key": "api-key",
+    "text": "API request",
+    "project": "workspace",
+    "state": "new",
+    "notes_path": "<DATA>/workitem-notes/golden-10/request.md",
+    "planner_session": null,
+    "plan_path": null,
+    "plan_ready_id": null,
+    "launch_request_id": null,
+    "launch_request_notes": null,
+    "questions": [],
+    "audit": [
+      {
+        "seq": 1,
+        "item_id": "golden-10",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      }
+    ]
+  }
+}

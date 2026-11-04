@@ -1,0 +1,2 @@
+{"sessionId":"claude-session","cwd":"<REPO>","type":"user","uuid":"claude-user","timestamp":"2026-09-01T10:00:00Z","message":{"role":"user","content":[{"type":"text","text":"synthetic request"}]}}
+{"sessionId":"claude-session","cwd":"<REPO>","type":"assistant","uuid":"claude-assistant","timestamp":"2026-09-01T10:00:01Z","message":{"role":"assistant","content":[{"type":"text","text":"synthetic response"}]}}

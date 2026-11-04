@@ -1,0 +1,4 @@
+{
+  "output": "{\"data\":{\"plan_id\":\"nested\",\"reviewed_head\":\"5fd013740ea62c113cd8c573d3c5a54dad8510ca\"},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":true,\"outcome\":\"success\",\"schema_version\":1}\n",
+  "bytes": "---\ntype: plan\nid: nested\ntitle: Nested\nstatus: completed\n---\n"
+}

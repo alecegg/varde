@@ -1,0 +1,38 @@
+Report per-step request counts, distinct sessions, friction items and fills for
+how topics (`doc how` history and `learn how`). Reads the calls and friction stores; writes nothing.
+
+Usage: varde learn skills demand [SKILL] [OPTIONS]
+
+With a SKILL, only that skill's per-step rows and skill row are shown.
+
+Options:
+      --window <DURATION>   Include calls and friction from the trailing window (for example, 30d)
+      --changelog <PATH>    Read fills and cut-tag step ids from a changelog.jsonl
+      --json                Print machine-readable output
+  -h, --help                Print help
+
+Only successful `doc how` or `learn how` calls are requests; failed calls are reported apart.
+Rows with no session count as requests and are shown as unknown. Friction joins on
+`--target how/<skill>/<step>`; the target wins over an `st-g<k>-<nnn>` tag.
+`skills[].sessions_with_request` is a floor, not a denominator: distinct sessions
+with any how call for the skill, so it excludes sessions where the skill ran
+and asked for nothing. `skills[].unknown_session_requests` totals its null-session
+requests. Topic files read directly from disk are not counted.
+Skill runs come from the sweep ledger, not the calls store. The denominator is
+`swept_sessions`: ledger rows with `analyzed_at` in the window (sessions never
+swept are absent; rows swept before skill extraction count as no runs).
+Columns and sources:
+  runs, runs_with_load, suspected_skips, suspected_skip_candidates: ledger
+    transcripts, windowed by `analyzed_at`.
+  sessions_with_request, unknown_session_requests: calls store, by call time.
+  friction_items, how_skip_friction: friction store, by `created_at`.
+`runs_with_load` can differ from `sessions_with_request` (different sources and
+windows). `suspected_skips` is null when the skill has no observed load in calls
+or the ledger (it may have no how topics). A suspected skip is a session where
+the skill ran, no how topic was loaded, and a tool failed soon after. It is a
+heuristic with a precision limit: `suspected_skip_candidates` (up to 20, with
+session, harness, post_errors and first_error) are candidates for a human to
+judge, not confirmed skips. File a confirmed skip with
+`varde learn friction add --tag skilltrim --tag how-skip --source <skill>`;
+`how_skip_friction` counts items matching the tag and `source`.
+Exit codes: 0 for success, 2 for invalid arguments or an unreadable store.

@@ -1,0 +1,17 @@
+language = "csharp"
+task = "Implement an event ticket booking module in `Original`, with one booking request per nonblank input line."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.cs" = "3ee29952904a45d2c478ab2e99dce16765f8b2fff55ccbbcd2ffb247a7e409bf"
+"judge-classes.cs" = "93b5442c0301c494cce01083808f46e6e9f72dd47486cf731a51f0026f370b8a"
+"judge-defensive.cs" = "6d8304a28cd03bc7dfcec9eb9a3230049aa297cec6f1db58d2ae497498d5e111"
+"judge-extract.cs" = "b599bb1ef678b3edfe2cdc407a84ff3d941fbaa796657da8eae2206d4db3b1b1"
+"judge-inline.cs" = "75cd35d58b292ee1b246ab15808547be066e153aad88dd191b80329dc81ee376"
+"judge-names.cs" = "114405e286439a505fee2fb72e334e345787bf15b5e305747344ba5a34e4bf62"
+"original.cs" = "f4cdef5aa1e037c949bad566ebf11d2eac1f8828378916ca737f1f2c058abea0"
+"qssample.csproj" = "c299ec65c19b75d1f4fd4ce516c09ee667a141b87a68a37ec76169cc3f86df2c"
+"smoothed.cs" = "38b663cfe5bd86f71aa076588f2614f79166c4f150d45dae7574647408a6f9ec"
+"smoothing.md" = "ae6ad08cd598f349c7c8523f2c6db869d8677f1222b42f6e49cb20c58b2f7c1a"
+"task.md" = "6fc41617e3cf28285c1f76b70cf0db488d43e8192cb97c8b8fd53886cb422cba"

@@ -1,0 +1,10 @@
+Record a main-agent nudge without sending a message
+
+Usage: varde msg nudge --to <SLOT> --reason <REASON>
+
+Options:
+      --to <SLOT>       Agent slot being nudged
+      --reason <REASON> idle-unread, stalled, or other
+  -h, --help            Print help
+
+Appends a main-nudge record to the inbox nudges.jsonl log. It sends nothing.

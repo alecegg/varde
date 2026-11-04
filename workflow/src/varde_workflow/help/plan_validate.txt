@@ -1,0 +1,16 @@
+Validate one workflow artifact without mutation
+
+Usage: varde plan validate [OPTIONS] <ARTIFACT>
+
+Arguments:
+  <ARTIFACT>
+          
+
+Options:
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+JSON failures use diagnostic code `validation_failed`; plan status values are `backlog`, `active`, `blocked`, `completed`, and `cancelled`, while task values are `todo`, `in_progress`, `building`, `in_review`, `fixing`, `integrating`, `blocked`, and `done`.

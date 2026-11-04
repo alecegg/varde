@@ -1,0 +1,25 @@
+/* Image block: a figure holding a lazy picture inside a link (a zoom dialog opens it when image.js runs), a caption and a plain-text description. The width and height attributes reserve the space; the picture never grows past the column. Colours come only from --vd-* tokens. */
+.vd-image { margin-block: var(--vd-density-gap); margin-inline: 0; min-inline-size: 0; max-inline-size: 100%; }
+.vd-image-narrow { max-inline-size: 24rem; }
+.vd-image-link { display: block; box-sizing: border-box; inline-size: fit-content; min-inline-size: 2.75rem; min-block-size: 2.75rem; max-inline-size: 100%; border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-s); background: var(--vd-surface); overflow: hidden; }
+.vd-image-link:focus-visible { outline: 3px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-image-img { display: block; max-inline-size: 100%; block-size: auto; }
+.vd-image-caption { margin-block-start: var(--vd-space-2); min-inline-size: 0; font-weight: 600; overflow-wrap: break-word; }
+.vd-image-alt { margin: var(--vd-space-1) 0 0; min-inline-size: 0; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: break-word; }
+.vd-image-missing { box-sizing: border-box; margin: 0; padding: var(--vd-space-3); min-inline-size: 0; border: 2px dashed var(--vd-border-interactive); border-radius: var(--vd-radius-s); color: var(--vd-text-secondary); overflow-wrap: break-word; }
+.vd-image-dialog { box-sizing: border-box; inline-size: fit-content; max-inline-size: 96vw; max-block-size: 96vh; margin: auto; padding: var(--vd-space-3); border: 2px solid var(--vd-border-interactive); border-radius: var(--vd-radius-s); background: var(--vd-surface); color: var(--vd-text); overflow: hidden; }
+.vd-image-dialog::backdrop { background: var(--vd-text); opacity: 0.6; }
+.vd-image-zoomed { display: block; max-inline-size: 100%; max-block-size: calc(96vh - 7rem); inline-size: auto; block-size: auto; margin-block-start: var(--vd-space-3); object-fit: contain; }
+.vd-image-close { box-sizing: border-box; display: block; min-inline-size: 2.75rem; min-block-size: 2.75rem; margin-inline-start: auto; padding: var(--vd-space-2) var(--vd-space-4); border: 2px solid var(--vd-border-interactive); border-radius: var(--vd-radius-s); background: var(--vd-surface); color: var(--vd-text); font: inherit; cursor: pointer; }
+.vd-image-close:focus-visible { outline: 3px solid var(--vd-focus-ring); outline-offset: -5px; }
+@media (forced-colors: active) {
+  .vd-image-link, .vd-image-missing, .vd-image-dialog, .vd-image-close { border-color: CanvasText; }
+  .vd-image-link:focus-visible, .vd-image-close:focus-visible { outline-color: Highlight; }
+}
+@media print {
+  .vd-image, .vd-image .vb-card, .vd-image .vd-image-link { overflow: visible; min-inline-size: 0; white-space: normal; }
+  .vd-image { break-inside: avoid; }
+  .vd-image .vd-image-link { min-block-size: 0; inline-size: auto; }
+  .vd-image .vd-image-img { max-inline-size: 100%; }
+  .vd-image-dialog { display: none; }
+}

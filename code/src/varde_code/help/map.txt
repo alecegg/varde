@@ -1,0 +1,38 @@
+Query the code index (symbols, dependencies, impact)
+
+Usage: varde map [OPTIONS] <COMMAND>
+
+Commands:
+  extract              Extract entities and symbols from a file or directory tree
+  build                Extract, resolve, and persist a repo's index so the query subcommands (symbols_in_file, find_pattern's DB-backed peers, etc.) can read it. Full rebuild every run — writes to `<varde config root>/code/repos/<name>-<hash>/index.db` (default: `~/.config/varde/code/repos/<name>-<hash>/index.db`)
+  batch                Query: run several query modes in one call. (see `batch` help for inputs)
+  symbols_in_file      Query: list symbols declared in a file. (see `symbols_in_file` help for inputs)
+  symbols_in_files     Query: batch form of `symbols_in_file` over many files in one call. (see `symbols_in_files` help for inputs)
+  get_symbol           Query: get one symbol by name (+ optional file/kind). (see `get_symbol` help for inputs)
+  dependencies         Query: files the given file depends on (imports by default); use direction: incoming to reverse it. (see `dependencies` help for inputs)
+  dependents           Query: files that depend on the given file. (see `dependents` help for inputs)
+  tests_for_file       Query: test files covering a given file. (see `tests_for_file` help for inputs)
+  hotspots             Query: risk hotspots ranked by complexity + churn. (see `hotspots` help for inputs)
+  clusters             Query: community-detection partition of the resolution graph into densely-interconnected file clusters. (see `clusters` help for inputs)
+  map_file             Query: map a file to its persisted node info. (see `map_file` help for inputs)
+  map_symbol           Query: map a symbol to its persisted entity. (see `map_symbol` help for inputs)
+  map_path             Query: map a dependency path between two files. (see `map_path` help for inputs)
+  explore              Query: explore the dependency graph from a seed file or symbol name. `query.params.input` resolves as a file path first, falling back to a symbol-name match (exact, then substring) when no file matches; `query.params.direction` is `outgoing` (default), `incoming`, or `both`. (see `explore` help for inputs)
+  blast_radius         Query: potential downstream impact of changing a file (transitive dependents, excluding the file itself). (see `blast_radius` help for inputs)
+  symbol_blast_radius  Query: downstream impact of a unique declaration through resolved calls and inheritance; reports partial coverage explicitly. (see `symbol_blast_radius` help for inputs)
+  detect_changes       Query: symbols changed between git states. (see `detect_changes` help for inputs)
+  find_imports         Query: resolved import edges of a file. (see `find_imports` help for inputs)
+  type_hierarchy       Query: type hierarchy for a symbol. (see `type_hierarchy` help for inputs)
+  filter_symbols       Query: filter symbols by kind/tags/language/etc. (see `filter_symbols` help for inputs)
+  find_pattern         Query: find AST nodes matching a $VAR / $$$VAR pattern. (see `find_pattern` help for inputs)
+  context_pack         Query: keyword-driven context bundle — files/symbols matching `query` plus their one-hop graph neighborhood, ranked and with covering tests. `rankingMode` is `fallback` (default; lexical retrieval runs only when structural matching finds fewer than 3 seed files) or `structural`. (see `context_pack` help for inputs)
+  nav_map              Query: session-start repo orientation map — entrypoints, foundational files, module layers, subsystems, symbols, flows, and hotspots assembled from the persisted index. JSON is the canonical output; `--format text` derives a plain-text rendering from the same JSON. Each flow summary carries a deduplicated `files` path table; its tree nodes reference paths by `f` index into that table rather than restating the path per node. (see `nav_map` help for inputs)
+  packs                Build and check committed context packs under docs/repo-map/ (`build` writes the repo map or a folder module pack; `status [--check]` reports staleness)
+  prune                Prune index folders under the code config root whose recorded source folder is gone. Dry run by default: nothing is deleted unless the JSON input sets `apply: true`
+  slice_state          Dump the slice freshness ledger for a repo (the `--why` view: what each derived slice was last built through and whether it's stale). Read-only — never builds or freshens. (see `slice_state` help for inputs)
+  help                 Print this message or the help of the given subcommand(s)
+
+Options:
+  -v, --verbose  Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help     Print help
+  -V, --version  Print version

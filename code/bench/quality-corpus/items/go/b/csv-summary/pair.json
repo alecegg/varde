@@ -1,0 +1,33 @@
+{
+  "task": "csv-summary",
+  "pair_group": "csv-summary",
+  "language": "go",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "1e7a40c9b2d863f5a4170e6b",
+      "left": "sensible.go",
+      "right": "monolith.go"
+    },
+    {
+      "pair_id": "8b2d51f7e4069a3c7d1e5b90",
+      "left": "sensible.go",
+      "right": "tiny.go"
+    },
+    {
+      "pair_id": "c3f96d024a8e5b17f260d4a8",
+      "left": "sensible.go",
+      "right": "padded.go"
+    },
+    {
+      "pair_id": "47b0e6a15c9837d2f5b41e0c",
+      "left": "sensible.go",
+      "right": "sizematched.go"
+    },
+    {
+      "pair_id": "9a1c8753de604b2f8a7d3c15",
+      "left": "sensible.go",
+      "right": "namematched.go"
+    }
+  ]
+}

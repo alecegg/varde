@@ -1,0 +1,52 @@
+Measure skill-guided output quality against baseline runs.
+
+Cost scales with runs × evals × 2 plus judging calls when baseline is enabled.
+
+Usage: varde learn measure <SKILL> output [OPTIONS]
+
+Arguments:
+ 
+          Directory containing the skill under evaluation
+
+Options:
+      --harness <HARNESS>
+          Official client used for evaluated sessions and judging; no fallback
+          
+          [default: codex]
+          [possible values: codex, claude]
+
+      --model <MODEL>
+          Model for evaluated sessions (Codex defaults to gpt-6-luna; Claude uses its default)
+
+      --judge-model <JUDGE_MODEL>
+          Judge model override; defaults to the evaluated model
+
+      --runs <RUNS>
+          Number of runs per eval
+          
+          [default: 1]
+
+      --iteration <ITERATION>
+          Iteration number, recorded alongside results
+          
+          [default: 1]
+
+      --workspace <WORKSPACE>
+          Workspace directory the harness session runs in
+
+      --eval <EVAL>
+          Eval ID to run; repeat to select several. Defaults to all evals
+
+      --timeout-seconds <TIMEOUT_SECONDS>
+          Per-run timeout in seconds
+          
+          [default: 300]
+
+      --sandbox-dir <SANDBOX_DIR>
+          Directory to sandbox the harness session in
+
+      --no-baseline
+          Skip the baseline (no-skill) comparison run
+
+  -h, --help
+          Print help (see a summary with '-h')

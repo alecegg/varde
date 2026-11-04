@@ -1,0 +1,35 @@
+/* State block: a 1:1 scale SVG in a scroll region, then the states and transitions as text lists. Colours come only from --vd-* tokens. */
+.vd-state { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-3); margin-block: var(--vd-density-gap); min-inline-size: 0; }
+.vd-state-title { margin: 0; overflow-wrap: break-word; }
+.vd-state-summary { margin: 0; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: break-word; }
+.vd-state-view { position: relative; overflow: auto; max-inline-size: 100%; min-inline-size: 0; min-block-size: 44px; max-block-size: 40rem; border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); background: var(--vd-surface); scroll-padding: 8px; }
+.vd-state-view:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-state-svg { display: block; max-inline-size: none; overflow: visible; }
+.vd-state-label, .vd-state-edge-label { fill: var(--vd-text); font: 13px var(--vd-font-body); pointer-events: none; }
+.vd-state-edge-label { font-size: 12px; }
+.vd-state-label-bg { fill: var(--vd-surface); stroke: none; opacity: 0.92; }
+.vd-state-shape { fill: var(--vd-surface-elevated); stroke: var(--vd-text-secondary); stroke-width: 2; }
+.vd-state-ring { fill: none; stroke: var(--vd-text-secondary); stroke-width: 2; }
+.vd-state-initial .vd-state-shape { stroke: var(--vd-accent); stroke-width: 3; }
+.vd-state-final .vd-state-shape, .vd-state-final .vd-state-ring { stroke: var(--vd-text); }
+.vd-state-error .vd-state-shape { fill: var(--vd-tone-risk-tint); stroke: var(--vd-tone-risk-edge); stroke-width: 3; }
+.vd-state-unreachable .vd-state-shape { stroke-dasharray: 6 4; }
+.vd-state-dot { fill: var(--vd-text); stroke: none; }
+.vd-state-line { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.75; }
+.vd-state-head { fill: var(--vd-text-secondary); stroke: none; }
+.vd-state-states, .vd-state-moves { margin: 0; padding-inline-start: var(--vd-space-7); min-inline-size: 0; }
+.vd-state-item { min-inline-size: 0; margin-block-end: var(--vd-space-2); overflow-wrap: break-word; }
+@media (forced-colors: active) {
+  .vd-state-view { border-color: CanvasText; }
+  .vd-state-label, .vd-state-edge-label { fill: CanvasText; }
+  .vd-state-label-bg { fill: Canvas; }
+  .vd-state-shape, .vd-state-ring, .vd-state-initial .vd-state-shape, .vd-state-error .vd-state-shape { fill: Canvas; stroke: CanvasText; }
+  .vd-state-line { stroke: CanvasText; }
+  .vd-state-head, .vd-state-dot { fill: CanvasText; }
+}
+@media print {
+  .vd-state, .vd-state-view, .vd-state-states, .vd-state-moves, .vd-state-item { overflow: visible; max-block-size: none; min-inline-size: 0; min-block-size: 0; white-space: normal; }
+  .vd-state-svg { max-inline-size: 100%; inline-size: 100%; block-size: auto; }
+  .vd-state-item { break-inside: avoid; }
+  .vd-state .vb-card { overflow: visible; min-inline-size: 0; white-space: normal; }
+}

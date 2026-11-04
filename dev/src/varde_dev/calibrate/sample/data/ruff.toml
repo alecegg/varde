@@ -1,0 +1,3 @@
+extend = "../../../../../../pyproject.toml"
+extend-exclude = ["python-sample-*/behaviour_test.py"]
+cache-dir = "../../../../../../.ruff_cache"

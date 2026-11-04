@@ -1,0 +1,85 @@
+/* Slider widget (inputs_ordered), owned by dw-slider. Tokens only.
+   Native input[type=range]: 44px hit area, 10px sunk track with a border, a
+   28px thumb, a fill driven by the --vd-fill ratio (0..1) that the script sets
+   through the CSSOM. The global focus ring is not touched; the focus ring is drawn
+   on the thumb (the 2px ring the other fields use), not on the whole input. */
+.slider-group { border: 0; margin: 0; padding: 0; min-inline-size: 0; }
+.slider-label { padding: 0; margin-block-end: var(--vd-space-2); font-weight: 600; overflow-wrap: anywhere; }
+.slider-track { position: relative; min-inline-size: 0; padding-inline: var(--vd-space-1); }
+
+.slider-input {
+  --slider-thumb: 1.75rem;
+  --slider-track: 0.625rem;
+  --slider-stop: calc(var(--slider-thumb) / 2 + (100% - var(--slider-thumb)) * var(--vd-fill, 0));
+  display: block; inline-size: 100%; box-sizing: border-box; margin: 0;
+  min-block-size: var(--vd-control-height); background: transparent; cursor: pointer;
+  -webkit-appearance: none; appearance: none; border-radius: var(--vd-radius-m);
+  scroll-margin-block: var(--vd-space-4);
+}
+.slider-input:focus-visible { outline: none; }
+.slider-input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.slider-input:focus-visible::-moz-range-thumb { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.slider-input:disabled { cursor: default; }
+
+.slider-input::-webkit-slider-runnable-track {
+  block-size: var(--slider-track); box-sizing: border-box; border-radius: var(--vd-radius-full);
+  border: 1px solid var(--vd-border-interactive); background: var(--vd-surface-sunk);
+}
+.slider-input[data-moved]::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--vd-accent) var(--slider-stop), var(--vd-surface-sunk) var(--slider-stop));
+}
+.slider-input[data-moved]:dir(rtl)::-webkit-slider-runnable-track {
+  background: linear-gradient(to left, var(--vd-accent) var(--slider-stop), var(--vd-surface-sunk) var(--slider-stop));
+}
+.slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; box-sizing: border-box;
+  inline-size: var(--slider-thumb); block-size: var(--slider-thumb);
+  margin-block-start: calc((var(--slider-track) - var(--slider-thumb)) / 2);
+  border-radius: var(--vd-radius-full); background: var(--vd-accent);
+  border: 3px solid var(--vd-surface-elevated);
+}
+.slider-input::-moz-range-track {
+  block-size: var(--slider-track); box-sizing: border-box; border-radius: var(--vd-radius-full);
+  border: 1px solid var(--vd-border-interactive); background: var(--vd-surface-sunk);
+}
+.slider-input[data-moved]::-moz-range-progress {
+  block-size: var(--slider-track); border-radius: var(--vd-radius-full); background: var(--vd-accent);
+}
+.slider-input::-moz-range-thumb {
+  box-sizing: border-box; inline-size: var(--slider-thumb); block-size: var(--slider-thumb);
+  border-radius: var(--vd-radius-full); background: var(--vd-accent);
+  border: 3px solid var(--vd-surface-elevated);
+}
+.slider-input:disabled::-webkit-slider-thumb { background: var(--vd-disabled-text) }
+.slider-input:disabled::-moz-range-thumb { background: var(--vd-disabled-text) }
+
+/* Tick marks sit under the track, inset by half a thumb so they meet the thumb centre. */
+.slider-ticks { display: flex; justify-content: space-between; margin-block-start: calc(var(--vd-space-4) * -1); padding-inline: 0.875rem; pointer-events: none; }
+.slider-ticks > span { display: block; inline-size: 2px; block-size: var(--vd-space-2); background: var(--vd-border-interactive); }
+
+/* End labels follow the document direction: first label at the start edge. */
+.slider-ends { display: flex; justify-content: space-between; gap: var(--vd-space-3); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.slider-end { min-inline-size: 0; overflow-wrap: anywhere; }
+.slider-end:last-child { text-align: end; }
+
+.slider-value { display: block; margin-block-start: var(--vd-space-2); font-size: var(--vd-text-2xl); font-weight: 600; line-height: var(--vd-leading-heading); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.slider-value:not([data-chosen]) { font-size: var(--vd-text-md); font-weight: 400; color: var(--vd-text-secondary); }
+
+.slider-send { margin-block-start: var(--vd-space-3); scroll-margin-block: var(--vd-space-3); }
+.slider-state { margin-inline-start: var(--vd-space-3); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.slider-error { margin: var(--vd-space-2) 0 0; color: var(--vd-error); font-size: var(--vd-text-sm); }
+.slider-error:empty { display: none; }
+
+@media (forced-colors: active) {
+  .slider-input { forced-color-adjust: none; }
+  .slider-input::-webkit-slider-runnable-track { background: Canvas; border: 2px solid CanvasText; }
+  .slider-input[data-moved]::-webkit-slider-runnable-track { background: linear-gradient(to right, Highlight var(--slider-stop), Canvas var(--slider-stop)); }
+  .slider-input[data-moved]:dir(rtl)::-webkit-slider-runnable-track { background: linear-gradient(to left, Highlight var(--slider-stop), Canvas var(--slider-stop)); }
+  .slider-input::-webkit-slider-thumb { background: ButtonText; border: 3px solid Canvas; box-shadow: 0 0 0 1px ButtonText; }
+  .slider-input::-moz-range-track { background: Canvas; border: 2px solid CanvasText; }
+  .slider-input[data-moved]::-moz-range-progress { background: Highlight; }
+  .slider-input::-moz-range-thumb { background: ButtonText; border: 3px solid Canvas; box-shadow: 0 0 0 1px ButtonText; }
+  .slider-input:disabled::-webkit-slider-thumb, .slider-input:disabled::-moz-range-thumb { background: GrayText; }
+  .slider-ticks > span { background: CanvasText; }
+  .slider-input:focus-visible::-webkit-slider-thumb, .slider-input:focus-visible::-moz-range-thumb { outline: 2px solid Highlight; outline-offset: 3px; }
+}

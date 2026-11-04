@@ -1,0 +1,1 @@
+{"data":{"id":1,"similar":[],"slug":"golden"},"envelope_version":1,"meta":{"truncated":false},"ok":true,"outcome":"success","schema_version":1}

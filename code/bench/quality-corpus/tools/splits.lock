@@ -1,0 +1,27 @@
+{
+  "assignments": {
+    "anchor-ledger": "dev",
+    "anchor-queue": "test-restricted",
+    "clinic-booking": "dev",
+    "csv-summary": "regression",
+    "inventory-adjustment": "test-restricted",
+    "invoice-aging": "dev",
+    "order-quote": "dev",
+    "price-order": "test-restricted",
+    "rental-quote": "dev",
+    "reservation-calendar": "dev",
+    "retry-policy": "test-restricted",
+    "scoreboard": "test-restricted",
+    "shift-pay": "dev",
+    "shipment-state": "test-restricted",
+    "shipping-quote": "test-restricted",
+    "structured-allowance": "dev",
+    "structured-booking": "test-restricted",
+    "structured-cart-count": "test-restricted",
+    "structured-distance": "test-restricted",
+    "structured-gratuity": "dev",
+    "structured-temperature": "dev",
+    "text-template": "test-restricted"
+  },
+  "sha256": "728a97b25063905b7e5a1d5035c863a23ee36c8490d9ded1f155e21a71a184aa"
+}

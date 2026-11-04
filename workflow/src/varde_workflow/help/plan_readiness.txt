@@ -1,0 +1,16 @@
+Report blockers and available workflow actions
+
+Usage: varde plan readiness [OPTIONS] <PLAN>
+
+Arguments:
+  <PLAN>
+          
+
+Options:
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Reports whether plan dependencies are ready and lists blockers and available next actions. A task is ready when its status is `todo` and all dependencies are `done`.

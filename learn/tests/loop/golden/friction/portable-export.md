@@ -1,0 +1,25 @@
+# Varde friction export
+
+## open
+
+### Global item (c7acf29065186fb4)
+```jsonl
+{"v":1,"id":"c7acf29065186fb4","ts":"2025-01-01T00:00:07.000Z","kind":"item_added","body":{"title":"Global item","source":"pytest","tags":[]}}
+{"v":1,"id":"60d2ddc2ae81f21d","ts":"2025-01-01T00:00:07.001Z","kind":"occurrence_appended","repo":"/repo","body":{"item":"c7acf29065186fb4","at":"2025-01-01T00:00:07.000Z","cwd":"/golden/work","repo_root":"/repo","head_sha":"abc","evidence":"global evidence"}}
+```
+
+## resolved
+
+## promoted
+
+### Golden (24cc45d75d9e126f)
+```jsonl
+{"v":1,"id":"24cc45d75d9e126f","ts":"2025-01-01T00:00:00.000Z","kind":"item_added","repo":"/repo","body":{"title":"Golden","source":"pytest","repo_root":"/repo","target":"docs/guide.md","tags":["golden"]}}
+{"v":1,"id":"b6e6e747a9074353","ts":"2025-01-01T00:00:00.001Z","kind":"occurrence_appended","repo":"/repo","body":{"item":"24cc45d75d9e126f","at":"2025-01-01T00:00:00.000Z","cwd":"/golden/work","repo_root":"/repo","head_sha":"abc","evidence":"first evidence"}}
+{"v":1,"id":"957d312fa1258360","ts":"2025-01-01T00:00:01.000Z","kind":"status_changed","repo":"/repo","body":{"item":"24cc45d75d9e126f","at":"2025-01-01T00:00:02.000Z","from":"open","to":"resolved","reason":"fixed"}}
+{"v":1,"id":"9a395cc7e635e87e","ts":"2025-01-01T00:00:04.000Z","kind":"status_changed","repo":"/repo","body":{"item":"24cc45d75d9e126f","at":"2025-01-01T00:00:03.000Z","from":"resolved","to":"promoted","reason":"Recorded adoption 1"}}
+{"v":1,"id":"ebb280318a43fe06","ts":"2025-01-01T00:00:04.001Z","kind":"adoption_recorded","body":{"at":"2025-01-01T00:00:03.000Z","summary":"Improve tests","files":["learn/test.py"],"items":["24cc45d75d9e126f"]}}
+{"v":1,"id":"145fb61956a3162e","ts":"2025-01-01T00:00:05.000Z","kind":"occurrence_appended","repo":"/repo","body":{"item":"24cc45d75d9e126f","at":"2025-01-01T00:00:06.000Z","cwd":"/golden/work","repo_root":"/repo","head_sha":"abc","evidence":"again"}}
+```
+
+## archived

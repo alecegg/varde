@@ -1,0 +1,12 @@
+[
+  {"query": "Write the AGENTS.md for this new module so an agent knows the local conventions.", "should_trigger": true},
+  {"query": "Trim our CLAUDE.md so it only holds what the agent would fail without.", "should_trigger": true},
+  {"query": "Review the agent instructions in docs/agent-guide.md and remove anything duplicated.", "should_trigger": true},
+  {"query": "Revise this AGENTS.md: it has grown to 400 lines and agents ignore half of it.", "should_trigger": true},
+  {"query": "Update the repo's CLAUDE.md to describe the new test command.", "should_trigger": true},
+  {"query": "Write a SKILL.md for our release process.", "should_trigger": false},
+  {"query": "Review the description of the deploy skill for trigger confusion with varde-build.", "should_trigger": false},
+  {"query": "Bring the README's API section up to date after the v2 rename.", "should_trigger": false},
+  {"query": "Add a changelog entry summarizing this week's changes.", "should_trigger": false},
+  {"query": "Review the diff on this branch for bugs.", "should_trigger": false}
+]

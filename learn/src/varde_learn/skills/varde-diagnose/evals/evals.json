@@ -1,0 +1,49 @@
+{
+  "skill_name": "varde-diagnose",
+  "skills": [
+    "varde-diagnose",
+    "varde-manage"
+  ],
+  "evals": [
+    {
+      "id": 5,
+      "prompt": "Here is one tool result from an agent session: the upload timed out. What can we infer from this excerpt? I am not asking for a whole-session diagnosis.",
+      "expected_output": "Use the visible evidence only. State the timeout observation, label any cause as a partial hypothesis, name missing evidence, and offer a bounded next check. Do not inspect a transcript, write a report, capture friction, or claim whole-session coverage.",
+      "assertions": [
+        "Assesses only the visible evidence supplied, reading no further history",
+        "Labels the assessment partial and separates observation from possible cause",
+        "Does not read session history, save a report, or capture friction"
+      ]
+    },
+    {
+      "id": "retro",
+      "prompt": "Review two recent root sessions for recurring agent-environment friction. Explain how to freeze and compare evidence, and say when a candidate may be retained.",
+      "expected_output": "Uses the multi-session retrospective route: compares root sessions, freezes roots and workers, retains a candidate only with two distinct roots or a high-severity single-session finding, and records retained candidates as friction. Makes no edit from one run.",
+      "assertions": [
+        "Distinguishes root sessions from worker context in the findings",
+        "Requires evidence from two root sessions unless a single finding is high severity",
+        "Does not edit a skill or code directly from one run"
+      ],
+      "assert": [
+        {
+          "kind": "event_order",
+          "events": [
+            "two distinct root sessions",
+            "records retained candidates as friction"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "friction-cycle",
+      "prompt": "Run a friction cycle over new repository sessions. Summarize them once, trace candidates to moments, capture real recurring waste, triage open items, and report the cycle metrics.",
+      "expected_output": "Uses one sessions summary call with --new and --mark, traces each error or waste candidate to a specific moment, searches friction before adding actual evidence, labels recurring speed or token candidates with measured cost, triages via brief multi-ID show and set-status, and reports analyzed sessions, changes, top three token patterns, and cycle token totals.",
+      "assertions": [
+        "Runs one sessions summary command with --harness all, --new, --limit, and --mark",
+        "Traces candidates to specific session moments and records only real friction after a text search",
+        "Keeps one-offs in the ledger and labels 3-or-more-session waste candidates speed or token with measured cost",
+        "Uses friction show --brief and set-status for triage, then reports the required counts and token metrics"
+      ]
+    }
+  ]
+}

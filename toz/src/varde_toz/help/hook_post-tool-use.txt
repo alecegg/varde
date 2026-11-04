@@ -1,0 +1,5 @@
+Usage: varde hook post-tool-use --harness <claude|codex|opencode|pi>
+
+Options:
+  --harness <HARNESS>  Harness the hook runs for (required)
+  -h, --help           Print help

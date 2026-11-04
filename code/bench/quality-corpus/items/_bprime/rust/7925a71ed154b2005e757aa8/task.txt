@@ -1,0 +1,2 @@
+Write each run of identical characters as the character followed by the run length in decimal digits.
+Input domain: short text with runs of equal characters, including empty text and runs of length one, which still carry their count.

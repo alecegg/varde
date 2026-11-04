@@ -1,0 +1,13 @@
+Rank skills and agent definitions to add to, trim or reset, from friction, route tokens and how-demand. Report-only; writes nothing and never runs evals.
+
+Usage: varde learn skills candidates [OPTIONS] [DIR]...
+
+Arguments:
+  [DIR]...  Module root (skills/ and agents/) or skills dir; default: shipped modules
+
+Each target gets one direction: add (friction or failed how requests), reset (no friction, 4000+ tokens: chosen by route size alone, not by a model or harness change) or trim (no friction, 1000+ tokens). Agents are sized by their instructions plus the SKILL.md of each skill they load. Ranking is within a direction: friction count, then tokens.
+
+Options:
+      --baselines <DIR>  Directory holding MANIFEST.json: skills with a baseline entry list `add` rows with a fill evidence block (friction ids filed with --target how/<skill>/<step>, suspected_skips, how requests), show `reset` as `baseline restore (<gen>)` only when the skill drifted from it, and are never `reset` or `trim` while at baseline
+      --json  Print machine-readable output
+  -h, --help  Print help

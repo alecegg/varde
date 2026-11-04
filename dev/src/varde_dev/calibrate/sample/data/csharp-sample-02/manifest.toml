@@ -1,0 +1,13 @@
+id = "csharp-sample-02"
+pair_group_id = "sample-csharp-price-order"
+language = "csharp"
+task = "Price an order with quantity validation, a 10% discount above 100, and 8% tax."
+left = "a.cs"
+right = "b.cs"
+behaviour_test = "behaviour_test.cs"
+license = "MIT"
+
+[sha256]
+a = "f15222f37c9c9c440e4a95ab728430a8fe722e8a8e08d6b799236b222997d2f3"
+b = "e7d6ec9db74aac686cb73411a842f91432b78221311ac51bcc4aca23b241d3e7"
+behaviour_test = "12c410cd43f95dddf78475f9014c7dd11358ebb03e364708e0311c9790c3d2c9"

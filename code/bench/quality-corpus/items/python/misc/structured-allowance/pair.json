@@ -1,0 +1,11 @@
+{
+  "pair_id": "44f45314f008a4df7efefa56",
+  "pair_group_id": "130971cb268fcac3bd2ae798",
+  "left_id": "c7a8ed1a8276a83643857950",
+  "right_id": "daef315d81b14f0d9bb133be",
+  "left": "good.py",
+  "right": "bad.py",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "copy-paste"
+}

@@ -1,0 +1,12 @@
+Review, retire, or restore dead-address mail
+
+Usage: varde msg retire (--dry-run <AUDIT_DIR> [--min-age-days N] | --apply <DRY_RUN_FILE> | --restore <AUDIT_FILE>)
+
+Options:
+      --dry-run <AUDIT_DIR>  Write and print a retirement listing for review
+      --min-age-days <N>     Minimum unread mail age in days (default: 30; dry-run only)
+      --apply <DRY_RUN_FILE> Apply a reviewed dry-run listing
+      --restore <AUDIT_FILE> Restore addresses recorded in a retirement audit
+  -h, --help                 Print help
+
+Retirement archives undelivered mail in an audit file and marks eligible addresses retired. It does not delete message rows. The dry-run listing must be reviewed before applying; live addresses, roles, main, recently active mail, and in-flight plans are excluded.

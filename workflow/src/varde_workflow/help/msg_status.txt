@@ -1,0 +1,21 @@
+Report delivery status and inbox lag
+
+Usage: varde msg status [--json] [--now <TIMESTAMP>]
+
+Options:
+      --json          Print the report as JSON
+      --now <TIMESTAMP>  Use an ISO 8601 timestamp for age calculations
+  -h, --help          Print help
+
+Exit status:
+  0   No current alert
+  1   Overdue unread mail, urgent mail due without a live mailman, or a
+      suspect, misdelivered, token-reuse, or supersede event in the last 24 h
+  70  Status report could not be loaded
+
+Mailman state is alive, dead, or none. Per-mailman output includes its last
+heartbeat or return, expected return time, delivery count, and recreate flag.
+Suspect and misdelivered counts are included. The stopped-reading line is
+informational: pending mail is over 10 minutes old, the binding has not been
+seen for over 30 minutes, and there has been no push or leased action in that
+period.

@@ -1,0 +1,7 @@
+Read-only batched plan status, mail, decision-file and worktree facts
+
+Usage: varde plan pulse [<PLAN>] [OPTIONS]
+
+Options:
+      --json  Print the same pulse facts as one JSON object
+  -h, --help  Print help (see more with '--help')

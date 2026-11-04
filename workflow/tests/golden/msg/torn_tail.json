@@ -1,0 +1,17 @@
+{
+  "classification": "intentional-change",
+  "read_after_torn": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": "{\"data\":{\"messages\":[{\"from\":\"sender\",\"id\":\"m-00000001\",\"kind\":\"info\",\"text\":\"valid prefix\",\"to\":\"main\",\"ts\":\"2026-10-22T12:00:00Z\"}]},\"envelope_version\":1,\"meta\":{\"truncated\":false},\"ok\":true,\"outcome\":\"success\",\"schema_version\":1}\n"
+  },
+  "status_after_append": {
+    "exit": 1,
+    "stderr": "",
+    "stdout": "{\n  \"addresses\": [\n    {\n      \"address\": \"main\",\n      \"delivered_not_acked\": 0,\n      \"last_delivery\": null,\n      \"last_delivery_channel\": null,\n      \"oldest_undelivered_age_seconds\": 0.0,\n      \"oldest_unread_age_seconds\": 0.0,\n      \"total\": 2,\n      \"unread\": 2\n    }\n  ],\n  \"bad\": true,\n  \"cli_main_reads\": {\n    \"count\": 0,\n    \"last_at\": null\n  },\n  \"events\": [],\n  \"exit_code\": 1,\n  \"messages\": [\n    {\n      \"acked\": null,\n      \"delivered\": null,\n      \"id\": \"m-00000001\",\n      \"misdelivered\": 0,\n      \"pushed\": null,\n      \"sent\": \"2026-10-22T12:00:00Z\",\n      \"suspect\": 0\n    },\n    {\n      \"acked\": null,\n      \"delivered\": null,\n      \"id\": \"m-00000002\",\n      \"misdelivered\": 0,\n      \"pushed\": null,\n      \"sent\": \"2026-10-22T12:00:00Z\",\n      \"suspect\": 0\n    }\n  ],\n  \"overdue\": false,\n  \"runner_relay\": \"down\",\n  \"runner_relay_down_with_urgent_mail\": false,\n  \"send_to_ack_seconds\": {\n    \"p50\": null,\n    \"p90\": null\n  },\n  \"send_to_delivered_seconds\": {\n    \"p50\": null,\n    \"p90\": null\n  },\n  \"stopped_reading\": [],\n  \"unbound_pending\": [\n    \"main\"\n  ]\n}\n"
+  },
+  "store": {
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"main\",\"kind\":\"info\",\"text\":\"valid prefix\",\"id\":\"m-00000001\"}\n{\"ts\":\"torn\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"main\",\"kind\":\"info\",\"text\":\"after torn\",\"id\":\"m-00000002\"}\n"
+  },
+  "valid_id": "m-00000001"
+}

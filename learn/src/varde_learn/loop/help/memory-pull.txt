@@ -1,0 +1,14 @@
+Fetch or update the shared store and import its entries.
+
+The first pull clones the `[memory] shared` value from config.toml (a git URL
+or a path to a git repo) into <data>/varde/memory-shared; later pulls
+fast-forward it. Only the default branch is read, so an unmerged promote
+branch stays invisible. Files that fail the secret, slug or project-key
+checks are dropped with a warning. `list`, `show shared:<id>` and `surface`
+include shared entries; they change only by reviewed commit in the shared repo.
+
+Usage: varde learn memory pull [OPTIONS]
+
+Options:
+  --json      Print a JSON envelope
+  -h, --help  Print help

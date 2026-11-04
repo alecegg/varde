@@ -1,0 +1,17 @@
+Manage Concepts in a Knowledge Bundle and lint it
+
+Usage: varde learn knowledge <COMMAND>
+
+Commands:
+  create     Create a Concept from a complete frontmatter+body document
+  show       Show a Concept's frontmatter, body, and current version
+  update     Update a Concept, rejecting stale versions
+  delete     Delete a Concept (hard delete)
+  set-field  Set a single frontmatter field, rejecting stale versions
+  map        Generate deterministic root and type discovery maps
+  search     Search Concepts (`--field`, `--text`); with no filter, list them
+  lint       Lint a Knowledge Bundle for structural health issues
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

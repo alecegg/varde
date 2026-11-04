@@ -1,0 +1,16 @@
+{
+  "pair_group_id": "add668d4fef577098a013f05",
+  "task": "rental-quote",
+  "language": "typescript",
+  "part": "b",
+  "pairs": [
+    { "pair_id": "32afdfc4cb9719bc4964fc51", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "5d8e448401783388894fbcd6", "left": "sensible.ts", "right": "monolith.ts", "left_role": "sensible", "right_role": "over-monolith" },
+    { "pair_id": "b082efb98379ce93b566d1de", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "f3db14da27f58a72a19bdfd5", "left": "sensible.ts", "right": "tiny.ts", "left_role": "sensible", "right_role": "over-split" },
+    { "pair_id": "d2e1fa1e1fe203cdf0cd925d", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "18eda2278a572306f210bcd1", "left": "sensible.ts", "right": "padded.ts", "left_role": "sensible", "right_role": "over-split" },
+    { "pair_id": "4e72727b06b56e89b1661e64", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "c0a7930397a64fe7d623a755", "left": "sensible.ts", "right": "sizematched.ts", "left_role": "sensible", "right_role": "over-split" },
+    { "pair_id": "fe7af330b5a6250e99272a57", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "2f4a67de60813963e51843f4", "left": "sensible.ts", "right": "namematched.ts", "left_role": "sensible", "right_role": "over-split" },
+    { "pair_id": "ac5f1420d6f70384d1c5a091", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "a9d8bb25a7f24213b0e82716", "left": "sensible.ts", "right": "alt-pipeline.ts", "left_role": "sensible", "right_role": "alt-good", "preference_neutral": true },
+    { "pair_id": "b77320f181eaba850644ba53", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "77e44dbfdb778db865710fcc", "left": "sensible.ts", "right": "alt-table.ts", "left_role": "sensible", "right_role": "alt-good", "preference_neutral": true },
+    { "pair_id": "d52a20b01f08d9632ad33e89", "left_id": "1c2c19fd262cc047cedc0b8f", "right_id": "c71080d7f12eaa824db0d30c", "left": "sensible.ts", "right": "alt-class.ts", "left_role": "sensible", "right_role": "alt-good", "preference_neutral": true }
+  ]
+}

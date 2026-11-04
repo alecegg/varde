@@ -1,0 +1,12 @@
+{"jsonrpc":"2.0","id":1,"result":{"codexHome":"/Users/test/.codex","platformFamily":"unix","platformOs":"macos","userAgent":"codex-cli/0.162.1"}}
+{"jsonrpc":"2.0","method":"item/agentMessage/delta","params":{"delta":"Hello","itemId":"i1","threadId":"th1","turnId":"tu1"}}
+{"jsonrpc":"2.0","method":"item/started","params":{"item":{"id":"c1","type":"commandExecution","command":"git status"},"startedAtMs":1000,"threadId":"th1","turnId":"tu1"}}
+{"jsonrpc":"2.0","method":"item/completed","params":{"item":{"id":"c1","type":"commandExecution","status":"completed"},"completedAtMs":1010,"threadId":"th1","turnId":"tu1"}}
+{"jsonrpc":"2.0","id":42,"method":"item/commandExecution/requestApproval","params":{"itemId":"i2","startedAtMs":1020,"threadId":"th1","turnId":"tu1","command":"git status","cwd":"/workspace"}}
+{"jsonrpc":"2.0","id":"p2","method":"item/fileChange/requestApproval","params":{"itemId":"i3","startedAtMs":1030,"threadId":"th1","turnId":"tu1","grantRoot":"/workspace"}}
+{"jsonrpc":"2.0","method":"item/completed","params":{"item":{"id":"f1","type":"fileChange","status":"failed"},"completedAtMs":1015,"threadId":"th1","turnId":"tu1"}}
+{"jsonrpc":"2.0","method":"thread/tokenUsage/updated","params":{"threadId":"th1","turnId":"tu1","tokenUsage":{"last":{"cachedInputTokens":0,"inputTokens":4,"outputTokens":2,"reasoningOutputTokens":0,"totalTokens":6},"total":{"cachedInputTokens":0,"inputTokens":4,"outputTokens":2,"reasoningOutputTokens":0,"totalTokens":6},"modelContextWindow":128000}}}
+{"jsonrpc":"2.0","method":"account/rateLimits/updated","params":{"rateLimits":{"limitId":"main","primary":{"usedPercent":24,"windowDurationMins":300,"resetsAt":1800000000},"secondary":null,"planType":"plus","rateLimitReachedType":null,"credits":null}}}
+{"jsonrpc":"2.0","method":"error","params":{"error":{"message":"temporary failure"},"threadId":"th1","turnId":"tu1","willRetry":true}}
+{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"th1","turn":{"id":"tu1","items":[],"status":"failed","error":{"message":"failed"}}}}
+{"jsonrpc":"2.0","method":"serverRequest/resolved","params":{"requestId":42,"threadId":"th1"}}

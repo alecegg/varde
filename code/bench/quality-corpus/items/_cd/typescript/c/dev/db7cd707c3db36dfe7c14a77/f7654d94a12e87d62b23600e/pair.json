@@ -1,0 +1,33 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "src/compiler/checker.ts"
+  ],
+  "changed_functions": [
+    "getFlowTypeOfReference",
+    "getInitialOrAssignedType",
+    "getTypeAtFlowAssignment",
+    "getTypeOfInitializer"
+  ],
+  "child_sha": "007b4b1e31623aa8a108219262819d07ba63202a",
+  "file_licenses": {
+    "microsoft/TypeScript:src/compiler/checker.ts": "Apache-2.0"
+  },
+  "id": "f7654d94a12e87d62b23600e",
+  "intent": {
+    "linked_issues": [],
+    "message": "Minor simplification"
+  },
+  "label_source": "developer-intent",
+  "language": "typescript",
+  "left": "a.ts",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-2fb5f2c94098fbb2",
+  "parent_sha": "d4ad0d53dcb9b5fc529f6455074fad1230522f66",
+  "pin_sha": "2e9fb00f5f5c9186d09aabd78cced5ce2497456d",
+  "repo": "microsoft/TypeScript",
+  "right": "b.ts",
+  "split": "dev",
+  "upstream_url": "https://github.com/microsoft/TypeScript.git"
+}

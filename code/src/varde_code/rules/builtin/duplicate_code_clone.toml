@@ -1,0 +1,14 @@
+# Candidate spans are verified against exact source trees before reporting.
+# Comments and formatting are ignored; literals, operators and nesting remain.
+# Approximate clone bands remain available for navigation only.
+[[rule]]
+id = "duplicate-code-clone"
+kind = "sql"
+verification = "exact-clone"
+severity = "warning"
+name = "Exact function duplication budget"
+description = "At least three substantive function bodies have identical syntax trees within one language."
+message = "exact function duplication exceeds the configured occurrence budget"
+remediation = "extract shared behavior or document an intentional duplicate with a scoped suppression"
+query = "SELECT f.path AS file, e.start_line AS line, e.start_byte AS start_byte, e.end_byte AS end_byte, e.start_col AS start_col, e.end_line AS end_line, e.end_col AS end_col FROM entities e JOIN files f ON f.id = e.file_id WHERE e.kind = 0 AND e.is_test = 0 AND f.is_test_path = 0 AND f.is_tooling_path = 0 AND (e.end_line - e.start_line + 1) > :min_span_lines"
+thresholds = { min_members = 3.0, min_tokens = 20.0, min_span_lines = 8.0 }

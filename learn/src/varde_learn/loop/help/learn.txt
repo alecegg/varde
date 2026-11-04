@@ -1,0 +1,16 @@
+Diagnose sessions, measure skills, record friction, and measure CLI guardrails
+
+Usage: varde learn <COMMAND>
+
+Commands:
+  sessions   Inspect, summarize, sweep and review local agent sessions
+  measure    Measure a skill: flow, ledger, baseline, trigger, output, calibration
+  check      Check skill and document Markdown: lint, frontmatter, FLOW.md, blocks
+  how        Print a how-topic for a skill, or list its topics
+  docs       Serve, comment on and recap documents; spec inventory
+  friction   Read and maintain the global friction store; adopt changes
+  knowledge  Create, search and lint the project Knowledge Bundle
+  memory     Scoped agent, skill, project and global memory entries
+  skills     Skill demand and the self-improvement loop (candidates, report)
+  tools      Summarize runner tool calls by agent role
+  help       Print this message or the help of the given subcommand(s)

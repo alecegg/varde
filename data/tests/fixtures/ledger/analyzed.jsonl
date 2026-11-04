@@ -1,0 +1,10 @@
+{"session":"same","harness":"codex","analyzed_at":"old","summary":"old"}
+not json
+
+[1]
+{"session":"bad","harness":4,"analyzed_at":"now"}
+{"session":"missing","harness":"codex"}
+{"session":"other","harness":"codex","analyzed_at":"then","summary":"other"}
+{"session":"same","harness":"claude","analyzed_at":"claude","summary":"separate"}
+{"session":"same","harness":"codex","analyzed_at":"new","summary":"latest"}
+{"session":"tail"

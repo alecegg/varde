@@ -1,0 +1,11 @@
+Install or update the managed instruction block
+
+Usage: varde setup instructions install [OPTIONS]
+
+Options:
+      --target <TARGETS>     Instruction file to update (may be repeated)
+      --builders <BUILDERS>  Maximum number of builders in flight
+      --sections <SECTIONS>  Instruction sections to include [default: orchestration,toz]
+      --learn                Include the optional learning guidance
+      --dry-run              Print the planned file changes without writing
+  -h, --help                 Print help

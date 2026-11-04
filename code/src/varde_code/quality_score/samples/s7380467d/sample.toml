@@ -1,0 +1,17 @@
+language = "csharp"
+task = "Implement a parcel shipping quote module with one parcel per nonblank input line."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.cs" = "4efc451dd94f2d64c9223f07864d7591ac17b4171d85976720856db95a05f0be"
+"judge-classes.cs" = "63a42583ef47a0c383bfad7bc721acd7143baeeea1dd5ee725eb71d8f3946d3f"
+"judge-defensive.cs" = "0bfdd56c77066bf122a14a5c7017c48982ae4bed4ec02edb59c364f5394f97de"
+"judge-extract.cs" = "db5916c135fa0f1535cc097fa92268803333dd3b034a4e537946adff0af6b0fe"
+"judge-inline.cs" = "d90d7d0b81904dff4f1299c440f6fbae9595238eec260ee6335b6a6e2b1dc295"
+"judge-names.cs" = "d96e7dedd063b19d98cbce829f945b2dc9a9324971baca800a3cce2fe833c214"
+"original.cs" = "0106381de8c26deda51a44ab8bc1788cfaccce0299e47ebee1b3e50db8657c39"
+"qssample.csproj" = "c299ec65c19b75d1f4fd4ce516c09ee667a141b87a68a37ec76169cc3f86df2c"
+"smoothed.cs" = "7380467d145e3f18b01cc1e1cc7efc243d4472377ecb18056f053445c6a1087b"
+"smoothing.md" = "e9d180f5a565edbdc9c363535a06a0c96669746e2b8fcd6f35e78675e22033bc"
+"task.md" = "9824d8b22055294d86b84cfac2d15da792c1b012d53ab134677b2068fbdde5b0"

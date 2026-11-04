@@ -1,0 +1,13 @@
+Write the top-level repo map (docs/repo-map/README.md), or a module pack for one folder. Refreshes the repo's single index incrementally first and builds it only when it is missing or its schema/build version changed. Never copies or rebuilds into a temporary index
+
+Usage: varde map packs build [OPTIONS] [FOLDER]
+
+Arguments:
+  [FOLDER]  Folder to write a module pack for (docs/repo-map/modules/<slug>.md); omit for the top-level repo map
+
+Options:
+      --all                          Write the README and a pack for every folder in docs/repo-map/modules.txt; exit 2 when a listed folder is missing
+      --stale                        Write only a missing or stale README and module packs; print `packs fresh` when nothing changed
+      --readme-max-behind <N>        With --stale, rebuild the README once it is N or more commits behind [default: 100]
+      --repo-root <REPO_ROOT>        Repo root [default: the git top level of the current directory]
+  -h, --help                         Print help

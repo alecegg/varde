@@ -1,0 +1,12 @@
+Show a Concept's frontmatter, body, and current version
+
+Usage: varde learn knowledge show [OPTIONS] --bundle <BUNDLE> <SLUG>
+
+Arguments:
+  <SLUG>  Concept slug, e.g. `my-concept` or `pattern/my-concept`
+
+Options:
+      --bundle <BUNDLE>   Knowledge Bundle root directory (holds the Concept `.md` files)
+      --frontmatter-only  Print only the parsed frontmatter as structured JSON, omitting the body entirely (takes precedence over `--json`)
+      --json              Machine-readable JSON output
+  -h, --help              Print help

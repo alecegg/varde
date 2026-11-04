@@ -1,0 +1,13 @@
+Record an applied change and promote its friction items
+
+Usage: varde learn friction adopt [OPTIONS] --summary <SUMMARY>
+
+Options:
+      --items <IDS>                   Comma-separated friction item IDs to promote
+      --summary <SUMMARY>             Short summary of the applied change
+      --files <PATHS>                 Comma-separated changed file paths
+      --commit <COMMIT>               Commit SHA for the applied change
+      --eval-before <BENCHMARK_JSON>  Path to the before benchmark JSON file
+      --eval-after <BENCHMARK_JSON>   Path to the after benchmark JSON file
+      --json                          Print the shared machine-readable output envelope
+  -h, --help                          Print help

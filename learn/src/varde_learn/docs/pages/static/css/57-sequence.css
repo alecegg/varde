@@ -1,0 +1,47 @@
+/* Sequence block: a 1:1 scale SVG in a scroll region, then the same steps as an ordered text list. Colours come only from --vd-* tokens. */
+.vd-sequence { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-3); margin-block: var(--vd-density-gap); min-inline-size: 0; }
+.vd-sequence-title { margin: 0; overflow-wrap: break-word; }
+.vd-sequence-summary { margin: 0; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: break-word; }
+.vd-sequence-view { position: relative; overflow: auto; max-inline-size: 100%; min-inline-size: 0; max-block-size: 40rem; border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); background: var(--vd-surface); scroll-padding: 8px; }
+.vd-sequence-view:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-sequence-svg { display: block; max-inline-size: none; overflow: visible; }
+.vd-sequence-name, .vd-sequence-text, .vd-sequence-frame-label { fill: var(--vd-text); font: 13px var(--vd-font-body); pointer-events: none; }
+.vd-sequence-name, .vd-sequence-frame-label { font-weight: 600; }
+.vd-sequence-actor-box { fill: var(--vd-surface-sunk); stroke: var(--vd-text-secondary); stroke-width: 1.5; }
+.vd-sequence-life { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.5; stroke-dasharray: 2 5; }
+.vd-sequence-frame-box { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.5; pointer-events: none; }
+.vd-sequence-hit { fill: none; stroke: none; pointer-events: all; }
+.vd-sequence-line, .vd-sequence-head-open { fill: none; stroke: var(--vd-text); stroke-width: 1.75; }
+.vd-sequence-dashed { stroke-dasharray: 7 4; }
+.vd-sequence-head { fill: var(--vd-text); stroke: none; }
+.vd-sequence-note-box { fill: var(--vd-surface-elevated); stroke: var(--vd-text-secondary); stroke-width: 1.5; }
+.vd-sequence-on .vd-sequence-hit { fill: var(--vd-hover); stroke: var(--vd-accent); stroke-width: 2; }
+.vd-sequence-on .vd-sequence-line, .vd-sequence-on .vd-sequence-head-open { stroke: var(--vd-accent); stroke-width: 3; }
+.vd-sequence-on .vd-sequence-head { fill: var(--vd-accent); }
+.vd-sequence-steps { margin: 0; padding-inline-start: var(--vd-space-7); min-inline-size: 0; }
+.vd-sequence-step { box-sizing: border-box; min-block-size: 44px; min-inline-size: 0; margin-block-end: var(--vd-space-2); padding: var(--vd-space-2) var(--vd-space-3); border: 2px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); overflow-wrap: break-word; }
+.vd-sequence-step:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vd-sequence-step.vd-sequence-on { border-color: var(--vd-accent); background: var(--vd-hover); font-weight: 600; }
+.vd-sequence-step.vd-sequence-on::before { content: "\25B6\00a0"; }
+.vd-sequence-readout { box-sizing: border-box; min-block-size: 3.5em; min-inline-size: 0; margin: 0; padding: var(--vd-space-2) var(--vd-space-3); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: break-word; }
+@media (forced-colors: active) {
+  .vd-sequence-view, .vd-sequence-step, .vd-sequence-readout { border-color: CanvasText; }
+  .vd-sequence-name, .vd-sequence-text, .vd-sequence-frame-label { fill: CanvasText; }
+  .vd-sequence-actor-box, .vd-sequence-note-box { fill: Canvas; stroke: CanvasText; }
+  .vd-sequence-life, .vd-sequence-frame-box, .vd-sequence-line, .vd-sequence-head-open { stroke: CanvasText; }
+  .vd-sequence-head { fill: CanvasText; }
+  .vd-sequence-on .vd-sequence-hit, .vd-sequence-on .vd-sequence-line, .vd-sequence-on .vd-sequence-head-open { stroke: Highlight; }
+  .vd-sequence-on .vd-sequence-head { fill: Highlight; }
+  .vd-sequence-step.vd-sequence-on { border-color: Highlight; }
+}
+@media print {
+  .vd-sequence, .vd-sequence-view, .vd-sequence-steps, .vd-sequence-step { overflow: visible; max-block-size: none; min-inline-size: 0; min-block-size: 0; }
+  .vd-sequence-svg { max-inline-size: 100%; inline-size: 100%; block-size: auto; }
+  .vd-sequence-step { break-inside: avoid; white-space: normal; border-color: var(--vd-text); }
+  .vd-sequence-step.vd-sequence-on { background: none; font-weight: 400; }
+  .vd-sequence-step.vd-sequence-on::before { content: none; }
+  .vd-sequence-readout { display: none; }
+  .vd-sequence-on .vd-sequence-hit { fill: none; stroke: none; }
+  .vd-sequence-on .vd-sequence-line, .vd-sequence-on .vd-sequence-head-open { stroke: var(--vd-text); stroke-width: 1.75; }
+  .vd-sequence-on .vd-sequence-head { fill: var(--vd-text); }
+}

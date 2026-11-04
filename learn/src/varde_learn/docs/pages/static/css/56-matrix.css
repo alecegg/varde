@@ -1,0 +1,35 @@
+/* Option matrix block: a table preset. Recommended column, badge and tone colours; the table CSS does the layout. Tones come only from the --vd-tone-* tokens. */
+.vd-matrix { margin-block: var(--vd-density-gap); min-inline-size: 0; max-inline-size: 100%; }
+.vd-matrix .vb-scroll { position: relative; }
+.vd-matrix .vb-status-ok { color: var(--vd-tone-success-text); }
+.vd-matrix .vb-status-warn { color: var(--vd-tone-warning-text); }
+.vd-matrix .vb-status-bad { color: var(--vd-tone-risk-text); }
+.vd-matrix .vb-table .vb-status { white-space: normal; overflow-wrap: break-word; }
+.vd-matrix .vb-table td:not(:first-child) { min-inline-size: 13rem; }
+.vd-matrix .vb-table thead th { white-space: normal; overflow-wrap: break-word; }
+.vd-matrix .vb-table thead th:not(:first-child) { min-inline-size: 13rem; }
+.vd-matrix .vb-table thead th .vb-sort { white-space: normal; text-align: start; overflow-wrap: anywhere; max-inline-size: min(100%, 16rem); }
+.vd-matrix .vb-table th.vd-matrix-rec, .vd-matrix .vb-table td.vd-matrix-rec { border-inline: 1px solid var(--vd-tone-info-edge); }
+.vd-matrix .vb-table th.vd-matrix-rec::after { content: "\2605  Recommended"; display: block; inline-size: fit-content; margin: var(--vd-space-1); padding-inline: var(--vd-space-2); border: 1px solid var(--vd-tone-info-edge); border-radius: var(--vd-radius-full); background: var(--vd-tone-info-tint); color: var(--vd-tone-info-text); font-size: var(--vd-text-xs); font-weight: 600; white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+.vd-matrix .vb-sortpick { max-inline-size: 100%; min-inline-size: 0; }
+.vd-matrix .vb-sortselect { flex: 1 1 0; min-inline-size: 0; max-inline-size: 100%; box-sizing: border-box; }
+.vd-matrix-notes { position: relative; min-inline-size: 0; margin-block-start: var(--vd-space-2); overflow: auto; max-inline-size: 100%; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.vd-matrix-notes ul { margin: 0; padding-inline-start: 1.25rem; min-inline-size: 0; }
+.vd-matrix-notes li, .vd-matrix-notes strong { overflow-wrap: anywhere; }
+.vd-matrix-notes:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+/* Stacked on phones: the option label sits above its value so a long value keeps the full row. */
+@media (width < 40.0625rem) {
+  .vd-matrix .vb-table-stack td { grid-template-columns: minmax(0, 1fr); }
+}
+@media (forced-colors: active) {
+  .vd-matrix .vb-status { color: CanvasText; }
+  .vd-matrix .vb-table th.vd-matrix-rec, .vd-matrix .vb-table td.vd-matrix-rec { border-inline-color: Highlight; }
+  .vd-matrix .vb-table th.vd-matrix-rec::after { border-color: ButtonBorder; background: none; color: ButtonText; }
+}
+@media print {
+  .vd-matrix .vb-table td:not(:first-child), .vd-matrix .vb-table thead th:not(:first-child) { min-inline-size: 0; padding-inline: 0.125rem; }
+  .vd-matrix .vb-table .vb-status { gap: 0; font-size: 0.75em; }
+  .vd-matrix, .vd-matrix .vb-card, .vd-matrix .vb-scroll, .vd-matrix-notes { overflow: visible; min-inline-size: 0; }
+  .vd-matrix .vb-status, .vd-matrix-notes li { white-space: normal; min-inline-size: 0; }
+  .vd-matrix .vb-table th.vd-matrix-rec::after { white-space: normal; background: none; color: var(--vd-text); }
+}

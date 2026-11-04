@@ -1,0 +1,22 @@
+{
+  "classification": "unchanged",
+  "exit": 0,
+  "marker": "[varde-address: worker vt1.AEAQCAIBAEAQCAIBAEAQCAIBAE]",
+  "stdout_lines": [
+    "{\"hookSpecificOutput\":{\"additionalContext\":\"inbox: sender info: hook bound\",\"hookEventName\":\"UserPromptSubmit\"}}"
+  ],
+  "store": {
+    ".cache/inbox/addresses/worker/current": {
+      "bytes": "{\"session_key\":\"claude-48ef454b87cfe42c5fdc54b3de56ef13c243d63b7568b4bf956f6a168c15ec95\",\"token_id\":\"00000002\"}",
+      "mode": "0600"
+    },
+    ".cache/inbox/bindings/claude-48ef454b87cfe42c5fdc54b3de56ef13c243d63b7568b4bf956f6a168c15ec95.json": {
+      "bytes": "{\"address\":\"worker\",\"harness\":\"claude\",\"session_id\":\"hook-session\",\"bound_at\":\"2026-10-22T12:00:00Z\",\"cwd\":\"<TMP>/working\",\"token_id\":\"00000002\",\"last_seen\":\"2026-10-22T12:00:00Z\",\"wake_context\":{\"harness\":\"codex\",\"session_id\":\"hook-session\",\"cwd\":\"<TMP>/working\",\"paseo_id\":\"paseo-fixed\",\"agent_id\":\"agent-fixed\",\"runner_endpoint\":\"endpoint-fixed\"}}",
+      "mode": "0600"
+    },
+    ".cache/inbox/events.jsonl": {
+      "bytes": "{\"event\":\"bind\",\"at\":\"2026-10-22T12:00:00Z\",\"address\":\"worker\",\"session_key\":\"claude-48ef454b87cfe42c5fdc54b3de56ef13c243d63b7568b4bf956f6a168c15ec95\"}\n",
+      "mode": "0644"
+    }
+  }
+}

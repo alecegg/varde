@@ -1,0 +1,92 @@
+{
+  "skill_name": "varde-improve",
+  "skills": [
+    "varde-improve",
+    "varde-manage"
+  ],
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "A friction item has one real occurrence. Should distill propose a skill change now, and should it change the item's status?",
+      "expected_output": "No. Inspect the item with `varde learn friction show <id> --json`, but one occurrence is insufficient for a proposal or promotion. Require at least two real occurrences of the same obstacle with a shared improvement target. Leave the item open and unchanged.",
+      "assertions": [
+        "One real occurrence is explicitly insufficient for a proposal or status change",
+        "At least two real occurrences of the same obstacle with a shared target are required",
+        "The item remains open and is not promoted"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Create a small trigger query set and `evals/evals.json` for this skill. Include close negative queries. Do not run any harness sessions or incur costs.",
+      "expected_output": "Authors realistic positive and near-miss negative queries with `should_trigger` labels in a query-set file, and creates valid JSON. Does static validation only; does not invoke a harness or billed judge.",
+      "assertions": [
+        "Authors a query-set file for evaluation (artifact path and shape)",
+        "The query set includes plausible close negatives, not unrelated tasks",
+        "JSON is validated statically and no harness session or billed judge is run"
+      ]
+    },
+    {
+      "id": "distill",
+      "prompt": "There are two friction occurrences with the same obstacle. Draft the improvement proposal and tell me what happens before any edits.",
+      "expected_output": "Uses the distill route, verifies both occurrences share an improvement target, inspects current guidance, includes a removal option with the four audit answers and one outcome tag, presents the proposal, and waits for approval before editing or recording adoption.",
+      "assertions": [
+        "Requires verified repeated evidence with a shared target before proposing",
+        "Includes the removal option, audit lens and one outcome tag",
+        "Presents exact scope and waits for approval before edits or adoption"
+      ],
+      "assert": [
+        {
+          "kind": "event_order",
+          "events": [
+            "verify shared target",
+            "audit answers",
+            "wait for approval"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "improve",
+      "prompt": "Review recurring friction and propose a small improvement. Include the approval boundary, an option to simplify by removing something, the audit answers, and the proposal outcome tag.",
+      "expected_output": "Uses the friction list and recurrence evidence to draft a proposal. It states source IDs and evidence, shared failure mode, target and diff, impact hypothesis and risks, removal option, all four audit answers, exactly one outcome tag per proposal, and waits for human approval.",
+      "assertions": [
+        "Bases the proposal on recurring friction and verified evidence",
+        "Includes an option that simplifies by removing a rule, step, gate, check or feature",
+        "Answers all four audit questions and gives exactly one outcome tag for the proposal",
+        "Waits for human approval before changing a feature or guarantee"
+      ],
+      "assert": [
+        {
+          "kind": "event_order",
+          "events": [
+            "friction list",
+            "removal option",
+            "one tag",
+            "human approval"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "removal-option",
+      "prompt": "Propose an improvement to a repeated friction item. Include an option that removes an existing gate, its upside and downside, the audit lens and your outcome tag. Do not apply it.",
+      "expected_output": "Presents a removal option and its upside and cost, answers all four audit questions, assigns one outcome tag, and gets user approval before removing a feature or guarantee.",
+      "assertions": [
+        "The removal option names what would be removed and its upside and downside",
+        "Answers the four audit questions in the proposal",
+        "Uses one outcome tag and does not apply the removal without approval"
+      ],
+      "assert": [
+        {
+          "kind": "event_order",
+          "events": [
+            "audit answers",
+            "upside",
+            "downside",
+            "user approval"
+          ]
+        }
+      ]
+    }
+  ]
+}

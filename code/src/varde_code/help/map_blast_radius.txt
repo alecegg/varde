@@ -1,0 +1,8 @@
+Query: potential downstream impact of changing a file (transitive dependents, excluding the file itself). (see `blast_radius` help for inputs)
+
+Usage: varde map blast_radius [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, filePath, resultsLimit?, resultsOffset?, fullResults? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

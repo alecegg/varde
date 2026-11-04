@@ -1,0 +1,73 @@
+{
+  "skill_name": "varde-knowledge",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a knowledge note capturing our decision to use OCC (optimistic concurrency) for all bundle writes instead of file locks. We chose it because multiple agents edit the same checkout concurrently. Store it in the project knowledge folder.",
+      "expected_output": "A new decision note is created with Write at <knowledge>/decision/<slug>.md (type-first path, not nested under a domain). Frontmatter carries type: decision, a one-sentence description, and generated: { by: <harness>/<model-id>, at: <ISO 8601> }. The body follows the decision shape with ## What, ## Why, and ## Constraints headings. Content is compact and factual with no session narrative.",
+      "assertions": [
+        "The note is written to knowledge/decision/<slug>.md, with type as a top-level folder",
+        "Frontmatter includes a non-empty type field, a description, and a generated entry with by and at",
+        "The decision body uses the ## What / ## Why / ## Constraints structure",
+        "The filename is not index.md or log.md"
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
+    },
+    {
+      "id": 2,
+      "prompt": "The user reviewed and signed off that our knowledge note evals/fixtures/knowledge/pattern/error-envelope.md is correct — please record their sign-off.",
+      "expected_output": "A verified entry (verified: { by: human:<id>, at: <ISO 8601> }) is added to the note via a targeted Edit, without overwriting or re-touching the existing generated entry — generated.by (who wrote it) and verified.by (who confirmed it) are kept separate.",
+      "assertions": [
+        "A verified: { by: human:<id>, at: ... } entry is added to the note",
+        "The existing generated entry is not modified or replaced",
+        "The change is applied with a targeted Edit rather than recreating the file"
+      ],
+      "files": [
+        "evals/fixtures/knowledge/pattern/error-envelope.md"
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
+    },
+    {
+      "id": 3,
+      "prompt": "We're retiring the evals/fixtures/knowledge/pattern/legacy-polling.md note — the pattern is no longer how we do things, but old plans still link to it. Handle it.",
+      "expected_output": "Rather than deleting the file, the note is marked status: deprecated via a targeted Edit, keeping it in place so existing links and history stay resolvable. git rm is reserved for content that was wrong or should never have existed, which is not the case here.",
+      "assertions": [
+        "The note is marked status: deprecated rather than removed with git rm",
+        "The file remains at evals/fixtures/knowledge/pattern/legacy-polling.md so existing links resolve",
+        "The retirement is done with a targeted Edit, not by recreating or deleting the note"
+      ],
+      "files": [
+        "evals/fixtures/knowledge/pattern/legacy-polling.md"
+      ],
+      "verification_script": "evals/verify-knowledge-eval.sh"
+    },
+    {
+      "id": 4,
+      "prompt": "Find the knowledge note that explains how our plan bundles differ from findings — I think it's a concept somewhere in the knowledge folder.",
+      "expected_output": "For broad discovery, start from the generated root and type index.md concept maps; for a precise term, use ranked search or Grep/Glob as appropriate. Identify candidate notes first, then read only the identified note's full body. Notes are not opened one-by-one to browse the folder.",
+      "assertions": [
+        "Search is scoped to the knowledge/ folder before any note is read in full",
+        "A candidate note is identified via grep/glob (or CLI search) before its full body is read, not by opening every note"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Reconcile is asked to update a knowledge note's claim, but no current evidence in the codebase supports the proposed change.",
+      "expected_output": "Reconcile does not edit the note. Without confirming evidence for the proposed change, the existing note is left as-is rather than updated on the strength of the request alone.",
+      "assertions": [
+        "No edit is made to the knowledge note without supporting evidence",
+        "The absence of evidence is treated as a reason to leave the note unchanged, not to guess"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Reconcile the stale claim in evals/fixtures/knowledge/pattern/legacy-polling.md against current code. If the evidence supports one correction, apply it.",
+      "expected_output": "Read the note and current code, make an unambiguous evidence-supported targeted correction, and stamp reconciled metadata. The user's explicit instruction authorizes the correction without another confirmation; if evidence does not support it, leave the note unchanged and explain why.",
+      "assertions": [
+        "Evidence in current code is checked before an edit",
+        "An unambiguous correction proceeds without redundant confirmation",
+        "The corrected note keeps history and receives reconciled metadata"
+      ]
+    }
+  ]
+}

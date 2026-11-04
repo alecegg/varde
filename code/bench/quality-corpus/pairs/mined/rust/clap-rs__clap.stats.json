@@ -1,0 +1,39 @@
+{
+  "accepted": 14,
+  "commits_walked": 9226,
+  "filters": {
+    "file_limit": {
+      "evaluated": 170,
+      "passed": 132
+    },
+    "function_limit": {
+      "evaluated": 26,
+      "passed": 14
+    },
+    "generated": {
+      "evaluated": 14,
+      "passed": 14
+    },
+    "intent": {
+      "evaluated": 6938,
+      "passed": 170
+    },
+    "parent": {
+      "evaluated": 9226,
+      "passed": 6938
+    },
+    "parse": {
+      "evaluated": 132,
+      "passed": 26
+    },
+    "public_feature": {
+      "evaluated": 14,
+      "passed": 14
+    }
+  },
+  "intent_matches": 170,
+  "language": "rust",
+  "pin_sha": "ccc89b83875474399e9d9d70841163f6319d1a41",
+  "records_bytes": 12902,
+  "repository": "clap-rs/clap"
+}

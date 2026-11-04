@@ -1,0 +1,12 @@
+Run the local Varde daemon, API and MCP server
+
+Usage: varde serve [COMMAND]
+
+Commands:
+  stop    Stop the running daemon
+  status  Show whether the daemon runs, its port and the token file path
+  mcp     Run the MCP stdio shim for a harness
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

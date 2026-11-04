@@ -1,0 +1,17 @@
+language = "csharp"
+task = "Implement a C# order module in the global namespace as `public static class Original`."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.cs" = "791d283ba843110022375780c4a57a4c5731af7336ca9b6fd4716b6a8f52acb2"
+"judge-classes.cs" = "3ca13f78783e88ada580c686d3b25468e07aabdf87731c33b139597911734280"
+"judge-defensive.cs" = "ef76df6edfb7319ecc74722682a321ff229a617008dccaeee869e340ad37b70e"
+"judge-extract.cs" = "cacd35be8514e0729e20803e6d6aec8f783bbed1137b64968ae99d71959451d5"
+"judge-inline.cs" = "d42255e16555acdd3ec7455ce1b4c2d4dd79afbdfd7e3bd19f07e6d8349cd73d"
+"judge-names.cs" = "cdd09f3d51ac7c8b810f3aa0f3374a25601d69b0c7cc9b335c4abf3da665bfb6"
+"original.cs" = "39edc0d257c764a7ff3c031c6837840443f3c89a7d4cf44e6d90ebb0b418eaed"
+"qssample.csproj" = "c299ec65c19b75d1f4fd4ce516c09ee667a141b87a68a37ec76169cc3f86df2c"
+"smoothed.cs" = "7b0c58240bc866015a752876da00e62366c0159bcd18a6fff91222f2ccd57b69"
+"smoothing.md" = "f41c247378bba14498cdc25d1bf2dace08edcb7dd93b7ecc6a50e22c4d1cb2ca"
+"task.md" = "0195b90629eb5e190efc89a9ecd32ca8809acf2465f90ad50d9206bd6c555d56"

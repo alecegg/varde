@@ -1,0 +1,8 @@
+Propose moving one skill step into a counted tool. Writes a proposal and diff under the memory root loop/; changes no skill file until accepted. Omit STEP to list the step names. Skills with no how topics: use skills reset.
+
+Usage: varde learn skills extract <SKILL> [STEP] [OPTIONS]
+
+Options:
+      --dry-run  Print the diff and token delta; write no proposal
+      --json  Print machine-readable output
+  -h, --help  Print help

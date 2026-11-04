@@ -1,0 +1,30 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "absl/synchronization/mutex.cc"
+  ],
+  "changed_functions": [
+    "Block"
+  ],
+  "child_sha": "111ca7060a6ff50115ca85b59f6b5d8c8c5e9105",
+  "file_licenses": {
+    "abseil/abseil-cpp:absl/synchronization/mutex.cc": "Apache-2.0"
+  },
+  "id": "07739adf4797f65b34132c8a",
+  "intent": {
+    "linked_issues": [],
+    "message": "Export of internal Abseil changes.\n--\na2adbf75201f6b7feba929f77dfc4f87f9c1110b by Abseil Team <absl-team@google.com>:\n\nThis change allows for capturing the address of the mutex from which a call to `Block(...)` could be introducing latency. The attribute is a no-op if the application is not being built with XRay instrumentation.\n\nSee http://llvm.org/docs/XRay.html for more information about XRay.\n\nPiperOrigin-RevId: 225752598\n\n--\n6bc7f25573ddc6711f484dfacab9459f45e0bf42 by Abseil Team <absl-team@google.com>:\n\nUpdate absl/utility/CMakeLists.txt to use new functions\ni.e. absl_cc_(library|test)\n\nPiperOrigin-RevId: 225651883\n\n--\n4acde5e72032f31a26a1ffa53a28f35dbb0bd7d3 by Abseil Team <absl-team@google.com>:\n\nUpdate absl/types/CMakeLists.txt to use new functions\ni.e. absl_cc_(library|test)\n\nPiperOrigin-RevId: 225584788\n\n--\nfe2c740d64b17cece25eee4e5d2196a7c059d3e9 by Abseil Team <absl-team@google.com>:\n\nUpdate auto-generated build options files.\n\nPiperOrigin-RevId: 225557283\n\n--\ncd779dddceeee191ee82deb6b9030c4db288e758 by Jon Cohen <cohenjon@google.com>:\n\nInternal change.\n\nPiperOrigin-RevId: 225556657\n\n--\n3d56dd132d845930c3fb520a39ee77ecb2430bd2 by Matt Kulukundis <kfm@google.com>:\n\nInternal cleanup\n\nPiperOrigin-RevId: 225488946\nGitOrigin-RevId: a2adbf75201f6b7feba929f77dfc4f87f9c1110b\nChange-Id: I1b2178e053bdebc8cf3dcb017b0e247619b81a0c"
+  },
+  "label_source": "developer-intent",
+  "language": "cpp",
+  "left": "a.h",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-cab556ea43db2db5",
+  "parent_sha": "389ec3f906f018661a5308458d623d01f96d7b23",
+  "pin_sha": "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c",
+  "repo": "abseil/abseil-cpp",
+  "right": "b.h",
+  "split": "dev",
+  "upstream_url": "https://github.com/abseil/abseil-cpp.git"
+}

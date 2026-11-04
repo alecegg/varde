@@ -1,0 +1,6 @@
+# The snapshot literals must retain exact CLI output for regression comparisons.
+# ruff: noqa: E501, RUF100
+"""Command-line help text snapshots."""
+
+ROOT_HELP = "Code maps, scans, workflow state, tool-output capture and learning\n\nUsage: varde [COMMAND]\n\nCommands:\n  search     Search code, docs, knowledge, plans, captured output and friction\n  map        Query the code index (symbols, dependencies, impact)\n  scan       Scan the code against rule packs; manage rules\n  score      Score code quality from extracted facts\n  samples    List, inspect and recalibrate quality-score samples\n  edit       Preview and apply AST edits\n  plan       Plans, tasks and reviews\n  run        Capture, query and index command output\n  learn      Diagnose sessions, measure and check skills, record friction and knowledge\n  design     Check frontend pages for design defects\n  msg        Send and read one-line inbox messages between agents\n  setup      Install, configure and diagnose Varde\n  runner     Turn the runner switch and service off or on\n  serve      Run the local Varde daemon, API and MCP server\n  help       Print this message or the help of the given subcommand(s)\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version\n"
+VERSION = "varde 1.0.0\n"

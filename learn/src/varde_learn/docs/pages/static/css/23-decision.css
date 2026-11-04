@@ -1,0 +1,53 @@
+/* 23-decision: verdict buttons as a wrapping group (icon + text, 44px+), evidence
+   list, scrolling diff, comment box like 22-comment, state line. Approve/deny differ
+   by glyph and label, colour only reinforces. The global button focus ring from
+   10-chrome.css is left alone. Tokens only. */
+.decision-question { margin-block: 0 var(--vd-space-3); font-weight: 600; font-size: var(--vd-text-md); line-height: var(--vd-leading-heading); overflow-wrap: anywhere; }
+.decision-evidence { list-style: none; margin: 0 0 var(--vd-space-3); padding: 0; display: flex; flex-direction: column; gap: var(--vd-space-2); }
+.decision-evidence li { display: flex; flex-wrap: wrap; gap: var(--vd-space-1) var(--vd-space-3); padding: var(--vd-space-2) var(--vd-space-3); border: 1px solid var(--vd-border); border-radius: var(--vd-radius-m); background: var(--vd-surface-sunk); min-inline-size: 0; }
+.decision-label { flex: 0 1 auto; max-inline-size: 100%; overflow-wrap: anywhere; }
+.decision-text-line { flex: 1 1 12rem; min-inline-size: 0; color: var(--vd-text-secondary); overflow-wrap: anywhere; }
+/* tabindex=0 makes the scrolling diff keyboard reachable; padding inside leaves the ring room */
+.decision-diff { margin: 0 0 var(--vd-space-3); max-block-size: 24rem; overflow: auto; overscroll-behavior: contain; }
+.decision-diff:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.decision-buttons { display: flex; flex-wrap: wrap; gap: var(--vd-space-2); margin-block-end: var(--vd-space-3); }
+.decision-verdict { display: inline-flex; align-items: center; justify-content: center; gap: var(--vd-space-2); flex: 1 1 8rem; min-inline-size: 0; max-inline-size: 100%; overflow-wrap: anywhere; font-weight: 600; }
+.decision-glyph { font-weight: 700; line-height: 1; }
+.decision-approve { border-color: var(--vd-success); color: var(--vd-text); }
+.decision-approve .decision-glyph { color: var(--vd-success); }
+.decision-deny { border-color: var(--vd-danger); color: var(--vd-text); }
+.decision-deny .decision-glyph { color: var(--vd-danger); }
+@media (hover: hover) {
+  .decision-approve:hover:not(:disabled) { background: var(--vd-success-subtle); }
+  .decision-deny:hover:not(:disabled) { background: var(--vd-danger-subtle); }
+}
+/* chosen verdict: tinted fill and a 2px border (survives forced colours) */
+.decision-item[data-verdict="approved"] .decision-approve { background: var(--vd-success-subtle); border-width: 2px; }
+.decision-item[data-verdict="denied"] .decision-deny { background: var(--vd-danger-subtle); border-width: 2px; }
+.decision-item[data-verdict="commented"] .decision-state { border-color: var(--vd-border-selected); }
+.decision-comment { display: flex; flex-direction: column; gap: var(--vd-space-2); margin-block-end: var(--vd-space-3); min-inline-size: 0; }
+.decision-comment[hidden] { display: none; }
+.decision-note { font-weight: 600; font-size: var(--vd-text-md); line-height: var(--vd-leading-heading); }
+textarea.decision-text {
+  display: block; inline-size: 100%; max-inline-size: 100%; box-sizing: border-box;
+  min-block-size: 6rem; max-block-size: 20rem; padding: var(--vd-space-3);
+  font: inherit; font-size: max(1rem, 16px); line-height: var(--vd-leading-body, 1.5);
+  color: var(--vd-text); background: var(--vd-surface); border: 1px solid var(--vd-border-interactive);
+  border-radius: var(--vd-radius-l); resize: vertical; field-sizing: content;
+  overflow-wrap: anywhere; white-space: pre-wrap; scroll-margin-block: var(--vd-space-4);
+}
+textarea.decision-text:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; border-color: var(--vd-border-selected); }
+textarea.decision-text:disabled, textarea.decision-text:read-only { background: var(--vd-readonly); color: var(--vd-text-secondary); resize: none; }
+.decision-send { align-self: flex-start; scroll-margin-block: var(--vd-space-3); }
+.decision-status { margin: 0; font-size: var(--vd-text-sm); color: var(--vd-text-secondary); }
+.decision-state { display: inline-block; padding: 0 var(--vd-space-2); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); color: var(--vd-text); font-weight: 600; text-transform: capitalize; overflow-wrap: anywhere; }
+.decision-item[data-verdict="approved"] .decision-state::before { content: "\2713\00a0"; content: "\2713\00a0" / ""; }
+.decision-item[data-verdict="denied"] .decision-state::before { content: "\2715\00a0"; content: "\2715\00a0" / ""; }
+.decision-error { margin: var(--vd-space-2) 0 0; color: var(--vd-error); font-size: var(--vd-text-sm); overflow-wrap: anywhere; }
+.decision-error:empty { display: none; }
+@media (max-width: 24rem) { .decision-verdict { flex-basis: 100%; } }
+@media (forced-colors: active) {
+  .decision-verdict, .decision-state, textarea.decision-text { border-color: ButtonBorder; }
+  .decision-item[data-verdict] .decision-verdict { background: Canvas; }
+  textarea.decision-text:focus-visible, .decision-diff:focus-visible { outline-color: Highlight; }
+}

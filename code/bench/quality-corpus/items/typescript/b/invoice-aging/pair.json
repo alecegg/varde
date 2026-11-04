@@ -1,0 +1,33 @@
+{
+  "task": "invoice-aging",
+  "pair_group": "invoice-aging",
+  "language": "typescript",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "44f9df3bd5b9c49b620d77db",
+      "left": "sensible.ts",
+      "right": "monolith.ts"
+    },
+    {
+      "pair_id": "8760f551ed0f488bdd894ca4",
+      "left": "sensible.ts",
+      "right": "tiny.ts"
+    },
+    {
+      "pair_id": "ea196b7f56fa6b66ecb5a862",
+      "left": "sensible.ts",
+      "right": "padded.ts"
+    },
+    {
+      "pair_id": "e6ba6c00b26c7dd57f3bc5e8",
+      "left": "sensible.ts",
+      "right": "sizematched.ts"
+    },
+    {
+      "pair_id": "5862e2b772dc58e04aec0e92",
+      "left": "sensible.ts",
+      "right": "namematched.ts"
+    }
+  ]
+}

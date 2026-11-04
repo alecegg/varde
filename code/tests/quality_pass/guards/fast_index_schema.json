@@ -1,0 +1,20 @@
+{
+  "clone_band_members": ["band_id", "entity_id"],
+  "clone_bands": ["id", "label"],
+  "communities": ["id", "label"],
+  "community_members": ["community_id", "file_id"],
+  "diagnostics": ["id", "file_id", "path", "message", "severity"],
+  "entities": ["id", "kind", "name", "file_id", "start_byte", "end_byte", "start_line", "start_col", "end_line", "end_col", "enclosing_function", "method", "path", "status", "body_shape", "body_minhash", "is_async", "is_test", "owner_type"],
+  "files": ["id", "path", "is_test_path", "is_tooling_path", "mtime", "size", "content_hash", "complexity", "churn", "fan_in", "fan_out", "community_id", "rev", "edges_built_rev"],
+  "function_metrics": ["id", "file_id", "identity", "name", "owner_type", "start_byte", "end_byte", "start_line", "start_col", "end_line", "end_col", "cyclomatic", "cognitive", "max_nesting", "line_span", "byte_size", "confidence", "confidence_reasons", "metric_version"],
+  "graph_cache": ["id", "blob", "rev"],
+  "lexical": ["name", "doc", "body", "lexical", "rank"],
+  "lexical_config": ["k", "v"],
+  "lexical_data": ["id", "block"],
+  "lexical_docsize": ["id", "sz", "origin"],
+  "lexical_idx": ["segid", "term", "pgno"],
+  "resolved_edges": ["id", "from_file_id", "to_file_id", "kind", "resolved", "from_entity_id", "to_entity_id"],
+  "slice_meta": ["key", "value"],
+  "slice_state": ["slice", "built_through_rev", "schema_version"],
+  "symbols": ["id", "kind", "name", "file_id", "start_byte", "end_byte", "start_line", "start_col", "end_line", "end_col"]
+}

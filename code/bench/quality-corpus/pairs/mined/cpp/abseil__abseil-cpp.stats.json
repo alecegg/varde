@@ -1,0 +1,39 @@
+{
+  "accepted": 60,
+  "commits_walked": 3856,
+  "filters": {
+    "file_limit": {
+      "evaluated": 263,
+      "passed": 141
+    },
+    "function_limit": {
+      "evaluated": 124,
+      "passed": 72
+    },
+    "generated": {
+      "evaluated": 72,
+      "passed": 72
+    },
+    "intent": {
+      "evaluated": 3753,
+      "passed": 263
+    },
+    "parent": {
+      "evaluated": 3856,
+      "passed": 3753
+    },
+    "parse": {
+      "evaluated": 141,
+      "passed": 124
+    },
+    "public_feature": {
+      "evaluated": 72,
+      "passed": 60
+    }
+  },
+  "intent_matches": 263,
+  "language": "cpp",
+  "pin_sha": "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c",
+  "records_bytes": 109618,
+  "repository": "abseil/abseil-cpp"
+}

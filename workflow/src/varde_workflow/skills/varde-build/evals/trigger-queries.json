@@ -1,0 +1,12 @@
+[
+  {"query": "The retry backoff in src/queue/worker.mjs uses a fixed delay. Make it exponential with jitter.", "should_trigger": true},
+  {"query": "Fix the bug where closing the logger does not flush pending writes.", "should_trigger": true},
+  {"query": "Diagnose why the cache invalidation test is flaky, but do not change production code.", "should_trigger": true},
+  {"query": "Refactor the parser module without changing behavior.", "should_trigger": true},
+  {"query": "You are the builder for working/plans/2026-09-21-logger-fix/tasks/flush-on-exit.md. Complete only this task.", "should_trigger": true},
+  {"query": "Did we actually finish 2026-08-10-manage-command? Show me the evidence.", "should_trigger": false},
+  {"query": "Check the finished work against the plan's acceptance criteria without changing anything.", "should_trigger": false},
+  {"query": "Go over the auth changes I just made and tell me what's wrong with them.", "should_trigger": false},
+  {"query": "Plan out how we would add multi-tenant support to billing.", "should_trigger": false},
+  {"query": "Build the whole notifications plan with its five tasks.", "should_trigger": false}
+]

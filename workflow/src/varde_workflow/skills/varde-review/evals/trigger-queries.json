@@ -1,0 +1,12 @@
+[
+  {"query": "Review the diff on this branch against main and tell me what is risky before I merge.", "should_trigger": true},
+  {"query": "Check this plan against its tasks and acceptance criteria and report any gaps.", "should_trigger": true},
+  {"query": "Apply the findings in the review we wrote yesterday.", "should_trigger": true},
+  {"query": "Address the review threads and failing checks on this open PR.", "should_trigger": true},
+  {"query": "Simplify what I just changed in src/api/error.rs. Keep behavior.", "should_trigger": true},
+  {"query": "Run visual QA on https://example.test/app and tell me what looks broken.", "should_trigger": false},
+  {"query": "Fix the bug where the logger does not flush on close.", "should_trigger": false},
+  {"query": "Write a pull request description for this branch.", "should_trigger": false},
+  {"query": "Verify the finished plan against its acceptance criteria without changing anything.", "should_trigger": false},
+  {"query": "Review the SKILL.md for our deploy skill and tell me what is wrong with it.", "should_trigger": false}
+]

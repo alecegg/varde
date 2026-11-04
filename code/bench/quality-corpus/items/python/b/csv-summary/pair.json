@@ -1,0 +1,52 @@
+{
+  "pair_group_id": "2af91be4a03420c43f5856b6",
+  "task": "csv-summary",
+  "language": "python",
+  "pairs": [
+    {
+      "pair_id": "ff7438c4e7257c7e0244375f",
+      "left_id": "89550c6b3fa2ff0c83e6ad30",
+      "right_id": "0155b59da89f9d523f425788",
+      "left": "sensible.py",
+      "right": "tiny.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "ace761c8dad9a4d995678ad0",
+      "left_id": "1e7a31bf8fb3c9f663bc6c3e",
+      "right_id": "a1566478f4aa22a9346e74b1",
+      "left": "sensible.py",
+      "right": "padded.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "1c1d153b68c1f566fffefbb6",
+      "left_id": "ec9865b0a55d8063e0af56ab",
+      "right_id": "129edfb5af9c2d9158c7203c",
+      "left": "sensible.py",
+      "right": "sizematched.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "0e7dbfe856fd30fc015a1dfd",
+      "left_id": "a5b65106fb271ccb8a3408f1",
+      "right_id": "dadcd6d09d5585c3bc9ee20e",
+      "left": "sensible.py",
+      "right": "namematched.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "6f7ada624694122cc6b16cf3",
+      "left_id": "d05ebd637d4fbcb00fd89c28",
+      "right_id": "e38f527714117f6b32bde428",
+      "left": "sensible.py",
+      "right": "monolith.py",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+Query: map a dependency path between two files. (see `map_path` help for inputs)
+
+Usage: varde map map_path [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, sourceFile, targetFile, maxDepth? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

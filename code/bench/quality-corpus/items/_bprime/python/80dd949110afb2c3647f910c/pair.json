@@ -1,0 +1,10 @@
+{
+  "pair_id": "80dd949110afb2c3647f910c",
+  "pair_group_id": "76043dc397e24d1c5d46a718",
+  "left_id": "15811f035d1edc105784e3a8",
+  "right_id": "ed6945338648ade6bf4fb294",
+  "left": "a.py",
+  "right": "b.py",
+  "left_role": "before",
+  "right_role": "after"
+}

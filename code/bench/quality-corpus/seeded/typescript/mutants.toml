@@ -1,0 +1,152 @@
+[run]
+typescript = { command = ["node", "{test}"] }
+
+[[mutants]]
+id = "discount100"
+description = "Change discount100 business rule"
+find = "subtotal < 100"
+replace = "subtotal <= 100"
+
+[[mutants]]
+id = "discount200"
+description = "Change discount200 business rule"
+find = "subtotal >= 200"
+replace = "subtotal > 200"
+
+[[mutants]]
+id = "discount10rate"
+description = "Change discount10rate business rule"
+find = "subtotal * 0.1"
+replace = "subtotal * 0.11"
+
+[[mutants]]
+id = "discount5rate"
+description = "Change discount5rate business rule"
+find = "subtotal * 0.05"
+replace = "subtotal * 0.06"
+
+[[mutants]]
+id = "shipping150"
+description = "Change shipping150 business rule"
+find = "discountedSubtotal >= 150"
+replace = "discountedSubtotal > 150"
+
+[[mutants]]
+id = "shipping50"
+description = "Change shipping50 business rule"
+find = "discountedSubtotal >= 50"
+replace = "discountedSubtotal > 50"
+
+[[mutants]]
+id = "shippingmid"
+description = "Change shippingmid business rule"
+find = "return 5;"
+replace = "return 6;"
+
+[[mutants]]
+id = "shippinglow"
+description = "Change shippinglow business rule"
+find = "return 12;"
+replace = "return 13;"
+
+[[mutants]]
+id = "taxrate"
+description = "Change taxrate business rule"
+find = "discountedSubtotal * 0.08"
+replace = "discountedSubtotal * 0.09"
+
+[[mutants]]
+id = "roundup"
+description = "Change roundup business rule"
+find = "Math.round((value + Number.EPSILON) * 100) / 100"
+replace = "Math.floor((value + Number.EPSILON) * 100) / 100"
+
+[[mutants]]
+id = "emptyitems"
+description = "Change emptyitems business rule"
+find = "value.items.length === 0"
+replace = "value.items.length < 0"
+
+[[mutants]]
+id = "emptyid"
+description = "Change emptyid business rule"
+find = "value.id.trim() === ''"
+replace = "value.id.trim() === '  '"
+
+[[mutants]]
+id = "qtyzero"
+description = "Change qtyzero business rule"
+find = "quantity <= 0"
+replace = "quantity < 0"
+
+[[mutants]]
+id = "qtyfraction"
+description = "Change qtyfraction business rule"
+find = "!Number.isInteger(quantity)"
+replace = "false"
+
+[[mutants]]
+id = "dupes"
+description = "Change dupes business rule"
+find = "seen.has(sku)"
+replace = "false"
+
+[[mutants]]
+id = "unknownsku"
+description = "Change unknownsku business rule"
+find = "if (!isRecord(entry))"
+replace = "if (false)"
+
+[[mutants]]
+id = "pricepositive"
+description = "Change pricepositive business rule"
+find = "price <= 0"
+replace = "price < 0"
+
+[[mutants]]
+id = "finiteprice"
+description = "Change finiteprice business rule"
+find = "!Number.isFinite(price)"
+replace = "false"
+
+[[mutants]]
+id = "stockinteger"
+description = "Change stockinteger business rule"
+find = "!Number.isInteger(stock)"
+replace = "false"
+
+[[mutants]]
+id = "stocknegative"
+description = "Change stocknegative business rule"
+find = "stock < 0"
+replace = "stock < -1"
+
+[[mutants]]
+id = "stocklimit"
+description = "Change stocklimit business rule"
+find = "quantity > stock"
+replace = "quantity >= stock"
+
+[[mutants]]
+id = "taxstage"
+description = "Change taxstage business rule"
+find = "money(discountedSubtotal * 0.08)"
+replace = "money(subtotal * 0.08)"
+
+[[mutants]]
+id = "subtotalround"
+description = "Change subtotalround business rule"
+find = "subtotal = money(subtotal + lineTotal)"
+replace = "subtotal += lineTotal"
+
+[[mutants]]
+id = "line_round"
+description = "Change line_round business rule"
+find = "const lineTotal = money(price * quantity)"
+replace = "const lineTotal = price * quantity"
+
+[[mutants]]
+id = "totalshipping"
+description = "Change totalshipping business rule"
+find = "discountedSubtotal + tax + shipping"
+replace = "discountedSubtotal + tax"

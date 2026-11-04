@@ -1,0 +1,5 @@
+Merge the SQLite queue tables into the role inbox database
+
+Usage: varde plan queue merge-role-inbox
+
+Stop the runner first. The command backs up the queue database and any existing inbox database, copies and verifies all queue-owned rows, then advances the queue marker.

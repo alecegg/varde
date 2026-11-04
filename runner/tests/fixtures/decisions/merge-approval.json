@@ -1,0 +1,11 @@
+{
+  "type": "approval",
+  "approval": "merge",
+  "title": "Merge dashboard decisions",
+  "asked": "May this plan be merged?",
+  "why": "Implementation and review are complete.",
+  "plan_id": "dashboard-decisions",
+  "options": [],
+  "recommendation": "approve",
+  "evidence": [{"kind": "diff", "caption": "Diff stat", "text": "4 files changed, 98 insertions(+), 12 deletions(-)"}]
+}

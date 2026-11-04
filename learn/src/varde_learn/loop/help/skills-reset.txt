@@ -1,0 +1,18 @@
+Propose slimming a skill to outcomes plus validation, or restoring it to a recorded baseline. Writes a proposal; changes no file until accepted.
+
+Usage: varde learn skills reset <SKILL> --model <ID> --harness-version <VERSION> [--no-pointer] [OPTIONS]
+       varde learn skills reset <SKILL> --to-baseline --baselines <DIR> [--gen <GEN>] [--root <DIR>] [OPTIONS]
+
+Options:
+      --model <ID>                 Model the reset is for (required unless --to-baseline)
+      --harness-version <VERSION>  Harness version the reset is for (required unless --to-baseline)
+      --no-pointer                 Slim without a `## Topics` section or `how:` lines: moved sections become how topics and SKILL.md keeps no pointer to them (a baseline)
+      --to-baseline                Restore the exact baseline file set (SKILL.md, references, assets, step_tools, how/) from the generation's slim/ copy; files not in the baseline are deleted; no how pointer lines are added
+      --baselines <DIR>            Directory holding MANIFEST.json (with --to-baseline)
+      --gen <GEN>                  Baseline generation [default: the skill's newest entry]
+      --root <DIR>                 Restore a repo package root (<DIR>/skills/<skill>, <DIR>/how/<skill>) instead of the synced install
+      --dry-run                    Print the diff and token delta; write no proposal
+      --json                       Print machine-readable output
+  -h, --help                       Print help
+
+A baseline restore refuses a slim copy whose hash differs from the entry's tree_hash. Accepting it checks the written tree against that hash; verify later with `learn measure <SKILL> baseline --check`. A repo checkout's unpointed topics must be listed in core/how-unpointed.txt (check-refs.sh); `learn measure <SKILL> baseline --record --source <repo>` writes it, a reset proposal does not.

@@ -1,0 +1,50 @@
+[
+  {
+    "skill": "varde-x",
+    "direction": "trim",
+    "change": "move step \"a\" into a tool <b>",
+    "created": "2026-11-01",
+    "token_delta": -120,
+    "decision": "",
+    "later_demand": {
+      "a": 2
+    },
+    "pre_hashes": {},
+    "id": "trim-varde-x-1",
+    "state": "proposed",
+    "trigger": [
+      "f-1",
+      "f-2"
+    ]
+  },
+  {
+    "skill": "varde-y",
+    "direction": "reset",
+    "change": "move step \"a\" into a tool <b>",
+    "created": "2026-11-01",
+    "token_delta": -300,
+    "decision": "",
+    "later_demand": {},
+    "pre_hashes": {},
+    "id": "reset-varde-y-1",
+    "state": "proposed",
+    "trigger": []
+  },
+  {
+    "skill": "varde-z",
+    "direction": "trim",
+    "change": "move step \"a\" into a tool <b>",
+    "created": "2026-11-01",
+    "token_delta": -120,
+    "decision": "",
+    "later_demand": {
+      "a": 2
+    },
+    "pre_hashes": {},
+    "id": "trim-varde-z-1",
+    "state": "rejected",
+    "trigger": [
+      "f-9"
+    ]
+  }
+]

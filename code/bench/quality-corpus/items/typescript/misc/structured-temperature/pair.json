@@ -1,0 +1,11 @@
+{
+  "pair_id": "75aad96ed4f055e10c256acc",
+  "pair_group_id": "7ceebc8f916551bab9ed5f66",
+  "left_id": "a76754608de0f4dab53341f1",
+  "right_id": "1f8bd4e50ca90d16da0461c1",
+  "left": "good.ts",
+  "right": "bad.ts",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "mutable-flags"
+}

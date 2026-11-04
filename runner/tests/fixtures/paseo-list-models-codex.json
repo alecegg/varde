@@ -1,0 +1,14 @@
+{
+  "provider": "codex",
+  "models": [
+    {
+      "provider": "codex",
+      "id": "gpt-6-luna",
+      "label": "GPT-6-Luna",
+      "thinkingOptions": [
+        { "id": "medium", "label": "medium", "isDefault": true }
+      ],
+      "defaultThinkingOptionId": "medium"
+    }
+  ]
+}

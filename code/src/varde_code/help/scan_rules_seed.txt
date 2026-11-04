@@ -1,0 +1,11 @@
+Seed: materialize the built-in rule packs as editable TOML files in the repo (`.varde-code/rules/`, default) or user (`--user`, `<varde config root>/code/rules/` (default `~/.config/varde/code/rules/`) scope, so they can be customized directly instead of only overridden by id. Existing files are left untouched unless `--force`. Undo with `rules_remove` (same `--user`/`--force` flags). The routed `--rule-id <id>` option selects only the built-in pack containing that id. (see `rules_seed` help)
+
+Usage: varde scan rules rules_seed [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>   JSON object: { repoRoot, ruleId? }
+      --user          Seed into the user-scoped rules dir instead of the repo's
+      --force         Overwrite files that already exist (default: leave them alone)
+      --rule-id <ID>  Seed only the built-in pack containing this rule id
+  -v, --verbose       Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help          Print help

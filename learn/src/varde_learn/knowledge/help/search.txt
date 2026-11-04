@@ -1,0 +1,14 @@
+Search Concepts, or list all of them when no filter is given: `--field key=value` for exact frontmatter matches, `--text <QUERY>` for ranked lexical full-text search across bodies and frontmatter (composable: `--field` narrows first, `--text` ranks/filters the remainder)
+
+Usage: varde learn knowledge search [OPTIONS]
+
+Options:
+      --field <KEY=VALUE>  Exact-value frontmatter filter `key=value`, repeatable; results must match every filter (AND semantics). Values match strings, the canonical form of other scalars, or any element of a sequence (e.g. `tags`)
+      --text <QUERY>       Ranked lexical full-text search across Concept bodies and frontmatter values (substring matching, not fuzzy). Composes with `--field`: when both are given, `--field` narrows to exact matches first and `--text` ranks/filters the remainder
+      --limit <LIMIT>      Maximum number of results `--text` returns, ranked highest-score first (ties broken alphabetically by slug). Ignored for a `--field`-only search [default: 20]
+      --bundle <BUNDLE>    Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde setup paths`) when omitted
+      --include-deprecated Without a filter, include `status: deprecated` Concepts in the listing
+      --offset <OFFSET>    Without a filter, records skipped before returning results [default: 0]
+      --all                Without a filter, return every record without pagination
+      --json               Machine-readable JSON output
+  -h, --help               Print help

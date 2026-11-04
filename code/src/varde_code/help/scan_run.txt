@@ -1,0 +1,26 @@
+Under construction: all languages are report-only; verdicts are advisory. Scan built-in, user, and repository rules against a fresh read-only index. On index_missing or index_stale, run `varde map build --repo-root <repo-root>` on the main checkout and retry. Exit nonzero for incomplete analysis or policy-blocking findings. Inspect data.analysis.status and data.gate.status independently. Example: `varde scan --json '{"repoRoot":"."}'`. Analysis completeness and policy gate status are independent; inspect both
+
+Usage: varde scan [OPTIONS] --json <JSON>
+       varde scan --report [--repo-root <PATH>] [--no-build] [--readme-max-behind <N>]
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, output?, severityThreshold?, gateRules?, fullFindings?, findingsLimit?, findingsOffset?, skipQuality?, allowCalibrationChange?, migratePreview?, rulesRef?, changedSince?, vs?, verdict? } Example: `varde scan --json '{"repoRoot":"."}'`. Choose either severityThreshold or explicit gateRules
+      --apply        Apply rewrite templates after a complete scan. Pattern rewrites use captured `$VAR` (one node) and `$$$VAR` (multiple nodes); unknown languages or unavailable captures are reported as per-file failures. Without this flag, source files remain unchanged
+      --force        With `--apply`: write to files with uncommitted git changes. For setup, allow replacing overrides. Without it, such files are skipped as `skipped-dirty`
+      --skip-quality  Skip the quality pass and quality-* rules; restores the scan without quality scoring. Same as `"skipQuality": true` in the JSON
+      --migrate-preview  Show the quality score diff for a different formula major or calibration id instead of scanning. Same as `"migratePreview": true` in the JSON
+      --allow-calibration-change  Accept a different formula major or calibration id than the pinned one. Same as `"allowCalibrationChange": true` in the JSON
+      --rules-ref <REF>  Read rules, thresholds and overrides from this git ref (use the base branch in a protected CI workflow). Same as `"rulesRef"` in the JSON
+      --changed-since <REF>  Limit quality floor and cap findings to files changed since this git ref; the mean covers the full scope. Same as `"changedSince"` in the JSON
+      --vs <NAME>    Show a per-file quality verdict and fix list (field `quality_verdict`) against `repo` (this scan's own non-test files; default), `generic` (shipped calibration line) or `mine` (your saved examples). The verdict is also shown with `--changed-since` or `"verdict": true`. It is a report field: no finding, no severity, no effect on the exit code. Same as `"vs"` in the JSON
+      --report       Print one summary line (gate, analysis, finding counts, build and scan seconds) instead of JSON. Builds the index once on index_missing or index_stale and retries. Exit 0 for pass or fail with complete analysis; 1 for a failed build, invalid output or incomplete analysis; 2 for a bad repo root. In a repo with justfile and .githooks, warns on stderr when a context pack is missing or the README pack is far behind
+      --repo-root <PATH>  With `--report`: repository root (default: git top level of the current directory)
+      --no-build     With `--report`: on index_missing or index_stale, print the recovery command and exit 0 instead of building
+      --readme-max-behind <N>  With `--report`: warn when the README pack is at least N commits behind (default 100)
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help
+
+Subcommands:
+  test   Test: run every rule's `[[rule.test]]` entries and report pass/fail. Self-contained — no DB, no prior `build`; exits non-zero when any test fails. (see `test` help for inputs)
+  setup  Apply a scan preset and show effective rules
+  rules  Subcommands of `varde scan rules`

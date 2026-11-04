@@ -1,0 +1,40 @@
+/* Containers: tabs and columns that hold other blocks. Every panel shows by default; containers.js adds the tablist. Tones and colours come only from tokens. */
+.vd-containers { margin-block: var(--vd-density-gap); min-inline-size: 0; }
+.vd-containers-panel { min-inline-size: 0; }
+.vd-containers-label { margin: 0 0 var(--vd-space-2); font-size: var(--vd-text-md); font-weight: 650; overflow-wrap: anywhere; }
+.vd-containers-alt { margin: 0 0 var(--vd-space-2); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: anywhere; }
+.vd-containers-slot { min-inline-size: 0; }
+.vd-containers-slot > .block { margin-block: var(--vd-space-2); }
+.vd-containers-note { margin: 0; padding: var(--vd-space-2) var(--vd-space-3); border: 1px solid var(--vd-tone-warning-edge); border-radius: var(--vd-radius-m); background: var(--vd-tone-warning-tint); color: var(--vd-tone-warning-text); overflow-wrap: anywhere; }
+.vd-columns-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-4); min-inline-size: 0; }
+.vd-columns-panel { padding-inline-start: var(--vd-space-3); border-inline-start: 1px solid var(--vd-border); }
+@container vd-doc (min-width: 44rem) {
+  .vd-columns-n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .vd-columns-n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .vd-columns-n4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.vd-ctabs-panel { padding-block-start: var(--vd-space-2); }
+.vd-ctabs-on > .vd-ctabs-panel > .vd-containers-label { display: none; }
+.vd-ctabs-on > .vd-ctabs-panel[hidden] { display: none; }
+.vd-ctabs-scroll { position: relative; overflow-x: auto; border-block-end: 1px solid var(--vd-border); }
+.vd-ctabs-scroll:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vd-ctabs-list { display: flex; gap: var(--vd-space-1); inline-size: max-content; min-inline-size: 100%; }
+.vd-ctabs-tab { flex: 0 0 auto; box-sizing: border-box; min-block-size: 44px; max-inline-size: min(20rem, 75cqi); padding: var(--vd-space-2) var(--vd-space-4); border: 2px solid var(--vd-neutral-muted); border-radius: var(--vd-radius-s) var(--vd-radius-s) 0 0; background: none; color: var(--vd-text-secondary); font: inherit; font-weight: 600; text-align: start; white-space: normal; overflow-wrap: normal; cursor: pointer; }
+@media (hover: hover) { .vd-ctabs-tab:hover { background: var(--vd-hover); color: var(--vd-text); } }
+.vd-ctabs-tab[aria-selected="true"] { border-color: var(--vd-border-selected); background: var(--vd-selected); color: var(--vd-text); }
+.vd-ctabs-tab:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+@media (forced-colors: active) {
+  .vd-ctabs-scroll { border-block-end-color: CanvasText; }
+  .vd-ctabs-tab { border: 2px solid ButtonBorder; color: ButtonText; }
+  .vd-ctabs-tab[aria-selected="true"] { border-color: Highlight; color: HighlightText; background: Highlight; }
+  .vd-columns-panel { border-inline-start-color: CanvasText; }
+  .vd-containers-note { border-color: CanvasText; background: none; color: CanvasText; }
+}
+@media print {
+  .vd-containers, .vd-ctabs-scroll, .vd-ctabs-panel, .vd-columns-grid { overflow: visible; }
+  .vd-ctabs-scroll { display: none; }
+  .vd-ctabs-on > .vd-ctabs-panel > .vd-containers-label { display: block; }
+  .vd-ctabs-on > .vd-ctabs-panel[hidden], .vd-ctabs-panel[hidden] { display: block; }
+  .vd-columns-grid { grid-template-columns: minmax(0, 1fr); }
+  .vd-containers-note { background: none; color: var(--vd-text); }
+}

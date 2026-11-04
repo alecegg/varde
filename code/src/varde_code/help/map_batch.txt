@@ -1,0 +1,8 @@
+Query: run several query modes in one call. (see `batch` help for inputs)
+
+Usage: varde map batch [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, calls: [{ mode, ... }, ...] } Example: {"repoRoot":".","calls":[{"mode":"get_symbol","name":"authenticate"},{"mode":"dependencies","filePath":"src/api.rs"}]}
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

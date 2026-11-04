@@ -1,0 +1,10 @@
+Show one message and its delivery state
+
+Usage: varde msg show <ID> [--json]
+
+Arguments:
+  <ID>  Message ID
+
+Options:
+      --json  Print message, state, timestamps, and recipient age as JSON
+  -h, --help  Print help (see more with '--help')

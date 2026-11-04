@@ -1,0 +1,9 @@
+references/review-gates.md varde-build varde-docs varde-orchestrate
+references/main-agent-replies.md varde-orchestrate varde-swarm
+references/TASK-TEMPLATE.md varde-build varde-plan
+references/varde-code-cli.md varde-docs varde-explain varde-explore varde-plan varde-review
+references/varde-workflow-cli.md varde-build varde-knowledge varde-orchestrate varde-swarm
+references/workflow-state.md varde-build varde-orchestrate varde-swarm
+references/options.md varde-diagnose varde-improve
+references/report-format.md varde-review varde-review-ui
+references/sentence-style.md varde-doc-authoring varde-skill-authoring

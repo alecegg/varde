@@ -1,0 +1,131 @@
+[
+  {
+    "returned": {
+      "id": "golden-02",
+      "idempotency_key": "planner-key",
+      "text": "Plan this",
+      "project": "workspace",
+      "state": "new",
+      "notes_path": "<DATA>/workitem-notes/golden-02/request.md",
+      "planner_session": null,
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 2,
+        "item_id": "golden-02",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-02",
+      "idempotency_key": "planner-key",
+      "text": "Plan this",
+      "project": "workspace",
+      "state": "planning",
+      "notes_path": "<DATA>/workitem-notes/golden-02/request.md",
+      "planner_session": "planner-session",
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 2,
+        "item_id": "golden-02",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 3,
+        "item_id": "golden-02",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      }
+    ]
+  },
+  {
+    "claimed": true,
+    "returned": {
+      "id": "golden-03",
+      "idempotency_key": "claim-key",
+      "text": "Claim this",
+      "project": "workspace",
+      "state": "planning",
+      "notes_path": "<DATA>/workitem-notes/golden-03/request.md",
+      "planner_session": null,
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 4,
+        "item_id": "golden-03",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 5,
+        "item_id": "golden-03",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner start claimed"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-03",
+      "idempotency_key": "claim-key",
+      "text": "Claim this",
+      "project": "workspace",
+      "state": "new",
+      "notes_path": "<DATA>/workitem-notes/golden-03/request.md",
+      "planner_session": null,
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 4,
+        "item_id": "golden-03",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 5,
+        "item_id": "golden-03",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner start claimed"
+      },
+      {
+        "seq": 6,
+        "item_id": "golden-03",
+        "prior_state": "planning",
+        "new_state": "new",
+        "detail": "planner start recovered for retry"
+      }
+    ]
+  }
+]

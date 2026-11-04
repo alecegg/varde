@@ -1,0 +1,4 @@
+category = "a"
+language = "rust"
+pair_group_id = "4337e150de52d82e3d1edcd7"
+dominant_defect = "mutable-flags"

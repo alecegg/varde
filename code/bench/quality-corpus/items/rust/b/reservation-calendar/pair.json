@@ -1,0 +1,12 @@
+{
+  "pair_group_id": "982a2a9a4261e1e74a4ae22b",
+  "task": "reservation-calendar",
+  "language": "rust",
+  "pairs": [
+    {"pair_id":"a18cb8ef726448a5a8047102","left_id":"5c6205d4d48741e5ae03d107","right_id":"38e1d96579904eddb6638b20","left":"sensible.rs","right":"tiny.rs","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"6d96218558a949ada4c6f9bd","left_id":"5c6205d4d48741e5ae03d107","right_id":"398ccca9956e4ff29e843355","left":"sensible.rs","right":"padded.rs","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"dfa53ea8da3f4be995a3292a","left_id":"5c6205d4d48741e5ae03d107","right_id":"f11ad9f1eb4c4922ac144867","left":"sensible.rs","right":"sizematched.rs","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"0e12c041484b4f0c9df6e189","left_id":"5c6205d4d48741e5ae03d107","right_id":"c724a51e56ec4709b8f3869c","left":"sensible.rs","right":"namematched.rs","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"d418b4f7d6234a25a9a01a90","left_id":"5c6205d4d48741e5ae03d107","right_id":"721ae1d140ee4d04839b1969","left":"sensible.rs","right":"monolith.rs","left_role":"sensible","right_role":"over-monolith"}
+  ]
+}

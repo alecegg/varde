@@ -1,0 +1,250 @@
+2026-09-22 05:14:30.281100+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46078], error = 159: Sandbox restriction
+2026-09-22 05:14:30.281375+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46078], error = 159: Sandbox restriction
+2026-09-22 05:14:30.289366+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46079], error = 159: Sandbox restriction
+2026-09-22 05:14:30.289607+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46079], error = 159: Sandbox restriction
+2026-09-22 05:14:30.303119+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46080], error = 159: Sandbox restriction
+2026-09-22 05:14:30.303385+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46080], error = 159: Sandbox restriction
+2026-09-22 05:14:30.312375+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46087], error = 159: Sandbox restriction
+2026-09-22 05:14:30.312593+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46087], error = 159: Sandbox restriction
+2026-09-22 05:14:30.508155+0200  localhost launchd[1]: [system:] failed lookup: name = com.apple.AppleLOM.Watchdog, flags = 0x1, requestor = watchdogd[550], error = 3: No such process
+2026-09-22 05:14:33.198670+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46524], error = 159: Sandbox restriction
+2026-09-22 05:14:33.198857+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46524], error = 159: Sandbox restriction
+2026-09-22 05:14:33.202828+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46524], error = 159: Sandbox restriction
+2026-09-22 05:14:33.202958+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46524], error = 159: Sandbox restriction
+2026-09-22 05:14:33.373833+0200  localhost launchd[1]: Remove subscription with token 54514
+2026-09-22 05:14:33.532382+0200  localhost launchd[1]: Remove subscription with token 54515
+2026-09-22 05:14:33.735157+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46533], error = 159: Sandbox restriction
+2026-09-22 05:14:33.735414+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46533], error = 159: Sandbox restriction
+2026-09-22 05:14:33.740932+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46533], error = 159: Sandbox restriction
+2026-09-22 05:14:33.741249+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46533], error = 159: Sandbox restriction
+2026-09-22 05:14:34.003647+0200  localhost launchd[1]: [pid/12823 [photolibraryd]:] uncorking domain
+2026-09-22 05:14:34.015855+0200  localhost launchd[1]: [pid/12823 [photolibraryd]:] Service stub initialized for com.apple.SetStoreUpdateService
+2026-09-22 05:14:34.015926+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService:] initialized endpoint after lookup
+2026-09-22 05:14:34.018661+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:14:34.018691+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService:] service state: spawn scheduled
+2026-09-22 05:14:34.018694+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService:] service state: spawning
+2026-09-22 05:14:34.018776+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService:] launching: ipc (mach)
+2026-09-22 05:14:34.021464+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService [46540]:] xpcproxy spawned with pid 46540
+2026-09-22 05:14:34.021514+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService [46540]:] internal event: SPAWNED, code = 0
+2026-09-22 05:14:34.021518+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService [46540]:] service state: xpcproxy
+2026-09-22 05:14:34.021543+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService [46540]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:14:34.035515+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService [46540]:] service state: running
+2026-09-22 05:14:34.035543+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService [46540]:] internal event: INIT, code = 0
+2026-09-22 05:14:34.035570+0200  localhost launchd[1]: [pid/12823/com.apple.SetStoreUpdateService [46540]:] Successfully spawned SetStoreUpdateService[46540] because ipc (mach)
+2026-09-22 05:14:34.048405+0200  localhost launchd[1]: [pid/46540 [SetStoreUpdateS]:] uncorking exec source upfront
+2026-09-22 05:14:34.048453+0200  localhost launchd[1]: [pid/46540 [SetStoreUpdateS]:] created
+2026-09-22 05:14:34.161708+0200  localhost launchd[1]: [pid/46540 [SetStoreUpdateS]:] uncorking domain
+2026-09-22 05:14:34.184445+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.CoreServices.coreservicesd, flags = 0x9, requestor = SetStoreUpdateS[46540], error = 159: Sandbox restriction
+2026-09-22 05:14:34.188617+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.DiskArbitration.diskarbitrationd, flags = 0x9, requestor = SetStoreUpdateS[46540], error = 159: Sandbox restriction
+2026-09-22 05:14:35.152148+0200  localhost launchd[1]: Remove subscription with token 1303973
+2026-09-22 05:14:35.152180+0200  localhost launchd[1]: Last log repeated 1 times
+2026-09-22 05:14:35.253142+0200  localhost launchd[1]: Remove subscription with token 1303767
+2026-09-22 05:14:36.966187+0200  localhost launchd[1]: [gui/501/com.pi-web:] service state: spawning
+2026-09-22 05:14:36.966244+0200  localhost launchd[1]: [gui/501/com.pi-web:] launching: semaphore
+2026-09-22 05:14:36.966925+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] xpcproxy spawned with pid 46660
+2026-09-22 05:14:36.966957+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] internal event: SPAWNED, code = 0
+2026-09-22 05:14:36.966961+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] service state: xpcproxy
+2026-09-22 05:14:36.966963+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] deferred event: domain spawn response: 0
+2026-09-22 05:14:36.966968+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:14:36.971663+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] Service could not initialize: Unable to set current working directory. path = /Users/dev/source/pi-web/worktrees/00076-install-sh, error 0x2 - No such file or directory
+2026-09-22 05:14:36.971673+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] initialization failure: 26A428: xpcproxy + 24664 [945][449FAE8E-5C25-3463-B680-193D4C4F4F21]: 0x2
+2026-09-22 05:14:36.971675+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] internal event: INIT, code = 2
+2026-09-22 05:14:36.971681+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] job state = spawn failed
+2026-09-22 05:14:36.972074+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] xpcproxy exited due to exit(78)
+2026-09-22 05:14:36.972084+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] exited due to exit(78), ran for 5ms
+2026-09-22 05:14:36.972085+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] already handled failed init, ignoring
+2026-09-22 05:14:36.972087+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] service state: exited
+2026-09-22 05:14:36.972118+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] internal event: EXITED, code = 0
+2026-09-22 05:14:36.972120+0200  localhost launchd[1]: [gui/501 [100015]:] service inactive: com.pi-web
+2026-09-22 05:14:36.972122+0200  localhost launchd[1]: [gui/501/com.pi-web [46660]:] service state: not running
+2026-09-22 05:14:36.972125+0200  localhost launchd[1]: [gui/501/com.pi-web:] Service only ran for 0 seconds. Pushing respawn out by 10 seconds.
+2026-09-22 05:14:36.972177+0200  localhost launchd[1]: [gui/501/com.pi-web:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:14:36.972178+0200  localhost launchd[1]: [gui/501/com.pi-web:] service state: spawn scheduled
+2026-09-22 05:14:36.972179+0200  localhost launchd[1]: [gui/501/com.pi-web:] service spawn deferred by 10 seconds due to throttle
+2026-09-22 05:14:41.693881+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46819], error = 159: Sandbox restriction
+2026-09-22 05:14:41.694185+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46819], error = 159: Sandbox restriction
+2026-09-22 05:14:41.698552+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46819], error = 159: Sandbox restriction
+2026-09-22 05:14:41.699047+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46819], error = 159: Sandbox restriction
+2026-09-22 05:14:41.714543+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46820], error = 159: Sandbox restriction
+2026-09-22 05:14:41.715639+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46820], error = 159: Sandbox restriction
+2026-09-22 05:14:41.720161+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46820], error = 159: Sandbox restriction
+2026-09-22 05:14:41.720438+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46820], error = 159: Sandbox restriction
+2026-09-22 05:14:41.725841+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46821], error = 159: Sandbox restriction
+2026-09-22 05:14:41.726469+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46821], error = 159: Sandbox restriction
+2026-09-22 05:14:41.742698+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46821], error = 159: Sandbox restriction
+2026-09-22 05:14:41.743047+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46821], error = 159: Sandbox restriction
+2026-09-22 05:14:41.752285+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46824], error = 159: Sandbox restriction
+2026-09-22 05:14:41.752530+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46824], error = 159: Sandbox restriction
+2026-09-22 05:14:41.755895+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46824], error = 159: Sandbox restriction
+2026-09-22 05:14:41.756132+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46824], error = 159: Sandbox restriction
+2026-09-22 05:14:43.699160+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46959], error = 159: Sandbox restriction
+2026-09-22 05:14:43.699541+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46959], error = 159: Sandbox restriction
+2026-09-22 05:14:43.711314+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46960], error = 159: Sandbox restriction
+2026-09-22 05:14:43.711571+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46960], error = 159: Sandbox restriction
+2026-09-22 05:14:43.728531+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46963], error = 159: Sandbox restriction
+2026-09-22 05:14:43.728754+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46963], error = 159: Sandbox restriction
+2026-09-22 05:14:43.744420+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[46966], error = 159: Sandbox restriction
+2026-09-22 05:14:43.744776+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[46966], error = 159: Sandbox restriction
+2026-09-22 05:14:45.235923+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[46994], error = 159: Sandbox restriction
+2026-09-22 05:14:45.236220+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[46994], error = 159: Sandbox restriction
+2026-09-22 05:14:45.265161+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[46995], error = 159: Sandbox restriction
+2026-09-22 05:14:45.265435+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[46995], error = 159: Sandbox restriction
+2026-09-22 05:14:45.293750+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[46996], error = 159: Sandbox restriction
+2026-09-22 05:14:45.294071+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[46996], error = 159: Sandbox restriction
+2026-09-22 05:14:45.325418+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[47005], error = 159: Sandbox restriction
+2026-09-22 05:14:45.325848+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[47005], error = 159: Sandbox restriction
+2026-09-22 05:14:46.585822+0200  localhost launchd[1]: [gui/501/com.pi-web:] cannot spawn: service is throttled
+2026-09-22 05:14:46.586275+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:14:46.586290+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000:] service state: spawn scheduled
+2026-09-22 05:14:46.586292+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000:] service state: spawning
+2026-09-22 05:14:46.586433+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000:] launching: ipc (mach)
+2026-09-22 05:14:46.588052+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000 [47060]:] xpcproxy spawned with pid 47060
+2026-09-22 05:14:46.588097+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000 [47060]:] internal event: SPAWNED, code = 0
+2026-09-22 05:14:46.588100+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000 [47060]:] service state: xpcproxy
+2026-09-22 05:14:46.588120+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000 [47060]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:14:46.601665+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000 [47060]:] service state: running
+2026-09-22 05:14:46.601697+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000 [47060]:] internal event: INIT, code = 0
+2026-09-22 05:14:46.601717+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0C000000-0100-0000-0000-000000000000 [47060]:] Successfully spawned mdworker_shared[47060] because ipc (mach)
+2026-09-22 05:14:46.614432+0200  localhost launchd[1]: [pid/47060 [mdworker_shared]:] uncorking exec source upfront
+2026-09-22 05:14:46.614481+0200  localhost launchd[1]: [pid/47060 [mdworker_shared]:] created
+2026-09-22 05:14:46.980014+0200  localhost launchd[1]: [gui/501/com.pi-web:] service state: spawning
+2026-09-22 05:14:46.980103+0200  localhost launchd[1]: [gui/501/com.pi-web:] launching: semaphore
+2026-09-22 05:14:46.981590+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] xpcproxy spawned with pid 47071
+2026-09-22 05:14:46.981636+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] internal event: SPAWNED, code = 0
+2026-09-22 05:14:46.981639+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] service state: xpcproxy
+2026-09-22 05:14:46.981642+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] deferred event: domain spawn response: 0
+2026-09-22 05:14:46.981649+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:14:46.991245+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] Service could not initialize: Unable to set current working directory. path = /Users/dev/source/pi-web/worktrees/00076-install-sh, error 0x2 - No such file or directory
+2026-09-22 05:14:46.991275+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] initialization failure: 26A428: xpcproxy + 24664 [945][449FAE8E-5C25-3463-B680-193D4C4F4F21]: 0x2
+2026-09-22 05:14:46.991278+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] internal event: INIT, code = 2
+2026-09-22 05:14:46.991281+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] job state = spawn failed
+2026-09-22 05:14:46.992049+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] xpcproxy exited due to exit(78)
+2026-09-22 05:14:46.992071+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] exited due to exit(78), ran for 11ms
+2026-09-22 05:14:46.992073+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] already handled failed init, ignoring
+2026-09-22 05:14:46.992077+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] service state: exited
+2026-09-22 05:14:46.992102+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] internal event: EXITED, code = 0
+2026-09-22 05:14:46.992107+0200  localhost launchd[1]: [gui/501 [100015]:] service inactive: com.pi-web
+2026-09-22 05:14:46.992109+0200  localhost launchd[1]: [gui/501/com.pi-web [47071]:] service state: not running
+2026-09-22 05:14:46.992115+0200  localhost launchd[1]: [gui/501/com.pi-web:] Service only ran for 0 seconds. Pushing respawn out by 10 seconds.
+2026-09-22 05:14:46.992254+0200  localhost launchd[1]: [gui/501/com.pi-web:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:14:46.992256+0200  localhost launchd[1]: [gui/501/com.pi-web:] service state: spawn scheduled
+2026-09-22 05:14:46.992257+0200  localhost launchd[1]: [gui/501/com.pi-web:] service spawn deferred by 10 seconds due to throttle
+2026-09-22 05:14:51.949478+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0600-0000-0000-000000000000 [38242]:] exited due to SIGKILL | sent by mds[553], ran for 232389ms
+2026-09-22 05:14:51.949518+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0600-0000-0000-000000000000 [38242]:] service state: exited
+2026-09-22 05:14:51.949548+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0600-0000-0000-000000000000 [38242]:] internal event: EXITED, code = 0
+2026-09-22 05:14:51.949556+0200  localhost launchd[1]: [user/501:] service inactive: com.apple.mdworker.shared.0B000000-0600-0000-0000-000000000000
+2026-09-22 05:14:51.949559+0200  localhost launchd[1]: [user/501:] removing service: com.apple.mdworker.shared.0B000000-0600-0000-0000-000000000000
+2026-09-22 05:14:51.949614+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0600-0000-0000-000000000000 [38242]:] internal event: PETRIFIED, code = 0
+2026-09-22 05:14:51.949617+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0600-0000-0000-000000000000 [38242]:] service state: not running
+2026-09-22 05:14:51.949646+0200  localhost launchd[1]: [pid/38242 [mdworker_shared]:] shutting down
+2026-09-22 05:14:51.949673+0200  localhost launchd[1]: [pid/38242 [mdworker_shared]:] cleaning up
+2026-09-22 05:14:51.949843+0200  localhost launchd[1]: [system:] removing child: pid/38242
+2026-09-22 05:14:52.678883+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[47246], error = 159: Sandbox restriction
+2026-09-22 05:14:52.679134+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[47246], error = 159: Sandbox restriction
+2026-09-22 05:14:52.702782+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[47247], error = 159: Sandbox restriction
+2026-09-22 05:14:52.703020+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[47247], error = 159: Sandbox restriction
+2026-09-22 05:14:52.725204+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[47248], error = 159: Sandbox restriction
+2026-09-22 05:14:52.725419+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[47248], error = 159: Sandbox restriction
+2026-09-22 05:14:52.748060+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = codex[47249], error = 159: Sandbox restriction
+2026-09-22 05:14:52.748287+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = codex[47249], error = 159: Sandbox restriction
+2026-09-22 05:14:55.642203+0200  localhost launchd[1]: [gui/501/com.pi-web:] cannot spawn: service is throttled
+2026-09-22 05:14:55.642916+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:14:55.642930+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000:] service state: spawn scheduled
+2026-09-22 05:14:55.642932+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000:] service state: spawning
+2026-09-22 05:14:55.642954+0200  localhost launchd[1]: Last log repeated 1 times
+2026-09-22 05:14:55.643008+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000:] launching: ipc (mach)
+2026-09-22 05:14:55.644818+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000 [47322]:] xpcproxy spawned with pid 47322
+2026-09-22 05:14:55.644869+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000 [47322]:] internal event: SPAWNED, code = 0
+2026-09-22 05:14:55.644872+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000 [47322]:] service state: xpcproxy
+2026-09-22 05:14:55.644889+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000 [47322]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:14:55.644894+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:14:55.644895+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000:] service state: spawn scheduled
+2026-09-22 05:14:55.644897+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000:] service state: spawning
+2026-09-22 05:14:55.644966+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000:] launching: ipc (mach)
+2026-09-22 05:14:55.646128+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000 [47323]:] xpcproxy spawned with pid 47323
+2026-09-22 05:14:55.646167+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000 [47323]:] internal event: SPAWNED, code = 0
+2026-09-22 05:14:55.646169+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000 [47323]:] service state: xpcproxy
+2026-09-22 05:14:55.646178+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000 [47323]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:14:55.656006+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000 [47322]:] service state: running
+2026-09-22 05:14:55.656034+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000 [47322]:] internal event: INIT, code = 0
+2026-09-22 05:14:55.656047+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.0B000000-0700-0000-0000-000000000000 [47322]:] Successfully spawned mdworker_shared[47322] because ipc (mach)
+2026-09-22 05:14:55.656062+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000 [47323]:] service state: running
+2026-09-22 05:14:55.656064+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000 [47323]:] internal event: INIT, code = 0
+2026-09-22 05:14:55.656066+0200  localhost launchd[1]: [user/501/com.apple.mdworker.shared.03000000-0000-0000-0000-000000000000 [47323]:] Successfully spawned mdworker_shared[47323] because ipc (mach)
+2026-09-22 05:14:55.664784+0200  localhost launchd[1]: [pid/47322 [mdworker_shared]:] uncorking exec source upfront
+2026-09-22 05:14:55.664880+0200  localhost launchd[1]: [pid/47322 [mdworker_shared]:] created
+2026-09-22 05:14:55.665179+0200  localhost launchd[1]: [pid/47323 [mdworker_shared]:] uncorking exec source upfront
+2026-09-22 05:14:55.665198+0200  localhost launchd[1]: [pid/47323 [mdworker_shared]:] created
+2026-09-22 05:14:56.238117+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47339], error = 159: Sandbox restriction
+2026-09-22 05:14:56.238379+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47339], error = 159: Sandbox restriction
+2026-09-22 05:14:56.242114+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47339], error = 159: Sandbox restriction
+2026-09-22 05:14:56.242301+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47339], error = 159: Sandbox restriction
+2026-09-22 05:14:56.995839+0200  localhost launchd[1]: [gui/501/com.pi-web:] service state: spawning
+2026-09-22 05:14:56.995926+0200  localhost launchd[1]: [gui/501/com.pi-web:] launching: semaphore
+2026-09-22 05:14:56.997503+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] xpcproxy spawned with pid 47352
+2026-09-22 05:14:56.997546+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] internal event: SPAWNED, code = 0
+2026-09-22 05:14:56.997550+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] service state: xpcproxy
+2026-09-22 05:14:56.997552+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] deferred event: domain spawn response: 0
+2026-09-22 05:14:56.997560+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:14:57.007629+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] Service could not initialize: Unable to set current working directory. path = /Users/dev/source/pi-web/worktrees/00076-install-sh, error 0x2 - No such file or directory
+2026-09-22 05:14:57.007662+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] initialization failure: 26A428: xpcproxy + 24664 [945][449FAE8E-5C25-3463-B680-193D4C4F4F21]: 0x2
+2026-09-22 05:14:57.007665+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] internal event: INIT, code = 2
+2026-09-22 05:14:57.007669+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] job state = spawn failed
+2026-09-22 05:14:57.008455+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] xpcproxy exited due to exit(78)
+2026-09-22 05:14:57.008478+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] exited due to exit(78), ran for 11ms
+2026-09-22 05:14:57.008480+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] already handled failed init, ignoring
+2026-09-22 05:14:57.008483+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] service state: exited
+2026-09-22 05:14:57.008491+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] internal event: EXITED, code = 0
+2026-09-22 05:14:57.008495+0200  localhost launchd[1]: [gui/501 [100015]:] service inactive: com.pi-web
+2026-09-22 05:14:57.008497+0200  localhost launchd[1]: [gui/501/com.pi-web [47352]:] service state: not running
+2026-09-22 05:14:57.008503+0200  localhost launchd[1]: [gui/501/com.pi-web:] Service only ran for 0 seconds. Pushing respawn out by 10 seconds.
+2026-09-22 05:14:57.008599+0200  localhost launchd[1]: [gui/501/com.pi-web:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:14:57.008601+0200  localhost launchd[1]: [gui/501/com.pi-web:] service state: spawn scheduled
+2026-09-22 05:14:57.008602+0200  localhost launchd[1]: [gui/501/com.pi-web:] service spawn deferred by 10 seconds due to throttle
+2026-09-22 05:14:59.158133+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47413], error = 159: Sandbox restriction
+2026-09-22 05:14:59.158396+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47413], error = 159: Sandbox restriction
+2026-09-22 05:14:59.162034+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47413], error = 159: Sandbox restriction
+2026-09-22 05:14:59.162295+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47413], error = 159: Sandbox restriction
+2026-09-22 05:15:00.296399+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd:] internal event: WILL_SPAWN, code = 0
+2026-09-22 05:15:00.296464+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd:] service state: spawn scheduled
+2026-09-22 05:15:00.296465+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd:] service state: spawning
+2026-09-22 05:15:00.296695+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd:] launching: ipc (mach)
+2026-09-22 05:15:00.299423+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd [47461]:] xpcproxy spawned with pid 47461
+2026-09-22 05:15:00.299498+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd [47461]:] internal event: SPAWNED, code = 0
+2026-09-22 05:15:00.299506+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd [47461]:] service state: xpcproxy
+2026-09-22 05:15:00.299592+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd [47461]:] internal event: SOURCE_ATTACH, code = 0
+2026-09-22 05:15:00.308640+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd [47461]:] service state: running
+2026-09-22 05:15:00.308678+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd [47461]:] internal event: INIT, code = 0
+2026-09-22 05:15:00.308690+0200  localhost launchd[1]: [system/com.apple.findmy.findmybeaconingd [47461]:] Successfully spawned findmybeaconingd[47461] because ipc (mach)
+2026-09-22 05:15:00.326385+0200  localhost launchd[1]: [pid/47461 [findmybeaconing]:] uncorking exec source upfront
+2026-09-22 05:15:00.326433+0200  localhost launchd[1]: [pid/47461 [findmybeaconing]:] created
+2026-09-22 05:15:00.461700+0200  localhost launchd[1]: [system:] denied lookup: name = com.apple.timed.xpc, requestor = findmybeaconing[47461], error = 159: Sandbox restriction
+2026-09-22 05:15:00.509218+0200  localhost launchd[1]: [system:] failed lookup: name = com.apple.AppleLOM.Watchdog, flags = 0x1, requestor = watchdogd[550], error = 3: No such process
+2026-09-22 05:15:00.509289+0200  localhost launchd[1]: Last log repeated 3 times
+2026-09-22 05:15:00.707206+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47485], error = 159: Sandbox restriction
+2026-09-22 05:15:00.707479+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47485], error = 159: Sandbox restriction
+2026-09-22 05:15:00.710312+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47486], error = 159: Sandbox restriction
+2026-09-22 05:15:00.710689+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47486], error = 159: Sandbox restriction
+2026-09-22 05:15:00.712649+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47485], error = 159: Sandbox restriction
+2026-09-22 05:15:00.712914+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47485], error = 159: Sandbox restriction
+2026-09-22 05:15:00.715890+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47486], error = 159: Sandbox restriction
+2026-09-22 05:15:00.716222+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47486], error = 159: Sandbox restriction
+2026-09-22 05:15:00.717259+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47487], error = 159: Sandbox restriction
+2026-09-22 05:15:00.717538+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47487], error = 159: Sandbox restriction
+2026-09-22 05:15:00.720953+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47487], error = 159: Sandbox restriction
+2026-09-22 05:15:00.721167+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47487], error = 159: Sandbox restriction
+2026-09-22 05:15:00.723181+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47488], error = 159: Sandbox restriction
+2026-09-22 05:15:00.723372+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47488], error = 159: Sandbox restriction
+2026-09-22 05:15:00.726490+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47488], error = 159: Sandbox restriction
+2026-09-22 05:15:00.726676+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47488], error = 159: Sandbox restriction
+2026-09-22 05:15:00.780053+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47507], error = 159: Sandbox restriction
+2026-09-22 05:15:00.780427+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47507], error = 159: Sandbox restriction
+2026-09-22 05:15:00.784126+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = zsh[47507], error = 159: Sandbox restriction
+2026-09-22 05:15:00.784341+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = zsh[47507], error = 159: Sandbox restriction
+2026-09-22 05:15:00.789113+0200  localhost launchd[1]: [system:] denied lookup: name = com.apple.system.opendirectoryd.membership, flags = 0x8, requestor = git[47523], error = 159: Sandbox restriction
+2026-09-22 05:15:00.789260+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.bsd.dirhelper, flags = 0x9, requestor = git[47523], error = 159: Sandbox restriction
+2026-09-22 05:15:00.789394+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.logd, flags = 0x9, requestor = git[47523], error = 159: Sandbox restriction
+2026-09-22 05:15:00.789512+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.system.notification_center, flags = 0x9, requestor = git[47523], error = 159: Sandbox restriction
+2026-09-22 05:15:00.789599+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.bsd.dirhelper, flags = 0x9, requestor = git[47523], error = 159: Sandbox restriction
+2026-09-22 05:15:00.789643+0200  localhost launchd[1]: [system:] denied lookup: name = com.apple.system.opendirectoryd.membership, flags = 0x8, requestor = git[47523], error = 159: Sandbox restriction
+2026-09-22 05:15:00.789708+0200  localhost launchd[1]: [gui/501 [100015]:] denied lookup: name = com.apple.bsd.dirhelper, flags = 0x9, requestor = git[47523], error = 159: Sandbox restriction

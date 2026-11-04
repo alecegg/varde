@@ -1,0 +1,22 @@
+Set or clear the harness-neutral owner for one plan
+
+Usage: varde plan owner [OPTIONS] <PLAN> [HARNESS:ID]
+
+Arguments:
+  <PLAN>
+          Plan path or identifier
+
+  [HARNESS:ID]
+          Owner identifier in opaque `<harness>:<id>` form
+
+Options:
+      --clear
+          Remove the plan owner
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+The owner is an opaque `<harness>:<id>` string. `varde plan watch` passes it to
+`orchestration.wake_command` as VARDE_WAKE_OWNER so the wake can reach the
+owning session. An orchestrator sets its own at start.
+Example: `varde plan owner plan.md agent:123`.

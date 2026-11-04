@@ -1,0 +1,5 @@
+Validate an agent handoff
+
+Usage: varde plan handoff-check [OPTIONS] <FILE>
+
+Options: --root <DIR>, --json, -h

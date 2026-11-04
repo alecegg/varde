@@ -1,0 +1,26 @@
+routes/settings/TypesCard.svelte:1 # The multiline config editor needs a content-sized minimum height.
+routes/settings/sections/SettingsContent.svelte:4 # Settings form sections retain their explicit responsive layout.
+routes/settings/[section]/+page.svelte:3 # Settings route shells preserve their section layout geometry.
+routes/settings/SdkFlipCard.svelte:1 # The confirmation dialog uses viewport-relative limits for short screens.
+routes/settings/RolesCard.svelte:1 # The role list scroll area is capped to keep its controls reachable.
+routes/profile/[agentId]/+page.svelte:8 # Chat profile layout retains its dedicated responsive sizing and typography.
+routes/plans/[id]/+page.svelte:1 # Plan actions preserve the 44px touch target contract.
+lib/DragHandle.svelte:1 # The drag affordance uses fixed icon and focus-ring geometry for pointer access.
+lib/AgentFilterBar.svelte:1 # Filter chips preserve the mobile touch target and label padding.
+lib/ThreadHeader.svelte:6 # Thread controls follow the compact chat header geometry.
+lib/HomeThread.svelte:3 # Chat surface sizing preserves desktop and mobile conversation bounds.
+lib/ActorBadge.svelte:1 # Actor state badges use a compact fixed minimum for single-line labels.
+lib/NeedsYou.svelte:9 # Home cards retain independent styling and the filtered chat view matches prototype B.
+lib/RoleStatusCard.svelte:2 # Status labels and controls keep their compact card proportions.
+lib/AgentCard.svelte:1 # The roster grid's min() sizing prevents overflow on narrow screens.
+lib/PinControls.svelte:1 # Pin controls keep their explicit 44px touch target.
+lib/AuditSheet.svelte:1 # The audit sheet is limited to the visible viewport on phones.
+lib/Roster.svelte:1 # Roster selection controls retain the 44px touch target.
+lib/chat/MenuSheet.svelte:10 # Full-screen chat menu uses viewport dimensions and a scrim color.
+lib/chat/InlineApproval.svelte:2 # Approval bubbles retain responsive chat message dimensions.
+lib/chat/ChatShell.svelte:3 # Chat shell header and message sizing match the fixed conversation layout.
+lib/chat/ChatList.svelte:17 # Legacy chat-list styles remain while the Needs action pin uses a shared component.
+lib/chat/AppHeader.svelte:4 # Chat app header keeps its fixed mobile touch targets and compact header geometry.
+lib/chat/DesktopChatSidebar.svelte:3 # Desktop sidebar keeps its grid and explicit keyboard focus geometry.
+lib/chat/AvatarRow.svelte:15 # Avatar rows use dedicated compact spacing and image dimensions.
+lib/chat/ChatThread.svelte:8 # Conversation bubbles and composer use viewport-specific chat geometry.

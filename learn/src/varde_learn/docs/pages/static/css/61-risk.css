@@ -1,0 +1,47 @@
+/* Risks block: a 3x3 summary grid (role=img) and the full risk list. Severity is a glyph plus a word; the cell border style (solid, dashed, double) repeats it for grey print. Chips shrink to dots in a narrow container. Tones come only from the --vd-tone-* tokens. */
+.vd-risk { --vd-rk-edge: var(--vd-tone-info-edge); --vd-rk-text: var(--vd-tone-info-text); margin-block: var(--vd-density-gap); min-inline-size: 0; max-inline-size: 100%; }
+.vd-risk-title { margin: 0 0 var(--vd-space-2); font-weight: 650; overflow-wrap: break-word; }
+.vd-risk-summary, .vd-risk-axes { margin: 0 0 var(--vd-space-2); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); overflow-wrap: break-word; }
+.vd-risk-grid { display: grid; grid-template-columns: 4.5rem repeat(3, minmax(0, 1fr)); gap: var(--vd-space-1); min-inline-size: 0; max-inline-size: 100%; margin-block-end: var(--vd-space-4); }
+.vd-risk-colhead, .vd-risk-rowhead { min-inline-size: 0; align-self: center; color: var(--vd-text-secondary); font-size: var(--vd-label-size); font-weight: var(--vd-label-weight); text-transform: uppercase; overflow-wrap: break-word; }
+.vd-risk-colhead { text-align: center; }
+.vd-risk-cell { --vd-rk-edge: var(--vd-tone-info-edge); display: flex; flex-wrap: wrap; align-content: flex-start; gap: var(--vd-space-1); box-sizing: border-box; min-inline-size: 0; min-block-size: 3.5rem; padding: var(--vd-space-1); border: 2px solid var(--vd-rk-edge); border-radius: var(--vd-radius-s); overflow: hidden; }
+.vd-risk-cell-low { border-style: solid; }
+.vd-risk-cell-medium { --vd-rk-edge: var(--vd-tone-warning-edge); border-style: dashed; }
+.vd-risk-cell-high { --vd-rk-edge: var(--vd-tone-risk-edge); border-style: double; border-width: 4px; }
+.vd-risk-cell-critical { --vd-rk-edge: var(--vd-tone-risk-edge); border-style: double; border-width: 6px; background: var(--vd-tone-risk-tint); }
+.vd-risk-glyph { flex: none; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); line-height: 1.4; }
+.vd-risk-chip, .vd-risk-more { box-sizing: border-box; min-inline-size: 0; max-inline-size: 100%; padding-inline: var(--vd-space-1); border: 1px solid var(--vd-border-interactive); border-radius: var(--vd-radius-full); background: var(--vd-surface); color: var(--vd-text); font-family: var(--vd-font-mono); font-size: var(--vd-text-sm); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vd-risk-more { border-style: dashed; }
+.vd-risk-list { margin: 0; padding: 0; min-inline-size: 0; }
+.vd-risk-entry { --vd-rk-edge: var(--vd-tone-info-edge); --vd-rk-text: var(--vd-tone-info-text); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--vd-space-1) var(--vd-space-3); min-inline-size: 0; padding: var(--vd-space-2) var(--vd-space-3); border-inline-start: 4px solid var(--vd-rk-edge); border-block-end: 1px solid var(--vd-border-interactive); }
+.vd-risk-sev-medium { --vd-rk-edge: var(--vd-tone-warning-edge); --vd-rk-text: var(--vd-tone-warning-text); }
+.vd-risk-sev-high, .vd-risk-sev-critical { --vd-rk-edge: var(--vd-tone-risk-edge); --vd-rk-text: var(--vd-tone-risk-text); }
+.vd-risk-entry > dt { grid-column: 1 / -1; min-inline-size: 0; font-weight: 600; overflow-wrap: break-word; }
+.vd-risk-entry > dd { margin: 0; min-inline-size: 0; overflow-wrap: break-word; }
+.vd-risk-id { font-family: var(--vd-font-mono); }
+.vd-risk-key { max-inline-size: 100%; overflow-wrap: break-word; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.vd-risk-sevmark, .vd-risk-sevword { color: var(--vd-rk-text); font-weight: 600; }
+@container vd-doc (min-width: 36rem) {
+  .vd-risk-entry { grid-template-columns: repeat(3, minmax(13rem, 1fr)); }
+}
+@container vd-doc (max-width: 30rem) {
+  .vd-risk-grid { grid-template-columns: 3.5rem repeat(3, minmax(0, 1fr)); }
+  .vd-risk-cell { min-block-size: 2.5rem; }
+  .vd-risk-chip { inline-size: 0.625rem; block-size: 0.625rem; padding: 0; font-size: 0; color: var(--vd-surface); background: var(--vd-text-secondary); }
+}
+@media (forced-colors: active) {
+  .vd-risk-cell, .vd-risk-chip, .vd-risk-more { border-color: CanvasText; }
+  .vd-risk-cell-critical, .vd-risk-cell-high { border-color: Highlight; }
+  .vd-risk-chip { background: CanvasText; }
+  .vd-risk-entry { border-color: CanvasText; }
+  .vd-risk-sevmark, .vd-risk-sevword { color: CanvasText; }
+}
+@media print {
+  .vd-risk, .vd-risk .vb-card, .vd-risk .vd-risk-grid, .vd-risk .vd-risk-list, .vd-risk .vd-risk-entry, .vd-risk .vd-risk-cell { overflow: visible; min-inline-size: 0; white-space: normal; }
+  .vd-risk .vd-risk-grid { grid-template-columns: 3.5rem repeat(3, minmax(0, 1fr)); }
+  .vd-risk .vd-risk-cell { min-block-size: 0; background: none; }
+  .vd-risk .vd-risk-chip { inline-size: auto; block-size: auto; padding-inline: 0.125rem; font-size: 0.75rem; background: none; white-space: normal; overflow-wrap: break-word; overflow: visible; }
+  .vd-risk .vd-risk-entry { grid-template-columns: minmax(0, 1fr); break-inside: avoid; }
+  .vd-risk .vd-risk-sevmark, .vd-risk .vd-risk-sevword { color: var(--vd-text); }
+}

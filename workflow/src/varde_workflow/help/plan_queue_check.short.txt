@@ -1,0 +1,10 @@
+Read task queue order and blockers
+
+Usage: varde plan queue check [OPTIONS] <PLAN>
+
+Arguments:
+  <PLAN>  Plan path or identifier
+
+Options:
+      --json  Print machine-readable output
+  -h, --help  Print help (see more with '--help')

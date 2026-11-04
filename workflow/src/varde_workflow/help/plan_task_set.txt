@@ -1,0 +1,13 @@
+Set a task status
+
+Usage: varde plan task set <TASK> <STATE> [--plan <PLAN>]
+
+Arguments:
+  <TASK>  Task file path or task id when --plan is supplied
+  <STATE> Target task status
+
+Options:
+      --plan <PLAN>  Plan containing the task id
+      --json
+
+Validates the state transition, writes `status` and UTC `status_at` to task frontmatter, and prints the updated path.

@@ -1,0 +1,17 @@
+Print the entries relevant to a session start (agent, skill, project, global).
+
+Prints a pointer: the memory index location and index lines, never entry
+bodies; read a body with `varde learn memory show <id>`. Retired and expired
+entries are excluded. A Topics line counts topics (at most 8). Index lines list
+only `surface: true` entries by scope (skill, agent, project, global), then
+newest created, then id. Without --skill, one line names the skills with memory.
+
+Usage: varde learn memory surface [OPTIONS]
+
+Options:
+  --agent <name>      Include this agent's entries (none are selected without it)
+  --skill <name>      Include this skill's entries
+  --project <key>     Project key (default: the current project)
+  --budget <chars>    Output cap (default: [memory] budget in config.toml, 1200)
+  --json              Print a JSON envelope
+  -h, --help          Print help

@@ -1,0 +1,149 @@
+# Built-in empty-handler syntax policies.
+#
+# A comment inside a handler body is intentional suppression. Comments remain
+# AST children, so comment-only bodies do not match these patterns.
+[[rule]]
+id = "empty-catch-block"
+kind = "pattern"
+severity = "error"
+name = "Empty catch handler policy"
+description = "A bound catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the error, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A } catch ($ERR) { }"
+languages = ["typescript", "tsx", "javascript"]
+
+[[rule]]
+id = "empty-catch-block-unbound"
+kind = "pattern"
+severity = "error"
+name = "Empty unbound catch handler policy"
+description = "An unbound catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty unbound catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the error, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A } catch { }"
+languages = ["typescript", "tsx", "javascript"]
+
+# `constraints.ERR = "!^(ImportError|ModuleNotFoundError)$"` excludes two
+# idiomatic Python optional-dependency suppression shapes.
+[[rule]]
+id = "empty-except-block"
+kind = "pattern"
+severity = "error"
+name = "Empty except handler policy"
+description = "A Python except handler whose body is only `pass` violates the empty-handler syntax policy."
+message = "empty except handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try:\n    $$$A\nexcept $ERR: pass"
+languages = ["python"]
+constraints = { ERR = "!^(ImportError|ModuleNotFoundError)$" }
+
+[[rule]]
+id = "empty-except-block-bare"
+kind = "pattern"
+severity = "error"
+name = "Empty bare except handler policy"
+description = "A Python bare except handler whose body is only `pass` violates the empty-handler syntax policy."
+message = "empty bare except handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try:\n    $$$A\nexcept: pass"
+languages = ["python"]
+
+[[rule]]
+id = "empty-catch-block-java"
+kind = "pattern"
+severity = "error"
+name = "Empty Java catch handler policy"
+description = "A Java catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty Java catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A; } catch ($TYPE $ERR) { }"
+languages = ["java"]
+
+[[rule]]
+id = "empty-catch-block-csharp"
+kind = "pattern"
+severity = "error"
+name = "Empty C# catch handler policy"
+description = "A C# catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty C# catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "catch ($TYPE $ERR) { }"
+languages = ["csharp"]
+
+[[rule]]
+id = "empty-catch-block-kotlin"
+kind = "pattern"
+severity = "error"
+name = "Empty Kotlin catch handler policy"
+description = "A Kotlin catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty Kotlin catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A } catch ($ERR: $TYPE) { }"
+languages = ["kotlin"]
+
+[[rule]]
+id = "empty-catch-block-dart"
+kind = "pattern"
+severity = "error"
+name = "Empty Dart catch handler policy"
+description = "A Dart catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty Dart catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A; } catch ($ERR) { }"
+languages = ["dart"]
+
+[[rule]]
+id = "empty-catch-block-dart-typed"
+kind = "pattern"
+severity = "error"
+name = "Empty typed Dart catch handler policy"
+description = "A typed Dart catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty typed Dart catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A; } on $TYPE catch ($ERR) { }"
+languages = ["dart"]
+
+[[rule]]
+id = "empty-catch-block-php"
+kind = "pattern"
+severity = "error"
+name = "Empty PHP catch handler policy"
+description = "A PHP catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty PHP catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A; } catch ($TYPE $$ERR) { }"
+languages = ["php"]
+
+[[rule]]
+id = "empty-catch-block-cpp"
+kind = "pattern"
+severity = "error"
+name = "Empty C++ catch handler policy"
+description = "A C++ catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty C++ catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "try { $$$A; } catch ($$$PARAMS) { }"
+languages = ["cpp"]
+
+[[rule]]
+id = "empty-catch-block-ruby"
+kind = "pattern"
+severity = "error"
+name = "Empty Ruby rescue handler policy"
+description = "A Ruby rescue handler with an empty body violates the empty-handler syntax policy."
+message = "empty Ruby rescue handler violates the empty-handler syntax policy"
+remediation = "handle or log the exception, or add a comment inside the handler explaining intentional suppression"
+pattern = "begin\n  $$$A\nrescue => $ERR\nend"
+languages = ["ruby"]
+
+[[rule]]
+id = "empty-catch-block-swift"
+kind = "pattern"
+severity = "error"
+name = "Empty Swift catch handler policy"
+description = "A Swift catch handler with an empty body violates the empty-handler syntax policy."
+message = "empty Swift catch handler violates the empty-handler syntax policy"
+remediation = "handle or log the error, or add a comment inside the handler explaining intentional suppression"
+pattern = "do { $$$A } catch { }"
+languages = ["swift"]

@@ -1,0 +1,4 @@
+category = "a"
+language = "typescript"
+pair_group_id = "7ceebc8f916551bab9ed5f66"
+dominant_defect = "mutable-flags"

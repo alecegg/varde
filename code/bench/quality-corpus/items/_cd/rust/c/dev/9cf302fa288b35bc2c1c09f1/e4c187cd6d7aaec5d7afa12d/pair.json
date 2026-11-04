@@ -1,0 +1,30 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "clap_complete/tests/testsuite/engine.rs"
+  ],
+  "changed_functions": [
+    "suggest_custom_arg_value"
+  ],
+  "child_sha": "9bef07708d24f17c6f2b4c16ea46fd2a9a9e8a7e",
+  "file_licenses": {
+    "clap-rs/clap:clap_complete/tests/testsuite/engine.rs": "MIT"
+  },
+  "id": "e4c187cd6d7aaec5d7afa12d",
+  "intent": {
+    "linked_issues": [],
+    "message": "test(complete): Simplify ArgValueCandidates test"
+  },
+  "label_source": "developer-intent",
+  "language": "rust",
+  "left": "a.rs",
+  "license": "MIT",
+  "pair_group_id": "refactor-279c6f754547ab70",
+  "parent_sha": "5f1eb968b4d2b772f18cece0f29eddca3d36c60c",
+  "pin_sha": "ccc89b83875474399e9d9d70841163f6319d1a41",
+  "repo": "clap-rs/clap",
+  "right": "b.rs",
+  "split": "dev",
+  "upstream_url": "https://github.com/clap-rs/clap.git"
+}

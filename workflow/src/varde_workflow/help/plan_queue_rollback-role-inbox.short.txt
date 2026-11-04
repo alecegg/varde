@@ -1,0 +1,3 @@
+Restore the queue tables to the retained SQLite queue database
+
+Usage: varde plan queue rollback-role-inbox

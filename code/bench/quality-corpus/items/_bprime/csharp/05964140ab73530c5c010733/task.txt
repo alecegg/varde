@@ -1,0 +1,2 @@
+Render one line of a text table by padding every cell to a fixed field width and joining the cells with a separator.
+Input domain: cell texts joined with a space, a vertical bar and a space; a cell at least as long as the width is not shortened, and an empty cell list renders an empty line.

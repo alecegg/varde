@@ -1,0 +1,8 @@
+Query: map a file to its persisted node info. (see `map_file` help for inputs)
+
+Usage: varde map map_file [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, filePath }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

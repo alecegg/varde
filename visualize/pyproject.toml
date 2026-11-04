@@ -1,0 +1,19 @@
+[project]
+name = "varde-visualize"
+version = "0.1.0"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = []
+
+[project.entry-points."varde.skills"]
+visualize = "varde_visualize"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "varde_visualize"
+module-root = "src"
+wheel-exclude = ["**/evals", "**/evals/**", "**/*-workspace/**"]
+source-exclude = ["**/evals/**"]

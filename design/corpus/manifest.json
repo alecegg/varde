@@ -1,0 +1,363 @@
+{
+  "version": 1,
+  "notes": [
+    "Third-party pages are fetched at calibration time (python design/corpus/corpus.py fetch DEST) into a directory outside the repository; none is vendored or shipped in the wheel. All licences permit redistribution, but plan decision 7.1 keeps them unvendored.",
+    "Pages reference external CSS and CDN assets; companions lists the same-repo files fetched with each page. CDN assets are not fetched.",
+    "Candidates and licences verified 2026-11-01 via the GitHub licence API and the licence file at the pinned commit."
+  ],
+  "varde": {
+    "root": "projects/varde-py/working",
+    "vendored": false,
+    "pages": {
+      "plans/2026-10-14-varde-python-port/evidence/perf-parallel/evidence/pep-0790.html": "d3130d58915812abca677977e0c355579d58913bb88cd709787a5c69e98fef55",
+      "plans/2026-10-14-varde-python-port/evidence/perf-parallel/evidence/python-3150.html": "87faad477191d13df323b78c0c74cffe6a452ceefce4661a102194a536c4092d",
+      "plans/2026-10-20-dashboard-redesign/notes/mockup.html": "0017d0c815453cb1166e905ba63a2e6a5a859974f8d009044dcabcc1b4f134f0",
+      "plans/2026-10-20-dashboard-ux/notes/icons/index.html": "ee5e01a7db4e324aa238c24eeedc81fcfdba558fd1d23dc794d7011782fa9d3d",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/index.html": "928e01fe53256d1f3899adc2f9b49806d0d4ba628430fed324e9f725ca16714a",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/mailbox-list.html": "84a104c39ab2a8f19110b745755f66cd2da24d20be1fed2f0ae4afa5a2090b29",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/nav-a.html": "b831e00536240b2ab2d6612c761e1652210b9e7951e5d305e90e7f51727f1820",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/nav-b.html": "d3840836a6dce40dadf9412940913aa078e992c662600c12d592c63dfc715493",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/nav-c.html": "91212afcc2eaaea2ecdb7c9e61465eef9e4bf7b121b826c621b03c49d892c4b9",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/new-item.html": "98f9da907b899038996387d133e4403ba0bb8ee499f77032edc33813e5a2d13f",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/plans.html": "d841111ea8d2a5e20238b6883a4db43ec7553c612a8aaa9bda72e8255d7e16b9",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/roles.html": "64b9d2087c3af6ecfe29f38732a2566fcf038ae9921687873421784bf565a7d6",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/thread-a.html": "88e88639eca3d84f3d128d11be08965970854c1e05c0566bd94686bb3b9fb081",
+      "plans/2026-10-21-dashboard-ux2-design/mockups/thread-b.html": "5b70c3305739c606d1a599cbb53f9bc8ef533d4761575d20e37b7c5a21442529",
+      "plans/2026-10-21-plans-page-grouping/mockups/a.html": "4b7c86f91e657e93595ef1206d6322cb2b1cc9377b72988a329a6381b4df7b8e",
+      "plans/2026-10-21-plans-page-grouping/mockups/b.html": "f86d17469e59d16c1e4e0d06ba94b1062a9f62ad57adb356c2e3ac0fdfe7bcb2",
+      "plans/2026-10-21-plans-page-grouping/mockups/c.html": "8cd668afd04352550e936098e9fa405eb659b1d2efec082da81cd0caca56bf2e",
+      "plans/2026-10-21-plans-page-grouping/mockups/d.html": "f2ed61139faff8411e628e998dd2f0ae68442c618e150b8efb23c75f5363fa17",
+      "plans/2026-10-21-plans-page-grouping/mockups/index.html": "3c2608dd519b18e7580eafd8301f0e4ff2831820ff3a95e059fb3272a47ff819",
+      "plans/2026-10-28-ux-fixes-round4/notes/tooling-proof3/runner-home.html": "022082f4f5dea7aa7dc2fb51c7c26b353fc47ddce88ccd6783a6d578a40c1470",
+      "reviews/2026-10-27-chat-first-prototype/APPROVED/index.html": "0a45f1de1783c3842e6de30c2f626a1f1785e2f2ba88fc404da146a32ffe222d",
+      "reviews/2026-10-27-chat-first-prototype/index.html": "913af9c18df0c6c814e5d96a2b0ede97a65f540eb6997ca21964cf310ef979f6",
+      "reviews/2026-10-27-chat-first-prototype/variant-a/index.html": "f2de458c4c41ebdec35ef3536fbd40bc3baa5b40d0f4b0e056ece5821dc84777",
+      "reviews/2026-10-27-chat-first-prototype/variant-b/index.html": "f4ed82e14b468d1326a835aee37a6aedbb40543c50f0944526bf28a2c913e13b",
+      "reviews/2026-10-27-chat-first-prototype/variant-c/index.html": "bdac73d7f9ef4418f2946fa9e1dfec7166fc78c9c577e51e07d0873f445a26f3",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2/index.html": "74c661e41e8eb62007ae8c468536420ce4b016b9ad5a7670b10d04d1a59f4c7d",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2a/index.html": "4e5388cb1d51d3561aa9e09d7779894f7d8dc90db647d03c9774b52abb07c475",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2a-v1/index.html": "7960d410a1f91391d880f51de08b0e8bb3ba6dd7c57486223b0dc7835aa65c24",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2a-v1b/index.html": "0a45f1de1783c3842e6de30c2f626a1f1785e2f2ba88fc404da146a32ffe222d",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2a-v2/index.html": "e4759165eb4f82c8648afce5a28577c4b3ab32956a91c5f129889ac902d4ae80",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2a-v3/index.html": "ff818a475501e30dbe7c178bdc58edede3f4dc6ffbaf7df1eb3f17f44b957eca",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2b/index.html": "f06de64bac4986f8c7bf409e869f795f4da8649d4c8973da10252b88423e5b32",
+      "reviews/2026-10-27-chat-first-prototype/variant-c2c/index.html": "5f8be0f132181c585cd85848a0559b764e81e4aa82734c505fd615ac502a28ab",
+      "reviews/2026-10-27-chat-first-prototype/variant-c3/index.html": "50de87652018e15b503f1ed7d2748f700ad08ee58ad7cc2133f9e7a60c09ce56",
+      "reviews/2026-10-27-chat-first-prototype/variant-c4/index.html": "952effc3a1bdbb74ab4b9940f0cbfc61432d838fd09c40c3e6ed14ee13294922",
+      "reviews/2026-10-27-chat-first-prototype/variants.html": "ee682af9e6720f097a110bbd1ef514ab23795f6985b6dfb67b496514ebd67447",
+      "reviews/2026-10-27-chat-list-prototypes/a/index.html": "cb64ed0bbaad4b833b10952f308fa36163ee465ca96879672a9736beb7b94399",
+      "reviews/2026-10-27-chat-list-prototypes/b/index.html": "ecc69f82997f714964ec424e6268c0f3c64fa7074b8eb75357af8a040d6e443e",
+      "reviews/2026-10-27-chat-list-prototypes/c/index.html": "0f9884372d59fc438733a2d66b5507b2d22e1eee5258c82f2ef756ca596b987e",
+      "reviews/2026-10-27-chat-list-prototypes/index.html": "8171ed87fa3bdd510c61f22eb0da5092ca735e9b92d824bcb967107502df61b1",
+      "reviews/2026-10-27-screenshots/index.html": "b1a37520351db8d094636c9681b2130cd92014dc116c3732ea7118a7ef14985c",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/agents/a/index.html": "e143e31c288f2393e8d40f4efefe750bbef41f480cc1027d14a8ec0ad3308615",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/agents/b/index.html": "fcfc850081c49082819fcb0c64700eddecb4ef83813a4e69d9cf0a52225e21ca",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/agents/c/index.html": "a918c60f7881c6c782d85b02cd356cd4836f3099ece5371d7a56a3dec116fd34",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/agents/index.html": "4c64ef4e7c33ae9ebb43fa55c2c3ffca414dd12ca3cc04f797e80944ceff9aef",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/agents-detail/d1/index.html": "27ea5c7ee7bdea83b480203e02df3587729da74c8fa670f5ebfb384499ba3871",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/agents-detail/d2/index.html": "9c315849db04eb5371eedabf7aef50af8551e700490dd348d87757cb4fb7382b",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/agents-detail/index.html": "a426b8d3a95495ec24b0b22112f172a5f7347deb22932b2713a8059a91c20b65",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/index.html": "a2f14548195f5fb5d6b1e384bc235708233090562fdea58847f09cc604330d55",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/plans/a/index.html": "1212764d681bcdec6336f02a78f185cb1ae02553c3d41e26f5e9286090f2b8ef",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/plans/b/index.html": "d588989829c720449f91b6ca05c72529ac4c4a017f39072d6da2995af5cc49ec",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/plans/c/index.html": "133a9935747408c0bc3eb3197299f9361f557c60481e52873c0b0a50cd058911",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/plans/index.html": "831a83ec7704c97dc98903df6f99562a7cff9b2992baf256fbc21c5f153731e7",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/settings/a/index.html": "891706315749d1099c0417e1d05dfacf54c81908b67a398c399331b30541ee48",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/settings/b/index.html": "696a0502adaf61eca358097e81a5510689e7e919b1379bdd986083b8aa559142",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/settings/c/index.html": "eea8050ac9cc4d748f1c8ca0cf20a8392f4eb6a70e366964b5d4fd5b62dfb96b",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/settings/icons/index.html": "de164e3471ab622efcbbce9c20e6b2f5f3d172c546f4b53ad262c091d2b4cdc2",
+      "reviews/2026-10-27-settings-plans-agents-prototypes/settings/index.html": "c98f9f66cc2c7e1d5aa648290296010f939c7c92cf6a5a71ce7e03bac93bfcb0"
+    },
+    "notes": "Own work, kept in agent-memory; hashes pinned by `corpus.py pin --memory-root`. Doc-serve plan renders and runner pages at 390/1440 are screenshots produced at calibration time and are not listed here."
+  },
+  "third_party": [
+    {
+      "id": "mvp",
+      "repo": "andybrewer/mvp",
+      "url": "https://github.com/andybrewer/mvp/blob/629ba5eb91362afe2504fdd09a1ac039e2fca420/index.html",
+      "commit": "629ba5eb91362afe2504fdd09a1ac039e2fca420",
+      "path": "index.html",
+      "companions": [
+        "mvp.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/andybrewer/mvp/blob/629ba5eb91362afe2504fdd09a1ac039e2fca420/LICENSE",
+      "design_system": "MVP.css classless",
+      "vendored": false,
+      "sha256": {
+        "index.html": "dd236f0d47a198f4c6a745befda1898b128a0478c69a121e589b5ef6310e0d58",
+        "mvp.css": "e0843dbd4883d1d30ef62102ff498a1698deab8d435f889e2b2be0288a45cccd"
+      }
+    },
+    {
+      "id": "simple-css",
+      "repo": "kevquirk/simple.css",
+      "url": "https://github.com/kevquirk/simple.css/blob/b6eab64c47692afd18c50bab0d5e656fd51d1695/index.html",
+      "commit": "b6eab64c47692afd18c50bab0d5e656fd51d1695",
+      "path": "index.html",
+      "companions": [
+        "simple.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/kevquirk/simple.css/blob/b6eab64c47692afd18c50bab0d5e656fd51d1695/LICENSE",
+      "design_system": "Simple.css classless",
+      "vendored": false,
+      "sha256": {
+        "index.html": "b7d59212e6543aeda9542429846313fa02578a9bf85bc5039e6112bebfc095a0",
+        "simple.css": "10dd35ccd4d0bd9219da7f47359695d370c3fe27ba4541db10e4baefbdad472a"
+      }
+    },
+    {
+      "id": "milligram",
+      "repo": "milligram/milligram",
+      "url": "https://github.com/milligram/milligram/blob/5e56af462aea08baf5011a045bf1bfaaef72552c/example.html",
+      "commit": "5e56af462aea08baf5011a045bf1bfaaef72552c",
+      "path": "example.html",
+      "companions": [
+        "dist/milligram.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/milligram/milligram/blob/5e56af462aea08baf5011a045bf1bfaaef72552c/license",
+      "design_system": "Milligram minimal framework",
+      "vendored": false,
+      "sha256": {
+        "example.html": "d677b9f2188a2b962d7154f35630e3b854e14693d1a3ba776471fa43d08f12ce",
+        "dist/milligram.css": "0e79dc73372d7747b20efa42310eed3f4b9826ead1d998175ec374a51d363bab"
+      }
+    },
+    {
+      "id": "skeleton",
+      "repo": "dhg/Skeleton",
+      "url": "https://github.com/dhg/Skeleton/blob/88f03612b05f093e3f235ced77cf89d3a8fcf846/index.html",
+      "commit": "88f03612b05f093e3f235ced77cf89d3a8fcf846",
+      "path": "index.html",
+      "companions": [
+        "css/normalize.css",
+        "css/skeleton.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/dhg/Skeleton/blob/88f03612b05f093e3f235ced77cf89d3a8fcf846/LICENSE.md",
+      "design_system": "Skeleton boilerplate",
+      "vendored": false,
+      "sha256": {
+        "index.html": "fb9489c326ad4208bfc6d8e759cd64a724305fd3f528a87ad3a180aa9d93d4f0",
+        "css/normalize.css": "f4d7e8250f8f124f8b7d087e5e260766a34b079fddc43e7b20d8c18ca1e92e51",
+        "css/skeleton.css": "10207d6db44e2c69bcc0ea046c77074719478331aa6290ed3538034f20f3d308"
+      }
+    },
+    {
+      "id": "water-css",
+      "repo": "kognise/water.css",
+      "url": "https://github.com/kognise/water.css/blob/d950cbc9f8607521587fae1aa523f85e25f8396f/docs/index.html",
+      "commit": "d950cbc9f8607521587fae1aa523f85e25f8396f",
+      "path": "docs/index.html",
+      "companions": [
+        "docs/style.css",
+        "dist/light.min.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/kognise/water.css/blob/d950cbc9f8607521587fae1aa523f85e25f8396f/LICENSE.md",
+      "design_system": "Water.css classless docs",
+      "vendored": false,
+      "sha256": {
+        "docs/index.html": "7fe66cfbafebd5c4a37a91a3f76534f5c5c687fa3bf21622ed77ddfa9bf39a1a",
+        "docs/style.css": "dfb543e0ce24f09f50e60ffea5810f7f379ec1de58dce61d6d47edb36507caf8",
+        "dist/light.min.css": "dc05b25844db568760de80ab82edbf2663b843924a1a8f86ed46dfeba6c2961e"
+      }
+    },
+    {
+      "id": "new-css",
+      "repo": "xz/new.css",
+      "url": "https://github.com/xz/new.css/blob/0fd9378dc870bd73a0e33267b001b7fa0cd35bfb/demo.html",
+      "commit": "0fd9378dc870bd73a0e33267b001b7fa0cd35bfb",
+      "path": "demo.html",
+      "companions": [
+        "new.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/xz/new.css/blob/0fd9378dc870bd73a0e33267b001b7fa0cd35bfb/LICENSE",
+      "design_system": "new.css classless",
+      "vendored": false,
+      "sha256": {
+        "demo.html": "1943158e4ceb46e2c0574045640811a4de765a64b8958d0a7f2ebfe90b9193b5",
+        "new.css": "5dddc031939e4e1b2bba942eb122e3aafde16cd99ca5e4e6b3489e23d9f2c4e9"
+      }
+    },
+    {
+      "id": "spectre",
+      "repo": "picturepan2/spectre",
+      "url": "https://github.com/picturepan2/spectre/blob/8847251d71b4dac27e8407cbdb71ae89ce156a43/docs/components/cards.html",
+      "commit": "8847251d71b4dac27e8407cbdb71ae89ce156a43",
+      "path": "docs/components/cards.html",
+      "companions": [
+        "docs/dist/spectre.min.css",
+        "docs/dist/docs.min.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/picturepan2/spectre/blob/8847251d71b4dac27e8407cbdb71ae89ce156a43/LICENSE",
+      "design_system": "Spectre.css component framework",
+      "vendored": false,
+      "sha256": {
+        "docs/components/cards.html": "c788af83c52e3a7ea7e8574951787293dbcc226644a60e9352f0d3a0535e2dd7",
+        "docs/dist/spectre.min.css": "beb6e5817e7f1f16be8426abc571e4882ee5bfdbf3d24de63623ca5018d8f7aa",
+        "docs/dist/docs.min.css": "d0cd18fd09253aabb37be453e4a9b3173abc8fa3723b019c8cf6060f85e3a1dd"
+      }
+    },
+    {
+      "id": "pure-marketing",
+      "repo": "pure-css/pure",
+      "url": "https://github.com/pure-css/pure/blob/7a2b0b708fd219e2d456e932a9256c288efce575/site/static/layouts/marketing/index.html",
+      "commit": "7a2b0b708fd219e2d456e932a9256c288efce575",
+      "path": "site/static/layouts/marketing/index.html",
+      "companions": [
+        "site/static/layouts/marketing/styles.css"
+      ],
+      "licence": "BSD-3-Clause",
+      "licence_url": "https://github.com/pure-css/pure/blob/7a2b0b708fd219e2d456e932a9256c288efce575/LICENSE",
+      "design_system": "Pure.css marketing layout",
+      "vendored": false,
+      "sha256": {
+        "site/static/layouts/marketing/index.html": "35caec1c60ef878b6682fbc88be1a7b66afbc6098900fd87bc65162344fc86ec",
+        "site/static/layouts/marketing/styles.css": "11d303c78bed76523c768e895acc3a635ccdac7a6e2980a14cd0877edcf6cfe5"
+      }
+    },
+    {
+      "id": "picnic",
+      "repo": "franciscop/picnic",
+      "url": "https://github.com/franciscop/picnic/blob/e0c502d648b65bcac5d0b709ca98e369994c7d17/docs/index.html",
+      "commit": "e0c502d648b65bcac5d0b709ca98e369994c7d17",
+      "path": "docs/index.html",
+      "companions": [
+        "docs/style/style.min.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/franciscop/picnic/blob/e0c502d648b65bcac5d0b709ca98e369994c7d17/LICENSE",
+      "design_system": "Picnic CSS docs site",
+      "vendored": false,
+      "sha256": {
+        "docs/index.html": "0110cfcad0c9e55b75067ce2ef40aab41fb7436c0db95caa51e3371e5f7361e5",
+        "docs/style/style.min.css": "cd46d1be377036000a5d89ba5fcb6bcccc14c2b019d98fb2f936d852edc50aac"
+      }
+    },
+    {
+      "id": "sakura",
+      "repo": "oxalorg/sakura",
+      "url": "https://github.com/oxalorg/sakura/blob/1eab9fd871abc74ec74d1a6f18ee56148f5a4b8f/index.html",
+      "commit": "1eab9fd871abc74ec74d1a6f18ee56148f5a4b8f",
+      "path": "index.html",
+      "companions": [
+        "css/normalize.css"
+      ],
+      "licence": "MIT",
+      "licence_url": "https://github.com/oxalorg/sakura/blob/1eab9fd871abc74ec74d1a6f18ee56148f5a4b8f/LICENSE.txt",
+      "design_system": "Sakura classless",
+      "vendored": false,
+      "sha256": {
+        "index.html": "8304f9ab4e2b736f1ee1146123821d8d08e9ddf0decae66a9bbd73dcc5b4b5eb",
+        "css/normalize.css": "b87bb63007752ef08e544021bcc95de0ba498bb754192ec6573bc6ff9077865a"
+      }
+    }
+  ],
+  "synthetic": {
+    "root": "design/tests/fixtures/corpus",
+    "rule_pairs": [
+      {
+        "rule": "S1",
+        "defect": "rules/S1/defect.html",
+        "clean": "rules/S1/clean.html"
+      },
+      {
+        "rule": "S2",
+        "defect": "rules/S2/defect.html",
+        "clean": "rules/S2/clean.html"
+      },
+      {
+        "rule": "S3",
+        "defect": "rules/S3/defect.html",
+        "clean": "rules/S3/clean.html"
+      },
+      {
+        "rule": "S4",
+        "defect": "rules/S4/defect.html",
+        "clean": "rules/S4/clean.html"
+      },
+      {
+        "rule": "S5",
+        "defect": "rules/S5/defect.html",
+        "clean": "rules/S5/clean.html"
+      },
+      {
+        "rule": "S6",
+        "defect": "rules/S6/defect.html",
+        "clean": "rules/S6/clean.html"
+      },
+      {
+        "rule": "S7",
+        "defect": "rules/S7/defect.html",
+        "clean": "rules/S7/clean.html"
+      },
+      {
+        "rule": "S8",
+        "defect": "rules/S8/defect.html",
+        "clean": "rules/S8/clean.html"
+      },
+      {
+        "rule": "S9",
+        "defect": "rules/S9/defect.html",
+        "clean": "rules/S9/clean.html"
+      },
+      {
+        "rule": "S10",
+        "defect": "rules/S10/defect.html",
+        "clean": "rules/S10/clean.html"
+      },
+      {
+        "rule": "R1",
+        "defect": "rules/R1/defect.html",
+        "clean": "rules/R1/clean.html"
+      },
+      {
+        "rule": "R2",
+        "defect": "rules/R2/defect.html",
+        "clean": "rules/R2/clean.html"
+      },
+      {
+        "rule": "R3",
+        "defect": "rules/R3/defect.html",
+        "clean": "rules/R3/clean.html"
+      },
+      {
+        "rule": "R4",
+        "defect": "rules/R4/defect.html",
+        "clean": "rules/R4/clean.html"
+      },
+      {
+        "rule": "R5",
+        "defect": "rules/R5/defect.html",
+        "clean": "rules/R5/clean.html"
+      },
+      {
+        "rule": "R6",
+        "defect": "rules/R6/defect.html",
+        "clean": "rules/R6/clean.html"
+      },
+      {
+        "rule": "R7",
+        "defect": "rules/R7/defect.html",
+        "clean": "rules/R7/clean.html"
+      },
+      {
+        "rule": "R8",
+        "defect": "rules/R8/defect.html",
+        "clean": "rules/R8/clean.html"
+      }
+    ],
+    "pages": [
+      "pages/good-docs.html",
+      "pages/good-dashboard.html",
+      "pages/no-system.html"
+    ],
+    "no_system_page": "pages/no-system.html",
+    "render_rule_pairs_pending": []
+  }
+}

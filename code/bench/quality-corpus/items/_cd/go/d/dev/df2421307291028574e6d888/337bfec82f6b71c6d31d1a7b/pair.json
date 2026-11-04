@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "invariant",
+  "id": "337bfec82f6b71c6d31d1a7b",
+  "label_source": "construction",
+  "language": "go",
+  "left": "a.go",
+  "license": "Apache-2.0",
+  "mutant_file": "337bfec82f6b71c6d31d1a7b-b.go",
+  "operator": "add-dead-branches",
+  "provenance": {
+    "end_line": 40,
+    "file": "014-spf13_cobra-testcompletenodescmdinfishscript.go",
+    "function": "TestCompleteNoDesCmdInFishScript",
+    "license": "Apache-2.0",
+    "license_header": "014-spf13_cobra-testcompletenodescmdinfishscript.license.txt",
+    "lines": 15,
+    "parse_language": "go",
+    "path": "fish_completions_test.go",
+    "pin_sha": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+    "repo": "spf13/cobra",
+    "start_line": 26,
+    "test_path": false
+  },
+  "right": "b.go",
+  "seed": 2488213979715641203,
+  "source_file": "337bfec82f6b71c6d31d1a7b-a.go",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "parse"
+}

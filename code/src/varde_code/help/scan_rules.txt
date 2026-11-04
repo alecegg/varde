@@ -1,0 +1,13 @@
+Subcommands of `varde scan rules`
+
+Usage: varde scan rules [COMMAND]
+
+Commands:
+  list    List the rules that would run for a repo (built-in + user + repo scope, with override provenance) — no DB required, never scans. Example: `varde scan rules list --json '{"repoRoot":"."}'`. Repo and user scopes override built-ins by rule id; a higher-scope definition replaces the lower-scope definition. The repository scope defaults to `.varde-code/rules/`; user rules use the Varde config root. Run this first to see what `scan` would use before seeding or customizing anything. (see `rules_list` help for inputs)
+  diff    List the rules that would run for a repo (built-in + user + repo scope, with override provenance) — no DB required, never scans. Example: `varde scan rules list --json '{"repoRoot":"."}'`. Repo and user scopes override built-ins by rule id; a higher-scope definition replaces the lower-scope definition. The repository scope defaults to `.varde-code/rules/`; user rules use the Varde config root. Run this first to see what `scan` would use before seeding or customizing anything. (see `rules_list` help for inputs)
+  seed    Seed: materialize the built-in rule packs as editable TOML files in the repo (`.varde-code/rules/`, default) or user (`--user`, `<varde config root>/code/rules/` (default `~/.config/varde/code/rules/`) scope, so they can be customized directly instead of only overridden by id. Existing files are left untouched unless `--force`. Undo with `rules_remove` (same `--user`/`--force` flags). The routed `--rule-id <id>` option selects only the built-in pack containing that id. (see `rules_seed` help)
+  remove  Undo `rules_seed`: delete previously seeded built-in rule pack files from the repo (default) or user (`--user`) rules dir. Only removes files matching a shipped built-in's name; custom rule files are left alone. A seeded file edited since seeding is skipped unless `--force` (which discards those local edits). (see `rules_remove` help)
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

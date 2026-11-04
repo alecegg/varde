@@ -1,0 +1,16 @@
+language = "java"
+task = "Implement an inventory and order-processing module in `Original`."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.java" = "0b53ffa139746b5d98f253c06d1bdc009b888b8c77ec7c18a763ca71cdc6363b"
+"judge-classes.java" = "621b9f180351c1e504f68ed421335a7022ce6a478fdde89faccbb6cc4e80925a"
+"judge-defensive.java" = "6cbde8d23131236fd264d0c7a7a5ac2bdaec881446d6260d27400cdd2938dd00"
+"judge-extract.java" = "38a79b023377ffa433c222642fdc910d973e0c0e1bfd9b9a9bb791bc3b17d473"
+"judge-inline.java" = "a963a09323de9e8e851f32f1bf37398c4c11e2538dee080df20d2d55f00d90de"
+"judge-names.java" = "046fb9830956f8492b3e2baa9759fe0b085d810ef5a511daec08e7722768047d"
+"original.java" = "4a26e24b209d2942066231a0da8da771db07b24a31ff16c164aac3fe3d0f6f47"
+"smoothed.java" = "cbce10dc3f66f6cfa8992b45ea978df8dcabaf7567cb497a4dd81ecec7b114e2"
+"smoothing.md" = "c6e267e4ed5484301007eca0b876ae11ea06207e767a9a1b714fafbbb3099ada"
+"task.md" = "bc2ecdad66f23fd1763c39b969f6ce571bff671bc7e904ea2162ebe68fd16a42"

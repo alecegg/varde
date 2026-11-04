@@ -1,0 +1,8 @@
+Query: batch form of `symbols_in_file` over many files in one call. (see `symbols_in_files` help for inputs)
+
+Usage: varde map symbols_in_files [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, filePaths, includeBody?, resultsLimit?, resultsOffset?, fullResults? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

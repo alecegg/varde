@@ -1,0 +1,39 @@
+/* Timeline block: an ordered list with a CSS rail (borders, so print and forced colors keep it) and one node per item. Vertical below 44rem; horizontal columns scroll inside a focusable region. Tones come only from the --vd-tone-* tokens. */
+.vd-timeline { --vd-tl-edge: var(--vd-border-interactive); --vd-tl-text: var(--vd-text-secondary); margin-block: var(--vd-density-gap); min-inline-size: 0; max-inline-size: 100%; }
+.vd-timeline-title { margin: 0 0 var(--vd-space-2); font-weight: 650; overflow-wrap: break-word; }
+.vd-timeline-summary { margin: 0 0 var(--vd-space-2); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.vd-timeline-scroll { position: relative; min-inline-size: 0; max-inline-size: 100%; }
+.vd-timeline-scroll:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vd-timeline-list { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; padding: 0; list-style: none; min-inline-size: 0; }
+.vd-timeline-item { --vd-tl-state: var(--vd-border-interactive); position: relative; min-inline-size: 0; min-block-size: 2rem; padding-inline-start: 2.75rem; padding-block-end: var(--vd-space-4); }
+.vd-timeline-item::before { content: ""; position: absolute; inset-block: 2rem 0; inset-inline-start: calc(1rem - 1px); border-inline-start: 2px solid var(--vd-border-interactive); }
+.vd-timeline-item:last-child::before { display: none; }
+.vd-timeline-done { --vd-tl-state: var(--vd-tone-success-edge); --vd-tl-text: var(--vd-tone-success-text); }
+.vd-timeline-active { --vd-tl-state: var(--vd-tone-info-edge); --vd-tl-text: var(--vd-tone-info-text); }
+.vd-timeline-blocked { --vd-tl-state: var(--vd-tone-risk-edge); --vd-tl-text: var(--vd-tone-risk-text); }
+.vd-timeline-node { position: absolute; inset-block-start: 0; inset-inline-start: 0; display: flex; align-items: center; justify-content: center; box-sizing: border-box; inline-size: 2rem; block-size: 2rem; border: 2px solid var(--vd-tl-state); border-radius: var(--vd-radius-full); background: var(--vd-surface); color: var(--vd-tl-text); font-family: var(--vd-font-mono); font-size: var(--vd-text-sm); line-height: 1; }
+.vd-timeline-active .vd-timeline-node { background: var(--vd-tone-info-tint); border-width: 3px; }
+.vd-timeline-body { min-inline-size: 0; }
+.vd-timeline-body > p { margin: 0; min-inline-size: 0; overflow-wrap: break-word; }
+.vd-timeline-when { color: var(--vd-text-secondary); font-size: var(--vd-label-size); font-weight: var(--vd-label-weight); letter-spacing: var(--vd-label-tracking); text-transform: uppercase; }
+.vd-timeline-label { font-weight: 600; }
+.vd-timeline-status { color: var(--vd-tl-text); font-size: var(--vd-text-sm); font-weight: 600; }
+.vd-timeline-note, .vd-timeline-owner { color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+@container vd-doc (min-width: 44rem) {
+  .vd-timeline-horizontal .vd-timeline-scroll { overflow-x: auto; overflow-y: hidden; }
+  .vd-timeline-horizontal .vd-timeline-list { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(13rem, 1fr); }
+  .vd-timeline-horizontal .vd-timeline-item { padding-inline: 0 var(--vd-space-4); padding-block: 2.75rem 0; }
+  .vd-timeline-horizontal .vd-timeline-item::before { inset-block: calc(1rem - 1px) auto; inset-inline: 2rem 0; border-inline-start: 0; border-block-start: 2px solid var(--vd-border-interactive); }
+}
+@media (forced-colors: active) {
+  .vd-timeline-node { border-color: CanvasText; background: Canvas; color: CanvasText; }
+  .vd-timeline-active .vd-timeline-node { border-color: Highlight; }
+  .vd-timeline-item::before { border-color: CanvasText; }
+  .vd-timeline-status { color: CanvasText; }
+}
+@media print {
+  .vd-timeline, .vd-timeline .vd-timeline-scroll, .vd-timeline .vd-timeline-list, .vd-timeline .vd-timeline-item { overflow: visible; min-inline-size: 0; white-space: normal; }
+  .vd-timeline.vd-timeline-horizontal .vd-timeline-list { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+  .vd-timeline .vd-timeline-item { break-inside: avoid; }
+  .vd-timeline .vd-timeline-status { color: var(--vd-text); }
+}

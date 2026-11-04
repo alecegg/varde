@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "increased structural debt",
+  "id": "0951235397e5653ac5862e1a",
+  "label_source": "construction",
+  "language": "typescript",
+  "left": "a.ts",
+  "license": "MIT",
+  "mutant_file": "0951235397e5653ac5862e1a-b.ts",
+  "operator": "wrap-in-class",
+  "provenance": {
+    "end_line": 31,
+    "file": "018-vuejs_core-parsewithvon.ts",
+    "function": "parseWithVOn",
+    "license": "MIT",
+    "license_header": "",
+    "lines": 14,
+    "parse_language": "typescript",
+    "path": "packages/compiler-core/__tests__/transforms/vOn.spec.ts",
+    "pin_sha": "bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c",
+    "repo": "vuejs/core",
+    "start_line": 18,
+    "test_path": false
+  },
+  "right": "b.ts",
+  "seed": 1286187780026040433,
+  "source_file": "0951235397e5653ac5862e1a-a.ts",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "compile"
+}

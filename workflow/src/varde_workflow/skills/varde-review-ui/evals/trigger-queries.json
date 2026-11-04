@@ -1,0 +1,12 @@
+[
+  {"query": "Run visual QA on https://example.test/app and report layout defects at desktop and mobile widths.", "should_trigger": true},
+  {"query": "Check this iOS simulator build visually and through its interactions.", "should_trigger": true},
+  {"query": "Audit our running dashboard UI from the point of view of an operations user and rank the requests.", "should_trigger": true},
+  {"query": "Inspect the running macOS app named Notes for visual problems.", "should_trigger": true},
+  {"query": "Click through the settings page of the running web app and note anything that looks off.", "should_trigger": true},
+  {"query": "Review the diff on this branch for bugs in the token handling.", "should_trigger": false},
+  {"query": "Fix the layout defects the visual QA report listed.", "should_trigger": false},
+  {"query": "Mock up a few layout options for the settings page so I can click through them.", "should_trigger": false},
+  {"query": "Write a pull request description for the UI change.", "should_trigger": false},
+  {"query": "Plan how we would redesign the dashboard.", "should_trigger": false}
+]

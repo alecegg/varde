@@ -1,0 +1,2 @@
+{"type":"session","version":2,"id":"old-session","timestamp":"2026-10-22T09:00:00.000Z","cwd":"/repo/project"}
+{"type":"message","id":"a1b2c3d4","parentId":null,"timestamp":"2026-10-22T09:00:01.000Z","message":{"role":"user","content":"Old session"}}

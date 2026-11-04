@@ -1,0 +1,8 @@
+Recover legacy urgent messages into the inbox store
+
+Usage: varde msg migrate [--strays] [--apply]
+
+Options:
+  --strays  Preview stray-store messages; combine with --apply to merge them
+  --apply   Apply the stray-store merge (requires --strays)
+  -h, --help  Print help

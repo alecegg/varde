@@ -1,0 +1,4 @@
+{
+  "output": "Cleared slot assignment for <TMP>/working/plans/group/nested/plan.md.\n",
+  "bytes": "---\ntype: plan\nid: nested\ntitle: Nested\nstatus: active\n---\n"
+}

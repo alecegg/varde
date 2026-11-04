@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "increased structural debt",
+  "id": "aefb52c2d4e632dd2882ebc4",
+  "label_source": "construction",
+  "language": "python",
+  "left": "a.py",
+  "license": "MIT",
+  "mutant_file": "aefb52c2d4e632dd2882ebc4-b.py",
+  "operator": "wrap-in-class",
+  "provenance": {
+    "end_line": 106,
+    "file": "015-pytest_dev_pytest-evaluate.py",
+    "function": "_evaluate",
+    "license": "MIT",
+    "license_header": "",
+    "lines": 37,
+    "parse_language": "python",
+    "path": "src/_pytest/_py/path.py",
+    "pin_sha": "cb6ff97bcb147f2bb5d9e0072c424dc03a452ba1",
+    "repo": "pytest-dev/pytest",
+    "start_line": 70,
+    "test_path": false
+  },
+  "right": "b.py",
+  "seed": 5035576322736260267,
+  "source_file": "aefb52c2d4e632dd2882ebc4-a.py",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "compile"
+}

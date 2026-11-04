@@ -1,0 +1,205 @@
+{
+  "skill_name": "varde-visualize",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Visualize p50 and p95 latency before vs after: p50 120 ms to 80 ms, p95 400 ms to 210 ms.",
+      "expected_output": "One-page form. The agent writes a markdown page under <working>/visualizations/<slug>/ with a `ui` fence holding a `chart` statement, checks it with `varde learn check`, serves it on 127.0.0.1 and replies with the URL first.",
+      "assertions": [
+        "Writes a `ui` statement using the `chart` component, no HTML or custom fence",
+        "Runs `varde learn check` on the doc and it exits 0",
+        "Replies with a 127.0.0.1 URL first, then the file path",
+        "Output lives under <working>/visualizations/<slug>/",
+        "Served URL passes evals/check-served-url.sh"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Visualize bubble sort stepping through the array [5, 2, 9, 1, 7].",
+      "expected_output": "No script route exists: the agent shows the steps as a page of components (a `table` or `flow` of each pass) and says live animation is not offered.",
+      "assertions": [
+        "Writes a `ui` page with a `table` or `flow` statement showing each pass",
+        "Writes no HTML, script or `custom` fence",
+        "Says live animation is not available in a page",
+        "Replies with a 127.0.0.1 URL first"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Chart these line counts as a dashboard page: core 12000, toz 8000, code 21000, workflow 15000.",
+      "expected_output": "One page with a title and one `ui` fence per visual; no HTML page.",
+      "assertions": [
+        "Writes one markdown page with `chart` and `table` statements, not an HTML file",
+        "Writes no script and no remote assets",
+        "Serves on 127.0.0.1 only and passes no --host",
+        "Replies with the URL, then the file path",
+        "Served URL passes evals/check-served-url.sh"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "Explain how the changes in the last commit work.",
+      "expected_output": "Negative: explaining a change is not a visualization request.",
+      "assertions": [
+        "Builds no visualization",
+        "Reads the last commit diff and files, explaining the change citing path:line",
+        "Creates nothing under <working>/visualizations/",
+        "Does not run varde learn docs serve unless the user asked for a page"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "Let's iterate on the layout of the settings page with me over a few rounds.",
+      "expected_output": "Negative: multi-round design shaping is not a one-shot visualization.",
+      "assertions": [
+        "Builds no visualization",
+        "Writes layout variants under <working>/prototypes/"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 6,
+      "prompt": "Serve docs/x.md so I can read it in the browser.",
+      "expected_output": "Negative: serving an existing markdown file is `varde learn docs serve`, not a new visualization.",
+      "assertions": [
+        "Builds no visualization",
+        "Runs `varde learn docs serve docs/x.md` and replies with its 127.0.0.1 URL",
+        "Creates nothing under <working>/visualizations/"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 7,
+      "prompt": "Wireframe the login page for me.",
+      "expected_output": "Negative: a wireframe is not a one-shot visualization.",
+      "assertions": [
+        "Builds no visualization",
+        "Produces a wireframe the user can refine",
+        "Creates nothing under <working>/visualizations/",
+        "Does not run varde learn docs serve"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 8,
+      "prompt": "Show how the modules in this repo depend on each other.",
+      "expected_output": "Negative: how repo modules relate is an explanation request.",
+      "assertions": [
+        "Builds no visualization",
+        "Reads repo files to explain the module dependencies, citing path:line",
+        "Creates nothing under <working>/visualizations/",
+        "Does not run varde learn docs serve unless the user asked for a page"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 9,
+      "prompt": "Build me a dashboard page with three sections: signups, churn and revenue for last quarter.",
+      "expected_output": "One markdown page with a heading per section and `ui` statements; no HTML.",
+      "assertions": [
+        "Writes a markdown page with three headed sections of `ui` statements",
+        "Writes no HTML file",
+        "Runs `varde learn check` and it exits 0",
+        "Serves it with `varde learn docs serve`"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 10,
+      "prompt": "Chart monthly revenue for the last 12 months, plus a table of the top 5 customers by revenue.",
+      "expected_output": "One page. The agent applies axis, label and table rules.",
+      "assertions": [
+        "Applies chart and table craft rules in the doc",
+        "Uses chart kind `line` for the 12 ordered monthly points",
+        "States the baseline or axis range and the table row order in the doc text",
+        "Runs `varde learn check` and it exits 0"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 11,
+      "prompt": "Visualize an animated CSS loading spinner.",
+      "expected_output": "The agent says animation and scripts are not offered, and offers a static page of components instead.",
+      "assertions": [
+        "Does not write a `custom` fence or any HTML",
+        "Says the page system has no custom or script route",
+        "Offers a page of components or a real project instead"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 12,
+      "prompt": "Build me a one-page dashboard of three KPIs.",
+      "expected_output": "One markdown page of `ui` statements served on loopback.",
+      "assertions": [
+        "Writes a markdown page of `ui` statements, not an HTML file",
+        "Serves on 127.0.0.1 and replies with the URL first"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    }
+  ]
+}

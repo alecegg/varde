@@ -1,0 +1,18 @@
+Review local agent sessions in a UTC time window and write a dated report.
+
+Usage: varde learn sessions run [OPTIONS]
+
+Options:
+      --window <WINDOW>          yesterday, since-last, or YYYY-MM-DD [default: yesterday]
+      --budget-tokens <N>        Maximum model tokens for this run
+      --no-model                 Run deterministic metrics only
+      --dry-run                  List statuses without model calls or review-store writes
+      --json                     Print machine-readable output
+  -h, --help                     Print help
+
+`since-last` starts at the last successful review run and ends now, capped to
+the previous seven days. `sessions[]` statuses are analyzed, skipped, failed,
+or pending; pending reasons are `budget` or `rate_limited`. `coverage` includes
+analyzed, skipped, failed, and pending counts. `cost_usd_estimate` is null when
+the client reports no cost. Dry runs still discover configured session locations.
+Exit codes: 0 for success, 2 for invalid arguments or a failed run.

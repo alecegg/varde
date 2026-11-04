@@ -1,0 +1,355 @@
+[tool.uv]
+required-version = "==0.12.19"
+
+[tool.uv.workspace]
+members = ["core", "toz", "code", "learn", "workflow", "dev", "visualize", "design", "app", "runner", "data", "serve"]
+
+[tool.uv.sources]
+varde-core = { workspace = true }
+varde-code = { workspace = true }
+varde-workflow = { workspace = true }
+varde-learn = { workspace = true }
+varde = { workspace = true }
+varde-toz = { workspace = true }
+varde-dev = { workspace = true }
+varde-visualize = { workspace = true }
+varde-design = { workspace = true }
+varde-runner = { workspace = true }
+varde-data = { workspace = true }
+varde-serve = { workspace = true }
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "pytest-timeout>=2.3,<3", "pytest-xdist>=3.6,<4", "ruff", "pyright[nodejs]"]
+
+[tool.pytest.ini_options]
+timeout = 300
+timeout_method = "thread"
+markers = [
+    "slow: integration, stress, scale, browser, or full-matrix test",
+]
+
+[tool.pyright]
+typeCheckingMode = "standard"
+pythonVersion = "3.14"
+venvPath = "."
+venv = ".venv"
+# Test fixture helper modules are put on sys.path by the test conftests at runtime.
+extraPaths = ["code/tests/quality_gate/fixtures", "design/corpus"]
+include = [
+    "design",
+    "visualize",
+    "app",
+    "toz",
+    "learn",
+    "code",
+    "core",
+    "workflow",
+    "runner",
+    "data",
+    "serve",
+]
+exclude = [
+    "**/skills/**",
+    "**/node_modules",
+    "**/tests/**/fixtures/**",
+    # Benchmark harnesses were never type-checked.
+    "code/bench",
+    "runner/bench",
+    # Shipped seeded samples are deliberately mixed-quality data.
+    "code/src/varde_code/quality_score/samples/*/**",
+    # Packaged and fixture solutions import `solution` as a sibling file.
+    "code/src/varde_code/quality_score/baseline_data/**",
+    "code/tests/quality_score/baseline_fixture/**",
+]
+strict = ["core/src/varde_core/io.py", "core/src/varde_core/module.py"]
+
+[tool.ruff]
+# Workspace members require Python 3.14+; skill scripts target Python 3.9.
+target-version = "py314"
+per-file-target-version = { "**/skills/**/*.py" = "py39" }
+extend-exclude = [
+    # Fixture sources are examples and inputs, not maintained Python modules.
+    "**/tests/**/fixtures/**",
+    # Golden files capture expected output and should remain byte-for-byte stable.
+    "**/tests/**/golden/**",
+    "**/tests/**/goldens/**",
+    "code/bench/quality-corpus/items/**",
+    # Seeded samples and their gaming variants are deliberately mixed-quality data.
+    "code/bench/quality-corpus/seeded/**",
+    # Shipped seeded samples are deliberately mixed-quality data, one directory per sample.
+    "code/src/varde_code/quality_score/samples/*/**",
+    "code/bench/quality-corpus/spike/sample/**",
+    "code/bench/call-resolution/envs/**",
+    "code/bench/call-resolution/data/**",
+    "code/bench/quality-corpus/corpus/cache/**",
+    # Generated baseline solutions (model output kept as data).
+    "code/bench/quality-corpus/baseline/agreed/**",
+    "code/src/varde_code/quality_score/baseline_data/**",
+]
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "B", "SIM", "C4", "TC", "C90", "PLR", "RUF100", "RET", "FURB", "PLW", "PERF", "S", "E", "TRY"]
+ignore = [
+    "PLR2004", # Literal protocol and fixture values keep assertions readable.
+    "TC001", # Runtime-evaluated annotations make moving first-party imports unsafe.
+    "TC002", # Runtime-evaluated annotations make moving third-party imports unsafe.
+    "TC003", # Runtime-evaluated annotations make moving standard-library imports unsafe.
+    "TRY003", # Long messages in raised exceptions are CLI-facing errors; a class per message adds indirection without benefit.
+    # Deferred to a later per-file pass.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Pytest assertions are the test mechanism.
+"**/tests/**" = ["S101"]
+# Fast-index sources are pinned by a digest guard (code/tests/quality_pass/guards); edits need D28 measurement.
+"code/src/varde_code/index/**" = ["RET504", "PERF401"]
+"code/src/varde_code/extract/**" = ["FURB171", "PERF401", "PLW0108", "RET504"]
+"code/src/varde_code/complexity.py" = ["E501"] # Fast-index source is digest-pinned (edits need D28 measurement); long lines stay unchanged.
+"code/src/varde_code/parse.py" = ["E501"] # Fast-index source is digest-pinned (edits need D28 measurement); long lines stay unchanged.
+"code/src/varde_code/index/prune.py" = ["TRY300"] # Fast-index source is digest-pinned (edits need D28 measurement); the return stays in the try body.
+"code/src/varde_code/index/repo_lock.py" = ["TRY300"] # Fast-index source is digest-pinned (edits need D28 measurement); the return stays in the try body.
+# Fast-index sources are digest-pinned (edits need D28 measurement); the SQL fragment is a generated placeholder list, never user input.
+"code/src/varde_code/index/persist/edges.py" = ["S608", "E501"]
+"code/src/varde_code/index/persist/entities.py" = ["S608", "E501"]
+"code/src/varde_code/index/slice.py" = ["S608", "E501"]
+# Keep Z timestamp parsing compatible with Python 3.9 and 3.10.
+"dev/scripts/check_window.py" = ["FURB162"]
+
+# Hook outcome notes are best-effort and must not change hook results.
+"**/varde_toz/hook.py" = ['S110', 'BLE001', 'C901', 'PLR0911', 'PLR0912', 'PLR0913', 'PLR0915', 'PLR0917'] # Ignore optional telemetry write failures. # Broad catches maintain failure-isolation behavior.
+
+
+# Pattern matching deliberately skips unreadable files and unsupported candidates.
+"**/varde_code/pattern_match.py" = ['S112', 'BLE001'] # Keep best-effort scanning tolerant. # Broad catches maintain failure-isolation behavior.
+
+
+# Keep file lifetimes aligned with their API ownership.
+"**/varde_toz/streaming.py" = ["SIM115"] # The returned temporary file is owned and closed by the caller.
+"**/varde/cli.py" = ['SIM115', 'PLR0911'] # stdout is replaced for the remaining process lifetime after EPIPE.
+
+
+# Keep positional constructor field order stable in frozen record classes.
+"**/varde_code/index/build.py" = ["RUF023", "E501"] # Slots order maps constructor arguments to fields.
+"**/varde_code/index/incremental.py" = ['RUF023', 'PLR0913', 'PLR0917', 'S101', 'S608', "E501"] # Slots order maps constructor arguments to fields. S101/S608: digest-pinned; the assert narrows an already validated type and the SQL fragment is a generated placeholder list.
+
+
+# Preserve explicit module re-exports and lazy adapter registration imports.
+"**/varde_code/rules/dependency_facts/rust.py" = ["PLC0414"] # Aliases preserve the public module surface or registration side effect.
+"**/varde_learn/loop/diagnose/model.py" = ["PLC0414"] # Aliases preserve the public module surface or registration side effect.
+"**/varde_workflow/commands/common.py" = ["PLC0414"] # Aliases preserve the public module surface or registration side effect.
+"**/varde_workflow/commands/error.py" = ["PLC0414"] # Aliases preserve the public module surface or registration side effect.
+"**/varde_workflow/commands/input.py" = ["PLC0414"] # Aliases preserve the public module surface or registration side effect.
+"**/varde_workflow/output.py" = ["PLC0414"] # Aliases preserve the public module surface or registration side effect.
+
+
+# Preserve current string rendering and serialized enum compatibility.
+"**/varde_core/redact/__init__.py" = ["UP042"] # Keep existing str(Enum) behavior.
+"**/varde_core/text_audit.py" = ["UP042"] # Keep existing str(Enum) behavior.
+"**/varde_learn/docs/cli.py" = ['UP042', 'PLR0911', 'PLR0912'] # Keep existing str(Enum) behavior.
+"**/varde_learn/loop/output/__init__.py" = ["UP042"] # Keep existing str(Enum) behavior.
+"**/varde_learn/knowledge/lint/__init__.py" = ["UP042"] # Keep existing str(Enum) behavior.
+
+
+# Preserve existing fail-open and per-source error handling.
+"**/varde_code/rules/test_runner.py" = ['BLE001', 'PLR0911'] # Broad catches maintain failure-isolation behavior.
+"**/varde_code/toz_bridge.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/tests/core/test_pattern_match.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_learn/docs/spec_inventory.py" = ['BLE001', 'PLR0913', 'PLR0915', 'PLR0917'] # Broad catches maintain failure-isolation behavior.
+"**/varde_learn/loop/cli_diagnose.py" = ['BLE001', 'PLR0915'] # Broad catches maintain failure-isolation behavior.
+"**/varde_learn/loop/cli_diagnose_eval.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_learn/loop/cli_friction_read.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_learn/loop/cli_friction_write.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/tests/diagnose/test_codex.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_toz/daemon/server.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_toz/runner/script.py" = ['BLE001', 'C901', 'PLR0911', 'PLR0915'] # Broad catches maintain failure-isolation behavior.
+"**/varde_workflow/commands/now.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_workflow/commands/readiness.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_workflow/commands/status.py" = ['BLE001', 'C901', 'PLR0912'] # Broad catches maintain failure-isolation behavior.
+"**/varde_workflow/execution_wave_tools.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde_workflow/inbox.py" = ['BLE001', 'TRY004'] # Broad catches maintain failure-isolation behavior. # Preserve existing validation exception type.
+"**/varde/glue/module.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde/glue/search/core.py" = ["BLE001"] # Broad catches maintain failure-isolation behavior.
+"**/varde/glue/search/toz.py" = ['BLE001', 'PLR0913'] # Broad catches maintain failure-isolation behavior.
+
+
+# Validation errors keep established ValueError compatibility for malformed inputs.
+"**/scripts/generate.py" = ["TRY004"] # Preserve the generator's validation exception type after it moves.
+"**/varde_code/graph_model.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_code/index/persist/edges.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_code/index/resolve/core.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_code/query/output.py" = ['TRY004', 'C901', 'PLR0912', 'PLR0915'] # Preserve existing validation exception type.
+"**/varde_code/rules/loader.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_code/rules/model.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_code/rules/sql.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde/json_order.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_learn/docs/frontmatter.py" = ['TRY004', 'C901', 'PLR0912'] # Preserve existing validation exception type.
+"**/varde_learn/loop/diagnose/list.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_learn/loop/importer.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_learn/loop/output/command.py" = ['TRY004', 'C901', 'PLR0912', 'PLR0913', 'PLR0915', 'PLR0917'] # Preserve existing validation exception type.
+"**/varde_learn/loop/trigger.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_toz/commands/run.py" = ['TRY004', 'C901', 'PLR0915'] # Preserve existing validation exception type.
+"**/varde_toz/profile.py" = ['TRY004', 'C901', 'PLR0912', 'PLR0915'] # Preserve existing validation exception type.
+"**/varde_workflow/graph.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde_workflow/schema.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde/setup/sync/config.py" = ["TRY004"] # Preserve existing validation exception type.
+"**/varde/setup/sync/support.py" = ["TRY004"] # Preserve existing validation exception type.
+
+
+# Existing varde CLI code; refactor complexity in a later plan.
+"**/varde/setup/hooks_install/json_hooks.py" = ["PLR0913", "PLR0917"]
+"**/varde/setup/sync/agents.py" = ["C901", "PLR0913", "PLR0917"]
+"**/varde/setup/sync/preserve.py" = ["PLR0913", "PLR0917"]
+
+# Existing code module; refactor complexity in a later plan.
+"**/varde_code/ast_edit/cli.py" = ["PLR0912", "PLR0915"]
+"**/varde_code/ast_edit/preview.py" = ["C901", "PLR0912", "PLR0915"]
+"**/varde_code/cli_scan.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/complexity.py" = ["PLR0911"]
+"**/varde_code/extract/entity.py" = ["PLR0915"]
+"**/varde_code/extract/langs/bash.py" = ["PLR0911"]
+"**/varde_code/extract/langs/c.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/cpp.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/csharp.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/dart.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/elixir.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/go.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/haskell.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/java.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/javascript.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/kotlin.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/lua.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/php.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/python.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/ruby.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/rust.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/scala.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/solidity.py" = ["C901", "PLR0911", "PLR0912"]
+"**/varde_code/extract/langs/swift.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_code/extract/langs/ts.py" = ["PLR0911"]
+"**/varde_code/extract/recursion.py" = ["PLR0911"]
+"**/varde_code/index/resolve/aux.py" = ["PLR0911", "PLR0913"]
+"**/varde_code/index/resolve/calls.py" = ["PLR0913", "PLR0917"]
+"**/varde_code/index/resolve/imports.py" = ["PLR0911", "E731"]
+"**/varde_code/index/slice.py" = ["PLR0911"]
+"**/varde_code/query/nav_map.py" = ["C901", "PLR0912", "PLR0915"]
+"**/varde_code/rules/clone_verification.py" = ["PLR0915"]
+"**/varde_code/rules/dependency_facts/c_cpp.py" = ["PLR0913", "PLR0917"]
+"**/varde_code/rules/dependency_facts/csharp_swift.py" = ["C901", "PLR0912", "PLR0915"]
+"**/varde_code/rules/dependency_facts/jvm.py" = ["PLR0915"]
+"**/varde_code/rules/dependency_facts/python.py" = ["PLR0913", "PLR0917"]
+"**/varde_code/rules/pattern.py" = ["C901", "PLR0912", "PLR0915"]
+"**/tests/extract/test_complexity.py" = ["PLR0913"]
+
+# Existing doc code; refactor complexity in a later plan.
+"**/varde_learn/docs/flow/scan.py" = ["PLR0913", "PLR0917"]
+"**/tests/docs/test_spec_inventory.py" = ["PLR0915"]
+
+# Existing learn module code; refactor complexity in a later plan.
+"**/varde_learn/loop/diagnose/claude.py" = ["PLR0913", "PLR0915", "PLR0917"]
+"**/varde_learn/loop/diagnose/codex/__init__.py" = ["PLR0915"]
+"**/varde_learn/loop/diagnose/codex/discovery.py" = ["PLR0915"]
+"**/varde_learn/loop/diagnose/codex/events.py" = ["C901", "PLR0912", "PLR0915"]
+"**/varde_learn/loop/diagnose/context_usage.py" = ["PLR0911"]
+"**/varde_learn/loop/diagnose/opencode.py" = ["C901", "PLR0912", "PLR0915"]
+"**/varde_learn/loop/diagnose/snapshot.py" = ["C901", "PLR0912", "PLR0915"]
+"**/varde_learn/loop/output/run.py" = ["PLR0913"]
+
+# Existing knowledge code; refactor complexity in a later plan.
+"**/varde_learn/knowledge/cli.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+
+# Existing toz code; refactor complexity in a later plan.
+"**/varde_toz/capture.py" = ["PLR0913", "PLR0915", "PLR0917"]
+"**/varde_toz/commands/capture.py" = ["C901", "PLR0912", "PLR0915", "E501"]
+"**/varde_toz/commands/migrate_metadata.py" = ["PLR0915", "E501"]
+"**/varde_toz/commands/profile.py" = ["PLR0912", "PLR0915"]
+"**/varde_toz/commands/query.py" = ["C901", "PLR0911", "PLR0912", "PLR0915", "E501"]
+"**/varde_toz/hook_input/compound.py" = ["C901", "PLR0912", "PLR0915"]
+"**/varde_toz/search.py" = ["PLR0913", "PLR0917"]
+"**/varde_toz/strategies.py" = ["PLR0913", "PLR0917"]
+
+# Existing workflow code; refactor complexity in a later plan.
+"**/varde_workflow/cli.py" = ["C901", "PLR0911", "PLR0912", "PLR0915"]
+"**/varde_workflow/commands/watch.py" = ["PLR0913", "PLR0917"]
+"**/varde_workflow/execution_wave.py" = ["C901", "PLR0912", "PLR0915"]
+
+# Existing doc skill code; refactor complexity in a later plan.
+"**/skills/varde-skill-authoring/evals/test-report-verifier.py" = ["PLR0913", "PLR0917"]
+
+# Existing varde-orchestrate skill code; refactor complexity in a later plan.
+"**/varde_workflow/skills/varde-orchestrate/scripts/select-plans.py" = ["PLR0912"]
+
+# Existing code skill; refactor complexity in a later plan.
+"**/varde_code/skills/varde-code/evals/verify-navigation.py" = ["PLR0911"]
+
+# Subprocess-running files (S602-S607): each file's job is to run git, build tools, or the CLI under test with fixed argv.
+"app/pex/build.py" = ["S603", "S607"] # Builds the PEX by invoking pinned build tools with fixed argument lists.
+"app/tests/setup/test_autosave.py" = ["S603", "S607"] # Exercises autosave CLI subprocess behavior in integration tests.
+"app/tests/glue/test_worktree_prune_guard.py" = ["S603", "S607"] # Builds temporary git worktrees with fixed argv to exercise the prune guard.
+"app/tests/test_installed_wheels.py" = ["S603", "S607"] # Installs and exercises built wheels in isolated subprocesses.
+"app/tests/test_io_wiring.py" = ["S603", "S607"] # Exercises CLI entry points in subprocesses to verify IO wiring.
+"app/tests/test_router.py" = ["S603"] # Exercises router CLI behavior in subprocess integration tests.
+"app/tests/test_wheel_install.py" = ["S603", "S607"] # Builds and installs wheels in subprocess integration tests.
+"code/bench/call-resolution/groundtruth/go-rust/collect.py" = ["S603", "S607"] # Collects benchmark ground truth by invoking pinned language tools and Git.
+"code/bench/call-resolution/groundtruth/java-csharp/tools.py" = ["S603", "S607"] # Runs compiler and build tools for benchmark ground truth collection.
+"code/bench/call-resolution/groundtruth/python-ts/stage_repositories.py" = ["S603", "S607"] # Stages benchmark repositories through Git subprocesses.
+"code/bench/call-resolution/run/runner.py" = ["S603", "S607"] # Runs benchmark repository Git operations as part of the harness.
+"code/bench/call-resolution/tests/groundtruth/java-csharp/test_groundtruth_java_csharp.py" = ["S603", "S607"] # Creates Git fixtures in benchmark integration tests.
+"code/bench/call-resolution/tests/runner/test_runner_cli.py" = ["S603", "S607"] # Exercises benchmark CLI and creates Git fixtures in integration tests.
+"code/bench/code-rank/run.py" = ["S603", "S607"] # Runs fixed benchmark tools and search commands as part of the harness.
+"code/bench/quality-corpus/corpus/fetch.py" = ["S603", "S607"] # Fetches and verifies pinned corpus inputs through subprocess tools.
+"code/bench/quality-corpus/corpus/verified/cd_artifacts.py" = ["S603", "S607"] # Builds verified benchmark artifacts with controlled compiler commands.
+"code/bench/quality-corpus/corpus/verified/cd_run.py" = ["S603", "S607"] # Runs the verified benchmark corpus with controlled commands.
+"code/bench/quality-corpus/mutations/csharp/operators.py" = ["S603"] # Mutation operators invoke the configured C# compiler with constructed arguments.
+"code/bench/quality-corpus/mutations/go/operators.py" = ["S603", "S607"] # Mutation operators invoke Go tooling with constructed arguments.
+"code/bench/quality-corpus/pairs/mine.py" = ["S603", "S607"] # Mines benchmark pairs by invoking controlled corpus tools.
+"code/bench/quality-corpus/tests/corpus/test_corpus_manifest.py" = ["S603", "S607"] # Tests exercise corpus manifest CLI commands in isolated temporary trees.
+"code/bench/quality-corpus/tests/pairs/test_pairs_mining.py" = ["S603", "S607"] # Tests exercise pair-mining CLI commands against temporary fixtures.
+"code/bench/quality-corpus/tests/tools/test_tools_audit_repo.py" = ["S603", "S607"] # Tests invoke the audit CLI against controlled temporary repositories.
+"code/bench/quality-corpus/tests/tools/test_tools_runner_place.py" = ["S603", "S607"] # Tests invoke runner and placement CLIs against controlled fixtures.
+"code/bench/quality-corpus/tests/tools/test_tools_splits_hygiene.py" = ["S603"] # Tests invoke repository hygiene commands against temporary fixtures.
+"code/bench/quality-corpus/tests/tools/test_tools_tiers.py" = ["S603"] # Tests invoke tier scripts against controlled temporary fixtures.
+"code/bench/quality-corpus/tools/behaviour_runner.py" = ["S603", "S607"] # Benchmark harness executes controlled commands to measure behavior.
+"code/src/varde_code/index/supervise.py" = ["S603", "E501"] # Fast-index source is pinned by a digest guard; the argv is a fixed supervisor command.
+"code/tests/core/test_seams.py" = ["S603", "S607"] # Integration tests exercise CLI seams in temporary repositories.
+"code/tests/query/test_mapping_nav.py" = ["S603", "S607"] # Integration fixtures create Git repositories to exercise mapping navigation against real Git metadata.
+"code/tests/rules/test_pattern.py" = ["S603", "S607"] # Tests initialize temporary Git repositories to verify pattern behavior with repository context.
+"dev/tests/calibrate/sample/test_calibrate_sample_dataset.py" = ["S603", "S607"] # Calibration dataset tests execute sample programs and Git commands in isolated fixtures.
+"learn/src/varde_learn/skills/varde-skill-authoring/evals/test-report-verifier.py" = ["S603", "S607"] # Evaluation harness runs isolated verifier subprocesses to validate report behavior.
+"learn/tests/docs/native/test_cli.py" = ["S603", "S607"] # Native CLI integration tests invoke Git to prepare and verify temporary repository fixtures.
+"learn/tests/docs/test_spec_inventory.py" = ["S603", "S607"] # Inventory tests invoke Git against temporary repositories to verify source discovery.
+"learn/tests/knowledge/test_memory.py" = ["S603", "S607"] # Memory integration tests invoke Git to prepare repositories and validate persisted Git-backed state.
+"learn/tests/loop/store/test_paths.py" = ["S603", "S607"] # Store path tests initialize temporary Git repositories to verify path discovery.
+"runner/scripts/relay_e2e.py" = ["S603", "S607"] # End-to-end relay harness launches subprocesses to exercise the complete local relay lifecycle.
+"runner/src/varde_runner/varde_cli.py" = ["S603", "S607"] # Runner CLI adapter launches the configured local CLI as its core operation.
+"workflow/src/varde_workflow/plan_gate.py" = ["S603", "S607"] # Gate orchestration invokes Git, shell check commands from plan configuration, and Varde tools as its core behavior.
+"workflow/src/varde_workflow/review_structure.py" = ["S603", "S607"] # Review structure checks inspect Git history using fixed argv and controlled revision/path arguments.
+"workflow/tests/native/test_plan_workflows.py" = ["S603", "S607"] # Test fixture builds temporary Git repositories and invokes Git with fixed argv to exercise plan workflows.
+"workflow/tests/test_artifact.py" = ["S603", "S607"] # Integration tests initialize temporary Git repositories with fixed argv to validate artifact behavior.
+"workflow/tests/test_cli.py" = ["S603", "S607"] # CLI integration tests create temporary Git repositories with fixed argv to exercise command behavior.
+"workflow/tests/test_gate.py" = ["S603", "S607"] # Gate integration tests initialize temporary Git repositories with fixed argv to validate gate behavior.
+"workflow/tests/test_lifecycle.py" = ["S603", "S607"] # Lifecycle CLI integration tests invoke git with fixed argv to create and inspect temporary repositories; every subprocess call exercises that process-backed behavior.
+"workflow/tests/test_watch.py" = ["S603", "S607", "E501"] # Watch integration tests invoke git with fixed argv to construct temporary repositories and verify watcher behavior against real commits.
+"workflow/tests/test_waves.py" = ["S603", "S607"] # Wave integration tests invoke git with fixed argv to construct temporary repositories and verify ownership and wave behavior against real commits.
+"code/src/varde_code/extract/versions_check.py" = ["E501"] # Fast-index source is digest-pinned (edits need D28 measurement); long lines stay unchanged.
+"code/src/varde_code/index/_refresh_fastpath.py" = ["E501"] # Fast-index source is digest-pinned (edits need D28 measurement); long lines stay unchanged.
+"code/src/varde_code/index/db.py" = ["E501"] # Fast-index source is digest-pinned (edits need D28 measurement); long lines stay unchanged.
+"code/src/varde_code/index/lexical.py" = ["E501"] # Fast-index source is digest-pinned (edits need D28 measurement); long lines stay unchanged.
+"code/src/varde_code/index/persist/metrics.py" = ["E501"] # Fast-index source is digest-pinned (edits need D28 measurement); long lines stay unchanged.
+"toz/src/varde_toz/commands/doctor.py" = ["E501"] # Rendered configuration snippet; wrapping would change CLI output.
+"toz/src/varde_toz/commands/event_note.py" = ["E501"] # Rendered help text; wrapping would change CLI output.
+"toz/src/varde_toz/commands/fetch.py" = ["E501"] # Rendered help text; wrapping would change CLI output.
+"toz/src/varde_toz/commands/index.py" = ["E501"] # Rendered help text; wrapping would change CLI output.
+"workflow/src/varde_workflow/commands/instructions.py" = ["E501"] # Generated instruction text is user-visible and its complete lines must stay intact.
+"workflow/tests/test_readiness_overlap.py" = ["E501"] # The exact warning text is asserted as CLI output.
+"runner/tests/test_web_browser.py" = ["E501"] # JavaScript and selectors embedded in Python strings; the exact text is asserted.
+"code/bench/quality-corpus/tests/tools/test_tools_item_spec_check.py" = ["E501"] # Embedded multi-language source fixtures keep one statement per line; splitting would obscure what each fixture parses.
+
+[tool.ruff.lint.mccabe]
+max-complexity = 19
+
+[tool.ruff.lint.pylint]
+max-args = 6
+max-branches = 18
+max-returns = 8
+max-statements = 53
+

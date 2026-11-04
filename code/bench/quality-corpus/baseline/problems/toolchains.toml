@@ -1,0 +1,25 @@
+# Test command and toolchain per language. The runner copies the solution and the
+# test file (plus `support`) into an empty directory and runs `command` there.
+# `{tfm}` in support files is replaced by the major version of `dotnet --version`.
+
+[python]
+requires = "python3 >= 3.11 on PATH (stdlib unittest only)"
+tools = ["python3"]
+solution = "solution.py"
+test = "test_solution.py"
+command = ["python3", "-m", "unittest", "test_solution"]
+
+[typescript]
+requires = "node >= 22.18 on PATH (built-in type stripping; no tsc)"
+tools = ["node"]
+solution = "solution.ts"
+test = "solution.test.ts"
+command = ["node", "--test", "solution.test.ts"]
+
+[csharp]
+requires = ".NET SDK >= 8 on PATH (offline; no NuGet packages)"
+tools = ["dotnet"]
+solution = "Solution.cs"
+test = "Tests.cs"
+support = ["Baseline.csproj", "Harness.cs"]
+command = ["dotnet", "run", "--project", "Baseline.csproj"]

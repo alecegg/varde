@@ -1,0 +1,15 @@
+Record a checked merge approval as main
+
+Usage: varde plan approve-as-main <PLAN> --note <TEXT> --plan-followed --gate-result pass --abnormal-events <TEXT>
+
+Reads the runner's merge-approver-main secret and posts a checklist tied to reviewed_commit. Requires a passing review.md verdict and explicit checklist options.
+
+Arguments:
+  <PLAN>        Plan path or identifier
+  --note <TEXT>           Short approval note (required)
+  --plan-followed         Confirm the plan was followed (required)
+  --gate-result <TEXT>    Gate result; must be pass (required)
+  --abnormal-events TEXT  Record abnormal events or none (required)
+
+Options:
+  -h, --help    Print help

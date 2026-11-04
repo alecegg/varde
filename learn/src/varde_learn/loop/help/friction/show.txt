@@ -1,0 +1,13 @@
+Show an item and its occurrences and status history
+
+Usage: varde learn friction show [OPTIONS] <IDENTIFIER>...
+
+Arguments:
+  <IDENTIFIER>  One or more numeric item IDs or safe item slugs
+
+Options:
+      --offset <OFFSET>  Offset shared by occurrence and status-history pages [default: 0]
+      --limit <LIMIT>    Maximum rows from each collection (1 to 1000) [default: 100]
+      --brief            Print one compact triage line per item
+      --json             Print the shared machine-readable output envelope
+  -h, --help             Print help

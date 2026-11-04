@@ -1,0 +1,47 @@
+{
+  "classification": "intentional-change",
+  "message_rows": [
+    {
+      "from": "sender",
+      "id": "m-00000001",
+      "kind": "info",
+      "text": "below watermark",
+      "to": "worker",
+      "ts": "2026-10-22T12:00:00Z"
+    },
+    {
+      "_legacy_idless": true,
+      "from": "sender",
+      "id": "m-ceaf9bab",
+      "kind": "info",
+      "text": "legacy",
+      "to": "legacy",
+      "ts": "2026-10-22T11:40:00Z"
+    },
+    {
+      "from": "sender",
+      "id": "m-00000007",
+      "kind": "info",
+      "text": "stopped reading",
+      "to": "stale-reader",
+      "ts": "2026-10-22T11:40:00Z"
+    }
+  ],
+  "stdout_stderr": {
+    "json": {
+      "exit": 1,
+      "stderr": "Warning: stray message store found at <TMP>/runner/memory-bank/working/.cache/inbox\n",
+      "stdout": "{\n  \"addresses\": [\n    {\n      \"address\": \"legacy\",\n      \"delivered_not_acked\": 0,\n      \"last_delivery\": null,\n      \"last_delivery_channel\": null,\n      \"oldest_undelivered_age_seconds\": 1200.0,\n      \"oldest_unread_age_seconds\": 1200.0,\n      \"total\": 1,\n      \"unread\": 1\n    },\n    {\n      \"address\": \"stale-reader\",\n      \"delivered_not_acked\": 0,\n      \"last_delivery\": null,\n      \"last_delivery_channel\": null,\n      \"oldest_undelivered_age_seconds\": 1200.0,\n      \"oldest_unread_age_seconds\": 1200.0,\n      \"total\": 1,\n      \"unread\": 1\n    },\n    {\n      \"address\": \"worker\",\n      \"delivered_not_acked\": 0,\n      \"last_delivery\": null,\n      \"last_delivery_channel\": null,\n      \"oldest_undelivered_age_seconds\": 0.0,\n      \"oldest_unread_age_seconds\": 0.0,\n      \"total\": 1,\n      \"unread\": 1\n    }\n  ],\n  \"bad\": true,\n  \"cli_main_reads\": {\n    \"count\": 0,\n    \"last_at\": null\n  },\n  \"events\": [],\n  \"exit_code\": 1,\n  \"messages\": [\n    {\n      \"acked\": null,\n      \"delivered\": null,\n      \"id\": \"m-00000001\",\n      \"misdelivered\": 0,\n      \"pushed\": null,\n      \"sent\": \"2026-10-22T12:00:00Z\",\n      \"suspect\": 0\n    },\n    {\n      \"acked\": null,\n      \"delivered\": null,\n      \"id\": \"m-ceaf9bab\",\n      \"misdelivered\": 0,\n      \"pushed\": null,\n      \"sent\": \"2026-10-22T11:40:00Z\",\n      \"suspect\": 0\n    },\n    {\n      \"acked\": null,\n      \"delivered\": null,\n      \"id\": \"m-00000007\",\n      \"misdelivered\": 0,\n      \"pushed\": null,\n      \"sent\": \"2026-10-22T11:40:00Z\",\n      \"suspect\": 0\n    }\n  ],\n  \"overdue\": false,\n  \"runner_relay\": \"down\",\n  \"runner_relay_down_with_urgent_mail\": false,\n  \"send_to_ack_seconds\": {\n    \"p50\": null,\n    \"p90\": null\n  },\n  \"send_to_delivered_seconds\": {\n    \"p50\": null,\n    \"p90\": null\n  },\n  \"stopped_reading\": [\n    {\n      \"address\": \"stale-reader\",\n      \"newer_binding\": null\n    }\n  ],\n  \"unbound_pending\": [\n    \"legacy\",\n    \"worker\"\n  ]\n}\n"
+    },
+    "text": {
+      "exit": 1,
+      "stderr": "Warning: stray message store found at <TMP>/runner/memory-bank/working/.cache/inbox\n",
+      "stdout": "runner relay: down\nlegacy: 1 total, 1 unread, 0 delivered-not-acked, 1200s oldest undelivered\nstale-reader: 1 total, 1 unread, 0 delivered-not-acked, 1200s oldest undelivered\nworker: 1 total, 1 unread, 0 delivered-not-acked, 0s oldest undelivered\nsuspect: 0, misdelivered: 0\nstale-reader: stopped reading\n"
+    }
+  },
+  "store": {
+    ".cache/inbox/index/stale-reader.json": "{\"watermark\": 207}",
+    ".cache/inbox/index/worker.json": "{\"watermark\":1}\n",
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"worker\",\"kind\":\"info\",\"text\":\"below watermark\",\"id\":\"m-00000001\"}\n{\"ts\":\"2026-10-22T11:40:00Z\",\"from\":\"sender\",\"to\":\"legacy\",\"kind\":\"info\",\"text\":\"legacy\"}\n{\"ts\":\"2026-10-22T11:40:00Z\",\"from\":\"sender\",\"to\":\"stale-reader\",\"kind\":\"info\",\"text\":\"stopped reading\",\"id\":\"m-00000007\"}\n"
+  }
+}

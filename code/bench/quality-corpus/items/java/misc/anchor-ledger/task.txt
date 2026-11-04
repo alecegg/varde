@@ -1,0 +1,2 @@
+Return the account balance after applying a sequence of signed ledger entries.
+Input domain: Opening balance and signed integer entries are integers; return their sum.

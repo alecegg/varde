@@ -1,0 +1,13 @@
+{
+  "task": "reservation-calendar",
+  "pair_group": "reservation-calendar",
+  "language": "go",
+  "part": "b",
+  "pairs": [
+    {"pair_id": "e6c07192453d8f460a728406", "left": "sensible.go", "right": "monolith.go"},
+    {"pair_id": "f7d18203564e90571b839517", "left": "sensible.go", "right": "tiny.go"},
+    {"pair_id": "08e29314675fa1682c94a628", "left": "sensible.go", "right": "padded.go"},
+    {"pair_id": "19f3a4257860b2793da5b739", "left": "sensible.go", "right": "sizematched.go"},
+    {"pair_id": "2a04b5368971c38a4eb6c84a", "left": "sensible.go", "right": "namematched.go"}
+  ]
+}

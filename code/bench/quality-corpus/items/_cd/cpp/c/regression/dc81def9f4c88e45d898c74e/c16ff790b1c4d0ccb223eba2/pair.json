@@ -1,0 +1,30 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "absl/time/civil_time.cc"
+  ],
+  "changed_functions": [
+    "FormatYearAnd"
+  ],
+  "child_sha": "037ade20d1132781aae3cda4d547a9e6a5f557bf",
+  "file_licenses": {
+    "abseil/abseil-cpp:absl/time/civil_time.cc": "Apache-2.0"
+  },
+  "id": "c16ff790b1c4d0ccb223eba2",
+  "intent": {
+    "linked_issues": [],
+    "message": "Export of internal Abseil changes\n\n--\nd8a1e7f8059a0bc4cd72b4e4ca2947322c36f7ee by Martijn Vels <mvels@google.com>:\n\nAdd cordz allowlist and cleanup COPTS\n\nPiperOrigin-RevId: 372042499\n\n--\n2abd20ac17127b8823787bfcdd3e7e80709d3034 by Evan Brown <ezb@google.com>:\n\nRemove unnecessary string conversion now that FormatTime accepts string_view.\n\nPiperOrigin-RevId: 371989142\nGitOrigin-RevId: d8a1e7f8059a0bc4cd72b4e4ca2947322c36f7ee\nChange-Id: I637e9fa434de9b2c38fd0f96d66eefc6e8eec8e8"
+  },
+  "label_source": "developer-intent",
+  "language": "cpp",
+  "left": "a.h",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-d0a0165c5874d5a4",
+  "parent_sha": "cba8cf87bcaac32e90a366fa16216ee89f7f61cc",
+  "pin_sha": "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c",
+  "repo": "abseil/abseil-cpp",
+  "right": "b.h",
+  "split": "regression",
+  "upstream_url": "https://github.com/abseil/abseil-cpp.git"
+}

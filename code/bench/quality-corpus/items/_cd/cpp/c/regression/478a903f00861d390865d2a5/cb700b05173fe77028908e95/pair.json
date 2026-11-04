@@ -1,0 +1,31 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "absl/strings/internal/str_format/arg.cc"
+  ],
+  "changed_functions": [
+    "ConvertIntArg",
+    "ConvertV"
+  ],
+  "child_sha": "0f4133aacfa2ebc84c76f69e6ab02ce58603072f",
+  "file_licenses": {
+    "abseil/abseil-cpp:absl/strings/internal/str_format/arg.cc": "Apache-2.0"
+  },
+  "id": "cb700b05173fe77028908e95",
+  "intent": {
+    "linked_issues": [],
+    "message": "StrFormat() simplification: Treat %v unconditionally as %d when formatting integers.\n\nThis is a simplification but not a behavior change; we used to choose %u for unsigned ints, but %u and %d generate the same output for these types.\n\nPiperOrigin-RevId: 539104599\nChange-Id: I9d7ff561b969a6287889f95063636d6b77a4a78b"
+  },
+  "label_source": "developer-intent",
+  "language": "cpp",
+  "left": "a.h",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-8eb311537bb3b1da",
+  "parent_sha": "163cade8645fad00682b6829b4eac92be9e71b89",
+  "pin_sha": "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c",
+  "repo": "abseil/abseil-cpp",
+  "right": "b.h",
+  "split": "regression",
+  "upstream_url": "https://github.com/abseil/abseil-cpp.git"
+}

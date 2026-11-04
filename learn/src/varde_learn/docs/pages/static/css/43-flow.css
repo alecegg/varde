@@ -1,0 +1,23 @@
+/* Flow block and dependency graph. */
+.dep-graph { display: block; max-inline-size: none; }
+.dep-graph .node rect { fill: var(--vd-surface); stroke: var(--vd-accent); stroke-width: 1.5; }
+.dep-graph .node text { fill: var(--vd-text); font-size: 12px; font-family: var(--vd-font-body); }
+.dep-graph .node.missing rect { stroke: var(--vd-text-secondary); stroke-dasharray: 4 3; }
+.dep-graph .node.missing text { fill: var(--vd-text-secondary); }
+.dep-graph .edge { fill: none; stroke: var(--vd-text-secondary); stroke-width: 1.5; }
+.dep-graph .edge.back { stroke-dasharray: 5 3; }
+.dep-graph .arrow { fill: var(--vd-text-secondary); }
+.graph-note, .graph-empty { color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.vb-flow { margin: 0; padding-inline-start: 1.4em; }
+.vb-step { margin-block: 0.3em; }
+.vb-next { color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.vb-flowbar { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-block: 0 0.4rem; }
+.flow .vb-data > summary { display: flex; align-items: center; min-block-size: 44px; cursor: pointer; }
+/* Dependency highlight: before = dotted outline, after = heavy solid outline, selected = fill. */
+.vd-node.vf-up .vd-shape { stroke: var(--vd-series-2); stroke-width: 3; stroke-dasharray: 2 3; }
+.vd-node.vf-down .vd-shape { stroke: var(--vd-accent); stroke-width: 4; }
+@media (forced-colors: active) {
+  .vd-node.vf-up .vd-shape, .vd-node.vf-down .vd-shape { stroke: Highlight; }
+}
+.vb-readout { min-block-size: 1.5em; margin-block: 0.3em 0; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.flow .vd-detail { min-block-size: 1.5em; color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }

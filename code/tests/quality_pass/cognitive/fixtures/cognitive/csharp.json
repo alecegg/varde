@@ -1,0 +1,217 @@
+{
+  "language": "csharp",
+  "source": "class CognitiveFixtures {\nstatic bool c00_simple_if(bool a, bool b, bool c, bool d) { if (a) return true; return false; }\nstatic bool c01_nested_if(bool a, bool b, bool c, bool d) { if (a) { if (b) return true; } return false; }\nstatic bool c02_triple_nested_if(bool a, bool b, bool c, bool d) { if (a) { if (b) { if (c) return true; } } return false; }\nstatic bool c03_if_else(bool a, bool b, bool c, bool d) { if (a) return true; else return false; return false; }\nstatic bool c04_if_elif_else(bool a, bool b, bool c, bool d) { if (a) return true; else if (b) return false; else return true; return false; }\nstatic bool c05_three_way_chain(bool a, bool b, bool c, bool d) { if (a) return true; else if (b) return false; else if (c) return true; else return false; return false; }\nstatic bool c06_and_sequence(bool a, bool b, bool c, bool d) { if (a && b) return true; return false; }\nstatic bool c07_or_sequence(bool a, bool b, bool c, bool d) { if (a || b) return true; return false; }\nstatic bool c08_mixed_boolean(bool a, bool b, bool c, bool d) { if (a && b || c && d) return true; return false; }\nstatic bool c09_assigned_boolean(bool a, bool b, bool c, bool d) { bool value = a && b; return value; return false; }\nstatic bool c10_while_loop(bool a, bool b, bool c, bool d) { while (a) { a = false; } return false; }\nstatic bool c11_for_loop(bool a, bool b, bool c, bool d) { for (int i = 0; i < 2; i++) { } return false; }\nstatic bool c12_if_with_loop(bool a, bool b, bool c, bool d) { if (a) { for (int i = 0; i < 2; i++) { } } return false; }\nstatic bool c13_nested_loops(bool a, bool b, bool c, bool d) { for (int i = 0; i < 2; i++) { while (a) { break; } } return false; }\nstatic bool c14_switch_or_match(bool a, bool b, bool c, bool d) { switch (a) { case true: return true; default: return false; } return false; }\nstatic bool c15_switch_nested_if(bool a, bool b, bool c, bool d) { switch (a) { case true: if (b) return true; break; default: return false; } return false; }\nstatic bool c16_try_one_catch(bool a, bool b, bool c, bool d) { try { if (a) return true; } catch (Exception error) { return false; } return false; }\nstatic bool c17_try_two_catches(bool a, bool b, bool c, bool d) { try { if (a) return true; } catch (ArgumentException error) { return false; } catch (Exception other) { return true; } return false; }\nstatic bool c18_recursive_call(bool a, bool b, bool c, bool d) { if (a) return true; return c18_recursive_call(b, a, c, d); return false; }\nstatic bool c19_conditional_expression(bool a, bool b, bool c, bool d) { return a ? true : false; return false; }\nstatic bool c20_nested_conditionals(bool a, bool b, bool c, bool d) { return a ? true : (b ? false : true); return false; }\nstatic bool c21_lambda_decision(bool a, bool b, bool c, bool d) { return new[] { a }.Any(value => { if (value) return true; return false; }); return false; }\nstatic bool c22_if_lambda_decision(bool a, bool b, bool c, bool d) { if (a) return new[] { b }.Any(value => { if (value) return true; return false; }); return false; }\nstatic bool c23_nested_callable(bool a, bool b, bool c, bool d) { System.Func<bool> inner = () => { if (a) return true; return false; }; return inner(); return false; }\nstatic bool c24_comprehension(bool a, bool b, bool c, bool d) { return new[] { a, b }.Where(value => value).Any(); return false; }\nstatic bool c25_labeled_jump(bool a, bool b, bool c, bool d) { outer: while (a) { break; } return false; }\nstatic bool c26_boolean_operator_sequences(bool a, bool b, bool c, bool d) { return a && (b || c); }\nstatic bool c27_language_idiom(bool a, bool b, bool c, bool d) { bool IsTrue(bool value) { return value; } return IsTrue(a); }static bool c28_loop_if_boolean(bool a, bool b, bool c, bool d) { for (int i = 0; i < 2; i++) { if (a && b) return true; } return false; }\nstatic bool c29_else_loop(bool a, bool b, bool c, bool d) { if (a) return true; else { while (b) { break; } } return false; }\n}\n",
+  "functions": [
+    {
+      "name": "c00_simple_if",
+      "construct": "simple_if",
+      "source": "static bool c00_simple_if(bool a, bool b, bool c, bool d) { if (a) return true; return false; }\n",
+      "expected": 1,
+      "derivation": "One top-level if adds one structural increment."
+    },
+    {
+      "name": "c01_nested_if",
+      "construct": "nested_if",
+      "source": "static bool c01_nested_if(bool a, bool b, bool c, bool d) { if (a) { if (b) return true; } return false; }\n",
+      "expected": 3,
+      "derivation": "The outer if adds 1; the nested if adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c02_triple_nested_if",
+      "construct": "triple_nested_if",
+      "source": "static bool c02_triple_nested_if(bool a, bool b, bool c, bool d) { if (a) { if (b) { if (c) return true; } } return false; }\n",
+      "expected": 6,
+      "derivation": "Three nested ifs add 1, 2, and 3 respectively."
+    },
+    {
+      "name": "c03_if_else",
+      "construct": "if_else",
+      "source": "static bool c03_if_else(bool a, bool b, bool c, bool d) { if (a) return true; else return false; return false; }\n",
+      "expected": 2,
+      "derivation": "The if and its else each add one; else is hybrid."
+    },
+    {
+      "name": "c04_if_elif_else",
+      "construct": "if_elif_else",
+      "source": "static bool c04_if_elif_else(bool a, bool b, bool c, bool d) { if (a) return true; else if (b) return false; else return true; return false; }\n",
+      "expected": 3,
+      "derivation": "The if, else-if, and else each add one; else-if is hybrid."
+    },
+    {
+      "name": "c05_three_way_chain",
+      "construct": "three_way_chain",
+      "source": "static bool c05_three_way_chain(bool a, bool b, bool c, bool d) { if (a) return true; else if (b) return false; else if (c) return true; else return false; return false; }\n",
+      "expected": 4,
+      "derivation": "One if, two else-if branches, and one else add four total."
+    },
+    {
+      "name": "c06_and_sequence",
+      "construct": "and_sequence",
+      "source": "static bool c06_and_sequence(bool a, bool b, bool c, bool d) { if (a && b) return true; return false; }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator && sequence adds 1."
+    },
+    {
+      "name": "c07_or_sequence",
+      "construct": "or_sequence",
+      "source": "static bool c07_or_sequence(bool a, bool b, bool c, bool d) { if (a || b) return true; return false; }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator || sequence adds 1."
+    },
+    {
+      "name": "c08_mixed_boolean",
+      "construct": "mixed_boolean",
+      "source": "static bool c08_mixed_boolean(bool a, bool b, bool c, bool d) { if (a && b || c && d) return true; return false; }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; &&, ||, && form three logical sequences, adding 3."
+    },
+    {
+      "name": "c09_assigned_boolean",
+      "construct": "assigned_boolean",
+      "source": "static bool c09_assigned_boolean(bool a, bool b, bool c, bool d) { bool value = a && b; return value; return false; }\n",
+      "expected": 1,
+      "derivation": "A binary logical sequence in an assignment adds one fundamental increment."
+    },
+    {
+      "name": "c10_while_loop",
+      "construct": "while_loop",
+      "source": "static bool c10_while_loop(bool a, bool b, bool c, bool d) { while (a) { a = false; } return false; }\n",
+      "expected": 1,
+      "derivation": "One top-level while adds one structural increment."
+    },
+    {
+      "name": "c11_for_loop",
+      "construct": "for_loop",
+      "source": "static bool c11_for_loop(bool a, bool b, bool c, bool d) { for (int i = 0; i < 2; i++) { } return false; }\n",
+      "expected": 1,
+      "derivation": "One top-level loop adds one structural increment."
+    },
+    {
+      "name": "c12_if_with_loop",
+      "construct": "if_with_loop",
+      "source": "static bool c12_if_with_loop(bool a, bool b, bool c, bool d) { if (a) { for (int i = 0; i < 2; i++) { } } return false; }\n",
+      "expected": 3,
+      "derivation": "The if adds 1; the loop nested inside it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c13_nested_loops",
+      "construct": "nested_loops",
+      "source": "static bool c13_nested_loops(bool a, bool b, bool c, bool d) { for (int i = 0; i < 2; i++) { while (a) { break; } } return false; }\n",
+      "expected": 3,
+      "derivation": "The outer loop adds 1; the inner loop adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c14_switch_or_match",
+      "construct": "switch_or_match",
+      "source": "static bool c14_switch_or_match(bool a, bool b, bool c, bool d) { switch (a) { case true: return true; default: return false; } return false; }\n",
+      "expected": 1,
+      "derivation": "The switch/match/select construct adds one; its alternatives add no further points."
+    },
+    {
+      "name": "c15_switch_nested_if",
+      "construct": "switch_nested_if",
+      "source": "static bool c15_switch_nested_if(bool a, bool b, bool c, bool d) { switch (a) { case true: if (b) return true; break; default: return false; } return false; }\n",
+      "expected": 3,
+      "derivation": "The switch adds 1; the if nested in it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c16_try_one_catch",
+      "construct": "try_one_catch",
+      "source": "static bool c16_try_one_catch(bool a, bool b, bool c, bool d) { try { if (a) return true; } catch (Exception error) { return false; } return false; }\n",
+      "expected": 2,
+      "derivation": "Try is ignored; the if adds 1 and each catch adds 1."
+    },
+    {
+      "name": "c17_try_two_catches",
+      "construct": "try_two_catches",
+      "source": "static bool c17_try_two_catches(bool a, bool b, bool c, bool d) { try { if (a) return true; } catch (ArgumentException error) { return false; } catch (Exception other) { return true; } return false; }\n",
+      "expected": 3,
+      "derivation": "Try is ignored; the if adds 1 and each of two catch clauses adds 1."
+    },
+    {
+      "name": "c18_recursive_call",
+      "construct": "recursive_call",
+      "source": "static bool c18_recursive_call(bool a, bool b, bool c, bool d) { if (a) return true; return c18_recursive_call(b, a, c, d); return false; }\n",
+      "expected": 2,
+      "derivation": "The base-case if adds 1; one direct recursive call adds 1 fundamental recursion increment.",
+      "overlay": true
+    },
+    {
+      "name": "c19_conditional_expression",
+      "construct": "conditional_expression",
+      "source": "static bool c19_conditional_expression(bool a, bool b, bool c, bool d) { return a ? true : false; return false; }\n",
+      "expected": 1,
+      "derivation": "One ternary/conditional expression adds one structural increment."
+    },
+    {
+      "name": "c20_nested_conditionals",
+      "construct": "nested_conditionals",
+      "source": "static bool c20_nested_conditionals(bool a, bool b, bool c, bool d) { return a ? true : (b ? false : true); return false; }\n",
+      "expected": 3,
+      "derivation": "The outer conditional adds 1; its nested conditional adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c21_lambda_decision",
+      "construct": "lambda_decision",
+      "source": "static bool c21_lambda_decision(bool a, bool b, bool c, bool d) { return new[] { a }.Any(value => { if (value) return true; return false; }); return false; }\n",
+      "expected": 2,
+      "derivation": "The lambda adds no structural point but raises nesting; its if adds 1 + 1 nesting."
+    },
+    {
+      "name": "c22_if_lambda_decision",
+      "construct": "if_lambda_decision",
+      "source": "static bool c22_if_lambda_decision(bool a, bool b, bool c, bool d) { if (a) return new[] { b }.Any(value => { if (value) return true; return false; }); return false; }\n",
+      "expected": 4,
+      "derivation": "Outer if adds 1; lambda if adds 1 + 2 nesting levels (outer if and lambda)."
+    },
+    {
+      "name": "c23_nested_callable",
+      "construct": "nested_callable",
+      "source": "static bool c23_nested_callable(bool a, bool b, bool c, bool d) { System.Func<bool> inner = () => { if (a) return true; return false; }; return inner(); return false; }\n",
+      "expected": 2,
+      "derivation": "Nested callable adds no structural point but one nesting level to its if (1 + 1)."
+    },
+    {
+      "name": "c24_comprehension",
+      "construct": "comprehension",
+      "source": "static bool c24_comprehension(bool a, bool b, bool c, bool d) { return new[] { a, b }.Where(value => value).Any(); return false; }\n",
+      "expected": 0,
+      "derivation": "The filter lambda contains no control-flow break; the collection pipeline is a sequence of calls."
+    },
+    {
+      "name": "c25_labeled_jump",
+      "construct": "labeled_jump",
+      "source": "static bool c25_labeled_jump(bool a, bool b, bool c, bool d) { outer: while (a) { break; } return false; }\n",
+      "expected": 1,
+      "derivation": "One top-level while adds 1; this break is unlabeled and adds nothing."
+    },
+    {
+      "name": "c26_boolean_operator_sequences",
+      "construct": "logical_operator_sequences",
+      "source": "static bool c26_boolean_operator_sequences(bool a, bool b, bool c, bool d) { return a && (b || c); }\n",
+      "expected": 2,
+      "derivation": "The return expression contains one && sequence and one || sequence, for two fundamental increments."
+    },
+    {
+      "name": "c27_language_idiom",
+      "construct": "local_function",
+      "source": "static bool c27_language_idiom(bool a, bool b, bool c, bool d) { bool IsTrue(bool value) { return value; } return IsTrue(a); }",
+      "expected": 0,
+      "derivation": "The local function declaration and call add no flow-break increment; both method bodies contain no decision, loop, catch, or logical-operator sequence."
+    },
+    {
+      "name": "c28_loop_if_boolean",
+      "construct": "loop_if_boolean",
+      "source": "static bool c28_loop_if_boolean(bool a, bool b, bool c, bool d) { for (int i = 0; i < 2; i++) { if (a && b) return true; } return false; }\n",
+      "expected": 4,
+      "derivation": "Loop adds 1; nested if adds 1 + 1 nesting; its && sequence adds 1."
+    },
+    {
+      "name": "c29_else_loop",
+      "construct": "else_loop",
+      "source": "static bool c29_else_loop(bool a, bool b, bool c, bool d) { if (a) return true; else { while (b) { break; } } return false; }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; its else adds 1. The loop in the else body is at nesting level 1, so it adds 1 structural + 1 nesting, totaling 4."
+    }
+  ]
+}

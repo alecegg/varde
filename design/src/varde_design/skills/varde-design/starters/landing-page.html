@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product name - one-line promise</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--muted:#525252;--line:#d4d4d4;--surface:#f5f5f5;--accent:#1d4ed8;--accent-strong:#1e40af;--on-accent:#fff;--danger:#b91c1c;--font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--t-sm:.875rem;--t-md:1rem;--t-lg:1.25rem;--t-xl:1.75rem;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s6:24px;--s8:32px;--s12:48px;--r:8px;--target:44px;--ring:2px solid var(--accent)}
+*{box-sizing:border-box}
+body{margin:0;font:var(--t-md)/1.5 var(--font);color:var(--fg);background:var(--bg)}
+header,section,footer{max-width:64rem;margin:0 auto;padding:var(--s4)}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--s2)}
+a{display:inline-flex;align-items:center;min-height:var(--target);padding:0 var(--s4);border-radius:var(--r);color:var(--accent);transition:background .15s}
+a:hover{background:var(--surface)}
+a:focus-visible{outline:var(--ring);outline-offset:2px}
+a.cta{background:var(--accent);color:var(--on-accent)}
+a.cta:hover{background:var(--accent-strong)}
+.hero{padding-block:var(--s12)}
+h1{font-size:2.25rem;line-height:1.15;margin:0 0 var(--s4);max-width:20ch}
+h2{font-size:var(--t-xl);margin:0 0 var(--s6)}
+.lede{font-size:var(--t-lg);color:var(--muted);max-width:36rem;margin:0 0 var(--s6)}
+.grid{display:grid;gap:var(--s4)}
+.card{padding:var(--s6);border:1px solid var(--line);border-radius:var(--r)}
+.card h3{margin:0 0 var(--s2);font-size:var(--t-lg)}
+.card p{margin:0;color:var(--muted)}
+footer{color:var(--muted);font-size:var(--t-sm)}
+@media (min-width:48rem){h1{font-size:3rem}.grid{grid-template-columns:repeat(3,1fr)}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+<strong>Product</strong>
+<nav aria-label="Main"><a href="#features">Features</a><a href="#start">Contact</a></nav>
+</header>
+<main>
+<section class="hero">
+<h1>One clear promise for one clear audience</h1>
+<p class="lede">Say what the product does and who it is for. Replace this text with real copy.</p>
+<a class="cta" href="#start">Get started</a>
+</section>
+<section id="features">
+<h2>What you get</h2>
+<div class="grid">
+<div class="card"><h3>First benefit</h3><p>Describe the outcome, not the feature.</p></div>
+<div class="card"><h3>Second benefit</h3><p>Use a concrete number or example.</p></div>
+<div class="card"><h3>Third benefit</h3><p>Keep each card to two sentences.</p></div>
+</div>
+</section>
+<section id="start">
+<h2>Ready to begin?</h2>
+<a class="cta" href="#start">Get started</a>
+</section>
+</main>
+<footer>&copy; 2026 Site Name</footer>
+</body>
+</html>

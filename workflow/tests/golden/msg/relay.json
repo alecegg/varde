@@ -1,0 +1,18 @@
+{
+  "classification": "unchanged",
+  "first_call": {
+    "delivered": true,
+    "pushed": true,
+    "skipped_busy": true
+  },
+  "repeat_call": {
+    "delivered": false,
+    "pushed": false,
+    "skipped_busy": false
+  },
+  "store": {
+    ".cache/inbox/deliveries.jsonl": "{\"message_id\":\"m-00000001\",\"reader\":\"reader-a\",\"session\":\"\",\"via\":\"hook\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000002\",\"reader\":\"reader-b\",\"session\":\"\",\"via\":\"relay\",\"event\":\"pushed\",\"at\":\"2026-10-22T12:00:00Z\"}\n{\"message_id\":\"m-00000003\",\"reader\":\"reader-c\",\"session\":\"\",\"via\":\"relay\",\"event\":\"skipped-busy\",\"at\":\"2026-10-22T12:00:00Z\"}\n",
+    ".cache/inbox/index/reader-a.json": "{\"watermark\": 331}",
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"reader-a\",\"kind\":\"info\",\"text\":\"delivered\",\"id\":\"m-00000001\"}\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"reader-b\",\"kind\":\"info\",\"text\":\"pushed\",\"id\":\"m-00000002\"}\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"reader-c\",\"kind\":\"info\",\"text\":\"busy\",\"id\":\"m-00000003\"}\n"
+  }
+}

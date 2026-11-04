@@ -1,0 +1,11 @@
+{
+  "type": "approval",
+  "approval": "unsandboxed",
+  "title": "Run the local browser check",
+  "asked": "May the browser check run with network access?",
+  "why": "The local preview needs a browser runtime.",
+  "plan_id": "dashboard-decisions",
+  "options": [],
+  "recommendation": "approve",
+  "evidence": [{"kind": "shot", "caption": "Runner check status", "path": "runner.jpg"}]
+}

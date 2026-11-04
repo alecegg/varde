@@ -1,0 +1,8 @@
+Query: filter symbols by kind/tags/language/etc. (see `filter_symbols` help for inputs)
+
+Usage: varde map filter_symbols [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, kind?, tags?, language?, file?, maxSymbols?, resultsLimit?, resultsOffset?, fullResults?, ... }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

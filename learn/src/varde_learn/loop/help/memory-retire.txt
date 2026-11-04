@@ -1,0 +1,3 @@
+Retire an entry (status retired; the file is kept).
+
+Usage: varde learn memory retire <ID> [--json]

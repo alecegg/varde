@@ -1,0 +1,1 @@
+A notification dispatcher with per-channel rate limits and fallbacks.

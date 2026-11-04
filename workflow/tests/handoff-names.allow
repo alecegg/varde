@@ -1,0 +1,14 @@
+# category<TAB>path regex<TAB>anchored line regex<TAB>reason
+non-goal	^(learn/ledgers/varde-delivery\.json|core/tests/fixtures/flow-ledger/varde\.json)$	^.*handoff.*$	Workflow phase ledger entries retain their handoff phase.
+non-goal	^(core/docs/skills\.md|learn/src/varde_learn/skills/varde-(skill|doc)-authoring/references/criteria\.md|learn/src/varde_learn/skills/varde-diagnose/references/diagnose-current\.md)$	^.*handoff.*$	These documents use handoff for separate workflow or review senses.
+legacy-read	^(workflow/src/varde_workflow/skills/(varde-plan|varde-build|varde-orchestrate|varde-swarm|varde-review)|core/src/varde_core/skills/shared/|learn/src/varde_learn/knowledge/skills/varde-knowledge/|learn/src/varde_learn/skills/varde-learn/|learn/src/varde_learn/skills/[^/]+/|toz/src/varde_toz/skills/varde-toz/).*$	^.*(handoff\.md|handoffs\b|legacy.{0,16}handoff).*$	Skill guidance and migration helpers describe legacy session-note paths.
+migration-command	^(workflow/src/varde_workflow/skills/(varde-plan|varde-build|varde-orchestrate|varde-swarm|varde-review)|core/src/varde_core/skills/shared/|learn/src/varde_learn/knowledge/skills/varde-knowledge/|learn/src/varde_learn/skills/varde-learn/|learn/src/varde_learn/skills/[^/]+/|toz/src/varde_toz/skills/varde-toz/).*$	^.*(migrate-session-notes|handoff\.md|handoffs/).*$	Skill guidance documents the one-time migration command and source layout.
+fixture	^(core/tests/.*|workflow/tests/.*)$	^.*handoff.*$	Shell tests retain old names as compatibility or workflow fixtures.
+fixture	^learn/eval-tools/query-sets/sibling-boundaries\.json$	^.*handoff.*$	The query set contains an explicit boundary fixture.
+legacy-read	^core/scripts/check-refs\.sh$	^.*handoff\.md.*$	The reference checker still accepts the legacy session-note file name.
+fixture	^workflow/src/varde_workflow/skills/varde-build/evals/.*$	^.*(handoff|HANDOFF).*$	Change evaluations keep legacy session-note fixtures for compatibility behavior.
+non-goal	^[^/]+/src/[^/]+/skills/[^/]+/FLOW\.md$	^.*thick arrow: handoff.*$	Generated FLOW.md legend names the handoff arrow.
+non-goal	^learn/(src/varde_learn|tests)/docs/flow/.*$	^.*(?i:handoff).*$	The flow analyzer models skill-to-skill handoff edges.
+non-goal	^learn/src/varde_learn/loop/review/spend\.py$	^.*handoff practices.*$	A review prompt names handoff practices.
+fixture	^learn/src/varde_learn/skills/varde-diagnose/evals/trigger-queries\.json$	^.*handoff.*$	A negative trigger query mentions a session handoff.
+non-goal	^workflow/src/varde_workflow/skills/(varde-build/SKILL|varde-review/SKILL|varde-orchestrate/SKILL|varde-swarm/references/main-agent)\.md$	^.*handoff.*$	Pipeline slot handoff between agents, not session notes.

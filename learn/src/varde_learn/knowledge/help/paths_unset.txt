@@ -1,0 +1,14 @@
+Remove working, knowledge, toz, and/or global learn directories from the user config
+
+Usage: varde setup paths unset [OPTIONS]
+
+Options:
+      --working            Forget the working directory setting
+      --knowledge          Forget the knowledge directory setting
+      --toz                Forget the toz output-capture store setting
+      --learn              Forget the global friction store setting
+      --memory             Forget the memory store directory setting
+      --default            Apply to `[default]` instead of one project root
+      --project <PROJECT>  Project root the setting applies to (default: git worktree root, then configured project, else cwd)
+      --json               
+  -h, --help               Print help

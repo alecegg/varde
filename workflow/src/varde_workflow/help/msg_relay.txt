@@ -1,0 +1,11 @@
+Run the inbox relay once or wait for due work
+
+Usage: varde msg relay (--once | --wait) --as <MAILMAN_TOKEN> [--timeout <SECONDS>] [--now <TIMESTAMP>] [--context-tokens N]
+       varde msg relay confirm <ACTION_ID> --result <RESULT> [--evidence <TEXT>] [--by <MAILMAN_TOKEN>] [--harness <NAME>] [--now <TIMESTAMP>]
+       varde msg relay renew <ACTION_ID> [--now <TIMESTAMP>]
+       varde msg relay end --as <MAILMAN_TOKEN> [--now <TIMESTAMP>]
+
+The relay writes one varde-relay/1 JSON object to stdout. Diagnostics go to stderr.
+Exit codes: 0 success, 64 invalid arguments or mailman token, 70 internal error.
+Wait defaults to a 540-second timeout. Results have status `actions`, `none` (at timeout), or `superseded`.
+Due urgent messages may be escalated to `main` when unbound or after repeated failures.

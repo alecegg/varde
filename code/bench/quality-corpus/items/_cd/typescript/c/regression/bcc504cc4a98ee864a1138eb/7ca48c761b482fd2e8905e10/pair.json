@@ -1,0 +1,31 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "src/services/formatting.ts"
+  ],
+  "changed_functions": [
+    "lists",
+    "processNode"
+  ],
+  "child_sha": "068e58965beb12da9226c50757101d251c1cba1b",
+  "file_licenses": {
+    "microsoft/TypeScript:src/services/formatting.ts": "Apache-2.0"
+  },
+  "id": "7ca48c761b482fd2e8905e10",
+  "intent": {
+    "linked_issues": [],
+    "message": "code cleanup: add more comments, rename methods"
+  },
+  "label_source": "developer-intent",
+  "language": "typescript",
+  "left": "a.ts",
+  "license": "Apache-2.0",
+  "pair_group_id": "refactor-796fbef6f90f9c24",
+  "parent_sha": "d6769ae090954ad07c286165d9e28830c332aae0",
+  "pin_sha": "2e9fb00f5f5c9186d09aabd78cced5ce2497456d",
+  "repo": "microsoft/TypeScript",
+  "right": "b.ts",
+  "split": "regression",
+  "upstream_url": "https://github.com/microsoft/TypeScript.git"
+}

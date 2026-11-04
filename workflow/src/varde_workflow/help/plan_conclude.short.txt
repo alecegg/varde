@@ -1,0 +1,12 @@
+Verify the review report and mark a plan completed
+
+Usage: varde plan conclude [OPTIONS] <PLAN>
+
+Arguments:
+  <PLAN>  
+
+Options:
+      --merged <MERGED>  Commit the reviewed work is merged as (defaults to the repository HEAD)
+      --repo <REPO>      Repository holding the reviewed and merged commits
+      --json             
+  -h, --help             Print help (see more with '--help')

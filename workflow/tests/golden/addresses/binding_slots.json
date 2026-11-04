@@ -1,0 +1,50 @@
+{
+  "bindings": [
+    {
+      "address": "worker",
+      "bound_at": "2026-10-22T12:00:01Z",
+      "cwd": "<TMP>/working",
+      "harness": "claude",
+      "last_seen": "2026-10-22T12:00:01Z",
+      "session_id": "s2",
+      "token_id": "00000008",
+      "wake_context": {
+        "agent_id": "agent-fixed",
+        "cwd": "<TMP>/working",
+        "harness": "codex",
+        "paseo_id": "paseo-fixed",
+        "runner_endpoint": "endpoint-fixed",
+        "session_id": "s2"
+      }
+    }
+  ],
+  "classification": "unchanged",
+  "expired_bind": false,
+  "slot_after_add": {
+    ".cache/inbox/slots/orchestrator-1.json": {
+      "bytes": "{\"aliases\": [\"plan-a\"], \"current_address\": \"orchestrator-1\", \"slot\": \"orchestrator-1\"}\n",
+      "mode": "0644"
+    }
+  },
+  "store": {
+    ".cache/inbox/addresses/worker/current": {
+      "bytes": "{\"session_key\":\"claude-ad328846aa18b32a335816374511cac1063c704b8c57999e51da9f908290a7a4\",\"token_id\":\"00000008\"}",
+      "mode": "0600"
+    },
+    ".cache/inbox/events.jsonl": {
+      "bytes": "{\"event\":\"bind\",\"at\":\"2026-10-22T12:00:00Z\",\"address\":\"worker\",\"session_key\":\"claude-e8bc163c82eee18733288c7d4ac636db3a6deb013ef2d37b68322be20edc45cc\"}\n{\"event\":\"supersede\",\"at\":\"2026-10-22T12:00:01Z\",\"address\":\"worker\",\"prior_live\":true}\n{\"event\":\"bind\",\"at\":\"2026-10-22T12:00:01Z\",\"address\":\"worker\",\"session_key\":\"claude-ad328846aa18b32a335816374511cac1063c704b8c57999e51da9f908290a7a4\"}\n{\"event\":\"refuse\",\"at\":\"2026-10-22T12:00:02Z\",\"address\":\"worker\",\"reason\":\"invalid-token\"}\n{\"event\":\"refuse\",\"at\":\"2026-10-22T12:00:00Z\",\"address\":\"expired\",\"reason\":\"expired-token\"}\n",
+      "mode": "0644"
+    },
+    ".cache/inbox/slots/orchestrator-1.json": {
+      "bytes": "{\"aliases\": [], \"current_address\": \"orchestrator-1\", \"slot\": \"orchestrator-1\"}\n",
+      "mode": "0644"
+    }
+  },
+  "supersede": false,
+  "superseded_bind": true,
+  "tokens": [
+    "[varde-address: worker vt1.AEAQCAIBAEAQCAIBAEAQCAIBAE]",
+    "[varde-address: worker vt1.A4DQOBYHA4DQOBYHA4DQOBYHA4]",
+    "[varde-address: expired vt1.BUGQ2DINBUGQ2DINBUGQ2DINBU]"
+  ]
+}

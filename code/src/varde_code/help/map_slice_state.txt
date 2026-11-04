@@ -1,0 +1,8 @@
+Dump the slice freshness ledger for a repo (the `--why` view: what each derived slice was last built through and whether it's stale). Read-only — never builds or freshens. (see `slice_state` help for inputs)
+
+Usage: varde map slice_state [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot } Example: {"repoRoot":"."}. Inspect db and slices.{imports,edges,global}.{built_through_rev,stale}; then rebuild or query to refresh stale data. This command never builds or freshens slices
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

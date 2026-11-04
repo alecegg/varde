@@ -1,0 +1,10 @@
+Report pack freshness for the README and the folders in docs/repo-map/modules.txt (other packs are ignored when that file exists): commits after each pack's recorded sha that touch paths outside docs/repo-map/ (module packs: only inside their scope), plus the index built_head, head, age and staleness. Uncommitted edits never mark a pack stale
+
+Usage: varde map packs status [OPTIONS]
+
+Options:
+      --readme-max-behind <N>  README counts as stale once N or more commits behind; module packs are stale after any scope commit [default: 100]
+      --repo-root <REPO_ROOT>  Repo root [default: the git top level of the current directory]
+      --json                   Print the report as JSON
+      --check                  Exit 1 when any pack is stale or README.md is missing, 2 on usage or git error; without --check exit 0
+  -h, --help                   Print help

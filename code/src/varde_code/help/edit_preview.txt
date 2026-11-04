@@ -1,0 +1,30 @@
+Build a rewrite proposal without changing source files.
+
+Directory scopes skip gitignored files; a symlink in a directory scope blocks the preview. JSON output includes complete, applicable, proposal_id, files, diagnostics, and paths to the proposal and diff. Apply validates source snapshots before writing. Failures are reported per file, so other files can still yield a proposal. Example: `varde edit preview --language typescript --pattern 'oldCall($ARG)' --replacement 'newCall($ARG)' --path src/ --json`.
+
+Usage: varde edit preview [OPTIONS] --path <PATH> <--rules <FILE>|--language <LANGUAGE>>
+
+Options:
+      --rules <FILE>
+          JSON file containing rewrite rules
+
+      --language <LANGUAGE>
+          Language for one inline rewrite rule
+
+      --pattern <PATTERN>
+          ast-grep pattern for the inline rule
+
+      --replacement <TEXT>
+          Replacement template for the inline rule
+
+      --path <PATH>
+          File or directory to include. Relative paths start at the invoking directory
+
+      --out <DIR>
+          Directory for the saved proposal and unified diff; defaults to the working store
+
+      --json
+          Print the versioned JSON envelope
+
+  -h, --help
+          Print help (see a summary with '-h')

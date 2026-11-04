@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Good page - documentation system</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1f2328;--muted:#57606a;--accent:#0b5cad;--line:#d8d4cb;--radius:4px;--s1:4px;--s2:8px;--s3:16px;--s4:32px}
+*{box-sizing:border-box}
+body{margin:0;font:17px/1.6 Georgia,serif;background:var(--bg);color:var(--fg)}
+header,main,footer{max-width:68ch;margin:0 auto;padding:var(--s3)}
+nav a{margin-right:var(--s3);display:inline-block;min-height:44px;line-height:44px}
+a{color:var(--accent)}
+h1{font-size:2rem;line-height:1.2}
+code{font:0.9em ui-monospace,monospace;background:#eee9de;padding:2px var(--s1);border-radius:var(--radius)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+footer{color:var(--muted);border-top:1px solid var(--line);font-size:14px}
+</style>
+</head>
+<body>
+<header><nav><a href="#">Guide</a><a href="#">Reference</a><a href="#">Changelog</a></nav></header>
+<main>
+<h1>Configuring retries</h1>
+<p>Set <code>retries</code> to the number of attempts a request may make before it fails. The default is three attempts with exponential backoff.</p>
+<h2>When to change it</h2>
+<p>Raise the value for flaky upstream services. Lower it for operations that are not safe to repeat.</p>
+</main>
+<footer>Last updated 2026-10-01</footer>
+</body>
+</html>

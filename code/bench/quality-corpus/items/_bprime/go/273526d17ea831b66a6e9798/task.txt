@@ -1,0 +1,2 @@
+Split a short text into lowercase word tokens, treating spaces, commas, full stops, exclamation marks and question marks as separators.
+Input domain: text whose words are separated by single or repeated separator characters; other characters, including tabs and underscores, stay inside the word.

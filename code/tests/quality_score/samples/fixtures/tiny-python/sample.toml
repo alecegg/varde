@@ -1,0 +1,9 @@
+language = "python"
+task = "Return a small computed value."
+authored_by = "fixture"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class-abstraction-heavy"]
+
+[hashes]
+"original.py" = "cd12dad73833433e21e9c616ee31b7b13cfed24238ffeac3969956c092a6c1c1"
+"smoothed.py" = "90492c4e6df8a1efa45919d4e4a0982125c173a28a3cadc3859ca33dc1a32789"
+"task.md" = "0fd8c87ba6209cdda20abe6b3b462b2423703554fc1699622e410e49aadfeff5"

@@ -1,0 +1,17 @@
+Fetch web pages as readable text and index them (24 h disk cache)
+
+Usage: varde run fetch [OPTIONS] <URLS>...
+
+Arguments:
+  <URLS>...  
+
+Options:
+      --fallback-dir <FALLBACK_DIR>  External store to try after primary-store access fails
+  -l, --label <LABEL>                Human label (single URL only; also the supersession key)
+      --project <PROJECT>            Project directory (default: git root of cwd, else cwd)
+      --ttl <TTL>                    Cache TTL in seconds (default 86400); 0 always refetches
+      --force                        Ignore the cache
+      --json                         Machine-readable JSON output
+  -c, --concurrency <CONCURRENCY>    Parallel fetches [default: 4]
+      --quiet                        Print only the handle line on overflow
+  -h, --help                         Print help

@@ -1,0 +1,10 @@
+Usage: varde plan comments [OPTIONS] PLAN
+
+List comments stored with a plan.
+
+Arguments:
+  PLAN
+
+Options:
+  --open   Show only open comments
+  -h, --help

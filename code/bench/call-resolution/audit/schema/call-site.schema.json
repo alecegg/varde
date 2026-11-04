@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://varde.dev/schemas/call-site-1.json",
+  "title": "Call resolution audit site",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repo", "language", "file", "line", "call_class", "ground_truth", "measured_edge", "measured_status", "truth_source", "function_id", "module"],
+  "properties": {
+    "repo": {"type": "string", "minLength": 1},
+    "language": {"type": "string", "minLength": 1},
+    "file": {"type": "string", "minLength": 1},
+    "line": {"type": "integer", "minimum": 1},
+    "call_name": {"type": ["string", "null"], "description": "Called name used to disambiguate multiple calls on one source line."},
+    "call_class": {"enum": ["same_file", "imported", "member", "constructor", "higher_order", "dynamic"]},
+    "ground_truth": {"oneOf": [{"type": "string", "minLength": 1, "not": {"enum": ["external", "unknown"]}}, {"enum": ["external", "unknown"]}], "description": "Target function id, external callee, or unknown target."},
+    "measured_edge": {"type": ["string", "null"], "description": "Resolved target function id; null when unresolved."},
+    "measured_status": {"enum": ["resolved", "ambiguous", "opaque", "unresolved", "external"]},
+    "truth_source": {"type": "string", "minLength": 1},
+    "function_id": {"type": ["string", "null"], "description": "Sampled caller function id, used for depth comparison."},
+    "module": {"type": ["string", "null"], "description": "Caller module used to restrict depth to within-module edges."},
+    "ground_truth_module": {"type": ["string", "null"], "description": "Target module for a ground-truth edge."},
+    "measured_module": {"type": ["string", "null"], "description": "Target module for a measured edge."}
+  }
+}

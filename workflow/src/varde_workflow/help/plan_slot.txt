@@ -1,0 +1,16 @@
+Manage durable worker and orchestrator slots.
+
+Usage: varde plan slot <COMMAND>
+
+Commands:
+  register SLOT --plan PLAN --role ROLE --agent-ref REF [--session-id ID] [--lease SECONDS]
+  heartbeat SLOT --epoch N [--progress NOTE] [--context-tokens N] [--turn-count N] [--lease SECONDS]
+  show SLOT
+  park SLOT --epoch N
+  unpark SLOT --epoch N
+  handoff SLOT --epoch N
+  resume SLOT --agent-ref REF [--session-id ID] [--lease SECONDS]
+  reclaim
+
+Slots require SQLite plan-store mode. Resume replaces the agent reference and advances the epoch.
+Handoff writes a validated checkpoint under the plan notes directory and stores its JSON in the slot.

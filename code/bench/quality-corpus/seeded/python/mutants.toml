@@ -1,0 +1,131 @@
+[[mutants]]
+id = "discount-100-strict"
+description = "The upper automatic discount starts above the boundary"
+find = 'if subtotal >= 100:'
+replace = 'if subtotal > 100:'
+
+[[mutants]]
+id = "discount-50-strict"
+description = "The lower automatic discount starts above the boundary"
+find = 'elif subtotal >= 50:'
+replace = 'elif subtotal > 50:'
+
+[[mutants]]
+id = "discount-upper-rate"
+description = "The upper automatic discount rate is reduced"
+find = 'automatic = subtotal * 0.10'
+replace = 'automatic = subtotal * 0.09'
+
+[[mutants]]
+id = "discount-lower-rate"
+description = "The lower automatic discount rate is reduced"
+find = 'automatic = subtotal * 0.05'
+replace = 'automatic = subtotal * 0.04'
+
+[[mutants]]
+id = "discount-code-rate"
+description = "The promotion rate is reduced"
+find = 'promotional = subtotal * 0.05 if code == "SAVE5" else 0'
+replace = 'promotional = subtotal * 0.04 if code == "SAVE5" else 0'
+
+[[mutants]]
+id = "discount-cap"
+description = "The discount cap is reduced"
+find = 'subtotal * 0.20'
+replace = 'subtotal * 0.19'
+
+[[mutants]]
+id = "tax-rate"
+description = "The tax rate is reduced"
+find = 'discounted_subtotal * 0.08'
+replace = 'discounted_subtotal * 0.07'
+
+[[mutants]]
+id = "tax-gross"
+description = "Tax is calculated before discount"
+find = 'discounted_subtotal * 0.08'
+replace = 'subtotal * 0.08'
+
+[[mutants]]
+id = "free-shipping-strict"
+description = "Free shipping requires more than the cutoff"
+find = 'if discounted_subtotal >= 75:'
+replace = 'if discounted_subtotal > 75:'
+
+[[mutants]]
+id = "shipping-cutoff-strict"
+description = "The middle shipping tier starts above its cutoff"
+find = '    if subtotal >= 50:'
+replace = '    if subtotal > 50:'
+
+[[mutants]]
+id = "shipping-middle-price"
+description = "The middle shipping charge is increased"
+find = 'return 5.0'
+replace = 'return 6.0'
+
+[[mutants]]
+id = "shipping-low-price"
+description = "The lowest shipping charge is increased"
+find = 'return 10.0'
+replace = 'return 11.0'
+
+[[mutants]]
+id = "unknown-code-permitted"
+description = "Unknown discount codes are accepted"
+find = 'code != "SAVE5"'
+replace = 'code != "SAVE5" and False'
+
+[[mutants]]
+id = "zero-price-permitted"
+description = "A zero price is permitted"
+find = 'if not math.isfinite(price) or price <= 0:'
+replace = 'if not math.isfinite(price) or price < 0:'
+
+[[mutants]]
+id = "negative-price-permitted"
+description = "A negative price is permitted"
+find = 'if not math.isfinite(price) or price <= 0:'
+replace = 'if not math.isfinite(price) or price < -1:'
+
+[[mutants]]
+id = "zero-quantity-permitted"
+description = "A zero quantity is permitted"
+find = 'isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0'
+replace = 'isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 0'
+
+[[mutants]]
+id = "boolean-quantity-permitted"
+description = "Boolean quantities pass integer validation"
+find = 'isinstance(quantity, bool) or not isinstance(quantity, int)'
+replace = 'not isinstance(quantity, int)'
+
+[[mutants]]
+id = "blank-customer-permitted"
+description = "A blank customer is accepted"
+find = 'not _is_nonblank(customer)'
+replace = 'False'
+
+[[mutants]]
+id = "blank-sku-permitted"
+description = "A blank SKU is accepted"
+find = 'not _is_nonblank(sku) or not _is_nonblank(name)'
+replace = 'False'
+
+[[mutants]]
+id = "blank-name-permitted"
+description = "A blank item name is accepted"
+find = 'not _is_nonblank(sku) or not _is_nonblank(name)'
+replace = 'not _is_nonblank(sku) or False'
+
+[[mutants]]
+id = "price-rounding-precision"
+description = "Prices are rounded to one decimal place"
+find = 'round(float(amount), 2)'
+replace = 'round(float(amount), 1)'
+
+[[mutants]]
+id = "line-order-reversed"
+description = "The item result order is reversed"
+find = 'items = [_normalize_item(item) for item in source_items]'
+replace = 'items = [_normalize_item(item) for item in reversed(source_items)]'

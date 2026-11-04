@@ -1,0 +1,17 @@
+[labels]
+sha256 = "c731bb9266c900e3e59ae5b2a6fe8ea091782f9df460afc1cecd2eff5fd6703b"
+
+[[pairs]]
+preferred = "preferred"
+other = "other"
+minimum_margin = 10000000
+
+[[anchors]]
+id = "excellent"
+minimum_score = 98000000
+maximum_score = 100000000
+
+[[anchors]]
+id = "poor"
+minimum_score = 0
+maximum_score = 50000000

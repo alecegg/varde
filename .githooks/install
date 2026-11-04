@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+repo=$(git rev-parse --show-toplevel)
+previous=$(git -C "$repo" config --local --get core.hooksPath || true)
+if [ -n "$previous" ]; then
+    printf 'Replacing repo-local core.hooksPath: %s\n' "$previous"
+fi
+git -C "$repo" config --local core.hooksPath .githooks

@@ -1,0 +1,10 @@
+Record that a message has been acknowledged
+
+Usage: varde msg ack <ID> --as <ADDRESS>
+
+Arguments:
+      <ID>          Message identifier
+
+Options:
+      --as <ADDRESS>  Reader address
+  -h, --help          Print help

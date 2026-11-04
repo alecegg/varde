@@ -1,0 +1,161 @@
+# `command` values are whitespace-delimited route-path prefixes.
+[[guardrails]]
+id = "plan-gate"
+kind = "gate"
+owner = "workflow/src/varde_workflow/plan_gate.py"
+purpose = "Require plans to pass their task gate."
+command = "plan gate"
+
+[[guardrails]]
+id = "plan-validate"
+kind = "cli-check"
+owner = "workflow/src/varde_workflow/commands/validate.py"
+purpose = "Validate plan structure and task ownership."
+command = "plan validate"
+
+[[guardrails]]
+id = "step-plan-task-set"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/task_set.py"
+purpose = "Change a task status through validated workflow transitions."
+command = "plan task set"
+
+[[guardrails]]
+id = "step-plan-now"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/now.py"
+purpose = "Set or clear the current plan progress line."
+command = "plan now"
+
+[[guardrails]]
+id = "step-plan-execution-wave"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/execution_wave.py"
+purpose = "Select the next advisory execution wave."
+command = "plan execution-wave"
+
+[[guardrails]]
+id = "step-plan-check-task-ownership"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/check_task_ownership.py"
+purpose = "Check a source commit against task ownership."
+command = "plan check-task-ownership"
+
+[[guardrails]]
+id = "step-plan-readiness"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/readiness.py"
+purpose = "Report workflow blockers and available actions."
+command = "plan readiness"
+
+[[guardrails]]
+id = "step-plan-approve-merge"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/approve_merge.py"
+purpose = "Check the user's merge approval for a plan."
+command = "plan approve-merge"
+
+[[guardrails]]
+id = "step-plan-merged"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/merged.py"
+purpose = "Record that a plan has been merged."
+command = "plan merged"
+
+[[guardrails]]
+id = "step-plan-conclude"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/conclude.py"
+purpose = "Verify review state and conclude a plan."
+command = "plan conclude"
+
+[[guardrails]]
+id = "step-plan-status"
+kind = "cli-step"
+owner = "workflow/src/varde_workflow/commands/status.py"
+purpose = "Show compact progress for non-terminal plans."
+command = "plan status"
+
+[[guardrails]]
+id = "step-learn-friction-add"
+kind = "cli-step"
+owner = "learn/src/varde_learn/loop/cli_friction_write.py"
+purpose = "Add a friction item to the learn store."
+command = "learn friction add"
+
+[[guardrails]]
+id = "step-learn-diagnose-summary"
+kind = "cli-step"
+owner = "learn/src/varde_learn/loop/cli_diagnose.py"
+purpose = "Summarize evidence across diagnosed sessions."
+command = "learn sessions summary"
+
+[[guardrails]]
+id = "step-learn-adopt-record"
+kind = "cli-step"
+owner = "learn/src/varde_learn/loop/cli_friction_write.py"
+purpose = "Record an applied change against friction items."
+command = "learn friction adopt"
+
+[[guardrails]]
+id = "step-learn-eval-calibrate"
+kind = "cli-step"
+owner = "learn/src/varde_learn/loop/cli_diagnose_eval.py"
+purpose = "Calibrate skill output evaluation thresholds."
+command = "learn measure"
+
+[[guardrails]]
+id = "step-setup-paths"
+kind = "cli-step"
+owner = "learn/src/varde_learn/knowledge/cli.py"
+purpose = "Show or configure Varde's memory paths."
+command = "setup paths"
+
+[[guardrails]]
+id = "step-learn-check"
+kind = "cli-step"
+owner = "learn/src/varde_learn/docs/cli.py"
+purpose = "Lint agent-facing Markdown documents."
+command = "learn check"
+
+[[guardrails]]
+id = "hook-pre-tool-install-guard"
+kind = "hook"
+owner = "app/src/varde/glue/tool_install_guard.py"
+purpose = "Block uv tool mutations from a linked worktree."
+
+[[guardrails]]
+id = "hook-pre-tool-worktree-prune"
+kind = "hook"
+owner = "app/src/varde/glue/worktree_prune_guard.py"
+purpose = "Block git worktree prune for callers other than main."
+
+[[guardrails]]
+id = "hook-stop-inbox-block"
+kind = "hook"
+owner = "app/src/varde/glue/hook.py"
+purpose = "Keep the session open while inbox mail is pending."
+
+[[guardrails]]
+id = "hook-pre-commit"
+kind = "hook"
+owner = ".githooks/pre-commit"
+purpose = "Run checks before accepting a commit."
+
+[[guardrails]]
+id = "hook-pre-merge-commit"
+kind = "hook"
+owner = ".githooks/pre-merge-commit"
+purpose = "Run checks before creating a merge commit."
+
+[[guardrails]]
+id = "hook-pre-push"
+kind = "hook"
+owner = ".githooks/pre-push"
+purpose = "Run checks before pushing commits."
+
+[[guardrails]]
+id = "hook-post-merge"
+kind = "hook"
+owner = ".githooks/post-merge"
+purpose = "Report checks after a fast-forward merge."

@@ -1,0 +1,63 @@
+# Shell test tiers for core/scripts/run-shell-tests.sh.
+#
+#   <path> <fast|slow> <seconds>
+#
+# One line per script the runner runs (skip rows are not listed). The runner
+# fails, before running anything, when a script it would run has no line here,
+# has two, or is listed here but no longer discovered; so a new test must be
+# tiered. Deleting this file is an error too. `just test` runs --tier fast,
+# `just test-all` and CI run --tier all.
+#
+# Tier boundary: a script is fast when the lowest observed wall time was under
+# 20 s, since the fast tier is what the machine achieves in its ordinary state;
+# a script that never came in under 20 s is slow. Seconds are the lowest wall
+# time observed per script on 2026-10-17, load average 6-12: one full runner pass
+# with all 38 scripts at load ~11, then repeats for the scripts near the boundary
+# and for check-length-content-tag.sh, which the full pass could not measure
+# because the checkout had no .venv yet. wave-integrate-lock.sh was measured
+# three times after its fixed sleeps became a poll on the lock's holders.
+#
+# path fast|slow measured_seconds
+app/tests/old-binary-names.sh fast 0
+core/tests/check-length-content-tag.sh fast 0
+core/tests/check-refs-load-line.sh fast 2
+core/tests/check-refs-how-orphan.sh fast 1
+core/tests/check-refs-stale-skill.sh fast 1
+core/tests/frontmatter.sh fast 2
+core/tests/help-coverage.sh fast 12
+core/tests/repo-lib.sh fast 0
+learn/tests/docs/doc-authoring-evals.sh fast 1
+learn/tests/docs/docs-refresh-scope.sh fast 1
+learn/tests/docs/prose-paragraphs.sh fast 0
+learn/tests/docs/skill-authoring-evals.sh fast 1
+learn/tests/docs/source-hash.sh fast 1
+learn/tests/docs/word-count-audit-test.sh fast 1
+learn/tests/knowledge/handoff-snapshot.sh fast 1
+learn/tests/knowledge/knowledge-verifier.sh fast 0
+learn/tests/knowledge/memory-boundary-test.sh fast 1
+learn/tests/knowledge/memory-knowledge-safety-test.sh fast 1
+runner/tests/worktree-create.sh fast 2
+workflow/tests/build-finish-storage-brief.sh fast 1
+workflow/tests/change-output-eval-fixtures.sh fast 18
+workflow/tests/handoff-names.sh fast 1
+workflow/tests/measure-writes.sh fast 2
+workflow/tests/parallel-wave-scheduler.sh fast 7
+workflow/tests/plan-route-membership.sh fast 1
+workflow/tests/pr-intake.sh fast 7
+workflow/tests/removed-normative-lines.sh fast 1
+workflow/tests/review-flow.sh fast 3
+workflow/tests/review-scope-scripts.sh fast 3
+workflow/tests/route-metrics-test.sh fast 0
+workflow/tests/select-plans.sh fast 3
+workflow/tests/service-templates.sh fast 0
+workflow/tests/skill-flow.sh fast 14
+workflow/tests/status-verify-boundary.sh fast 1
+workflow/tests/storage-fallbacks-test.sh fast 1
+workflow/tests/task-ownership.sh fast 4
+workflow/tests/wave-integrate-lock.sh fast 15
+workflow/tests/wave-worktree-reuse.sh fast 6
+workflow/tests/worktree-cleanup-claude-protect.sh fast 2
+workflow/tests/worktree-cleanup-index.sh fast 3
+workflow/tests/worktree-merge-destination.sh fast 14
+workflow/tests/worktree-wave-integrate.sh slow 33
+workflow/tests/worktree-wave.sh fast 16

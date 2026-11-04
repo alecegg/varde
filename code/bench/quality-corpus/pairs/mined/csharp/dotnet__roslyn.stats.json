@@ -1,0 +1,12 @@
+{
+  "accepted": 0,
+  "history_commits": 147096,
+  "language": "csharp",
+  "license": "MIT",
+  "pin_sha": "3645b6aa36ad41775a73e57a620787a3d38327a0",
+  "reason": "The mining process reached its 50-minute time budget before writing its final JSONL and stats; no Roslyn pair records were persisted.",
+  "records_bytes": 0,
+  "repository": "dotnet/roslyn",
+  "status": "time-capped, partial",
+  "time_budget_minutes": 50
+}

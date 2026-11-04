@@ -1,0 +1,36 @@
+{
+  "classification": "unchanged",
+  "stdout_stderr": {
+    "confirm": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"schema\":\"varde-relay/1\",\"now\":\"2026-10-22T12:00:00Z\",\"status\":\"confirmed\",\"action_id\":\"0000000e\",\"result\":\"pushed\",\"message_ids\":[\"m-0000000d\"]}\n"
+    },
+    "duplicate_confirm": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"schema\":\"varde-relay/1\",\"now\":\"2026-10-22T12:00:00Z\",\"status\":\"duplicate\"}\n"
+    },
+    "end": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"schema\":\"varde-relay/1\",\"now\":\"2026-10-22T12:00:00Z\",\"status\":\"ended\"}\n"
+    },
+    "once": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"schema\":\"varde-relay/1\",\"now\":\"2026-10-22T12:00:00Z\",\"status\":\"actions\",\"actions\":[{\"to\":\"worker\",\"address\":\"worker\",\"tier\":\"regular\",\"message_ids\":[\"m-0000000d\"],\"wake\":{\"harness\":\"codex\",\"session_id\":\"worker-session\",\"cwd\":\"<TMP>/working\",\"paseo_id\":\"paseo-fixed\",\"agent_id\":\"agent-fixed\",\"runner_endpoint\":\"endpoint-fixed\"},\"require_idle\":true,\"prompt\":\"[varde-delivery: 0000000e worker]\\nVarde messages for worker: m-0000000d\\nAcknowledge with `varde msg ack m-0000000d --as worker`.\",\"urgent\":false,\"action_id\":\"0000000e\",\"token_id\":\"00000002\",\"harness\":\"codex\",\"created_at\":\"2026-10-22T12:00:00Z\",\"expires_at\":\"2026-10-22T12:05:00Z\",\"status\":\"leased\",\"lease_until\":\"2026-10-22T12:05:00Z\",\"attempt\":1}],\"deferred\":[],\"escalations\":[],\"mailman\":{\"id\":\"00000002\",\"alive\":false,\"last_heartbeat\":null,\"last_return\":null,\"expect_return_by\":null,\"cycles\":0,\"deliveries\":0,\"age_h\":0.0,\"recreate\":false}}\n"
+    },
+    "renew": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "{\"schema\":\"varde-relay/1\",\"now\":\"2026-10-22T12:00:00Z\",\"status\":\"renewed\"}\n"
+    }
+  },
+  "store": {
+    ".cache/inbox/relay/state.json": {
+      "bytes": "{\"leases\":[],\"current_mailman\":\"00000002\",\"mailman_started\":{\"00000002\":\"2026-10-22T12:00:00Z\"},\"mailman_instances\":{\"00000002\":\"paseo-fixed:12345\"},\"events\":[{\"event\":\"ended\",\"at\":\"2026-10-22T12:00:00Z\",\"token_id\":\"00000002\",\"expect_return_by\":\"\"}]}",
+      "mode": "0644"
+    }
+  }
+}

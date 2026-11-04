@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"synthetic"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"type":"command_execution","command":"cat /tmp/synthetic-skill/SKILL.md"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"done"}}
+{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}

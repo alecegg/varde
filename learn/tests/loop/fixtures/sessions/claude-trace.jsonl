@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"synthetic-skill"}}]}}
+{"type":"result","subtype":"success","is_error":false}

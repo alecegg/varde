@@ -1,0 +1,17 @@
+Read-only batched plan status, mail, decision-file and worktree facts
+
+Usage: varde plan pulse [<PLAN>] [OPTIONS]
+
+Options:
+      --json
+          Print the same pulse facts as one JSON object
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+With a plan, report that plan; without one, report every active or blocked plan.
+Mail counts are a best-effort peek and may be unreliable. The notes folder scan
+is the fallback for decision and handoff files changed since the previous pulse.
+JSON also includes the mailman liveness status. An idle pulse prints one line;
+mailman status follows when it is not alive. Only the pulse fingerprint cache is
+written.

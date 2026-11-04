@@ -1,0 +1,30 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "Src/Newtonsoft.Json/Linq/JValue.cs"
+  ],
+  "changed_functions": [
+    "Equals"
+  ],
+  "child_sha": "2061a8bb9ab7d2b002f647cc8628c998e8b4b4c2",
+  "file_licenses": {
+    "JamesNK/Newtonsoft.Json:Src/Newtonsoft.Json/Linq/JValue.cs": "MIT"
+  },
+  "id": "cd7aaf4c20b6bc1a77cb6ede",
+  "intent": {
+    "linked_issues": [],
+    "message": "Simplify Equals override in JValue (#1148)\n\notherValue == null, including obj == null, both result in false and\nwill also result in false if continued into the Equals(JValue) method\nin the first branch, so having separate branches is just extra work."
+  },
+  "label_source": "developer-intent",
+  "language": "csharp",
+  "left": "a.cs",
+  "license": "MIT",
+  "pair_group_id": "refactor-5d4efc0533dd3ce3",
+  "parent_sha": "ed99856139057844e56b4be98d830b780fe87a67",
+  "pin_sha": "52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa",
+  "repo": "JamesNK/Newtonsoft.Json",
+  "right": "b.cs",
+  "split": "dev",
+  "upstream_url": "https://github.com/JamesNK/Newtonsoft.Json.git"
+}

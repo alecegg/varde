@@ -1,0 +1,20 @@
+{
+  "_doc": "Replay flag per tool registration. 'safe' tools may be re-invoked after a restart; 'unsafe' tools never rerun, and an interrupted call is reported as an error result that says it may have partially run. 'gated' lists tools whose side effect needs user approval: the registration is 'safe' because it only rereads the approval table, and the effect itself sits behind a once-only delivery row keyed by the approval key (spike B3, t4-b3.md).",
+  "tools": {
+    "read": { "replay": "safe" },
+    "ls": { "replay": "safe" },
+    "find": { "replay": "safe" },
+    "grep": { "replay": "safe" },
+    "edit": { "replay": "unsafe" },
+    "write": { "replay": "unsafe" },
+    "bash": {
+      "replay": "safe",
+      "gated": {
+        "when": "the command is not a pure discovery command",
+        "gate": "safe step keyed by the approval key, rereads the adapter-owned approval table",
+        "effect": "runs once behind a delivery row with a unique approval key, even though a shell command is otherwise unsafe to rerun",
+        "key": "<conversationId>:<callId>"
+      }
+    }
+  }
+}

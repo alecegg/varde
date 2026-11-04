@@ -1,0 +1,14 @@
+Watch plans and print one line per stale, blocked, or finished event
+
+Usage: varde plan watch [OPTIONS]
+
+Options:
+      --no-inbox             Do not append events to the main inbox (and print all current events once)
+      --no-wake              Do not run the configured wake command
+      --stale <DURATION>     Idle time that makes a plan stale, such as 20m (default: orchestration.stall_minutes)
+      --interval <DURATION>  Time between checks, such as 60s [default: 60s]
+      --once                 Check once, record and wake, then exit (with --no-inbox, print all current events)
+      --repo <REPO>          Repository whose branches and worktrees show plan activity
+      --notes <PATH>         Session notes file whose plan-status block is kept current
+      --json                 Print each event as one JSON line
+  -h, --help                 Print help (see more with '--help')

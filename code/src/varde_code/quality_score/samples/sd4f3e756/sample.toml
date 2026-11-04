@@ -1,0 +1,16 @@
+language = "python"
+task = "Implement a library loan fines module with public functions `price_loans(text)` and `receipt(text)`."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.py" = "9d2bf322d44c88f074fab950690d6748dd37c214a6fc6a208c14be885d520d28"
+"judge-classes.py" = "8aca3d64dab301eaed254e3329a7842a318c629d189cf378521ee110c32245bf"
+"judge-defensive.py" = "ae673e088d6fa0246073a8002152c1fdcdebf8a272161d60b4140480842b9eba"
+"judge-extract.py" = "fed808e30238ebd85285a4c78b3c6ef94f5aafaeb66f61b845cd3d43ab9c063f"
+"judge-inline.py" = "4ce0caeee64bb2cb32ca130a9f47605eeba65c01ee131d2c8cc01002e17826af"
+"judge-names.py" = "cc2cc3a10b995fe69d678e31190093410d1669ddc7eb1f3e32d109db012bf184"
+"original.py" = "9cfd247e9933293cb5a7539ad89d28499e7445b90b90ccad09a02b7ff3e113d3"
+"smoothed.py" = "d4f3e756ed39fa4e0c67f28fb4980d09d692be4cbec7e2c0c5a7ca1fb16d0940"
+"smoothing.md" = "9bbb0d6689fc105bb10a2ae865aab8c90848347402a5568c36dbd86441452c74"
+"task.md" = "a7939e808997c3633f53fcfb0549f1264059f05acb60d8d4e966d48c7b024f4d"

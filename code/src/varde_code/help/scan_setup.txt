@@ -1,0 +1,13 @@
+Apply a scan preset and show effective rules
+
+Usage: varde scan setup [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, preset (minimal|balanced|strict|lenient), scope? (repo|user), force?, reason?, date?, review_by? }
+      --force        Overwrite an existing overrides file; required to replace it
+      --user         Write overrides to the user configuration
+  -h, --help         Print help
+
+Presets affect nine warning-default maintainability rules. Minimal disables them; strict raises them to errors. The dependency-boundary rule remains an error by default and is inactive until both prefixes are configured.
+
+Balanced keeps existing overrides unchanged. Minimal and strict write overrides and also cover the quality floor, cap, and scope-mean rules (strict raises the mean to error). Lenient lowers the quality floor and cap to warning only and requires reason (optional date, review_by). Scope defaults to repo; use user for user configuration. Existing overrides are replaced only with --force.

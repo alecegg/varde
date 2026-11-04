@@ -1,0 +1,162 @@
+[
+ {
+  "url": "https://example.com/a?b=1&c=2#frag",
+  "kind": "link"
+ },
+ {
+  "url": "http://example.com",
+  "kind": "link"
+ },
+ {
+  "url": "HTTP://example.com",
+  "kind": "text"
+ },
+ {
+  "url": "https://a.com/\"x",
+  "kind": "text"
+ },
+ {
+  "url": "https://é.com",
+  "kind": "text"
+ },
+ {
+  "url": "https://a.com/a b",
+  "kind": "text"
+ },
+ {
+  "url": "#frag",
+  "kind": "link"
+ },
+ {
+  "url": "#a b",
+  "kind": "relative"
+ },
+ {
+  "url": "docs/page.md",
+  "kind": "relative"
+ },
+ {
+  "url": "./x.md?y=1",
+  "kind": "relative"
+ },
+ {
+  "url": "../up.md",
+  "kind": "relative"
+ },
+ {
+  "url": "a b",
+  "kind": "relative"
+ },
+ {
+  "url": "page.md?next=a:b",
+  "kind": "relative"
+ },
+ {
+  "url": "javascript:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "JaVaScRiPt:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": " javascript:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "java\nscript:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "java\tscript:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "java\u0000script:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "javascript:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "java script:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "java script:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "java﻿script:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "&#106;avascript:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "&#x6A;avascript:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "javascript&colon;alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "javascript&Tab;:alert(1)",
+  "kind": "text"
+ },
+ {
+  "url": "&lt;b&gt;x.md",
+  "kind": "relative"
+ },
+ {
+  "url": "a.md?x=1&y=2",
+  "kind": "relative"
+ },
+ {
+  "url": "a.md?x=1&amp;y=2",
+  "kind": "relative"
+ },
+ {
+  "url": "data:text/html,x",
+  "kind": "text"
+ },
+ {
+  "url": "vbscript:x",
+  "kind": "text"
+ },
+ {
+  "url": "//evil.com/x",
+  "kind": "text"
+ },
+ {
+  "url": "\\\\evil.com\\x",
+  "kind": "text"
+ },
+ {
+  "url": "a\\b",
+  "kind": "text"
+ },
+ {
+  "url": "mailto:a@b.c",
+  "kind": "text"
+ },
+ {
+  "url": "",
+  "kind": "text"
+ },
+ {
+  "url": "   ",
+  "kind": "text"
+ },
+ {
+  "url": "é.md",
+  "kind": "text"
+ },
+ {
+  "url": "x\n",
+  "kind": "relative"
+ }
+]

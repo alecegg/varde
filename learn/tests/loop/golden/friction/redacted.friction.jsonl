@@ -1,0 +1,2 @@
+{"v":1,"id":"d6b69bb266a2787a","ts":"2025-01-01T00:00:09.000Z","kind":"item_added","repo":"/repo","body":{"title":"Redaction","source":"pytest","repo_root":"/repo","tags":[]}}
+{"v":1,"id":"242e670be558e781","ts":"2025-01-01T00:00:09.001Z","kind":"occurrence_appended","repo":"/repo","body":{"item":"d6b69bb266a2787a","at":"2025-01-01T00:00:09.000Z","cwd":"/golden/work","repo_root":"/repo","head_sha":"abc","evidence":"[redacted:env-assign]"},"redacted":1}

@@ -1,0 +1,19 @@
+# Varde's own settings for `varde design check`. Values come from the runner
+# UI token sheet (runner/ui/src/style.css: --space-*, --font-size-*,
+# --control-h) and the doc-serve sheet. See docs/design-checker.md.
+token_files = [
+  "runner/ui/src/style.css",
+  "runner/ui/src/lib/chat/chatTokens.css",
+  "learn/src/varde_learn/docs/pages/static/css/00-tokens.css",
+]
+
+# --space-1..--space-6
+spacing_scale = [4, 8, 12, 16, 24, 32]
+# --font-size-xs..--font-size-lg
+font_size_scale = [12, 14, 16, 20]
+
+# --control-h is 44px; interactive targets must meet it at mobile width.
+min_target_px = 44
+min_ui_text_px = 12
+
+profile = "core"

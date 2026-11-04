@@ -1,0 +1,4 @@
+{
+  "output": "exit=1\nerror: concept document must be delimited by `---` frontmatter markers\n",
+  "bytes": "---\r\ntype: plan\r\nid: nested\r\ntitle: Nested\r\nstatus: active\r\n---\r\n"
+}

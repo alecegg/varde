@@ -1,0 +1,12 @@
+Change an item's status and record the reason
+
+Usage: varde learn friction set-status [OPTIONS] --reason <REASON> <ID>... <STATUS>
+
+Arguments:
+  <ID>      One or more numeric friction item IDs
+  <STATUS>  New status: open (needs action), resolved (fixed), promoted (adopted), or archived (inactive)
+
+Options:
+      --reason <REASON>  Reason recorded with the status transition
+      --json             Print the shared machine-readable output envelope
+  -h, --help             Print help

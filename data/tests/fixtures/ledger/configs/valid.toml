@@ -1,0 +1,4 @@
+repos = ["~/source/demo"]
+[summary]
+enabled = true
+token_cap = 42

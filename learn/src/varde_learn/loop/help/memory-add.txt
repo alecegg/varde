@@ -1,0 +1,16 @@
+Add a memory entry.
+
+Usage: varde learn memory add --scope <agent|skill|project|global> [--key <KEY>]
+       [--project <PROJECT_KEY>] --text <TEXT> [--tag <TAG>]... [--source <SRC>] [--no-surface]
+       [--model <M> --harness-version <V>] [--json]
+
+Options:
+      --scope <SCOPE>             agent, skill, project or global
+      --key <KEY>                 Agent or skill name (slug); project key for project (default: current project)
+      --project <PROJECT_KEY>     Limit an agent or skill entry to one project
+      --text <TEXT>               Entry text; secrets are rejected
+      --tag <TAG>                 Tag (repeatable)
+      --no-surface                Keep the entry out of the SessionStart pointer (no 80-character summary limit)
+      --model, --harness-version  Required for scope agent
+      --json                      Print machine-readable output
+  -h, --help                      Print help

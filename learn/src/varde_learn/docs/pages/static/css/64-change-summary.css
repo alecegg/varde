@@ -1,0 +1,15 @@
+/* Change-summary block: an info-toned panel with a label and one generated sentence. No controls. Tones come only from the --vd-tone-info-* tokens. */
+.vd-change-summary { margin-block: var(--vd-density-gap); padding: var(--vd-space-3) var(--vd-space-4); border: 1px solid var(--vd-tone-info-edge); border-radius: var(--vd-radius-l); background: var(--vd-tone-info-tint); min-inline-size: 0; max-inline-size: 100%; overflow-wrap: break-word; }
+.vd-change-summary-label { margin: 0 0 var(--vd-space-1); color: var(--vd-tone-info-text); font-size: var(--vd-label-size); font-weight: var(--vd-label-weight); letter-spacing: var(--vd-label-tracking); text-transform: uppercase; }
+.vd-change-summary-glyph { display: inline-block; inline-size: 1.25em; text-align: center; font-family: var(--vd-font-mono); font-weight: 700; }
+.vd-change-summary-title { margin: 0 0 var(--vd-space-1); font-weight: 650; overflow-wrap: break-word; }
+.vd-change-summary-text { margin: 0; min-inline-size: 0; overflow-wrap: break-word; }
+@media (forced-colors: active) {
+  .vd-change-summary { border-color: CanvasText; background: none; }
+  .vd-change-summary-label { color: CanvasText; }
+}
+@media print {
+  .vd-change-summary, .vd-change-summary .vd-change-summary-text, .vd-change-summary .vd-change-summary-title { overflow: visible; min-inline-size: 0; white-space: normal; }
+  .vd-change-summary { break-inside: avoid; background: none; }
+  .vd-change-summary .vd-change-summary-label { color: var(--vd-text); }
+}

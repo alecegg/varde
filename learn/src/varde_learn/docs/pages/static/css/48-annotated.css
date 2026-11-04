@@ -1,0 +1,57 @@
+/* Annotated code: pins in the gutter, folded quiet stretches, numbered notes (below the code, or a margin column in a wide page). Colours come only from --vd-* tokens. */
+.vd-annotated-code { margin-block: var(--vd-density-gap); min-inline-size: 0; display: grid; gap: var(--vd-space-3); grid-template-columns: minmax(0, 1fr); }
+.vd-annotated-code > .vd-code { margin-block: 0; }
+.vd-annotated-code { --vd-pin-cols: 1; }
+.vd-annotated-c2 { --vd-pin-cols: 2; }
+.vd-annotated-c3 { --vd-pin-cols: 3; }
+.vd-annotated-c4 { --vd-pin-cols: 4; }
+.vd-annotated-c5 { --vd-pin-cols: 5; }
+.vd-annotated-c6 { --vd-pin-cols: 6; }
+.vd-annotated-code .vd-code:not(.vd-code-nonum) .vd-code-line { position: relative; padding-inline-start: calc(var(--vd-code-gutter) + var(--vd-space-3) * 2 + var(--vd-pin-cols) * 44px); }
+.vd-annotated-code .vd-code-nonum .vd-code-line { padding-inline-start: calc(var(--vd-space-3) + var(--vd-pin-cols) * 44px); }
+.vd-annotated-pinned { min-block-size: 44px; }
+.vd-annotated-pins { position: absolute; inset-block-start: 0; inset-inline-start: 0; display: flex; text-indent: 0; }
+.vd-annotated-pin { --vd-pin-edge: var(--vd-tone-info-edge); display: flex; align-items: center; justify-content: center; inline-size: 44px; block-size: 44px; box-sizing: border-box; color: var(--vd-text); font: inherit; font-weight: 700; font-size: var(--vd-label-size); text-decoration: none; user-select: none; -webkit-user-select: none; }
+.vd-annotated-pin::before { content: ""; position: absolute; inline-size: 28px; block-size: 28px; box-sizing: border-box; border: 2px solid var(--vd-pin-edge); border-radius: var(--vd-radius-full); background: var(--vd-surface); z-index: -1; }
+.vd-annotated-pin { position: relative; isolation: isolate; }
+.vd-annotated-k-warn { --vd-pin-edge: var(--vd-tone-warning-edge); }
+.vd-annotated-k-change { --vd-pin-edge: var(--vd-tone-decision-edge); }
+.vd-annotated-pin:focus-visible, .vd-annotated-back:focus-visible, .vd-annotated-note:focus-visible, .vd-annotated-fold-row:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -3px; }
+.vd-code-line[data-active] { background: var(--vd-tone-info-tint); border-inline-start-color: var(--vd-tone-info-edge); }
+.vd-annotated-fold > summary { list-style: none; }
+.vd-annotated-fold > summary::-webkit-details-marker { display: none; }
+.vd-annotated-fold-row { display: flex; align-items: center; min-block-size: 44px; box-sizing: border-box; padding-inline: var(--vd-space-3); border-block: 1px dashed var(--vd-border-interactive); background: var(--vd-surface-subtle, transparent); color: var(--vd-text); font-family: var(--vd-font-ui, inherit); font-size: var(--vd-label-size); cursor: pointer; user-select: none; -webkit-user-select: none; white-space: normal; }
+.vd-annotated-fold-row::before { content: "\25B8\00a0"; }
+.vd-annotated-fold[open] > .vd-annotated-fold-row::before { content: "\25BE\00a0"; }
+.vd-annotated-fold-open, .vd-annotated-fold[open] .vd-annotated-fold-closed { display: none; }
+.vd-annotated-fold[open] .vd-annotated-fold-open { display: inline; }
+@media (hover: hover) { .vd-annotated-fold-row:hover, .vd-annotated-pin:hover::before { background: var(--vd-accent-subtle); } }
+.vd-annotated-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--vd-space-3); min-inline-size: 0; }
+.vd-annotated-note { --vd-note-edge: var(--vd-tone-info-edge); --vd-note-tint: var(--vd-tone-info-tint); --vd-note-text: var(--vd-tone-info-text); display: flex; gap: var(--vd-space-3); align-items: flex-start; padding: var(--vd-space-2) var(--vd-space-3); border: 1px solid var(--vd-note-edge); border-radius: var(--vd-radius-l); background: var(--vd-note-tint); min-inline-size: 0; overflow-wrap: anywhere; }
+.vd-annotated-t-warning { --vd-note-edge: var(--vd-tone-warning-edge); --vd-note-tint: var(--vd-tone-warning-tint); --vd-note-text: var(--vd-tone-warning-text); }
+.vd-annotated-t-decision { --vd-note-edge: var(--vd-tone-decision-edge); --vd-note-tint: var(--vd-tone-decision-tint); --vd-note-text: var(--vd-tone-decision-text); }
+.vd-annotated-back { flex: none; display: flex; align-items: center; justify-content: center; min-inline-size: 44px; min-block-size: 44px; box-sizing: border-box; border: 2px solid var(--vd-note-edge); border-radius: var(--vd-radius-full); background: var(--vd-surface); color: var(--vd-text); font-weight: 700; text-decoration: none; }
+.vd-annotated-body { min-inline-size: 0; }
+.vd-annotated-meta { margin: 0 0 var(--vd-space-1); color: var(--vd-note-text); font-size: var(--vd-label-size); font-weight: var(--vd-label-weight); letter-spacing: var(--vd-label-tracking); text-transform: uppercase; }
+.vd-annotated-glyph { display: inline-block; inline-size: 1.25em; text-align: center; font-weight: 700; }
+.vd-annotated-label { display: block; font-weight: 650; }
+.vd-annotated-text { margin: 0; }
+@container vd-doc (min-width: 44rem) {
+  .vd-annotated-code { grid-template-columns: minmax(0, 1fr) 18rem; align-items: start; }
+  .vd-annotated-notes { align-content: start; }
+}
+@media (forced-colors: active) {
+  .vd-annotated-pin::before, .vd-annotated-back { border-color: CanvasText; }
+  .vd-annotated-note { border: 1px solid CanvasText; background: none; }
+  .vd-annotated-fold-row { border-block-color: CanvasText; }
+  .vd-code-line[data-active] { background: none; border-inline-start-color: Highlight; }
+  .vd-annotated-pin:focus-visible, .vd-annotated-back:focus-visible, .vd-annotated-fold-row:focus-visible { outline-color: Highlight; }
+}
+@media print {
+  .vd-annotated-code { display: block; }
+  .vd-annotated-code > .vd-code { margin-block-end: var(--vd-space-3); }
+  .vd-annotated-code .vd-code:not(.vd-code-nonum) .vd-code-line { padding-inline-start: calc(var(--vd-code-gutter) + var(--vd-space-3) * 2); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .vd-annotated-pins { position: static; display: flex; flex-wrap: wrap; max-inline-size: 100%; }
+  .vd-annotated-note { break-inside: avoid; background: none; border-color: CanvasText; }
+  .vd-annotated-fold::details-content { content-visibility: visible; display: block; }
+}

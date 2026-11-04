@@ -1,0 +1,39 @@
+{
+  "accepted": 8,
+  "commits_walked": 1927,
+  "filters": {
+    "file_limit": {
+      "evaluated": 30,
+      "passed": 17
+    },
+    "function_limit": {
+      "evaluated": 13,
+      "passed": 9
+    },
+    "generated": {
+      "evaluated": 9,
+      "passed": 9
+    },
+    "intent": {
+      "evaluated": 1757,
+      "passed": 30
+    },
+    "parent": {
+      "evaluated": 1927,
+      "passed": 1757
+    },
+    "parse": {
+      "evaluated": 17,
+      "passed": 13
+    },
+    "public_feature": {
+      "evaluated": 9,
+      "passed": 8
+    }
+  },
+  "intent_matches": 30,
+  "language": "csharp",
+  "pin_sha": "52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa",
+  "records_bytes": 7404,
+  "repository": "JamesNK/Newtonsoft.Json"
+}

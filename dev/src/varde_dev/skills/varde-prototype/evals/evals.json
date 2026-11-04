@@ -1,0 +1,111 @@
+{
+  "skill_name": "varde-prototype",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm not sure what the new dashboard landing page should look like. Can you prototype three directions for the layout and hierarchy? Use the slug dashboard-layout. Save the pages under working/prototypes/dashboard-layout/ in this evaluation sandbox.",
+      "expected_output": "Standalone visual-track invocation. The skill states the resolved storage path working/prototypes/dashboard-layout/ and creates exactly three structurally different variant pages at variant-a.md through variant-c.md, each exported with `varde learn docs build` to a static HTML file with no script. It reports an export path first, then asks the user to select a direction or hybrid with a recommendation. It ends that round without writing v1.md; v1 follows the user's selection.",
+      "assertions": [
+        "Storage root is under the resolved <working>/prototypes/<slug>/ (standalone, not the plan-owned path)",
+        "Round 1 variants are written to variant-<a|b|c...>.md pages of `ui` statements, each exported with `varde learn docs build`",
+        "No variant or export holds a script or hand-written HTML",
+        "Each round reports the export path on disk first",
+        "Questions are asked inline in the message as a numbered menu with a recommendation, not via a native question-prompt tool",
+        "Exactly three variant-*.md pages exist at the evaluation storage path, each with a .html export free of <script",
+        "v1.md is absent before direction selection"
+      ],
+      "verification_script": "evals/verify-prototype-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "The prototype at working/prototypes/profile-panel/v1.md looks great. Ship it — write the plan and start implementing the real component so we don't lose the momentum.",
+      "expected_output": "The explicit follow-up authorizes starting the plan and build work in this turn without asking for renewed confirmation. The agent carries the prototype's decisions into the matching plan or bounded build; unresolved design still waits for plan approval. The prototype page remains a throwaway artifact rather than production source.",
+      "assertions": [
+        "The explicit user request starts the plan or build work in the same turn without reconfirming that request",
+        "The prototype's decisions inform the production work, but the prototype page is not copied into production as-is",
+        "Any unresolved design waits for plan approval before implementation"
+      ],
+      "setup_script": "evals/setup-prototype-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Does our order state model handle cancelling a partially-shipped order correctly? Prototype the logic. Use the slug order-cancellation. Save the page at working/prototypes/order-cancellation/logic.md in this evaluation sandbox.",
+      "expected_output": "Logic-track invocation producing a static working/prototypes/order-cancellation/logic.md page and its export, with no script, build step, framework, or server. The page opens with a plain-language paragraph naming the exact question (cancel of a partially-shipped order / refund split) and holds the state-transition table and step-by-step scenario tables (state, action, result) for the happy path, an awkward case and an illegal action. A pure logic module is delivered beside it. On close, the skill calls out that module as the part that lifts into the real codebase.",
+      "assertions": [
+        "Deliverable is a static logic.md page plus its export, with no framework, bundler, script, or dev server",
+        "The page holds a state-transition table and scenario tables of state, action and result",
+        "The page states the specific question being tested in domain language, not a generic restatement",
+        "No tests and no real database/API are introduced — in-memory state only",
+        "On close, the pure module is called out as the codebase-liftable part",
+        "logic.md exists at the requested evaluation path"
+      ],
+      "verification_script": "evals/verify-prototype-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 4,
+      "prompt": "Prototype a profile panel with a fixed direction: a compact two-column layout with details on the left and actions on the right. Use the slug profile-panel. Save the page under working/prototypes/profile-panel/ in this evaluation sandbox.",
+      "expected_output": "The specified direction skips variant comparison and creates v1.md (and its export) directly at the requested storage path. No variant-*.md pages are created.",
+      "assertions": [
+        "v1.md exists for an up-front specific direction",
+        "No variant pages are generated for an up-front specific direction"
+      ],
+      "verification_script": "evals/verify-prototype-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "Prototype the order state model so I can click through it: let me press buttons for ship, cancel and refund and see the state change live. Use the slug order-clicks.",
+      "expected_output": "Logic-track invocation. Live clicking is not offered in a page. The skill answers with the static scenario page (state-transition table and step-by-step scenario tables) and tells the user that live clicking is a real app, to be planned and built as normal project work.",
+      "assertions": [
+        "Writes a static page with a state-transition table and scenario tables of state, action and result",
+        "Writes no script and no hand-written HTML",
+        "Tells the user a prototype needing live behavior is a real app, planned and built as normal project work"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    },
+    {
+      "id": 6,
+      "prompt": "Prototype a live dashboard that polls our API every 5 seconds and updates the charts as new data arrives.",
+      "expected_output": "The request needs network and scripts, so the skill does not write a loose HTML page. It says this is a real app and offers to plan and build it as normal project work.",
+      "assertions": [
+        "Does not write a script, a polling page or a hand-written HTML file",
+        "Says a prototype needing live behavior (network, state, scripts) is a real app",
+        "Offers to plan and build it as normal project work"
+      ],
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      }
+    }
+  ]
+}

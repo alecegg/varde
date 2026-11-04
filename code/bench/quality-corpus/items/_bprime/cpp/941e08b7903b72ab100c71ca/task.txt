@@ -1,0 +1,2 @@
+Format a nonnegative count of seconds as hours, minutes and seconds separated by colons.
+Input domain: nonnegative second counts up to several days; hours carry no leading zero, minutes and seconds are always two digits.

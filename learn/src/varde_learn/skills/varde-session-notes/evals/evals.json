@@ -1,0 +1,59 @@
+{
+  "skill_name": "varde-session-notes",
+  "evals": [
+    {
+      "id": 5,
+      "prompt": "At the end of a `varde-orchestrate` run that finished all tasks with nothing left to do, does the closing step write session notes?",
+      "expected_output": "No. The run completed all its work with no open thread, so the agent writes no session notes and says nothing remains for a future session.",
+      "assertions": [
+        "No session notes are created when no work remains",
+        "The agent states that no work remains instead of writing notes at close anyway"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Create session notes for a session whose actual cwd is /tmp/scratch-project, outside any Git repository. It links notes/error-envelope.md, whose raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md. Record the frontmatter and link snapshot.",
+      "expected_output": "The session notes keep cwd: /tmp/scratch-project and explicitly record repo_root: none, branch: none, head_sha: none, and dirty: not-applicable. Their file link has path: . and a sha256:<64 lowercase hex> snapshot matching the raw bytes of the named fixture.",
+      "assertions": [
+        "The non-Git session notes explicitly record repo_root, branch, and head_sha as none, and dirty as not-applicable",
+        "The actual session cwd remains /tmp/scratch-project rather than being replaced by a repository root",
+        "The file link uses path: . and a SHA-256 hash of the raw fixture bytes"
+      ],
+      "files": [
+        "references/write.md",
+        "references/snapshot.md",
+        "evals/fixtures/session-notes/non-git-create.md",
+        "evals/fixtures/knowledge/pattern/error-envelope.md"
+      ],
+      "verification_script": "evals/verify-session-notes-eval.sh"
+    },
+    {
+      "id": 9,
+      "prompt": "Resume evals/fixtures/session-notes/non-git-resume.md. The current cwd is /tmp/scratch-project-moved. The first target exists and its raw bytes match evals/fixtures/knowledge/pattern/error-envelope.md; the second target is missing. Report the cwd and link statuses, then summarize the session notes without acting.",
+      "expected_output": "The cwd is modified because it differs from the recorded /tmp/scratch-project. The error-envelope link is modified because its current raw-byte SHA-256 differs from the snapshot. The retired-plan link is missing. The agent summarizes the session notes and waits before acting.",
+      "assertions": [
+        "A changed cwd is reported as modified context",
+        "The existing link's raw-byte SHA-256 is recomputed and the changed link is marked modified",
+        "The absent target is marked missing",
+        "The agent summarizes the session notes and waits before taking action"
+      ],
+      "files": [
+        "references/resume.md",
+        "references/snapshot.md",
+        "evals/fixtures/session-notes/non-git-resume.md",
+        "evals/fixtures/knowledge/pattern/error-envelope.md"
+      ],
+      "verification_script": "evals/verify-session-notes-eval.sh"
+    },
+    {
+      "id": 10,
+      "prompt": "Write short session notes for a routine unfinished task. Link the exact files needed next time; I did not request integrity snapshots.",
+      "expected_output": "Create notes in <working>/session-notes/<id>/notes.md with absolute file targets and integrity: none for each default link. Do not hash every linked file or claim unchanged content. On resume, existing lightweight targets are unknown until re-read.",
+      "assertions": [
+        "Default links use integrity: none without content_hashes",
+        "Targets are explicit absolute paths and missing targets are reported",
+        "A resumed lightweight target is labeled unknown and re-read before acting"
+      ]
+    }
+  ]
+}

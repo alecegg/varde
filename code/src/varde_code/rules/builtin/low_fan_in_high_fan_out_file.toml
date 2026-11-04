@@ -1,0 +1,24 @@
+[[rule]]
+id = "low-fan-in-high-fan-out-file"
+kind = "sql"
+verification = "dependency-facts"
+severity = "warning"
+name = "Certified dependency breadth budget"
+description = "Counts distinct certified target units per source file and distinct importing files per source unit. Calls and duplicate imports do not inflate counts."
+message = "file imports {fan_out} certified dependency units with {fan_in} certified importing files"
+remediation = "split dependency orchestration or document its intentional breadth"
+query = """
+WITH outgoing AS (
+ SELECT from_file_id, from_unit, COUNT(DISTINCT to_unit) AS fan_out
+ FROM dependency_facts WHERE certainty = 'certified' GROUP BY from_file_id, from_unit
+), incoming AS (
+ SELECT to_unit, COUNT(DISTINCT from_file_id) AS fan_in
+ FROM dependency_facts WHERE certainty = 'certified' GROUP BY to_unit
+)
+SELECT f.path AS file, 1 AS line, o.from_unit, o.fan_out, COALESCE(i.fan_in, 0) AS fan_in,
+ :max_fan_in AS max_fan_in, :min_fan_out AS min_fan_out, 'certified' AS certainty
+FROM outgoing o JOIN files f ON f.id = o.from_file_id LEFT JOIN incoming i ON i.to_unit = o.from_unit
+WHERE COALESCE(i.fan_in, 0) <= :max_fan_in AND o.fan_out >= :min_fan_out
+ORDER BY f.path
+"""
+thresholds = { max_fan_in = 2.0, min_fan_out = 15.0 }

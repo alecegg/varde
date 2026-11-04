@@ -1,0 +1,11 @@
+Check that merging revisions needs no unapproved plan (used by the pre-merge-commit hook)
+
+Usage: varde plan merge-gate [REV]...
+
+Exits 1 when a revision carries commits of a plan with no user approval record.
+
+Arguments:
+  [REV]...  Revisions being merged (branch, tag or commit)
+
+Options:
+  -h, --help  Print help

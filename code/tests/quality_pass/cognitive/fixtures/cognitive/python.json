@@ -1,0 +1,216 @@
+{
+  "language": "python",
+  "source": "def c00_simple_if(a=True, b=False, c=True, d=False):\n    if a: return True\n    return False\ndef c01_nested_if(a=True, b=False, c=True, d=False):\n    if a:\n        if b: return True\n    return False\ndef c02_triple_nested_if(a=True, b=False, c=True, d=False):\n    if a:\n        if b:\n            if c: return True\n    return False\ndef c03_if_else(a=True, b=False, c=True, d=False):\n    if a: return True\n    else: return False\n    return False\ndef c04_if_elif_else(a=True, b=False, c=True, d=False):\n    if a: return True\n    elif b: return False\n    else: return True\n    return False\ndef c05_three_way_chain(a=True, b=False, c=True, d=False):\n    if a: return True\n    elif b: return False\n    elif c: return True\n    else: return False\n    return False\ndef c06_and_sequence(a=True, b=False, c=True, d=False):\n    if a and b: return True\n    return False\ndef c07_or_sequence(a=True, b=False, c=True, d=False):\n    if a or b: return True\n    return False\ndef c08_mixed_boolean(a=True, b=False, c=True, d=False):\n    if a and b or c and d: return True\n    return False\ndef c09_assigned_boolean(a=True, b=False, c=True, d=False):\n    value = a and b\n    return value\n    return False\ndef c10_while_loop(a=True, b=False, c=True, d=False):\n    while a:\n        a = False\n    return False\ndef c11_for_loop(a=True, b=False, c=True, d=False):\n    for item in (a, b):\n        pass\ndef c12_if_with_loop(a=True, b=False, c=True, d=False):\n    if a:\n        for item in (b, c):\n            pass\ndef c13_nested_loops(a=True, b=False, c=True, d=False):\n    for item in (a, b):\n        while a:\n            a = False\n    return False\ndef c14_switch_or_match(a=True, b=False, c=True, d=False):\n    match a:\n        case True: return True\n        case _: return False\n    return False\ndef c15_switch_nested_if(a=True, b=False, c=True, d=False):\n    match a:\n        case True:\n            if b: return True\n        case _: return False\n    return False\ndef c16_try_one_catch(a=True, b=False, c=True, d=False):\n    try:\n        if a: return True\n    except ValueError:\n        return False\n    return False\ndef c17_try_two_catches(a=True, b=False, c=True, d=False):\n    try:\n        if a: return True\n    except ValueError:\n        return False\n    except TypeError:\n        return True\n    return False\ndef c18_recursive_call(a=True, b=False, c=True, d=False):\n    if a: return True\n    return c18_recursive_call(b, a)\n    return False\ndef c19_conditional_expression(a=True, b=False, c=True, d=False):\n    return a and b or c\ndef c20_nested_conditionals(a=True, b=False, c=True, d=False):\n    return (True if a else (False if b else True))\n    return False\ndef c21_lambda_decision(a=True, b=False, c=True, d=False):\n    return (lambda: True if a else False)()\n    return False\ndef c22_if_lambda_decision(a=True, b=False, c=True, d=False):\n    if a:\n        return (lambda: True if b else False)()\n    return False\ndef c23_nested_callable(a=True, b=False, c=True, d=False):\n    def inner():\n        if a: return True\n        return False\n    return inner()\n    return False\ndef c24_explicit_loop_filter(a=True, b=False, c=True, d=False):\n    result = []\n    for item in (a, b):\n        if item: result.append(item)\n    return bool(result)\ndef c25_labeled_jump(a=True, b=False, c=True, d=False):\n    while a:\n        break\ndef c26_try_except(values=None):\n    try:\n        return values[\"enabled\"]\n    except (KeyError, TypeError):\n        return False\ndef c27_language_idiom(a=True, b=False, c=True, d=False):\n    def inner():\n        return True\n    return inner()\ndef c28_loop_if_boolean(a=True, b=False, c=True, d=False):\n    for item in (a, b):\n        if item and a: return True\n    return False\ndef c29_else_loop(a=True, b=False, c=True, d=False):\n    if a:\n        return True\n    else:\n        for item in (a, b):\n            pass\n    return False\n",
+  "functions": [
+    {
+      "name": "c00_simple_if",
+      "construct": "simple_if",
+      "source": "def c00_simple_if(a=True, b=False, c=True, d=False):\n    if a: return True\n    return False\n",
+      "expected": 1,
+      "derivation": "One top-level if adds one structural increment."
+    },
+    {
+      "name": "c01_nested_if",
+      "construct": "nested_if",
+      "source": "def c01_nested_if(a=True, b=False, c=True, d=False):\n    if a:\n        if b: return True\n    return False\n",
+      "expected": 3,
+      "derivation": "The outer if adds 1; the nested if adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c02_triple_nested_if",
+      "construct": "triple_nested_if",
+      "source": "def c02_triple_nested_if(a=True, b=False, c=True, d=False):\n    if a:\n        if b:\n            if c: return True\n    return False\n",
+      "expected": 6,
+      "derivation": "Three nested ifs add 1, 2, and 3 respectively."
+    },
+    {
+      "name": "c03_if_else",
+      "construct": "if_else",
+      "source": "def c03_if_else(a=True, b=False, c=True, d=False):\n    if a: return True\n    else: return False\n    return False\n",
+      "expected": 2,
+      "derivation": "The if and its else each add one; else is hybrid."
+    },
+    {
+      "name": "c04_if_elif_else",
+      "construct": "if_elif_else",
+      "source": "def c04_if_elif_else(a=True, b=False, c=True, d=False):\n    if a: return True\n    elif b: return False\n    else: return True\n    return False\n",
+      "expected": 3,
+      "derivation": "The if, else-if, and else each add one; else-if is hybrid."
+    },
+    {
+      "name": "c05_three_way_chain",
+      "construct": "three_way_chain",
+      "source": "def c05_three_way_chain(a=True, b=False, c=True, d=False):\n    if a: return True\n    elif b: return False\n    elif c: return True\n    else: return False\n    return False\n",
+      "expected": 4,
+      "derivation": "One if, two else-if branches, and one else add four total."
+    },
+    {
+      "name": "c06_and_sequence",
+      "construct": "and_sequence",
+      "source": "def c06_and_sequence(a=True, b=False, c=True, d=False):\n    if a and b: return True\n    return False\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator && sequence adds 1."
+    },
+    {
+      "name": "c07_or_sequence",
+      "construct": "or_sequence",
+      "source": "def c07_or_sequence(a=True, b=False, c=True, d=False):\n    if a or b: return True\n    return False\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator || sequence adds 1."
+    },
+    {
+      "name": "c08_mixed_boolean",
+      "construct": "mixed_boolean",
+      "source": "def c08_mixed_boolean(a=True, b=False, c=True, d=False):\n    if a and b or c and d: return True\n    return False\n",
+      "expected": 4,
+      "derivation": "The if adds 1; &&, ||, && form three logical sequences, adding 3."
+    },
+    {
+      "name": "c09_assigned_boolean",
+      "construct": "assigned_boolean",
+      "source": "def c09_assigned_boolean(a=True, b=False, c=True, d=False):\n    value = a and b\n    return value\n    return False\n",
+      "expected": 1,
+      "derivation": "A binary logical sequence in an assignment adds one fundamental increment."
+    },
+    {
+      "name": "c10_while_loop",
+      "construct": "while_loop",
+      "source": "def c10_while_loop(a=True, b=False, c=True, d=False):\n    while a:\n        a = False\n    return False\n",
+      "expected": 1,
+      "derivation": "One top-level while adds one structural increment."
+    },
+    {
+      "name": "c11_for_loop",
+      "construct": "for_loop",
+      "source": "def c11_for_loop(a=True, b=False, c=True, d=False):\n    for item in (a, b):\n        pass\n",
+      "expected": 1,
+      "derivation": "One top-level loop adds one structural increment."
+    },
+    {
+      "name": "c12_if_with_loop",
+      "construct": "if_with_loop",
+      "source": "def c12_if_with_loop(a=True, b=False, c=True, d=False):\n    if a:\n        for item in (b, c):\n            pass\n",
+      "expected": 3,
+      "derivation": "The if adds 1; the loop nested inside it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c13_nested_loops",
+      "construct": "nested_loops",
+      "source": "def c13_nested_loops(a=True, b=False, c=True, d=False):\n    for item in (a, b):\n        while a:\n            a = False\n    return False\n",
+      "expected": 3,
+      "derivation": "The outer loop adds 1; the inner loop adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c14_switch_or_match",
+      "construct": "switch_or_match",
+      "source": "def c14_switch_or_match(a=True, b=False, c=True, d=False):\n    match a:\n        case True: return True\n        case _: return False\n    return False\n",
+      "expected": 1,
+      "derivation": "The switch/match/select construct adds one; its alternatives add no further points."
+    },
+    {
+      "name": "c15_switch_nested_if",
+      "construct": "switch_nested_if",
+      "source": "def c15_switch_nested_if(a=True, b=False, c=True, d=False):\n    match a:\n        case True:\n            if b: return True\n        case _: return False\n    return False\n",
+      "expected": 3,
+      "derivation": "The switch adds 1; the if nested in it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c16_try_one_catch",
+      "construct": "try_one_catch",
+      "source": "def c16_try_one_catch(a=True, b=False, c=True, d=False):\n    try:\n        if a: return True\n    except ValueError:\n        return False\n    return False\n",
+      "expected": 2,
+      "derivation": "Try is ignored; the if adds 1 and each catch adds 1."
+    },
+    {
+      "name": "c17_try_two_catches",
+      "construct": "try_two_catches",
+      "source": "def c17_try_two_catches(a=True, b=False, c=True, d=False):\n    try:\n        if a: return True\n    except ValueError:\n        return False\n    except TypeError:\n        return True\n    return False\n",
+      "expected": 3,
+      "derivation": "Try is ignored; the if adds 1 and each of two catch clauses adds 1."
+    },
+    {
+      "name": "c18_recursive_call",
+      "construct": "recursive_call",
+      "source": "def c18_recursive_call(a=True, b=False, c=True, d=False):\n    if a: return True\n    return c18_recursive_call(b, a)\n    return False\n",
+      "expected": 2,
+      "derivation": "The base-case if adds 1; one direct recursive call adds 1 fundamental recursion increment."
+    },
+    {
+      "name": "c19_conditional_expression",
+      "construct": "mixed_logical_sequences",
+      "source": "def c19_conditional_expression(a=True, b=False, c=True, d=False):\n    return a and b or c\n",
+      "expected": 2,
+      "derivation": "The expression has one and-sequence followed by one or-sequence; each operator run adds one, totaling 2."
+    },
+    {
+      "name": "c20_nested_conditionals",
+      "construct": "nested_conditionals",
+      "source": "def c20_nested_conditionals(a=True, b=False, c=True, d=False):\n    return (True if a else (False if b else True))\n    return False\n",
+      "expected": 3,
+      "derivation": "The outer conditional adds 1; its nested conditional adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c21_lambda_decision",
+      "construct": "lambda_decision",
+      "source": "def c21_lambda_decision(a=True, b=False, c=True, d=False):\n    return (lambda: True if a else False)()\n    return False\n",
+      "expected": 2,
+      "derivation": "The lambda adds no structural point but raises nesting; its if adds 1 + 1 nesting."
+    },
+    {
+      "name": "c22_if_lambda_decision",
+      "construct": "if_lambda_decision",
+      "source": "def c22_if_lambda_decision(a=True, b=False, c=True, d=False):\n    if a:\n        return (lambda: True if b else False)()\n    return False\n",
+      "expected": 4,
+      "derivation": "Outer if adds 1; lambda if adds 1 + 2 nesting levels (outer if and lambda)."
+    },
+    {
+      "name": "c23_nested_callable",
+      "construct": "nested_callable",
+      "source": "def c23_nested_callable(a=True, b=False, c=True, d=False):\n    def inner():\n        if a: return True\n        return False\n    return inner()\n    return False\n",
+      "expected": 2,
+      "derivation": "Nested callable adds no structural point but one nesting level to its if (1 + 1)."
+    },
+    {
+      "name": "c24_explicit_loop_filter",
+      "construct": "explicit_loop_filter",
+      "source": "def c24_explicit_loop_filter(a=True, b=False, c=True, d=False):\n    result = []\n    for item in (a, b):\n        if item: result.append(item)\n    return bool(result)\n",
+      "expected": 3,
+      "derivation": "The for loop adds 1; its nested if adds 1 structural + 1 nesting, totaling 3."
+    },
+    {
+      "name": "c25_labeled_jump",
+      "construct": "labeled_jump",
+      "source": "def c25_labeled_jump(a=True, b=False, c=True, d=False):\n    while a:\n        break\n",
+      "expected": 1,
+      "derivation": "One top-level while adds 1; this unlabeled break adds nothing."
+    },
+    {
+      "name": "c26_try_except",
+      "construct": "try_except",
+      "source": "def c26_try_except(values=None):\n    try:\n        return values[\"enabled\"]\n    except (KeyError, TypeError):\n        return False\n",
+      "expected": 1,
+      "derivation": "Try adds nothing; its single except clause adds one structural increment."
+    },
+    {
+      "name": "c27_language_idiom",
+      "construct": "language_idiom",
+      "source": "def c27_language_idiom(a=True, b=False, c=True, d=False):\n    def inner():\n        return True\n    return inner()\n",
+      "expected": 0,
+      "derivation": "The local nested function has a linear body and the call adds no increment; no decision or loop occurs."
+    },
+    {
+      "name": "c28_loop_if_boolean",
+      "construct": "loop_if_boolean",
+      "source": "def c28_loop_if_boolean(a=True, b=False, c=True, d=False):\n    for item in (a, b):\n        if item and a: return True\n    return False\n",
+      "expected": 4,
+      "derivation": "Loop adds 1; nested if adds 1 + 1 nesting; its && sequence adds 1."
+    },
+    {
+      "name": "c29_else_loop",
+      "construct": "else_loop",
+      "source": "def c29_else_loop(a=True, b=False, c=True, d=False):\n    if a:\n        return True\n    else:\n        for item in (a, b):\n            pass\n    return False\n",
+      "expected": 4,
+      "derivation": "The if adds 1; its else adds 1. The loop in the else body is at nesting level 1, so it adds 1 structural + 1 nesting, totaling 4."
+    }
+  ]
+}

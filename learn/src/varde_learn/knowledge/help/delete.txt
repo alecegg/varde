@@ -1,0 +1,11 @@
+Delete a Concept (hard delete)
+
+Usage: varde learn knowledge delete [OPTIONS] --bundle <BUNDLE> <SLUG>
+
+Arguments:
+  <SLUG>  Concept slug, e.g. `my-concept` or `pattern/my-concept`
+
+Options:
+      --bundle <BUNDLE>  Knowledge Bundle root directory (holds the Concept `.md` files)
+      --json             Machine-readable JSON output
+  -h, --help             Print help

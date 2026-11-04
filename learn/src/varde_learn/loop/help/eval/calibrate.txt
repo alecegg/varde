@@ -1,0 +1,22 @@
+Check whether declared mutations make a skill's evals fail.
+
+calibrate before trusting an eval's sensitivity.
+
+Usage: varde learn measure <SKILL> calibrate [OPTIONS]
+
+Arguments:
+ 
+          Directory containing the skill and evals/mutations.json
+
+Options:
+      --harness <HARNESS>
+          Harness used for evaluated sessions and judging
+          
+          [default: codex]
+          [possible values: codex, claude]
+
+      --json
+          Print the machine-readable output envelope
+
+  -h, --help
+          Print help (see a summary with '-h')

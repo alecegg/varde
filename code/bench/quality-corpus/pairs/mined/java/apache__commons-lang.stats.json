@@ -1,0 +1,39 @@
+{
+  "accepted": 88,
+  "commits_walked": 10085,
+  "filters": {
+    "file_limit": {
+      "evaluated": 196,
+      "passed": 145
+    },
+    "function_limit": {
+      "evaluated": 140,
+      "passed": 91
+    },
+    "generated": {
+      "evaluated": 91,
+      "passed": 91
+    },
+    "intent": {
+      "evaluated": 9844,
+      "passed": 196
+    },
+    "parent": {
+      "evaluated": 10085,
+      "passed": 9844
+    },
+    "parse": {
+      "evaluated": 145,
+      "passed": 140
+    },
+    "public_feature": {
+      "evaluated": 91,
+      "passed": 88
+    }
+  },
+  "intent_matches": 196,
+  "language": "java",
+  "pin_sha": "9c86ffe308e7c682df3b1cf76f27dfc5bb6a2243",
+  "records_bytes": 94912,
+  "repository": "apache/commons-lang"
+}

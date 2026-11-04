@@ -1,0 +1,40 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "tests/backends/tests.py",
+    "tests/files/tests.py",
+    "tests/gis_tests/layermap/tests.py",
+    "tests/mail/tests.py"
+  ],
+  "changed_functions": [
+    "test_bug_19457",
+    "test_close_connection",
+    "test_last_executed_query",
+    "test_layermap_unique_multigeometry_fk",
+    "test_server_stopped"
+  ],
+  "child_sha": "071801ccff970682a799ce754431a3c3ce3d6902",
+  "file_licenses": {
+    "django/django:tests/backends/tests.py": "BSD-3-Clause",
+    "django/django:tests/files/tests.py": "BSD-3-Clause",
+    "django/django:tests/gis_tests/layermap/tests.py": "BSD-3-Clause",
+    "django/django:tests/mail/tests.py": "BSD-3-Clause"
+  },
+  "id": "58823acbdbddaae4d958c014",
+  "intent": {
+    "linked_issues": [],
+    "message": "Cleanup: Removed the try-except-fail antipattern from tests\n\nFound cases where testing code was doing\n\n    try:\n        whatever\n    except (some excption type):\n        self.fail(\"exception shouldn't be thrown\")\n\nreplaced it with just\n\n    whatever\n\nas this makes the unexpected errors easier to debug, and the tests\nwould fail just as much and aren't rendered less readable.\n\nThanks Markus Holtermann for review"
+  },
+  "label_source": "developer-intent",
+  "language": "python",
+  "left": "a.py",
+  "license": "BSD-3-Clause",
+  "pair_group_id": "refactor-7c35af6bfdf96181",
+  "parent_sha": "1f28521e0ac81dcc660a5b9891f45a20306e093a",
+  "pin_sha": "d430084791a61b31cecec132bce3dca19194f7f2",
+  "repo": "django/django",
+  "right": "b.py",
+  "split": "regression",
+  "upstream_url": "https://github.com/django/django.git"
+}

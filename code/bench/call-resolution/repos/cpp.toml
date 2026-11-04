@@ -1,0 +1,80 @@
+[[repo]]
+name = "abseil/abseil-cpp"
+language = "cpp"
+url = "https://github.com/abseil/abseil-cpp.git"
+sha = "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c"
+license = "Apache-2.0"
+kind = "library"
+role = "dev"
+
+[[repo]]
+name = "simdjson/simdjson"
+language = "cpp"
+url = "https://github.com/simdjson/simdjson.git"
+sha = "edb7016c62efbe6155226896cdba5736307190e3"
+license = "Apache-2.0"
+kind = "library"
+role = "dev"
+
+[[repo]]
+name = "fmtlib/fmt"
+language = "cpp"
+url = "https://github.com/fmtlib/fmt.git"
+sha = "fdf31252e61ca7efe99af41bb4780353cc2253dd"
+license = "MIT"
+kind = "library"
+role = "dev"
+
+[[repo]]
+name = "google/leveldb"
+language = "cpp"
+url = "https://github.com/google/leveldb.git"
+sha = "bb74ef739973a70ca9f0d90788a1da89b788c0ad"
+license = "BSD-3-Clause"
+kind = "library"
+role = "dev"
+
+[[repo]]
+name = "jbeder/yaml-cpp"
+language = "cpp"
+url = "https://github.com/jbeder/yaml-cpp.git"
+sha = "c5e65360373d1d99d6b6848c991cd4fcee435009"
+license = "MIT"
+kind = "library"
+role = "dev"
+
+[[repo]]
+name = "assimp/assimp"
+language = "cpp"
+url = "https://github.com/assimp/assimp.git"
+sha = "665ab04c73364c9b6351a28664399c758731a959"
+license = "BSD-3-Clause"
+kind = "library"
+role = "dev"
+
+[[repo]]
+name = "qpdf/qpdf"
+language = "cpp"
+url = "https://github.com/qpdf/qpdf.git"
+sha = "4eba95899886e851cc41d76886483b347612f2a8"
+license = "Apache-2.0"
+kind = "end-user app"
+role = "test-only"
+
+[[repo]]
+name = "opencv/opencv"
+language = "cpp"
+url = "https://github.com/opencv/opencv.git"
+sha = "a9ea97659a120ac23d2219dfc819deb9f4082416"
+license = "Apache-2.0"
+kind = "library"
+role = "test-only"
+
+[[repo]]
+name = "google/filament"
+language = "cpp"
+url = "https://github.com/google/filament.git"
+sha = "9680e59f3fae866ef8f801524e77dd6fbbf760d3"
+license = "Apache-2.0"
+kind = "library"
+role = "test-only"

@@ -1,0 +1,10 @@
+Undo `rules_seed`: delete previously seeded built-in rule pack files from the repo (default) or user (`--user`) rules dir. Only removes files matching a shipped built-in's name; custom rule files are left alone. A seeded file edited since seeding is skipped unless `--force` (which discards those local edits). (see `rules_remove` help)
+
+Usage: varde scan rules rules_remove [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot }
+      --user         Remove from the user-scoped rules dir instead of the repo's
+      --force        Also remove seeded files that were locally modified
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

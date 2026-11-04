@@ -1,0 +1,12 @@
+Schedule commits and secret-scanned pushes for a standalone Git store
+
+Usage: varde setup autosave <COMMAND>
+
+Commands:
+  install    Install the scheduled autosave job for an explicit standalone store
+  uninstall  Remove the scheduled autosave job
+  run        Run one autosave tick
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

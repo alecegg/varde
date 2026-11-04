@@ -1,0 +1,1 @@
+<script lang="ts">import {onMount, type Snippet} from 'svelte';let {children,initialOpenId=null}:{children:Snippet<[string|null,(id:string)=>void]>;initialOpenId?:string|null}=$props();let openId=$state<string|null>(null);onMount(()=>{openId=initialOpenId});function toggle(id:string){openId=openId===id?null:id}</script><div>{@render children(openId,toggle)}</div>

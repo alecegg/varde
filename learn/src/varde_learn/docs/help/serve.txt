@@ -1,0 +1,20 @@
+Serve a markdown file as a page with inline comments and live updates
+
+Usage: varde learn docs serve [OPTIONS] <DOC>
+
+Arguments:
+  <DOC>  Markdown file to serve; comments are stored in <DOC>.comments.jsonl
+
+Options:
+      --port <PORT>  Port to bind (default 0: pick a free port)
+      --host <IP>    Address to bind: 127.0.0.1 (default) or a Tailscale IPv4
+                     address (100.64.0.0/10) on this machine. Others, IPv6 and
+                     0.0.0.0 are refused. Open the printed IP URL; MagicDNS
+                     names get 403
+                     Off loopback, serve prints a URL with ?k=<key> once: its
+                     first visit sets an HttpOnly cookie and redirects to the
+                     clean URL; every page route and POST needs that cookie
+      --allow-edit   Allow page edits and suggestion accept on a non-loopback
+                     bind (off by default there; always on for 127.0.0.1)
+      --open         Open the page in the default browser
+  -h, --help         Print help

@@ -1,0 +1,798 @@
+Show the page component vocabulary
+
+Usage: varde learn docs blocks [TYPE]
+
+Arguments:
+  [TYPE]  Component to describe; omit to describe all
+
+Options:
+  -h, --help  Print help
+
+A component is one statement in a ```ui fence: `<id> = <component>(<name>: <value>, ...)`.
+The id matches ^[a-z][a-z0-9-]{0,47}$ and is unique in the document. `covers` is reserved:
+an optional list of block ids that a block relates to.
+
+chart - A bar, line, area, scatter, donut, sparkline or combo chart from numbers
+
+Fields:
+  kind    bar, line, area, scatter, donut, sparkline or combo
+  labels  list of x labels (donut: slice names; scatter: omit)
+  title, unit, desc  optional text; desc is a one-sentence summary
+  right_unit  optional unit of the right axis (combo)
+  decimals  optional digits after the point, 0 to 6
+  stack, horizontal  optional true or false (bar; stack also combo)
+  notes: optional list, up to 12, of markers and bands; x, from and to are
+    labels (scatter: numbers); a band's from is not after its to
+    x      marker position;  label  required text;  tone  info (default),
+           decision, risk, warning or success
+    from, to  band ends instead of x (scatter: from below to, inside the data)
+  series: list of {name, values}, one per series (up to 12)
+    name    series name
+    values  list of numbers, one per label
+    x       scatter only: list of numbers, one per value
+    axis, type  combo only: axis left or right; type bar or line
+
+Line syntax (in a ```ui fence):
+  chart = chart(
+    kind: "bar",
+    title: "Latency",
+    unit: "ms",
+    desc: "p95 latency fell by about half after the cache change.",
+    labels: ["before", "after"],
+    series: [
+      {"name": "p50", "values": [120, 80]},
+      {"name": "p95", "values": [400, 210]},
+    ],
+    notes: [
+      {"x": "after", "label": "cache"},
+      {"from": "before", "to": "after", "label": "rollout", "tone": "warning"},
+    ],
+  )
+
+choice - A question answered by picking one option, or several
+
+Fields:
+  question  required text
+  options   required list: a string, or a table (label, detail, value)
+            recommended: true on one table shows a Recommended badge
+  multiple  optional true to allow several picks; default one
+  comment   optional true to add a free-text box
+
+Line syntax (in a ```ui fence):
+  choice = choice(
+    question: "Which database?",
+    comment: true,
+    options: [
+      {"label": "SQLite", "detail": "No server, one file", "recommended": true},
+      {"label": "Postgres", "detail": "Shared server", "value": "postgres"},
+    ],
+  )
+
+comment - A free-text box whose text is stored as the page's answer
+
+Fields:
+  label   required text shown above the box
+  submit  optional button label; default Send
+
+Line syntax (in a ```ui fence):
+  comment = comment(
+    label: "Anything we missed?",
+    submit: "Send",
+  )
+
+data-model - Entities with a key and relations to other entities
+
+Fields:
+  entity: list of {name, key, fields, relations}, one per entity
+    name       entity name (unique)
+    key        field that identifies a row; must be in fields
+    fields     {field name: type text, or {type, change, was}}
+    relations  optional list of {to, kind}
+      to    name of another entity in this block
+      kind  one-to-one, one-to-many, many-to-one, many-to-many
+  layout  optional: list (default) or graph; graph draws the relations as
+          lines between entity boxes, up to 30 entities
+  Change (optional on an entity, field, endpoint, parameter or response):
+    change  optional: added, modified, removed or renamed
+    was     optional previous name, type or value; required for renamed only
+
+Line syntax (in a ```ui fence):
+  data-model = data-model(
+    entity: [
+      {"name": "customer", "key": "id", "fields": {"id": "uuid", "email": "text"}},
+      {
+        "name": "order",
+        "key": "id",
+        "fields": {"id": "uuid", "customer_id": "uuid", "total": "cents"},
+        "relations": [{"to": "customer", "kind": "many-to-one"}]
+      },
+    ],
+  )
+
+decision - A question the user answers with approve, deny or a comment
+
+Fields:
+  question  required text
+  options   optional list of approve, deny, comment; default all three
+  evidence  optional list of {label, text} rows
+    label  optional short label
+    text   the row's text
+  diff      optional text, shown preformatted
+
+Line syntax (in a ```ui fence):
+  decision = decision(
+    question: "Accept the shorter build-skill intro?",
+    options: ["approve", "deny", "comment"],
+    diff: "- Read the whole file first.\n+ Read the task file first.",
+    evidence: [
+      {"label": "friction", "text": "3 sessions skipped the intro"},
+      {"label": "token delta", "text": "-120 tokens per run"},
+    ],
+  )
+
+deps - A task dependency graph drawn from edges
+
+Fields:
+  edges  table mapping each task id to the list of tasks it depends on
+
+Line syntax (in a ```ui fence):
+  deps = deps(
+    edges: {"a": [], "b": ["a"], "c": ["a", "b"]},
+  )
+
+diagram - A graph or tree of nodes and edges, laid out and drawn as SVG
+
+Fields:
+  kind        graph or tree
+  nodes: list of {id, label, group, shape, detail}
+    id      unique node name
+    label   text on the node
+    group   optional group id; the group can be collapsed
+    shape   optional: box (default), rounded, cylinder or diamond
+    detail  optional longer text shown when the node is selected
+  edges: optional list of {from, to, label, style}
+    from, to  node ids
+    label     optional text on the edge
+    style     optional: solid (default), dashed or dotted
+  groups: optional list of {id, label}, at most 3
+  direction   optional LR (graph default) or TB (tree default)
+  title, desc optional text
+  limits: 200 nodes, 400 edges; a tree has one parent per node
+
+Line syntax (in a ```ui fence):
+  diagram = diagram(
+    kind: "graph",
+    title: "Request path",
+    direction: "LR",
+    groups: [{"id": "edge", "label": "Edge"}, {"id": "core", "label": "Core"}],
+    nodes: [
+      {"id": "user", "label": "User", "shape": "rounded"},
+      {"id": "gw", "label": "Gateway", "group": "edge", "detail": "Terminates TLS"},
+      {"id": "api", "label": "API", "group": "core"},
+      {"id": "db", "label": "Database", "group": "core", "shape": "cylinder"},
+    ],
+    edges: [
+      {"from": "user", "to": "gw", "label": "https"},
+      {"from": "gw", "to": "api"},
+      {"from": "api", "to": "db", "label": "sql", "style": "dashed"},
+    ],
+  )
+
+endpoint - One HTTP endpoint with its auth rule and responses
+
+Fields:
+  method      GET, POST, PUT, PATCH, DELETE, HEAD or OPTIONS
+  path        starts with /
+  auth        required; "none" must be written to mean public
+  summary     optional one line
+  request     optional {parameter: type text, or {type, change, was}}
+  responses   list of {status, body, change, was}; status 100-599
+  Change (optional on an entity, field, endpoint, parameter or response):
+    change  optional: added, modified, removed or renamed
+    was     optional previous name, type or value; required for renamed only
+
+Line syntax (in a ```ui fence):
+  endpoint = endpoint(
+    method: "POST",
+    path: "/orders",
+    auth: "bearer",
+    summary: "Create an order",
+    request: {"customer_id": "uuid", "total": "cents"},
+    responses: [
+      {"status": 201, "body": "the new order"},
+      {"status": 422, "body": "validation errors"},
+    ],
+  )
+
+flow - Steps and the steps that can follow each
+
+Fields:
+  title        optional text
+  step: list of {id, text, next}, one per step
+    id    unique step name
+    text  what happens
+    next  optional list of step ids; several entries are branches
+
+Line syntax (in a ```ui fence):
+  flow = flow(
+    title: "Checkout",
+    step: [
+      {"id": "cart", "text": "Review cart", "next": ["pay"]},
+      {"id": "pay", "text": "Pay", "next": ["done", "failed"]},
+      {"id": "done", "text": "Show receipt"},
+      {"id": "failed", "text": "Show error", "next": ["pay"]},
+    ],
+  )
+
+form - Several fields (text, number, select, checkbox) sent with one submit
+
+Fields:
+  title    optional text
+  submit   optional button label; default Submit
+  fields: list of {name, label, type, ...}; type text|number|select|checkbox
+    required  optional true; a checkbox must then be ticked
+    maxlength  text only, up to 600
+    min, max   number only, finite bounds
+    options    select only, list of text; a blank choice comes first
+
+Line syntax (in a ```ui fence):
+  form = form(
+    title: "Rollout settings",
+    submit: "Save",
+    fields: [
+      {"name": "owner", "label": "Owner", "type": "text", "required": true,
+       "maxlength": 40},
+      {"name": "replicas", "label": "Replicas", "type": "number", "min": 1, "max": 10},
+      {"name": "region", "label": "Region", "type": "select", "options": ["eu", "us"]},
+      {"name": "notify", "label": "Notify the team", "type": "checkbox"},
+    ],
+  )
+
+include - A selected part of another markdown file (plan, task, review), rendered in place
+
+Fields:
+  source  path to a .md file under the page's directory or the plan store
+  select  heading:<anchor>, task:<id>, frontmatter, acceptance or lines:<a>-<b>
+  title   optional caption
+
+Line syntax (in a ```ui fence):
+  include = include(
+    source: "plan.md",
+    select: "acceptance",
+  )
+
+ranking - A list the reader puts in order; the answer is the ids in ranked order
+
+Fields:
+  question  required text
+  items     required list of 2-50: a string, or a table (label, detail, value)
+            the list starts in the order given; drag, or use the move buttons
+
+Line syntax (in a ```ui fence):
+  ranking = ranking(
+    question: "Order by urgency",
+    items: [
+      {"label": "Fix login", "value": "login"},
+      {"label": "Speed up search", "detail": "p95 is 2 s", "value": "search"},
+      {"label": "New logo", "value": "logo"},
+    ],
+  )
+
+recap - A plan's changed files, drift flags and review buttons
+
+Fields:
+  rows      list of changed files: file, status, hunk (and optional
+            tasks, blocks, drift, added, removed, shared, binary, truncated)
+  plan, base, head  optional text for the heading
+  summary   optional {name: count}
+  untouched, unverified  optional drift lists
+
+Line syntax (in a ```ui fence):
+  recap = recap(
+    plan: "demo",
+    base: "main",
+    head: "work",
+    summary: {"modified": 1},
+    rows: [
+      {"file": "a.py", "status": "modified", "hunk": "@@ -1 +1 @@", "tasks": ["t1"]},
+    ],
+  )
+
+slider - A number picked on a range; the answer is one number on a step
+
+Fields:
+  label   required text
+  min     required finite number
+  max     required finite number above min
+  step    optional number above 0, default 1; answers are min plus whole steps
+  labels  optional two texts shown at the low and high end
+
+Line syntax (in a ```ui fence):
+  slider = slider(
+    label: "Confidence",
+    min: 0,
+    max: 10,
+    step: 1,
+    labels: ["Low", "High"],
+  )
+
+table - A data table: sticky header, sort, filter, typed columns, row groups
+
+Fields:
+  caption        optional text
+  columns        list of unique column names
+  rows           list of rows; each row has one cell per column
+  types          optional table: column name to text, number, status, bar, link
+                  number and bar cells are numbers; a link cell is a URL
+                  or a [label, url] pair
+  footnote       optional text under the table
+  sticky_column  optional boolean: keep the first column in view
+  stack          optional boolean: on phones show each row as labelled pairs
+  groups         optional list of {label, rows}: row groups with a header
+
+Line syntax (in a ```ui fence):
+  table = table(
+    caption: "Plan options",
+    columns: ["option", "cost", "risk"],
+    rows: [["queue", "low", "slow"], ["cache", "medium", "stale"]],
+  )
+
+ui-states - What a screen shows when empty, loading and failing
+
+Fields:
+  screen          optional screen name
+  layout          optional: tabs (one state at a time, default) or grid
+  [empty]         required; shows = text, or na = reason it cannot occur
+  [loading]       required; same form
+  [error]         required; same form
+  [<other>]       optional extra state in the same form
+
+Line syntax (in a ```ui fence):
+  ui-states = ui-states(
+    screen: "Orders list",
+    empty: {"shows": "No orders yet, with a Create order button"},
+    loading: {"shows": "Skeleton rows"},
+    error: {"shows": "Message and a Retry button"},
+  )
+
+wireframe - Screen regions laid out on a text grid
+
+Fields:
+  title    optional text
+  grid     equal-width strings; a letter is a region, space or . is empty
+  regions  one-letter key = region label; every letter in grid must be declared
+  surface  optional device frame: browser, phone or tablet
+  kinds    optional one-letter key = nav, text, media, input, action or list;
+           each kind has its own hatch pattern and a [kind] label
+  notes    optional list of {region, text}; numbered pins and a notes list
+  compare  optional second frame {grid, regions, kinds, notes}; the main frame
+           is Before and compare is After (side by side on wide screens)
+
+Line syntax (in a ```ui fence):
+  wireframe = wireframe(
+    title: "Orders list",
+    surface: "browser",
+    grid: ["HHHHHH", "SSLLLL", "SSLLLL", "FFFFFF"],
+    regions: {"H": "header", "S": "filters", "L": "order list", "F": "footer"},
+    kinds: {"H": "nav", "S": "input", "L": "list"},
+    notes: [{"region": "S", "text": "Filters stay in the URL"}],
+  )
+
+callout - A tinted note with a tone, a label and plain text
+
+Fields:
+  tone   info, decision, risk, warning or success; the label shows its word
+  title  optional short heading
+  text   plain text; a blank line starts a paragraph, `code` marks inline code
+
+Line syntax (in a ```ui fence):
+  callout = callout(
+    tone: "decision",
+    title: "Storage",
+    text: "Use SQLite for the `queue` table; one writer is enough.",
+  )
+
+code - A source listing with line numbers, optional marked lines and a Copy button
+
+Fields:
+  language  python, js, ts, json or shell are highlighted; others show plain
+  source    the code, as one string
+  title     optional file name or caption
+  lines     optional [from, to]: show only those lines, numbered from `from`
+  wrap      optional true: wrap long lines instead of scrolling sideways
+  numbers   optional false: hide the line-number gutter
+  mark      optional list of line numbers or [from, to] ranges to call out
+
+Line syntax (in a ```ui fence):
+  code = code(
+    language: "python",
+    title: "queue.py",
+    source: "def push(item):\n    queue.append(item)\n",
+    mark: [2],
+  )
+
+annotated-code - A source file with notes on line ranges; quiet stretches fold away
+
+Fields:
+  filename  file name shown in the header
+  language  python, js, ts, json or shell are highlighted; others show plain
+  source    the code, as one string
+  notes     list of {lines, note, label, kind}, up to 40; lines is n or 'a-b'
+            inside the source; kind is info (default), warn or change
+  collapse  optional false: show every line (default folds stretches of 4 or
+            more lines that are more than 3 lines from any note)
+
+Line syntax (in a ```ui fence):
+  annotated-code = annotated-code(
+    filename: "queue.py",
+    language: "python",
+    source: "def push(item):\n    queue.append(item)\n",
+    notes: [
+      {"lines": 2, "label": "Unbounded", "note": "`queue` has no limit.", "kind": "warn"},
+    ],
+  )
+
+file-tree - Changed files as a folder tree with change markers, notes and link to code
+
+Fields:
+  title     optional heading
+  entries   list of tables, one per file; a path appears once
+    path    `dir/file.ext`, no leading slash
+    note    optional short text shown on the same row
+    role    optional label such as test or config
+    change  optional: added, modified, removed or renamed
+    was     optional previous name, type or value; required for renamed only
+            a renamed file sits at its new path; `was` is the old path
+  collapse  optional: close folders deeper than this many levels (default none)
+  A file whose path ends with the title of a `code` block links to that block.
+
+Line syntax (in a ```ui fence):
+  file-tree = file-tree(
+    title: "Changed files",
+    collapse: 2,
+    entries: [
+      {"path": "src/queue.py", "change": "modified", "note": "push returns the id"},
+      {"path": "src/retry.py", "change": "added"},
+      {"path": "src/backoff.py", "change": "renamed", "was": "src/wait.py"},
+      {"path": "tests/test_queue.py", "change": "modified", "role": "test"},
+    ],
+  )
+
+diff - A before and after text diff, unified or split, with notes on changed lines
+
+Fields:
+  filename  optional file name shown in the header
+  before    the old text, as one string (may be empty: an added file)
+  after     the new text, as one string (may be empty: a removed file)
+  patch     instead of before and after: a unified diff string
+  mode      optional: unified (default) or split (two columns when wide)
+  language  optional: python, js, ts, json or shell are highlighted
+  notes     optional list of {side, lines, note}, up to 40; side is before
+            or after; lines is n or 'from-to' on that side
+    Unchanged runs over 6 lines fold to 3 at each edge; noted lines stay.
+    At most 5000 lines are drawn; the rest shows as one 'N more lines' row.
+
+Line syntax (in a ```ui fence):
+  diff = diff(
+    filename: "queue.py",
+    language: "python",
+    before: "def push(item):\n    queue.append(item)\n",
+    after: "def push(item):\n    if not item:\n        return\n    queue.append(item)\n",
+    mode: "unified",
+    notes: [{"side": "after", "lines": "2-3", "note": "Skip empty items."}],
+  )
+
+checklist - A static checklist with a state word per item and a progress count
+
+Fields:
+  title  optional heading
+  items  list of {label, id, checked, note, status}, up to 500; label is
+         plain text with `code` spans; note shows muted under the label
+         status is done, open (default) or blocked; checked: true means done
+         and must agree with status
+    Shows the count as 'N of M done' beside a progress bar. Not interactive.
+
+Line syntax (in a ```ui fence):
+  checklist = checklist(
+    title: "Acceptance",
+    items: [
+      {"label": "Queue keeps order", "status": "done"},
+      {"label": "Retry uses `backoff`", "note": "API spec", "status": "blocked"},
+      {"label": "Docs updated"},
+    ],
+  )
+
+tabs - Tabs that show other blocks of the page, one panel at a time
+
+Fields:
+  tab  list of {label, blocks}, 1 to 12; label is the tab text, blocks the ids
+       of other statements to show in that panel (up to 200 ids in all)
+    A held block is shown once, in its panel, with its own menu. A block is
+    held by one container only, and containers do not nest. Input blocks
+    (choice, form, comment, ranking, slider, decision) cannot be held in tabs.
+    Without script and in print every panel shows, stacked under its label.
+
+Line syntax (in a ```ui fence):
+  tabs = tabs(
+    tab: [
+      {"label": "Code", "blocks": ["code"]},
+      {"label": "Checks", "blocks": ["checklist"]},
+    ],
+  )
+
+columns - Side-by-side columns that show other blocks of the page
+
+Fields:
+  col  list of {label, blocks}, 1 to 4; label is optional text above a column,
+       blocks the ids of other statements to show there
+    Columns stack below 44rem. A held block is shown once, with its own menu;
+    a block is held by one container only and containers do not nest.
+
+Line syntax (in a ```ui fence):
+  columns = columns(
+    col: [
+      {"label": "Before", "blocks": ["callout"]},
+      {"label": "After", "blocks": ["code"]},
+    ],
+  )
+
+matrix - A decision matrix: options as columns, criteria as rows, ratings in cells
+
+Fields:
+  title        optional heading
+  options      list of {id, label, note}, 1 to 12; label is the column name
+  criteria     list of {id, label, weight}, up to 200; weight is 1 to 5
+  cells        list of rows, one per criterion; a row has one cell per option
+               a cell is yes, partial or no, or high, medium or low (one
+               scale per matrix), or plain text; empty reads 'Not rated'
+  recommended  optional option id: its column gets a Recommended badge
+    Any weight adds a 'Weighted total' row (unweighted criteria count 1; yes
+    or high scores 2, partial or medium 1, no or low 0; text scores 0).
+    Rows stack on phones; sort and filter come from the table block.
+
+Line syntax (in a ```ui fence):
+  matrix = matrix(
+    title: "Queue options",
+    options: [
+      {"id": "db", "label": "SQLite", "note": "One writer is enough."},
+      {"id": "mq", "label": "Broker"},
+    ],
+    criteria: [
+      {"id": "ops", "label": "Easy to run", "weight": 3},
+      {"id": "scale", "label": "Scales out", "weight": 1},
+    ],
+    cells: [["yes", "no"], ["no", "yes"]],
+    recommended: "db",
+  )
+
+stats - A strip of 2 to 6 headline numbers with an optional change
+
+Fields:
+  item   list of {label, value, delta, direction, good, tone, note, decimals},
+         2 to 6; value is text or a number (numbers get thousands separators;
+         decimals sets the places); delta is text or a number, shown as
+         'up 12%' with an arrow; direction is up, down or flat (else the
+         sign of delta); good says which direction is good (up or down), so
+         a good move reads green and a bad one red; flat is neutral;
+         tone overrides: neutral, info, decision, risk, warning or success
+    The word up, down or flat is always in the text, never colour alone.
+
+Line syntax (in a ```ui fence):
+  stats = stats(
+    item: [
+      {"label": "Requests", "value": 1204331, "delta": "12%", "good": "up",
+       "direction": "up"},
+      {"label": "p95 latency", "value": "212 ms", "delta": "-8%", "good": "down"},
+      {"label": "Error rate", "value": 0.4, "decimals": 2, "delta": "0.1 pt",
+       "direction": "up", "good": "down"},
+    ],
+  )
+
+sequence - A sequence diagram of actors and ordered steps, drawn as SVG
+
+Fields:
+  actors: list of {id, label}, 1 to 12
+    id     unique actor name; label is the text over its lifeline
+  steps: list of {from, to, text, kind, group}, 1 to 200, in order
+    from, to  actor ids; the same id draws a self-call loop
+    text      the message
+    kind      optional: call (default, solid), return (dashed),
+              async (open head) or note (a box across from..to)
+    group     optional label; neighbouring steps with the same label sit
+              in one labelled frame (alt, loop, opt style)
+  desc        what the diagram shows, for screen readers
+  title       optional text
+    The steps are always also listed as text: 'A to B: text'.
+
+Line syntax (in a ```ui fence):
+  sequence = sequence(
+    title: "Sign in",
+    desc: "The browser signs a user in through the API and the user store.",
+    actors: [
+      {"id": "b", "label": "Browser"},
+      {"id": "api", "label": "API"},
+      {"id": "db", "label": "Users"},
+    ],
+    steps: [
+      {"from": "b", "to": "api", "text": "POST /login"},
+      {"from": "api", "to": "db", "text": "find user", "group": "cache miss"},
+      {"from": "db", "to": "api", "text": "row", "kind": "return", "group": "cache miss"},
+      {"from": "api", "to": "api", "text": "check password"},
+      {"from": "api", "to": "b", "text": "session cookie", "kind": "return"},
+    ],
+  )
+
+timeline - Phases and milestones in order, each with a status
+
+Fields:
+  title        optional caption
+  orientation  vertical (default) or horizontal; horizontal is a row on
+               wide pages (at most 24 items, scrolls if it does not fit) and
+               a vertical list on narrow ones
+  item         list of {when, label, status, note, owner}; when is free
+               text (a date or a phase name); status is done, active,
+               planned or blocked; at most 200 items (24 horizontal)
+    Status is a glyph plus a word, never colour alone; the first active
+    item is marked as the current step.
+
+Line syntax (in a ```ui fence):
+  timeline = timeline(
+    title: "Rollout",
+    item: [
+      {"when": "Week 1", "label": "Design review", "status": "done"},
+      {"when": "Week 2", "label": "Build", "status": "active", "owner": "Platform"},
+      {"when": "Week 4", "label": "Launch", "status": "planned",
+       "note": "Needs sign-off."},
+    ],
+  )
+
+risks - Risks placed by likelihood and impact, with severity and mitigations
+
+Fields:
+  title        optional caption
+  item         list of {id, label, likelihood, impact, mitigation, owner};
+               likelihood and impact are low, medium or high; ids are
+               unique; at most 200 items
+    Severity is likelihood x impact (low=1, medium=2, high=3): 1-2 low,
+    3-4 medium, 6 high, 9 critical. It is shown as a glyph and a word.
+    The 3x3 grid is a summary; the full list below it carries every
+    risk. A grid cell shows at most 4 ids and then '+N'.
+
+Line syntax (in a ```ui fence):
+  risks = risks(
+    title: "Launch risks",
+    item: [
+      {"id": "R1", "label": "Vendor patch slips", "likelihood": "high", "impact": "high",
+       "mitigation": "Ship behind a flag.", "owner": "Platform"},
+      {"id": "R2", "label": "Docs lag", "likelihood": "medium", "impact": "low"},
+    ],
+  )
+
+state - A state machine: states and labelled transitions, drawn as SVG
+
+Fields:
+  states: list of {id, label, kind, note}, 1 to 40
+    id     unique state name; label is the text in its box
+    kind   optional: initial (exactly one; gets a start dot), normal
+           (default), final (double border) or error (cross mark)
+    note   optional text shown in the text list
+  transitions: optional list of {from, to, label, guard}
+    from, to  state ids; the same id draws a self-loop
+    label     optional event or action; guard is shown as [guard]
+  desc        what the machine models, for screen readers
+  title       optional text
+    A state no path from the initial state reaches is marked unreachable.
+    Transitions are always also listed as text: 'A to B on label [guard]'.
+
+Line syntax (in a ```ui fence):
+  state = state(
+    title: "Job",
+    desc: "A job waits, runs, and ends done or failed; failed jobs retry.",
+    states: [
+      {"id": "idle", "label": "Idle", "kind": "initial"},
+      {"id": "run", "label": "Running"},
+      {"id": "done", "label": "Done", "kind": "final"},
+      {"id": "bad", "label": "Failed", "kind": "error"},
+    ],
+    transitions: [
+      {"from": "idle", "to": "run", "label": "start"},
+      {"from": "run", "to": "done", "label": "finish"},
+      {"from": "run", "to": "bad", "label": "crash"},
+      {"from": "bad", "to": "run", "label": "retry", "guard": "attempts < 3"},
+      {"from": "run", "to": "run", "label": "heartbeat"},
+    ],
+  )
+
+screen-flow - A flow of wireframe screens in lanes, joined by labelled arrows
+
+Fields:
+  screens: list of {id, title, grid, regions, surface, kinds, notes}, 1 to 12
+    id, title  unique screen name and its caption
+    grid, regions, surface, kinds, notes  as in wireframe (drawn at half size)
+  steps: optional list of {from, to, label}, up to 20
+    from, to  screen ids; a step joins neighbouring ranks of one lane
+    label     optional text on the arrow
+    A step across lanes or over a rank is a fault: add an intermediate screen.
+    A cycle is a fault; one screen per lane and rank.
+  lanes: optional list of {title, screens: [id]}; every screen in one lane
+  title, desc  optional text; desc is a one-sentence summary
+    Screens read left to right (top to bottom on phones); select one to hear
+    its notes. The screens are always also listed as text, in step order.
+
+Line syntax (in a ```ui fence):
+  screen-flow = screen-flow(
+    title: "Checkout",
+    desc: "The buyer picks a cart, pays, and sees a receipt.",
+    screens: [
+      {"id": "cart", "title": "Cart", "surface": "phone",
+       "grid": ["HH", "LL", "BB"], "regions": {"H": "header", "L": "lines", "B": "pay"},
+       "kinds": {"L": "list", "B": "action"},
+       "notes": [{"region": "B", "text": "Disabled while the cart is empty"}]},
+      {"id": "pay", "title": "Payment", "surface": "phone",
+       "grid": ["HH", "FF", "BB"], "regions": {"H": "header", "F": "card", "B": "pay"},
+       "kinds": {"F": "input", "B": "action"}},
+      {"id": "done", "title": "Receipt", "surface": "phone",
+       "grid": ["HH", "RR"], "regions": {"H": "header", "R": "receipt"}},
+    ],
+    steps: [
+      {"from": "cart", "to": "pay", "label": "Pay"},
+      {"from": "pay", "to": "done", "label": "Card accepted"},
+    ],
+  )
+
+image - A captioned picture from a png, jpeg, webp, gif or svg file beside the page
+
+Fields:
+  src      relative path from the page's directory; png, jpg, jpeg, webp,
+           gif or svg; no URLs, absolute paths, '..' or dotfiles; at most 5 MB
+  alt      what the picture shows (required; decorative images are not offered)
+  caption  optional text under the picture
+  width    optional: narrow (about 24rem) or full (default, column width)
+    The file is shown as an <img> only (an svg is never inlined) and is
+    served from the page's own directory. A page export embeds a file up
+    to 1 MB and otherwise shows the alt text and caption with a note.
+
+Line syntax (in a ```ui fence):
+  image = image(
+    src: "img/login-screen.png",
+    alt: "The login screen with the email field focused",
+    caption: "Login after the redesign",
+    width: "narrow",
+  )
+
+change-summary - One generated line counting the change markers on the page
+
+Fields:
+  title  optional short heading
+  No other field: the line counts the `change` markers of data-model,
+  endpoint and file-tree blocks on the same page, for example
+  '2 files added, 1 endpoint changed, 1 field removed'. A page without
+  markers shows 'No changes marked on this page.'
+
+Line syntax (in a ```ui fence):
+  change-summary = change-summary(
+    title: "What changed",
+  )
+
+Recipes - assemble a recap or plan page from these components
+
+Page order for a recap (omit any block with nothing to show; three blocks beat ten):
+  1. One outcome sentence first, as plain prose. No intro, no summary prose.
+  2. One block per kind of change:
+       UI change      wireframe, before and after side by side in columns
+       schema         data-model with change markers
+       API            endpoint with change markers
+       changed files  file-tree
+       key changes    tabs holding diff and annotated-code blocks
+       verification   checklist
+       numbers        stats, only when real numbers exist
+  3. Options and trade-offs: matrix with recommended.
+  4. Risks: callout with tone risk; risks only when there are three or more.
+  5. Open choices last, all in one form or choice set, each choice marking at
+     most one option recommended: true. Settled choices: callout with tone decision.
+
+Page order for a plan: outcome sentence, scope and non-goals (callout), approach
+(diagram or sequence), file map (file-tree plus annotated-code), checklist of
+acceptance criteria, risks, then the open-questions form.
+
+Samples that pass the page check: learn/tests/docs/fixtures/recipes/recap.md and plan.md.

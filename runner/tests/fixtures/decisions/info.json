@@ -1,0 +1,9 @@
+{
+  "type": "info",
+  "title": "Dashboard runner update",
+  "asked": "The dashboard runner is ready for review.",
+  "why": "This is an informational update.",
+  "plan_id": "dashboard-decisions",
+  "options": [],
+  "evidence": [{"kind": "note", "caption": "Release note", "path": "design.md"}]
+}

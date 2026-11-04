@@ -1,0 +1,10 @@
+Print a read-only knowledge skeleton for a plan
+
+Usage: varde plan distill [OPTIONS] <PLAN_DIR>
+
+Arguments:
+  <PLAN_DIR>  
+
+Options:
+      --json  
+  -h, --help  Print help

@@ -1,0 +1,65 @@
+Run a QuickJS script and capture its command output
+
+Usage: varde run run [OPTIONS]
+
+Options:
+      --fallback-dir <FALLBACK_DIR>
+          External store to try after primary-store access fails
+
+      --script <SCRIPT>
+          Run a QuickJS batch script from a file, or `-` for stdin
+
+      --code <CODE>
+          Run an inline QuickJS batch script
+
+      --project <PROJECT>
+          Project directory (default: git root of cwd, else cwd)
+
+      --handle <HANDLE>
+          Capture to read from the script
+
+      --json
+          Machine-readable JSON output
+
+      --quiet
+          Print only the handle line on overflow
+
+      --stream <STREAM>
+          Capture stream to read (stdout | stderr)
+          
+          [default: stdout]
+
+      --partial
+          Permit computation over an unfinished capture
+
+      --timeout-ms <TIMEOUT_MS>
+          Script wall-clock limit in milliseconds (default 5000)
+
+      --memory-mb <MEMORY_MB>
+          Script heap limit in MB
+
+  -l, --label <LABEL>
+          Human label for the capture (also the supersession key)
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Example:
+  varde run run --script - <<'JS'
+  const result = vardeToz.exec({argv: ['/bin/ls', '-la']});
+  print(result.exitCode, result.capture.preview || result.stdout);
+  JS
+
+Use --code '<js>' for an inline script. Scripts can call print(),
+console.log(), and console.error(). The vardeToz API provides exec({argv | shell,
+cwd?, env?, timeoutMs?, capture?, raw?}), eachLine(fn) or eachLine(stream, fn),
+text() or text(stream), and handle metadata (handle, label, bytes, lines,
+exitCode, stream). Use eachLine for large captures; text has a size limit.
+
+Command output up to the capture threshold (maximum 64 KiB) is complete in
+stdout/stderr with capture.state "inline". Larger output has a preview and
+capture.handle. capture: true forces retention; raw: true retains raw bytes;
+never-capture rules override both. Script print output appears inline until its
+output limit, then the normal preview and handle are returned. Pass --handle H
+to analyze an existing capture; --stream stderr selects its stderr stream, and
+--partial permits reading an unfinished capture.

@@ -1,0 +1,9 @@
+Revoke the current binding for an address
+
+Usage: varde msg address unbind <NAME>
+
+Arguments:
+  <NAME>  Address name
+
+Options:
+  -h, --help  Print help

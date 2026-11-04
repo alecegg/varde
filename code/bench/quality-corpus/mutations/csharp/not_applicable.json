@@ -1,0 +1,3 @@
+{
+  "wrap-in-class": "C# methods are already class members; adding another class layer would change nesting and access semantics."
+}

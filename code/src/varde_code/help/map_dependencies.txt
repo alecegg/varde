@@ -1,0 +1,8 @@
+Query: files the given file depends on (imports by default); use direction: incoming to reverse it. (see `dependencies` help for inputs)
+
+Usage: varde map dependencies [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, filePath, direction?, maxDepth?, resultsLimit?, resultsOffset?, fullResults? } Example: {"repoRoot":".","filePath":"src/api.rs","maxDepth":2}. maxDepth limits graph traversal depth
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

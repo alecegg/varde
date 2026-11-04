@@ -1,0 +1,10 @@
+{
+  "classification": "intentional-change",
+  "marker": "[varde-address: worker vt1.AEAQCAIBAEAQCAIBAEAQCAIBAE]",
+  "store": {
+    ".cache/inbox/events.jsonl": {
+      "bytes": "{\"event\":\"before\"}\n{\"event\":\"bind\",\"at\":\"2026-10-22T12:00:00Z\",\"address\":\"worker\",\"session_key\":\"claude-391b1ab89c5dcaf211b50a0bc466d1bfa65d74afd95cc1555452007dca9eb00a\"}\n",
+      "mode": "0644"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+language = "typescript"
+task = "Implement an inventory order-processing module in `original.ts`."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.ts" = "b730ab9207c44cf9e3706930f2664b31612c07864cc9cbf23f6850898c64e4bb"
+"judge-classes.ts" = "f1d9daba2ac1dca3ca4e9935b8d0a06ada3adc8ff464175b70e20140bf376d34"
+"judge-defensive.ts" = "7a25c9b2ca62ae11af2a5b1b083f03d6f0e698f5ba6a909f5d81d31f55855659"
+"judge-extract.ts" = "a36da8ddb4cd53117b16cf0e7eb443c2680a806892a878eb27315e3f97d6a47c"
+"judge-inline.ts" = "1a221023142537e851227002cefe58ddb5b4a96dea39d46a34c176cdab612a5f"
+"judge-names.ts" = "01c00991776e9cd1537458f5215881f7f578618ad5ee7b65acee34435b27cdf8"
+"original.ts" = "a6dddfac5f952abb27e6ca7243e3032f9bbbafed054cfbc1c5645ab01189a562"
+"smoothed.ts" = "4fd8f92a30b181ec9228043c36259f5c150f60319d54f0024dd9389ba38bfca0"
+"smoothing.md" = "14f0f208c45e3ec7432aed89f1b933c7755a19d6e8eb85ffe68610458a972ce5"
+"task.md" = "1f9700527bb029d22ddfca42d3d188808786e021ab21128b9324113b1c15328e"

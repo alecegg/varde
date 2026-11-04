@@ -1,0 +1,257 @@
+# Mutation self-check template for order-quote in Python.
+#
+# Run from the repository root:
+#   python code/bench/quality-corpus/tools/mutate_check.py \
+#     --item code/bench/quality-corpus/items/python/b/order-quote \
+#     --variant sensible.py --mutants code/bench/quality-corpus/tools/mutants/order-quote.python.toml
+#
+# Every mutant is a textual patch on sensible.py. A mutant is killed when the
+# shared behaviour test fails, survived when it still passes, and unapplied when
+# its `find` text no longer occurs exactly once.
+
+[run]
+# The behaviour test skips its deterministic cases when this variable is "1", so
+# --random-only leaves the random property loop alone.
+python = { env = "ORDER_QUOTE_RANDOM_ONLY" }
+
+[[mutants]]
+id = "tier-round-half-down"
+description = "Tier discount rounds ties down instead of up"
+find = 'tier_cut = (2 * subtotal * TIER_BP[tier] + 10000) // 20000'
+replace = 'tier_cut = (2 * subtotal * TIER_BP[tier] + 5000) // 20000'
+
+[[mutants]]
+id = "tier-round-truncate"
+description = "Tier discount truncates instead of rounding half up"
+find = 'tier_cut = (2 * subtotal * TIER_BP[tier] + 10000) // 20000'
+replace = 'tier_cut = (subtotal * TIER_BP[tier]) // 10000'
+
+[[mutants]]
+id = "tax-round-truncate"
+description = "Tax truncates instead of rounding half up"
+find = 'tax = (2 * net * tax_bp + 10000) // 20000'
+replace = 'tax = (2 * net * tax_bp) // 20000'
+
+[[mutants]]
+id = "tax-on-gross"
+description = "Tax is charged on the paid subtotal instead of the discounted net"
+find = 'tax = (2 * net * tax_bp + 10000) // 20000'
+replace = 'tax = (2 * subtotal * tax_bp + 10000) // 20000'
+
+[[mutants]]
+id = "coupon-before-tier"
+description = "The coupon applies to the subtotal before the tier discount"
+find = '''
+    net = subtotal - tier_cut
+    coupon_cut = coupon_discount(net, coupon)
+    return subtotal, tier_cut, coupon_cut, net - coupon_cut'''
+replace = '''
+    coupon_cut = coupon_discount(subtotal, coupon)
+    net = subtotal - coupon_cut
+    return subtotal, tier_cut, coupon_cut, net'''
+
+[[mutants]]
+id = "fixed-coupon-uncapped"
+description = "A FIXED coupon may exceed the net amount instead of being capped"
+find = 'return min(int(coupon[5:]) * 100, net)'
+replace = 'return int(coupon[5:]) * 100'
+
+[[mutants]]
+id = "pct-coupon-limit-51"
+description = "The coupon pattern accepts PCT51 instead of capping at PCT50"
+find = 'r"(?:PCT(?:[1-9]|[1-4][0-9]|50)|FIXED(?:[1-9]|[1-9][0-9]|[1-4][0-9]{2}|500)|FREESHIP)"'
+replace = 'r"(?:PCT(?:[1-9]|[1-4][0-9]|5[01])|FIXED(?:[1-9]|[1-9][0-9]|[1-4][0-9]{2}|500)|FREESHIP)"'
+
+[[mutants]]
+id = "pct-coupon-zero-accepted"
+description = "The coupon pattern accepts PCT0"
+find = 'r"(?:PCT(?:[1-9]|[1-4][0-9]|50)|FIXED(?:[1-9]|[1-9][0-9]|[1-4][0-9]{2}|500)|FREESHIP)"'
+replace = 'r"(?:PCT(?:[0-9]|[1-4][0-9]|50)|FIXED(?:[1-9]|[1-9][0-9]|[1-4][0-9]{2}|500)|FREESHIP)"'
+
+[[mutants]]
+id = "pct-coupon-truncate"
+description = "Percentage coupons truncate instead of rounding half up"
+find = 'return (2 * net * int(coupon[3:]) + 100) // 200'
+replace = 'return (2 * net * int(coupon[3:])) // 200'
+
+[[mutants]]
+id = "merged-qty-at-least"
+description = "Merged quantity fails at 1000 instead of above 1000"
+find = 'if qty > 1000:'
+replace = 'if qty >= 1000:'
+
+[[mutants]]
+id = "merged-qty-limit-1001"
+description = "Merged quantity is allowed to reach 1001"
+find = 'if qty > 1000:'
+replace = 'if qty > 1001:'
+
+[[mutants]]
+id = "sku-min-length-2"
+description = "SKU accepts two characters"
+find = 'SKU = re.compile(r"[A-Z0-9-]{3,12}")'
+replace = 'SKU = re.compile(r"[A-Z0-9-]{2,12}")'
+
+[[mutants]]
+id = "sku-max-length-13"
+description = "SKU accepts thirteen characters"
+find = 'SKU = re.compile(r"[A-Z0-9-]{3,12}")'
+replace = 'SKU = re.compile(r"[A-Z0-9-]{3,13}")'
+
+[[mutants]]
+id = "sku-underscore-allowed"
+description = "SKU allows an underscore"
+find = 'SKU = re.compile(r"[A-Z0-9-]{3,12}")'
+replace = 'SKU = re.compile(r"[A-Z0-9_-]{3,12}")'
+
+[[mutants]]
+id = "sku-not-trimmed"
+description = "Surrounding SKU whitespace is kept"
+find = '[row["sku"].strip().upper(), row["qty"], row["price"]]'
+replace = '[row["sku"].upper(), row["qty"], row["price"]]'
+
+[[mutants]]
+id = "sku-not-uppercased"
+description = "SKU keeps its case, so duplicates no longer merge"
+find = '[row["sku"].strip().upper(), row["qty"], row["price"]]'
+replace = '[row["sku"].strip(), row["qty"], row["price"]]'
+
+[[mutants]]
+id = "coupon-not-uppercased"
+description = "Coupon text keeps its case"
+find = 'request["coupon"].strip().upper(),'
+replace = 'request["coupon"].strip(),'
+
+[[mutants]]
+id = "item-cap-51"
+description = "Fifty-one distinct products are accepted"
+find = 'if not items or len(items) > 50:'
+replace = 'if not items or len(items) > 51:'
+
+[[mutants]]
+id = "item-cap-49"
+description = "Fifty distinct products are rejected"
+find = 'if not items or len(items) > 50:'
+replace = 'if not items or len(items) > 49:'
+
+[[mutants]]
+id = "qty-cap-1001"
+description = "A single line quantity may be 1001"
+find = 'if type(row[1]) is not int or not 1 <= row[1] <= 1000:'
+replace = 'if type(row[1]) is not int or not 1 <= row[1] <= 1001:'
+
+[[mutants]]
+id = "qty-zero-accepted"
+description = "A zero quantity is accepted"
+find = 'if type(row[1]) is not int or not 1 <= row[1] <= 1000:'
+replace = 'if type(row[1]) is not int or not 0 <= row[1] <= 1000:'
+
+[[mutants]]
+id = "qty-bool-accepted"
+description = "A boolean quantity passes the integer check"
+find = 'if type(row[1]) is not int or not 1 <= row[1] <= 1000:'
+replace = 'if not isinstance(row[1], int) or not 1 <= row[1] <= 1000:'
+
+[[mutants]]
+id = "zero-price-accepted"
+description = "A price of zero cents is accepted"
+find = 'return cents if cents else None'
+replace = 'return cents'
+
+[[mutants]]
+id = "price-max-7-digits"
+description = "The price pattern accepts seven integer digits"
+find = 'PRICE = re.compile(r"[0-9]{1,6}(?:\.[0-9]{1,2})?")'
+replace = 'PRICE = re.compile(r"[0-9]{1,7}(?:\.[0-9]{1,2})?")'
+
+[[mutants]]
+id = "price-fraction-3-digits"
+description = "The price pattern accepts three decimal digits"
+find = 'PRICE = re.compile(r"[0-9]{1,6}(?:\.[0-9]{1,2})?")'
+replace = 'PRICE = re.compile(r"[0-9]{1,6}(?:\.[0-9]{1,3})?")'
+
+[[mutants]]
+id = "price-comma-separator"
+description = "The price pattern accepts a comma decimal separator"
+find = 'PRICE = re.compile(r"[0-9]{1,6}(?:\.[0-9]{1,2})?")'
+replace = 'PRICE = re.compile(r"[0-9]{1,6}(?:[.,][0-9]{1,2})?")'
+
+[[mutants]]
+id = "freeship-ignored"
+description = "FREESHIP no longer waives shipping below the regional threshold"
+find = 'shipping = 0 if coupon == "FREESHIP" or net >= threshold else base_shipping'
+replace = 'shipping = 0 if net >= threshold else base_shipping'
+
+[[mutants]]
+id = "shipping-threshold-strict"
+description = "Shipping is charged at exactly the regional threshold"
+find = 'shipping = 0 if coupon == "FREESHIP" or net >= threshold else base_shipping'
+replace = 'shipping = 0 if coupon == "FREESHIP" or net > threshold else base_shipping'
+
+[[mutants]]
+id = "shipping-threshold-on-subtotal"
+description = "Free shipping is decided on the subtotal before discounts"
+find = 'shipping = 0 if coupon == "FREESHIP" or net >= threshold else base_shipping'
+replace = 'shipping = 0 if coupon == "FREESHIP" or subtotal >= threshold else base_shipping'
+
+[[mutants]]
+id = "free-shipping-always-applied"
+description = "The free-shipping rule is always reported as applied"
+find = '(shipping == 0, "free-shipping")'
+replace = '(True, "free-shipping")'
+
+[[mutants]]
+id = "tax-rule-always-applied"
+description = "The tax rule is always reported as applied"
+find = '(tax > 0, "tax")'
+replace = '(True, "tax")'
+
+[[mutants]]
+id = "tier-rule-always-applied"
+description = "The tier rule is always reported as applied"
+find = '(tier_cut > 0, "tier")'
+replace = '(True, "tier")'
+
+[[mutants]]
+id = "eu-tax-rate-halved"
+description = "EU tax is charged at 10% instead of 20%"
+find = '"EU": (2000, 800, 10000),'
+replace = '"EU": (1000, 800, 10000),'
+
+[[mutants]]
+id = "us-threshold-7501"
+description = "The US free-shipping threshold becomes 7501 cents"
+find = '"US": (700, 500, 7500),'
+replace = '"US": (700, 500, 7501),'
+
+[[mutants]]
+id = "gold-rate-1100"
+description = "The gold tier discount becomes 1100 basis points"
+find = 'TIER_BP = {"basic": 0, "silver": 500, "gold": 1000}'
+replace = 'TIER_BP = {"basic": 0, "silver": 500, "gold": 1100}'
+
+[[mutants]]
+id = "lines-sorted-descending"
+description = "Quote lines are sorted in descending SKU order"
+find = 'for sku, (qty, cents) in sorted(merged.items()):'
+replace = 'for sku, (qty, cents) in sorted(merged.items(), reverse=True):'
+
+[[mutants]]
+id = "total-omits-shipping"
+description = "The total leaves out shipping"
+find = '"total": net + shipping + tax,'
+replace = '"total": net + tax,'
+
+[[mutants]]
+id = "price-conflict-ignored"
+description = "Duplicate SKUs with a higher price no longer conflict"
+find = 'if merged[sku][1] != cents:'
+replace = 'if merged[sku][1] > cents:'
+
+[[mutants]]
+id = "equivalent-subtotal-recompute"
+description = "Subtotal is recomputed from quantity times unit cents"
+find = 'subtotal = sum(line["line_cents"] for line in lines)'
+replace = 'subtotal = sum(line["qty"] * line["unit_cents"] for line in lines)'
+equivalent = true
+reason = "line_cents is defined as qty * unit_cents, so both sums are the same integer"

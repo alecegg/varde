@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "invariant",
+  "id": "0a166fbe3cc528ca9b576344",
+  "label_source": "construction",
+  "language": "python",
+  "left": "a.py",
+  "license": "MIT",
+  "mutant_file": "0a166fbe3cc528ca9b576344-b.py",
+  "operator": "add-dead-branches",
+  "provenance": {
+    "end_line": 94,
+    "file": "010-pytest_dev_pytest-init.py",
+    "function": "__init__",
+    "license": "MIT",
+    "license_header": "",
+    "lines": 28,
+    "parse_language": "python",
+    "path": "src/_pytest/_io/pprint.py",
+    "pin_sha": "cb6ff97bcb147f2bb5d9e0072c424dc03a452ba1",
+    "repo": "pytest-dev/pytest",
+    "start_line": 67,
+    "test_path": false
+  },
+  "right": "b.py",
+  "seed": 4902158163651534000,
+  "source_file": "0a166fbe3cc528ca9b576344-a.py",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "compile"
+}

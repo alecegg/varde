@@ -1,0 +1,21 @@
+Manage pull-based role queues and inspect the legacy plan task queue.
+
+Usage: varde plan queue <COMMAND> [OPTIONS]
+
+Commands:
+  pull      Claim the next independent item for a slot
+  renew     Renew claims held by a slot
+  finish    Finish a claimed item and enqueue its follow-up
+  release   Return a claimed item to the queue
+  status    Show role counts, blockers, and available budget
+  metrics   Show cycle and idle time metrics
+  enqueue   Add an item to a role queue
+  check     Check legacy task queue ordering and blockers
+  merge-role-inbox    Back up and merge queue tables into the role inbox database
+  rollback-role-inbox Copy queue tables back to the retained queue database
+
+Pull and slot operations identify workers with --slot and fence them with --epoch.
+New starts fail closed when the resource snapshot is missing or stale, or a budget limit is exceeded.
+For follow-up enqueue, use --parent <item-id>; each follow-up adds one depth up to the configured cap.
+For routing telemetry, enqueue builder tasks with --route self|builder|orchestrator.
+Stop the runner before either merge or rollback operation.

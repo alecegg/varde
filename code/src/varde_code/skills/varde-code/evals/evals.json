@@ -1,0 +1,74 @@
+{
+  "skill_name": "varde-code",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I know the `TokenBucket` symbol is in this repository. Find its declaration and show its body.",
+      "expected_output": "Use `get_symbol` directly with the known name and request `includeBody:true`. Read the returned source to verify the declaration. Do not require a `nav_map` or `context_pack` chain first.",
+      "assertions": [
+        "Routes the known declaration to `get_symbol`",
+        "Requests the body because the user asked to see it",
+        "Does not require broad orientation queries before the lookup"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The parent prepared the auth/refresh fixture in `./project` and confirmed coverage and index readiness for that repoRoot. Query only; do not build an index or start a watcher. Give me a compact, ordered set of source files to read for the auth refresh path, with useful declaration line spans. Keep the `context_pack` output estimate near 1,500 tokens.",
+      "expected_output": "Use `context_pack` with the topic and `maxTokensEstimate:1500`, then use its `readingOrder` and declaration spans to read source files. Treat its `tests` as import-reachability hints, and do not claim it searches documentation or semantic content.",
+      "assertions": [
+        "Routes a topic-based code reading set to `context_pack`",
+        "Uses `readingOrder` to guide source reads",
+        "Uses default declaration rows and persisted 1-based span lines",
+        "Sets `maxTokensEstimate:1500` on the `context_pack` call",
+        "Presents the returned tests as hints from import reachability, not as measured coverage",
+        "Does not claim `context_pack` searches documentation or semantic content"
+      ],
+      "setup_script": "evals/setup-context-pack.sh"
+    },
+    {
+      "id": 3,
+      "prompt": "For `src/cache/store.rs`, tell me what files it imports and which files depend on it.",
+      "expected_output": "Use `dependencies` and `dependents` with the same `filePath`, setting `maxDepth:1` on both because the request asks for direct imports and dependents. Inspect the returned relationships and source files; describe the graph as potentially incomplete where completeness matters.",
+      "assertions": [
+        "Uses `dependencies` for files imported by the target",
+        "Uses `dependents` for files that depend on the target",
+        "Sets maxDepth:1 for direct imports and dependents",
+        "Leaves maxDepth unset only when transitive edges are wanted and sets it to 1 for direct edges",
+        "Does not present indexed edges as a complete proof without source checks"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "I am a subagent and `varde map context_pack` returns `index_stale`. What should I do to find the relevant source files?",
+      "expected_output": "Use `Read`, `Grep`, `Glob`, or `rg` for this query and report degraded index access. Do not start a watcher or build an index; the parent owns watcher setup.",
+      "assertions": [
+        "Falls back to source tools after `index_stale`",
+        "Reports degraded index access",
+        "Does not start or rebuild the watcher from a worker context"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "The parent prepared the auth/refresh fixture in `./project` and confirmed coverage and index readiness for that repoRoot. Query only; do not build an index or start a watcher. Read the sandbox-root `context-result.json`, recover matching source files after offset 20, then include matching occurrence/control rows for the auth refresh query.",
+      "expected_output": "Read `context-result.json` for its truncated envelope and `meta.toz.handle`, then inspect the capture with `varde run query --handle <H>` and read the rows after offset 20. Query `context_pack` with `includeOccurrences:true` to add matching occurrence/control rows. Do not describe the estimate as a model-token or global context guarantee.",
+      "assertions": [
+        "Reads context-result.json and inspects the Toz capture handle before paging",
+        "Uses capture rows after offset 20 to recover matching files",
+        "Sets includeOccurrences:true to request matching occurrence/control entities",
+        "Does not claim a global budget or actual tokenizer guarantee"
+      ],
+      "setup_script": "evals/setup-context-pack.sh"
+    },
+    {
+      "id": 6,
+      "prompt": "I am the main agent working in `/work/app`. My first `varde map get_symbol` call for `TokenBucket` returned `index_stale`. What do I do next?",
+      "expected_output": "Run `varde map build --repo-root /work/app` once (on demand, from the main checkout), then retry the same `get_symbol` query. Do not start a watcher. If the build is denied or fails, use `docs/repo-map/` packs, `find_pattern` or source tools and report degraded index access.",
+      "assertions": [
+        "Runs `varde map build` once for the repo after `index_stale`, not a watcher",
+        "Retries the original `get_symbol` query after the build succeeds",
+        "Does not run `setup watch` or `watch --list`",
+        "On build failure, falls back to packs, `find_pattern` or source tools and reports degraded index access"
+      ]
+    }
+  ]
+}

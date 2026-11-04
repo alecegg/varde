@@ -1,0 +1,46 @@
+{
+  "skill_name": "varde-pr",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a PR description for the current branch. Do not publish it.",
+      "expected_output": "A validated Summary / Evidence / Merge Danger body is saved in the working PR folder and its path is reported. Read-only GitHub queries are allowed; no PR write runs.",
+      "assertions": [
+        "Body file exists and passes validation",
+        "No GitHub write command ran"
+      ],
+      "verification_script": "evals/verify-pr-eval.sh",
+      "env": {
+        "GH_LOG": "{sandbox}/gh.log",
+        "PR_BODY_FILE": "{sandbox}/working/pr/2026-10-17-example.md",
+        "PR_OUTPUT_DIR": "{sandbox}/working/pr"
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "Create a PR using the body file you prepared.",
+      "expected_output": "The explicit request publishes a PR with the body read from a file.",
+      "assertions": [
+        "gh pr create ran",
+        "gh create uses --body-file",
+        "gh create does not use inline --body"
+      ],
+      "verification_script": "evals/verify-pr-eval.sh",
+      "env": {
+        "GH_LOG": "{sandbox}/gh.log"
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "Address the review comments on this PR.",
+      "expected_output": "No PR description body file is created; the agent works on the review comments instead.",
+      "assertions": [
+        "Review feedback does not create a PR body file"
+      ],
+      "verification_script": "evals/verify-pr-eval.sh",
+      "env": {
+        "PR_OUTPUT_DIR": "{sandbox}/working/pr"
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "classification": "intentional-change",
+  "stdout_stderr": {
+    "alias_target": {
+      "exit": 0,
+      "stderr": "relay: no mailman waiting (no mailman token)\n",
+      "stdout": "sent m-00000005 to orchestrator-1 (no-holder)\n"
+    },
+    "notes": {
+      "exit": 0,
+      "stderr": "relay: no mailman waiting (no mailman token)\n",
+      "stdout": "sent m-00000003 to main (queued)\n"
+    },
+    "plain": {
+      "exit": 0,
+      "stderr": "relay: no mailman waiting (no mailman token)\n",
+      "stdout": "sent m-00000001 to main (queued)\n"
+    },
+    "validation": {
+      "exit": 1,
+      "stderr": "Error: --from `bad address` must be one word of letters, digits, `.`, `_` or `-`, with an optional `:qualifier`\n",
+      "stdout": ""
+    }
+  },
+  "store": {
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"builder\",\"to\":\"main\",\"kind\":\"info\",\"text\":\"plain\",\"id\":\"m-00000001\"}\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"builder\",\"to\":\"main\",\"kind\":\"needs-user\",\"text\":\"review\",\"notes\":\"decision.json\",\"id\":\"m-00000003\"}\n{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"builder\",\"to\":\"orchestrator-1\",\"kind\":\"done\",\"text\":\"alias\",\"id\":\"m-00000005\"}\n",
+    ".cache/inbox/relay/state.json": "{\"events\":[{\"event\":\"send-liveness\",\"at\":\"2026-10-22T12:00:00Z\",\"message_id\":\"m-00000001\",\"to\":\"main\",\"alive\":false,\"token_age_s\":null},{\"event\":\"send-liveness\",\"at\":\"2026-10-22T12:00:00Z\",\"message_id\":\"m-00000003\",\"to\":\"main\",\"alive\":false,\"token_age_s\":null},{\"event\":\"send-liveness\",\"at\":\"2026-10-22T12:00:00Z\",\"message_id\":\"m-00000005\",\"to\":\"orchestrator-1\",\"alive\":false,\"token_age_s\":null}]}",
+    ".cache/inbox/slots/orchestrator-1.json": "{\"aliases\": [\"plan-a\"], \"current_address\": \"orchestrator-1\", \"slot\": \"orchestrator-1\"}\n"
+  }
+}

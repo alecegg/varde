@@ -1,0 +1,12 @@
+Read task queue order and blockers
+
+Usage: varde plan queue check [OPTIONS] <PLAN>
+
+Arguments:
+  <PLAN>  Plan path or identifier
+
+Options:
+      --json
+  -h, --help  Print help (see a summary with '--help')
+
+Reads `notes/queue.md` and task frontmatter without changing either file. Fixing items sort first. Later items are blocked by earlier unfinished tasks with overlapping `owns` declarations and by dependencies that are not done.

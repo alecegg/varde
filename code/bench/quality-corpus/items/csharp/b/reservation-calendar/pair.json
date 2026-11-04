@@ -1,0 +1,33 @@
+{
+  "task": "reservation-calendar",
+  "pair_group": "reservation-calendar",
+  "language": "csharp",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "6672c78cc78965f989d2d935",
+      "left": "sensible.cs",
+      "right": "monolith.cs"
+    },
+    {
+      "pair_id": "392b63a9d86136a6505f91ee",
+      "left": "sensible.cs",
+      "right": "tiny.cs"
+    },
+    {
+      "pair_id": "8aef27758cf998de04eb6b8d",
+      "left": "sensible.cs",
+      "right": "padded.cs"
+    },
+    {
+      "pair_id": "16fd879a5c949465bf2e1948",
+      "left": "sensible.cs",
+      "right": "sizematched.cs"
+    },
+    {
+      "pair_id": "61353fdf84403a24eb5b7fb7",
+      "left": "sensible.cs",
+      "right": "namematched.cs"
+    }
+  ]
+}

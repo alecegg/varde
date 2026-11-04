@@ -1,0 +1,39 @@
+{
+  "accepted": 20,
+  "commits_walked": 22251,
+  "filters": {
+    "file_limit": {
+      "evaluated": 77,
+      "passed": 56
+    },
+    "function_limit": {
+      "evaluated": 53,
+      "passed": 22
+    },
+    "generated": {
+      "evaluated": 22,
+      "passed": 22
+    },
+    "intent": {
+      "evaluated": 12975,
+      "passed": 77
+    },
+    "parent": {
+      "evaluated": 22251,
+      "passed": 12975
+    },
+    "parse": {
+      "evaluated": 56,
+      "passed": 53
+    },
+    "public_feature": {
+      "evaluated": 22,
+      "passed": 20
+    }
+  },
+  "intent_matches": 77,
+  "language": "typescript",
+  "pin_sha": "2eb7be8dc3410ac5b89aa84fd334e6813b53059c",
+  "records_bytes": 20911,
+  "repository": "nestjs/nest"
+}

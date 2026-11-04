@@ -1,0 +1,134 @@
+/* Chart block: server SVG marks, legend toggles, tooltip, data table. */
+.vb-plot { position: relative; max-inline-size: 30rem; border-radius: var(--vd-radius-m); }
+.vb-plot:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vb-chart { display: block; inline-size: 100%; block-size: auto; }
+.vb-spark { max-inline-size: 12rem; }
+.vb-tick, .vb-end, .vb-pct, .vb-note-label { fill: var(--vd-text); font: 15px var(--vd-font-body); }
+.vb-note-label { fill: var(--vd-text-secondary); }
+.vb-center { fill: var(--vd-text); font: 600 18px var(--vd-font-body); }
+.vb-axis { stroke: var(--vd-text-secondary); stroke-width: 1; }
+.vb-grid { stroke: var(--vd-border); stroke-width: 1; }
+.vb-note { stroke: var(--vd-text-secondary); stroke-width: 1.5; stroke-dasharray: 1 4; }
+.vb-col, .vb-hit { fill: transparent; stroke: none; pointer-events: all; }
+/* Series colours: each class sets --vb-c and --vb-f for its marks, key and legend. */
+.vb-s0 { --vb-c: var(--vd-accent); --vb-f: var(--vd-accent-subtle); }
+.vb-s1 { --vb-c: var(--vd-series-1); --vb-f: var(--vd-series-1-fill); }
+.vb-s2 { --vb-c: var(--vd-series-2); --vb-f: var(--vd-series-2-fill); }
+.vb-s3 { --vb-c: var(--vd-series-3); --vb-f: var(--vd-series-3-fill); }
+.vb-s4 { --vb-c: var(--vd-series-4); --vb-f: var(--vd-series-4-fill); }
+.vb-s5 { --vb-c: var(--vd-series-5); --vb-f: var(--vd-series-5-fill); }
+.vb-bar, .vb-slice { fill: var(--vb-c); stroke: var(--vd-surface); stroke-width: 1; }
+.vb-line { fill: none; stroke: var(--vb-c); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.vb-area { fill: var(--vb-f); stroke: none; }
+.vb-sym { fill: var(--vb-c); stroke: var(--vd-surface); stroke-width: 1; }
+.vb-sym.vb-open, .vb-key-mark.vb-open { fill: none; stroke: var(--vb-c); stroke-width: 3; stroke-linecap: round; }
+.vb-slice-key { fill: var(--vd-surface); stroke: var(--vd-text); stroke-width: 1.5; }
+.vb-slice-key.vb-open { fill: none; stroke: var(--vd-text); }
+.vb-dense .vb-dot { opacity: 0; }
+.vb-dense .vb-dot.vb-last, .vb-dense .vb-dot.vb-on { opacity: 1; }
+.vb-on.vb-bar, .vb-on.vb-slice { stroke: var(--vd-text); stroke-width: 2.5; }
+.vb-on .vb-sym, .vb-on.vb-sym { stroke: var(--vd-text); stroke-width: 2.5; }
+.vb-on.vb-sym.vb-open, .vb-on .vb-sym.vb-open { stroke-width: 4; }
+.vb-tip { pointer-events: none; }
+.vb-tip-box { fill: var(--vd-surface-elevated); stroke: var(--vd-text); stroke-width: 1; rx: 6; }
+.vb-tip-text { fill: var(--vd-text); font: 15px var(--vd-font-body); }
+.vb-off { display: none; }
+.vb-readout { min-block-size: 1.5em; margin-block: 0.4em 0; font-size: var(--vd-text-sm); }
+.vb-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; padding: 0; margin-block: 0.5em 0; margin-inline: 0; font-size: var(--vd-text-sm); }
+.vb-legend li { display: flex; align-items: center; gap: 0.4em; min-inline-size: 0; max-inline-size: 100%; }
+.vb-key { inline-size: 28px; block-size: 14px; flex: none; }
+.vb-key .vb-bar { stroke: none; }
+.vb-name { min-inline-size: 0; overflow-wrap: anywhere; }
+.vb-series-toggle { display: inline-flex; align-items: center; gap: 0.4em; box-sizing: border-box; min-block-size: 45px; min-inline-size: 45px; max-inline-size: 100%; padding: 0.25rem 0.6rem; font: inherit; color: var(--vd-text); background: var(--vd-surface); border: 2px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); cursor: pointer; text-align: start; }
+.vb-series-toggle[aria-pressed="true"] { border-color: var(--vd-border-selected); }
+.vb-series-toggle[aria-pressed="true"]::before { content: "\2713"; font-weight: 700; }
+.vb-series-toggle[aria-pressed="false"]::before { content: "\25CB"; }
+.vb-series-toggle[aria-pressed="false"] .vb-name { text-decoration: line-through; }
+.vb-series-toggle:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+.chart .vb-data > summary { display: flex; align-items: center; min-block-size: 45px; cursor: pointer; }
+.chart .vb-data:focus-within { outline: none; }
+.chart .vb-data > summary:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+@media (hover: hover) {
+  .vb-bar:hover, .vb-slice:hover { stroke: var(--vd-text); stroke-width: 2.5; }
+}
+@media (forced-colors: active) {
+  .vb-bar, .vb-slice { fill: CanvasText; stroke: Canvas; stroke-width: 1.5; }
+  .vb-area { fill: Canvas; stroke: none; }
+  .vb-line, .vb-sym.vb-open, .vb-key-mark.vb-open { stroke: CanvasText; }
+  .vb-sym { fill: CanvasText; stroke: Canvas; }
+  .vb-axis, .vb-grid, .vb-note { stroke: CanvasText; }
+  .vb-tick, .vb-end, .vb-pct, .vb-note-label, .vb-center, .vb-tip-text { fill: CanvasText; }
+  .vb-tip-box { fill: Canvas; stroke: CanvasText; }
+  .vb-on.vb-bar, .vb-on.vb-slice, .vb-on .vb-sym, .vb-on.vb-sym { stroke: Highlight; }
+  .vb-plot:focus-visible, .vb-series-toggle:focus-visible { outline-color: Highlight; }
+  .vb-series-toggle { border-color: ButtonText; color: ButtonText; background: ButtonFace; }
+  .vb-series-toggle[aria-pressed="true"] { border-color: Highlight; }
+}
+@media print {
+  .vb-plot { max-inline-size: 100%; break-inside: avoid; }
+  .vb-tip, .vb-readout { display: none; }
+  .vb-bar, .vb-slice { stroke: var(--vd-text); stroke-width: 1.5; }
+  .vb-line { stroke: var(--vd-text); }
+  .vb-sym:not(.vb-open) { stroke: var(--vd-text); }
+  .vb-series-toggle { border-width: 1px; }
+  .chart .vb-data { break-inside: auto; }
+}
+/* The data table is plain (table.js enhances only table.vb-table). */
+.vb-data-scroll { overflow-x: auto; max-inline-size: 100%; }
+.vb-data-scroll:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: -2px; }
+.vb-data-grid { inline-size: 100%; min-inline-size: min-content; font-size: var(--vd-text-sm); border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.vb-data-grid th, .vb-data-grid td { border-block-end: 1px solid var(--vd-border); padding: var(--vd-space-2) var(--vd-space-3); text-align: start; overflow-wrap: normal; word-break: normal; hyphens: none; }
+.vb-data-grid thead th { white-space: nowrap; }
+.vb-data-grid thead th { border-block-end: 2px solid var(--vd-border-interactive); font-weight: 600; }
+/* Events: tone bands and markers. Tone colours come from the --vd-tone-* triples. */
+.vb-ev-t-info { --vb-t: var(--vd-tone-info-edge); --vb-tt: var(--vd-tone-info-tint); }
+.vb-ev-t-decision { --vb-t: var(--vd-tone-decision-edge); --vb-tt: var(--vd-tone-decision-tint); }
+.vb-ev-t-risk { --vb-t: var(--vd-tone-risk-edge); --vb-tt: var(--vd-tone-risk-tint); }
+.vb-ev-t-warning { --vb-t: var(--vd-tone-warning-edge); --vb-tt: var(--vd-tone-warning-tint); }
+.vb-ev-t-success { --vb-t: var(--vd-tone-success-edge); --vb-tt: var(--vd-tone-success-tint); }
+.vb-band { fill: var(--vb-tt); stroke: none; }
+.vb-hatch { fill: none; stroke: var(--vb-t); stroke-width: 1; opacity: 0.6; }
+.vb-band-rule { stroke: var(--vb-t); stroke-width: 2.5; }
+.vb-ev-line { stroke: var(--vb-t); stroke-width: 2; stroke-dasharray: 6 4; }
+.vb-ev-t-decision .vb-ev-line { stroke-dasharray: 11 3; }
+.vb-ev-t-risk .vb-ev-line { stroke-dasharray: 2 3; }
+.vb-ev-t-warning .vb-ev-line { stroke-dasharray: 8 3 2 3; }
+.vb-ev-t-success .vb-ev-line { stroke-dasharray: 14 5; }
+.vb-ev-shape { fill: var(--vd-surface); stroke: var(--vb-t); stroke-width: 2.5; }
+.vb-ev-glyph { fill: var(--vb-t); }
+.vb-ev-no { fill: var(--vd-text); font: 600 15px var(--vd-font-body); }
+.vb-ev.vb-on .vb-ev-shape { stroke: var(--vd-text); stroke-width: 3.5; }
+.vb-ev.vb-on .vb-hatch { opacity: 1; }
+.vb-ev.vb-on .vb-ev-line, .vb-ev.vb-on .vb-band-rule { stroke-width: 4; }
+.vb-events-title { margin-block: 0.75em 0; }
+.vb-events { list-style: none; margin: 0; padding: 0; font-size: var(--vd-text-sm); }
+.vb-events li { margin-block-start: 0.5rem; min-inline-size: 0; max-inline-size: 100%; overflow-wrap: break-word; }
+.vb-ev-num { display: inline-block; box-sizing: border-box; min-inline-size: 1.75em; margin-inline-end: 0.5em; padding-inline: 0.25em; text-align: center; font-weight: 600; color: var(--vd-text); background: var(--vd-surface); border: 2px solid var(--vb-t); border-radius: var(--vd-radius-s); }
+.vb-ev-marker .vb-ev-num { border-radius: var(--vd-radius-full); }
+.vb-ev-meta { color: var(--vd-text); }
+.vb-ev-btn { display: block; box-sizing: border-box; inline-size: 100%; min-block-size: 45px; min-inline-size: 45px; padding: 0.25rem 0.6rem; font: inherit; color: var(--vd-text); background: var(--vd-surface); border: 2px solid var(--vd-border-interactive); border-radius: var(--vd-radius-m); cursor: pointer; text-align: start; overflow-wrap: break-word; }
+.vb-events li.vb-on > .vb-ev-btn { border-color: var(--vd-border-selected); }
+.vb-ev-btn:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; }
+@media screen and (max-width: 30rem) {
+  .vb-ev-text { display: none; }
+}
+@media (forced-colors: active) {
+  .vb-band { fill: Canvas; }
+  .vb-hatch, .vb-band-rule, .vb-ev-line, .vb-ev-shape { stroke: CanvasText; }
+  .vb-ev-shape { fill: Canvas; }
+  .vb-ev-glyph, .vb-ev-no { fill: CanvasText; }
+  .vb-ev-text { fill: CanvasText; }
+  .vb-ev.vb-on .vb-ev-shape { stroke: Highlight; }
+  .vb-ev-num { color: CanvasText; border-color: CanvasText; background: Canvas; }
+  .vb-ev-btn { border-color: ButtonText; color: ButtonText; background: ButtonFace; }
+  .vb-events li.vb-on > .vb-ev-btn { border-color: Highlight; }
+  .vb-ev-btn:focus-visible { outline-color: Highlight; }
+}
+@media print {
+  .vb-data-scroll { overflow: visible; }
+  .vb-data-grid { min-inline-size: 0; table-layout: fixed; }
+  .vb-data-grid th, .vb-data-grid td, .vb-data-grid thead th { white-space: normal; overflow-wrap: anywhere; }
+  .vb-events, .vb-events li, .vb-ev-btn { overflow: visible; min-inline-size: 0; min-block-size: 0; white-space: normal; }
+  .vb-ev-btn { border-width: 1px; }
+  .vb-ev-num { min-inline-size: 0; }
+}

@@ -1,0 +1,8 @@
+Query: explore the dependency graph from a seed file or symbol name. `query.params.input` resolves as a file path first, falling back to a symbol-name match (exact, then substring) when no file matches; `query.params.direction` is `outgoing` (default), `incoming`, or `both`. (see `explore` help for inputs)
+
+Usage: varde map explore [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, query: { params: { input, direction?, maxItems? } } }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

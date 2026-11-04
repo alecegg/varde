@@ -1,0 +1,13 @@
+{
+  "pair_group_id": "3338230242a7536d3436050f",
+  "task": "clinic-booking",
+  "language": "java",
+  "part": "b",
+  "pairs": [
+    {"pair_id":"e70be2851e77cb5d32e3d929","left_id":"3085a202ac393e6f45c670cd","right_id":"bcfd81826830bca72b707a4a","left":"sensible.java","right":"monolith.java","left_role":"sensible","right_role":"over-monolith"},
+    {"pair_id":"6993df83112f1be9429b0c0c","left_id":"3085a202ac393e6f45c670cd","right_id":"821680813c565361742c67ab","left":"sensible.java","right":"tiny.java","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"999c917f1bfade39a1653d8b","left_id":"3085a202ac393e6f45c670cd","right_id":"e6f168a4a0884abe731be63a","left":"sensible.java","right":"padded.java","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"97a6474bde97e6ac2a9b5aa9","left_id":"3085a202ac393e6f45c670cd","right_id":"34822e5022e5ddc3f27ac8ce","left":"sensible.java","right":"sizematched.java","left_role":"sensible","right_role":"over-split"},
+    {"pair_id":"00a925af64468c365e914241","left_id":"3085a202ac393e6f45c670cd","right_id":"cb01d271b98cc6bb69a4fc23","left":"sensible.java","right":"namematched.java","left_role":"sensible","right_role":"over-split"}
+  ]
+}

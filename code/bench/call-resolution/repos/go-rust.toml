@@ -1,0 +1,159 @@
+# Pinned ground-truth repositories for the Go and Rust call-resolution audit.
+# `license_first_line` is the first non-empty line of the file named first in
+# `license_file`, read from the pinned checkout.
+
+[[repo]]
+language = "go"
+name = "go-gitea/gitea"
+url = "https://github.com/go-gitea/gitea.git"
+sha = "3058f5ddf9bb01fed65210b1778bea29def24fb7"
+license = "MIT"
+license_file = "LICENSE"
+license_first_line = "Copyright (c) 2016 The Gitea Authors"
+kind = "end-user app"
+role = "dev"
+commit_count = 21788
+
+[[repo]]
+language = "go"
+name = "syncthing/syncthing"
+url = "https://github.com/syncthing/syncthing.git"
+sha = "d70d210320c4dcce67774c5bf1f545912b99e5d8"
+license = "MPL-2.0"
+license_file = "LICENSE"
+license_first_line = "Mozilla Public License Version 2.0"
+kind = "end-user app"
+role = "test-only"
+commit_count = 8211
+
+[[repo]]
+language = "go"
+name = "kubernetes/kubernetes"
+url = "https://github.com/kubernetes/kubernetes.git"
+sha = "949f064e6d9e32f0a597795c265fcd50c6aad66e"
+license = "Apache-2.0"
+license_file = "LICENSE"
+license_first_line = "Apache License"
+kind = "dev tool"
+role = "test-only"
+commit_count = 142248
+
+[[repo]]
+language = "go"
+name = "rclone/rclone"
+url = "https://github.com/rclone/rclone.git"
+sha = "4c52ae05756420fd4b7d9028fcdddd47af4e6e12"
+license = "MIT"
+license_file = "COPYING"
+license_first_line = "Copyright (C) 2012 by Nick Craig-Wood http://www.craig-wood.com/nick/"
+kind = "end-user app"
+role = "test-only"
+commit_count = 10583
+
+[[repo]]
+language = "go"
+name = "tailscale/tailscale"
+url = "https://github.com/tailscale/tailscale.git"
+sha = "e3c3ef18a51a2d70c902c28f465939888464fb86"
+license = "BSD-3-Clause"
+license_file = "LICENSE"
+license_first_line = "BSD 3-Clause License"
+kind = "end-user app"
+role = "dev"
+commit_count = 11496
+
+[[repo]]
+language = "go"
+name = "gohugoio/hugo"
+url = "https://github.com/gohugoio/hugo.git"
+sha = "9d502917ac3d6d7af38e47dc6bed435b59f918e1"
+license = "Apache-2.0"
+license_file = "LICENSE"
+license_first_line = "Apache License"
+kind = "end-user app"
+role = "dev"
+commit_count = 10028
+
+[[repo]]
+language = "rust"
+name = "sharkdp/fd"
+url = "https://github.com/sharkdp/fd.git"
+sha = "b6ca4e02167833c2c492de6ae9d06b56488d4696"
+license = "MIT OR Apache-2.0"
+license_file = "LICENSE-MIT,LICENSE-APACHE"
+license_first_line = "MIT License | Apache License"
+kind = "end-user app"
+role = "dev"
+commit_count = 2046
+
+[[repo]]
+language = "rust"
+name = "rust-lang/regex"
+url = "https://github.com/rust-lang/regex.git"
+sha = "72d650cb0a880a01ab6dc2137c0888e8f89740f7"
+license = "MIT OR Apache-2.0"
+license_file = "LICENSE-MIT,LICENSE-APACHE"
+license_first_line = "Copyright (c) 2014 The Rust Project Developers | Apache License"
+kind = "library"
+role = "dev"
+commit_count = 1631
+
+[[repo]]
+language = "rust"
+name = "rayon-rs/rayon"
+url = "https://github.com/rayon-rs/rayon.git"
+sha = "ee0a00bdb1ab039e178a215ad5712fb7fa58e58f"
+license = "MIT OR Apache-2.0"
+license_file = "LICENSE-MIT,LICENSE-APACHE"
+license_first_line = "Copyright (c) 2010 The Rust Project Developers | Apache License"
+kind = "library"
+role = "dev"
+commit_count = 2334
+
+[[repo]]
+language = "rust"
+name = "sharkdp/hyperfine"
+url = "https://github.com/sharkdp/hyperfine.git"
+sha = "c5161524980522320c7d3425e714cc0965a869a5"
+license = "MIT OR Apache-2.0"
+license_file = "LICENSE-MIT,LICENSE-APACHE"
+license_first_line = "MIT License | Apache License"
+kind = "end-user app"
+role = "dev"
+commit_count = 1213
+
+[[repo]]
+language = "rust"
+name = "sharkdp/bat"
+url = "https://github.com/sharkdp/bat.git"
+sha = "62b439dae330a8c4d053ff7d8526a6e3697000b9"
+license = "MIT OR Apache-2.0"
+license_file = "LICENSE-MIT,LICENSE-APACHE"
+license_first_line = "Copyright (c) 2018-2023 bat-developers (https://github.com/sharkdp/bat). | Apache License"
+kind = "end-user app"
+role = "test-only"
+commit_count = 4044
+
+[[repo]]
+language = "rust"
+name = "starship/starship"
+url = "https://github.com/starship/starship.git"
+sha = "3bf237c6c048329f5956fd61ccb0c284adac1c98"
+license = "ISC"
+license_file = "LICENSE"
+license_first_line = "ISC License"
+kind = "end-user app"
+role = "test-only"
+commit_count = 4457
+
+[[repo]]
+language = "rust"
+name = "helix-editor/helix"
+url = "https://github.com/helix-editor/helix.git"
+sha = "ba40e547426b0f9896c8bdc699a4ab11f2b37dbc"
+license = "MPL-2.0"
+license_file = "LICENSE"
+license_first_line = "Mozilla Public License Version 2.0"
+kind = "end-user app"
+role = "test-only"
+commit_count = 7694

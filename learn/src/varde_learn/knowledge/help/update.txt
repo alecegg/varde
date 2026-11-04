@@ -1,0 +1,18 @@
+Update a Concept, rejecting stale versions
+
+Usage: varde learn knowledge update [OPTIONS] --bundle <BUNDLE> --expected-version <EXPECTED_VERSION> <SLUG>
+
+Arguments:
+  <SLUG>  Concept slug, e.g. `my-concept` or `pattern/my-concept`
+
+Options:
+      --bundle <BUNDLE>
+          Knowledge Bundle root directory (holds the Concept `.md` files)
+      --expected-version <EXPECTED_VERSION>
+          OCC version hash last read; a mismatch is rejected as a conflict
+      --file <FILE>
+          Read the new document from this file; the slug stays the same
+      --json
+          Machine-readable JSON output
+  -h, --help
+          Print help

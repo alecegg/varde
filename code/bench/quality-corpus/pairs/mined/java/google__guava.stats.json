@@ -1,0 +1,39 @@
+{
+  "accepted": 75,
+  "commits_walked": 7556,
+  "filters": {
+    "file_limit": {
+      "evaluated": 296,
+      "passed": 190
+    },
+    "function_limit": {
+      "evaluated": 184,
+      "passed": 85
+    },
+    "generated": {
+      "evaluated": 85,
+      "passed": 85
+    },
+    "intent": {
+      "evaluated": 7554,
+      "passed": 296
+    },
+    "parent": {
+      "evaluated": 7556,
+      "passed": 7554
+    },
+    "parse": {
+      "evaluated": 190,
+      "passed": 184
+    },
+    "public_feature": {
+      "evaluated": 85,
+      "passed": 75
+    }
+  },
+  "intent_matches": 296,
+  "language": "java",
+  "pin_sha": "5e82f2f528fbbd970e00748025b48e3eb42ed702",
+  "records_bytes": 96500,
+  "repository": "google/guava"
+}

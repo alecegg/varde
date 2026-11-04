@@ -1,0 +1,33 @@
+[project]
+name = "varde-toz"
+version = "0.1.0"
+description = "Python port of the varde tool output zone"
+requires-python = ">=3.14"
+dependencies = [
+    "varde-core",
+    "beautifulsoup4==4.12.3",
+    "blake3>=1.0.11",
+    "wasmtime==49.0.0",
+    "markdownify==1.2.3",
+]
+
+[tool.uv.build-backend]
+wheel-exclude = ["**/evals", "**/evals/**", "**/*-workspace/**"]
+source-exclude = ["**/evals/**"]
+module-name = "varde_toz"
+module-root = "src"
+source-include = ["src/varde_toz/runner/*.wasm", "src/varde_toz/runner/LICENSES.txt"]
+
+[project.scripts]
+varde-toz = "varde_toz.cli:main"
+varde-toz-hookc = "varde_toz.daemon.client:main"
+
+[project.entry-points."varde.skills"]
+toz = "varde_toz"
+
+[project.entry-points."varde.modules"]
+toz = "varde_toz.module:register"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"

@@ -1,0 +1,9 @@
+Check whether a plan's branch is merged into main
+
+Usage: varde plan merged <PLAN>
+
+Arguments:
+  <PLAN>  Plan path or identifier
+
+Options:
+  -h, --help  Print help

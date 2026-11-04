@@ -1,0 +1,113 @@
+{
+  "pair_group_id": "f4a71005d7e96e2cb3190ad1",
+  "task": "clinic-booking",
+  "language": "typescript",
+  "part": "b",
+  "pairs": [
+    {
+      "pair_id": "68ad9d0c0e8ec4d5f54e9012",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "af85ebf6f6284e30bd1a36d5",
+      "left": "sensible.ts",
+      "right": "monolith.ts",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    },
+    {
+      "pair_id": "916f11bd054041e05d1cbd9c",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "7cfa892864fd81da3608e4d9",
+      "left": "sensible.ts",
+      "right": "tiny.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "2d1bb950a4af529445af2b1f",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "fc8977e87caa6bc077e7d3cf",
+      "left": "sensible.ts",
+      "right": "padded.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "f63e88007c941889d8a19127",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "1a319d9316d29be2da0b8c12",
+      "left": "sensible.ts",
+      "right": "sizematched.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "b6c6446f0a1f77cbf90a82af",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "e3d54209b73c1de3f760a995",
+      "left": "sensible.ts",
+      "right": "namematched.ts",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "f1a42e6c80c7b319d4e5a102",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "a840d3b12e9f607c4a1b8d53",
+      "left": "sensible.ts",
+      "right": "alt-pipeline.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "2b7c91e5a4f083d6c1b9e720",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "b951e8c42d6a0317f5c9b804",
+      "left": "sensible.ts",
+      "right": "alt-table.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "8d3f0a6c2e91b754c8a10f63",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "c2604a8e1d7f935b02e6c418",
+      "left": "sensible.ts",
+      "right": "alt-class.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "f1a42e6c80c7b319d4e5a102",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "a840d3b12e9f607c4a1b8d53",
+      "left": "sensible.ts",
+      "right": "alt-pipeline.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "2b7c91e5a4f083d6c1b9e720",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "b951e8c42d6a0317f5c9b804",
+      "left": "sensible.ts",
+      "right": "alt-table.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "8d3f0a6c2e91b754c8a10f63",
+      "left_id": "34ac894fdfe0672db181a6c9",
+      "right_id": "c2604a8e1d7f935b02e6c418",
+      "left": "sensible.ts",
+      "right": "alt-class.ts",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    }
+  ]
+}

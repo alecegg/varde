@@ -1,0 +1,11 @@
+Print the session-start usage note (used by harness hooks)
+
+Usage: varde run note [OPTIONS]
+
+Options:
+      --fallback-dir <FALLBACK_DIR>  External store to try after primary-store access fails
+      --harness <HARNESS>            Emit in the hook JSON format for this harness (claude-code); plain text otherwise
+      --project <PROJECT>            Project directory (default: git root of cwd, else cwd)
+      --json                         Machine-readable JSON output
+      --quiet                        Print only the handle line on overflow
+  -h, --help                         Print help

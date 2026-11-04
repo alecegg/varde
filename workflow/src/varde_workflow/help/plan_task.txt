@@ -1,0 +1,6 @@
+Manage task state
+
+Usage: varde plan task <COMMAND>
+
+Commands:
+  set  Change a task status using the workflow transitions

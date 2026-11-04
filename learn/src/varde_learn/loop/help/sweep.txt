@@ -1,0 +1,12 @@
+Run deterministic analysis over new local agent sessions.
+
+Usage: varde learn sessions sweep [OPTIONS]
+
+Options:
+      --dry-run       List unanalyzed sessions without extracting or writing
+      --limit <N>     Analyze at most N sessions
+      --json          Print the machine-readable result
+  -h, --help          Print help
+
+The JSON result keeps `failures` for repository and session errors and adds
+`warnings` for discovery warnings. The text summary reports both counts.

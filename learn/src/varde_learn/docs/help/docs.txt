@@ -1,0 +1,26 @@
+Serve, comment on and recap Markdown documents; inspect the specification inventory
+
+Usage: varde learn docs <COMMAND>
+
+Commands:
+  serve     Serve a markdown file as a commentable page with live updates
+  watch     Print one line per new page comment until interrupted
+  comments  List a page's comments and replies
+  reply     Reply to a page comment
+  blocks    List typed visual block types and fields
+  build     Export a page as one self-contained HTML file with no script
+  recap     Map a git diff to a plan's tasks and blocks and flag drift
+  spec      Classify domain specifications against current repository sources
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+
+Block menu: each block on a served page has one actions menu (arrow keys, Escape, Tab; a bottom sheet on phones). Entries by block type:
+  prose, heading, list, table  Comment, Suggest, Edit, Copy, Copy link
+  code, chart, diagram, flow, other visuals  Comment, Edit, Copy, Copy link (no Suggest)
+  choice, form, ranking, slider, comment, decision, recap, deps  Comment, Edit, Copy link (answers go through the widget)
+  included part  Comment, Copy, Copy link (the source owns the text)
+Edit shows only where editing is allowed. Accept, Resolve and Reply stay on each comment thread, not in the menu.
+
+Other document commands: `varde learn check` (lint, frontmatter, FLOW.md, typed blocks), `varde learn how` (how-topics), `varde learn measure` (flow, ledger, baseline).

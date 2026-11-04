@@ -1,0 +1,39 @@
+{
+  "accepted": 70,
+  "commits_walked": 5329,
+  "filters": {
+    "file_limit": {
+      "evaluated": 238,
+      "passed": 169
+    },
+    "function_limit": {
+      "evaluated": 125,
+      "passed": 79
+    },
+    "generated": {
+      "evaluated": 79,
+      "passed": 79
+    },
+    "intent": {
+      "evaluated": 4479,
+      "passed": 238
+    },
+    "parent": {
+      "evaluated": 5329,
+      "passed": 4479
+    },
+    "parse": {
+      "evaluated": 169,
+      "passed": 125
+    },
+    "public_feature": {
+      "evaluated": 79,
+      "passed": 70
+    }
+  },
+  "intent_matches": 238,
+  "language": "cpp",
+  "pin_sha": "0e95fe8200adbf0e033d0c0818eea473e1d4d346",
+  "records_bytes": 67057,
+  "repository": "nlohmann/json"
+}

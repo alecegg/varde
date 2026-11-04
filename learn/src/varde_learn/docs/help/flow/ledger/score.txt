@@ -1,0 +1,27 @@
+Hash, validate, score or check a decision ledger
+
+Usage: varde learn measure <skill> ledger [OPTIONS] <ACTION> <LEDGER>
+
+Arguments:
+  <ACTION>
+          Possible values:
+          - hash:     Rewrite each decision's hash from its cited lines
+          - validate: Report ledger problems (exit 1 if any)
+          - score:    Print cyclomatic and cognitive scores
+          - check:    Report decisions whose cited lines changed or moved (exit 1 if any)
+
+  <LEDGER>
+          The ledger JSON file
+
+Options:
+      --root <DIR>
+          Directory the ledger's source paths resolve against [default: Git top level]
+
+      --route <NAME>
+          Score only the phases of this route
+
+      --json
+          Print the shared JSON envelope instead of text
+
+  -h, --help
+          Print help (see a summary with '-h')

@@ -1,0 +1,168 @@
+# gate-test-cal: fixture calibration for the scan-gate attack suite. Test data only.
+[calibration]
+id = "gate-test-cal"
+formula = "vq1"
+validated = true
+anchors = "test data only; never ships; not validation"
+
+[global]
+A = "0.45"
+wL = "0.4"
+w = "0.6"
+lam = "0.3"
+cFs = "6.0"
+dps = "2.0"
+ks = "6.0"
+ts = "8.0"
+H = 6
+kappa_F = "0.0"
+structure = "1.0"
+
+[language.python]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+[language.typescript]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+[language.csharp]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+[language.tsx]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+[language.java]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+[language.go]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+[language.rust]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+[language.cpp]
+Plo = 32
+t_frag = 60
+Phi = 96
+c0 = 10
+cs = 29
+ss = 170
+dp0 = 3
+k0 = 4
+t0 = 6
+cmin = 3
+X = "62"
+Y = "38"
+cap = "12.5"
+
+
+[limits.strength]
+cognitive = ["0.05", "2.0"]
+long_side = ["0.05", "2.0"]
+small_side = ["0.05", "2.0"]
+structure = ["0.05", "2.0"]
+names = ["0.05", "2.0"]
+
+[limits.thresholds]
+X = ["0", "100"]
+Y = ["0", "100"]
+cap = ["0", "100"]
+
+[language.python.validation]
+state = "panel-validated"
+provenance = "fixture calibration for gate tests; not validation"
+
+[language.typescript.validation]
+state = "panel-validated"
+provenance = "fixture calibration for gate tests; not validation"
+
+[language.csharp.validation]
+state = "panel-validated"
+provenance = "fixture calibration for gate tests; not validation"
+
+[language.tsx.validation]
+state = "panel-validated"
+provenance = "fixture calibration for gate tests; not validation"

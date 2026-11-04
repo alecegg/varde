@@ -1,0 +1,18 @@
+{
+  "ack_alias": {
+    "exit": 0,
+    "stderr": "",
+    "stdout": ""
+  },
+  "classification": "intentional-change",
+  "send": {
+    "exit": 0,
+    "stderr": "relay: no mailman waiting (no mailman token)\n",
+    "stdout": "sent m-00000001 to orchestrator-1 (no-holder)\n"
+  },
+  "store": {
+    ".cache/inbox/deliveries.jsonl": "{\"message_id\":\"m-00000001\",\"reader\":\"orchestrator-1\",\"session\":\"\",\"via\":\"relay\",\"event\":\"delivered\",\"at\":\"2026-10-22T12:00:00+00:00\"}\n{\"message_id\":\"m-00000001\",\"reader\":\"orchestrator-1\",\"session\":\"\",\"via\":\"cli\",\"event\":\"acked\",\"at\":\"2026-10-22T12:00:00Z\"}\n",
+    ".cache/inbox/messages.jsonl": "{\"ts\":\"2026-10-22T12:00:00Z\",\"from\":\"sender\",\"to\":\"orchestrator-1\",\"kind\":\"info\",\"text\":\"alias mail\",\"id\":\"m-00000001\"}\n",
+    ".cache/inbox/slots/orchestrator-1.json": "{\"aliases\": [\"old-plan\"], \"current_address\": \"orchestrator-1\", \"slot\": \"orchestrator-1\"}\n"
+  }
+}

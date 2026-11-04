@@ -1,0 +1,2 @@
+Calculate a gratuity as a percentage of a meal bill and return the bill plus gratuity.
+Input domain: Bill and percentage are nonnegative integers; gratuity is bill*percent/100 and total is bill plus gratuity. Cases use values with whole-number gratuities.

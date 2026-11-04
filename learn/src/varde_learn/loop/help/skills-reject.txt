@@ -1,0 +1,7 @@
+Mark a proposal rejected. Changes no skill, agent or tool file.
+
+Usage: varde learn skills reject <ID> [OPTIONS]
+
+Options:
+      --json  Print machine-readable output
+  -h, --help  Print help

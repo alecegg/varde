@@ -1,0 +1,2 @@
+{"v":1,"id":"96fa02fd5810f23e","ts":"2026-10-15T01:09:37.303Z","kind":"item_added","body":{"title":"Compatibility fixture friction","source":"compat"}}
+{"v":1,"id":"e8b97be76857c0f2","ts":"2026-10-15T01:09:37.304Z","kind":"occurrence_appended","body":{"item":"96fa02fd5810f23e","at":"2026-10-15T01:09:37.303Z","cwd":"/private/var/folders/7q/w43y_rlx4rn2_lj_gv08041c0000gn/T/varde-learn-friction-compat-unwlprjc/cases/friction.fixture.compat-store","evidence":"Written by the compatibility fixture generator"}}

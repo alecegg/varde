@@ -1,0 +1,40 @@
+Scoped memory entries: agent, skill, project and global
+
+Usage: varde learn memory <COMMAND>
+
+Commands:
+  add        Add an entry in one scope
+  list       Print the one-line index of active entries
+  show       Show one entry by id
+  retire     Retire an entry
+  search     Search entries by text (ranked; --topic, --scope, --field narrow)
+  update     Replace an entry's text, rejecting stale versions
+  set-field  Set one front-matter field, rejecting stale versions
+  delete     Hard-delete one entry file and report entries that link to it
+  map        Print (or write) a map of the store by scope and type
+  lint       Check entries: errors, warnings, broken links, orphans
+  reset      Archive an agent's entries learned under another model or harness version
+  surface    Print the entries relevant to a session start
+  promote    Propose an entry for the shared store as a reviewed commit
+  pull       Fetch or update the shared store and import its entries
+  migrate    One-shot: migrate memory-tier decisions into scoped entries
+
+Scopes:
+  agent      Lessons for one agent (scope key: agent name); records model and harness version
+  skill      Lessons for one skill (scope key: skill name)
+  project    Facts about one project (scope key: <name>-<16 hex> project key; default: current project)
+  global     Applies everywhere (no scope key)
+
+Agent entries are matched by the agent name you pass to `surface --agent <name>`
+(key them like `varde-builder`). SessionStart reads `agent_type` (Claude Code agent
+sessions only), else a bound runner role as `<role>` and `varde-<role>`; SubagentStart
+(Claude Code, Codex) reads the subagent's `agent_type`.
+Agent and skill entries may carry --project <key> to apply to that project only.
+Entries are plain Markdown files under the memory root (VARDE_MEMORY_DIR,
+[default] memory, else <data>/varde/memory). Exit codes: 0 ok, 1 not found, 2 usage error.
+
+SessionStart: the `memory` provider of `varde hook` runs by default. An explicit
+`[hooks.session_start] providers` list in config.toml skips it unless it lists `memory`.
+
+Options:
+  -h, --help  Print help

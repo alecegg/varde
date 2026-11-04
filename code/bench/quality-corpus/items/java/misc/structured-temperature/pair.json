@@ -1,0 +1,11 @@
+{
+  "pair_id": "0c9fe9c6f5c4c5c647750158",
+  "pair_group_id": "64ca41f0d5c6540e3cc5a2e0",
+  "left_id": "1eb160f641ff9f273860d91f",
+  "right_id": "20b4babd3c35deb4ab638d37",
+  "left": "good.java",
+  "right": "bad.java",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "mutable-flags"
+}

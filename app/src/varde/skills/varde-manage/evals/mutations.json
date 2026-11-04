@@ -1,0 +1,38 @@
+{
+  "mutations": [
+    {
+      "id": "remove-install-source-and-target-guidance",
+      "file": "references/setup.md",
+      "remove": "- Use an installed `varde` or the binary in a known Varde checkout. If missing,\n  ask for the checkout location; do not guess a download URL.",
+      "evals": [
+        "install"
+      ]
+    },
+    {
+      "id": "remove-upgrade-preview-requirement",
+      "file": "references/setup.md",
+      "remove": "Preview with `varde setup sync\n  --dry-run` and apply, after approval, with the same targets.",
+      "replace_with": "Apply with the same targets.",
+      "evals": [
+        "upgrade"
+      ]
+    },
+    {
+      "id": "remove-project-scope-configuration-guidance",
+      "file": "references/setup.md",
+      "remove": "`varde setup paths set` at project scope; `--default` only for\n  an authorized shared default",
+      "evals": [
+        "configure"
+      ]
+    },
+    {
+      "id": "control-remove-unrelated-hook-install-guidance",
+      "file": "references/setup.md",
+      "remove": "- Hooks are installed per requested harness with `varde setup hooks install\n  --harness <h>`; hooks do not install the skill.",
+      "negative": true,
+      "evals": [
+        "install"
+      ]
+    }
+  ]
+}

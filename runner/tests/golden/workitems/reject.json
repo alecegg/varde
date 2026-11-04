@@ -1,0 +1,87 @@
+[
+  {
+    "returned": {
+      "id": "golden-06",
+      "idempotency_key": "reject-key",
+      "text": "reject me",
+      "project": "workspace",
+      "state": "ready",
+      "notes_path": "<DATA>/workitem-notes/golden-06/request.md",
+      "planner_session": "planner-reject",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "reject-ready",
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 16,
+        "item_id": "golden-06",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 17,
+        "item_id": "golden-06",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 18,
+        "item_id": "golden-06",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-06",
+      "idempotency_key": "reject-key",
+      "text": "reject me",
+      "project": "workspace",
+      "state": "rejected",
+      "notes_path": "<DATA>/workitem-notes/golden-06/request.md",
+      "planner_session": "planner-reject",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "reject-ready",
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 16,
+        "item_id": "golden-06",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 17,
+        "item_id": "golden-06",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 18,
+        "item_id": "golden-06",
+        "prior_state": "planning",
+        "new_state": "ready",
+        "detail": "plan ready"
+      },
+      {
+        "seq": 19,
+        "item_id": "golden-06",
+        "prior_state": "ready",
+        "new_state": "rejected",
+        "detail": "user decision"
+      }
+    ]
+  }
+]

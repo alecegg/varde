@@ -1,0 +1,13 @@
+/* Callout block: an even card, a 1px tone border all round, one radius, a flat tint. Tones come only from the --vd-tone-* tokens. */
+.vd-callout { --vd-callout-edge: var(--vd-tone-info-edge); --vd-callout-tint: var(--vd-tone-info-tint); --vd-callout-tint-2: var(--vd-tone-info-tint-2); --vd-callout-text: var(--vd-tone-info-text); margin-block: var(--vd-density-gap); padding: var(--vd-space-3) var(--vd-space-4); border: 1px solid var(--vd-callout-edge); border-radius: var(--vd-radius-l); background: var(--vd-callout-tint); min-inline-size: 0; overflow-wrap: anywhere; }
+.vd-callout-decision { --vd-callout-edge: var(--vd-tone-decision-edge); --vd-callout-tint: var(--vd-tone-decision-tint); --vd-callout-tint-2: var(--vd-tone-decision-tint-2); --vd-callout-text: var(--vd-tone-decision-text); }
+.vd-callout-risk { --vd-callout-edge: var(--vd-tone-risk-edge); --vd-callout-tint: var(--vd-tone-risk-tint); --vd-callout-tint-2: var(--vd-tone-risk-tint-2); --vd-callout-text: var(--vd-tone-risk-text); }
+.vd-callout-warning { --vd-callout-edge: var(--vd-tone-warning-edge); --vd-callout-tint: var(--vd-tone-warning-tint); --vd-callout-tint-2: var(--vd-tone-warning-tint-2); --vd-callout-text: var(--vd-tone-warning-text); }
+.vd-callout-success { --vd-callout-edge: var(--vd-tone-success-edge); --vd-callout-tint: var(--vd-tone-success-tint); --vd-callout-tint-2: var(--vd-tone-success-tint-2); --vd-callout-text: var(--vd-tone-success-text); }
+.vd-callout-label { margin: 0 0 var(--vd-space-1); color: var(--vd-callout-text); font-size: var(--vd-label-size); font-weight: var(--vd-label-weight); letter-spacing: var(--vd-label-tracking); text-transform: uppercase; }
+.vd-callout-glyph { display: inline-block; inline-size: 1.25em; text-align: center; font-weight: 700; }
+.vd-callout-title { margin: 0 0 var(--vd-space-1); font-weight: 650; }
+.vd-callout-text { margin: 0 0 var(--vd-space-2); }
+.vd-callout-text:last-child { margin-block-end: 0; }
+@media (forced-colors: active) { .vd-callout { border: 1px solid CanvasText; background: none; } }
+@media print { .vd-callout { break-inside: avoid; } .vd-callout-label { color: var(--vd-text); } }

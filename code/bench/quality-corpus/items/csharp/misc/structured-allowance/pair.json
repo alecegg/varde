@@ -1,0 +1,11 @@
+{
+  "pair_id": "5a0d7e2f91c4b836d15f0a72",
+  "pair_group_id": "2e9b57c1a4d08f36b25e7c19",
+  "left_id": "9e4c28b7d1f05a6392b7e4d0",
+  "right_id": "c63a90e5b28d14f70a5c93e8",
+  "left": "good.cs",
+  "right": "bad.cs",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "copy-paste"
+}

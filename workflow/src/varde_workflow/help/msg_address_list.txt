@@ -1,0 +1,7 @@
+List current reader address bindings
+
+Usage: varde msg address list [OPTIONS]
+
+Options:
+      --json  Print bindings as JSON
+  -h, --help  Print help

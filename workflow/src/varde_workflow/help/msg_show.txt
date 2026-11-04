@@ -1,0 +1,21 @@
+Show one message and its delivery state
+
+Usage: varde msg show <ID> [--json]
+
+Arguments:
+  <ID>
+          Message ID
+
+Options:
+      --json
+          Print message, delivery state, timestamps, and undelivered age as JSON
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Delivery states:
+  queued     Stored for the recipient.
+  pushed     The runner accepted the send.
+  delivered  A delivery receipt was recorded.
+  read       The inbox hook or read command claimed it.
+  answered   The recipient sent a later reply with --reply-to.

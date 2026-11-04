@@ -1,0 +1,394 @@
+{
+  "source": "live GET /openapi.json from opencode 2.0.18; downloaded locally by task review fix",
+  "version": "2.0.18",
+  "paths": {
+    "/api/session": {
+      "get": {
+        "operationId": "session.list",
+        "requestBody": null
+      },
+      "post": {
+        "operationId": "session.create",
+        "requestBody": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^ses"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "agent": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "model": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Model.Ref"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Location.PublicRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "metadata": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.Metadata"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "permissions": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Permission.Ruleset"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "/api/session/{sessionID}": {
+      "get": {
+        "operationId": "session.get",
+        "requestBody": null
+      },
+      "delete": {
+        "operationId": "session.remove",
+        "requestBody": null
+      }
+    },
+    "/api/session/{sessionID}/prompt": {
+      "post": {
+        "operationId": "session.prompt",
+        "requestBody": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^msg_"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/PromptInput.FileAttachment"
+              }
+            },
+            "agents": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Prompt.AgentAttachment"
+              }
+            },
+            "skills": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/PromptInput.SkillAttachment"
+              }
+            },
+            "metadata": {
+              "type": "object"
+            },
+            "delivery": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "resume": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "/api/session/{sessionID}/interrupt": {
+      "post": {
+        "operationId": "session.interrupt",
+        "requestBody": null
+      }
+    },
+    "/api/event": {
+      "get": {
+        "operationId": "event.subscribe",
+        "requestBody": null
+      }
+    },
+    "/api/session/{sessionID}/permission/{requestID}/reply": {
+      "post": {
+        "operationId": "session.permission.reply",
+        "requestBody": {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "$ref": "#/components/schemas/Permission.Reply"
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "decision"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "/api/session/{sessionID}/form/{formID}/reply": {
+      "post": {
+        "operationId": "session.form.reply",
+        "requestBody": {
+          "$ref": "#/components/schemas/Form.Reply"
+        }
+      }
+    },
+    "/api/permission/request": {
+      "get": {
+        "operationId": "permission.request.list",
+        "requestBody": null
+      }
+    },
+    "/api/form": {
+      "get": {
+        "operationId": "form.list",
+        "requestBody": null
+      }
+    },
+    "/api/session/{sessionID}/form/{formID}": {
+      "delete": {
+        "operationId": "session.form.cancel",
+        "requestBody": null
+      }
+    }
+  },
+  "schemas": {
+    "Model.Ref": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "providerID": {
+          "type": "string"
+        },
+        "variant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "providerID"
+      ],
+      "additionalProperties": false
+    },
+    "Permission.Rule": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "resource": {
+          "type": "string"
+        },
+        "effect": {
+          "$ref": "#/components/schemas/Permission.Effect"
+        }
+      },
+      "required": [
+        "action",
+        "resource",
+        "effect"
+      ],
+      "additionalProperties": false
+    },
+    "Permission.Reply": {
+      "type": "string",
+      "enum": [
+        "once",
+        "always",
+        "reject"
+      ]
+    },
+    "Permission.Ruleset": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/Permission.Rule"
+      }
+    },
+    "Form.Reply": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "$ref": "#/components/schemas/Form.Answer"
+        }
+      },
+      "required": [
+        "answer"
+      ],
+      "additionalProperties": false
+    },
+    "V2EventEncoded": {
+      "type": "string",
+      "contentMediaType": "application/json"
+    }
+  },
+  "event_source": {
+    "reference": "~/source/reference-repos/opencode/packages/schema/src/event-manifest.ts and event definitions; source package 2.0.32",
+    "note": "V2EventEncoded is opaque in the 2.0.18 OpenAPI schema. These shapes come from the V2 source definitions; provider turn delivery is not live-verified.",
+    "frames": [
+      {
+        "type": "server.connected",
+        "data": {}
+      },
+      {
+        "type": "session.step.started",
+        "data": {
+          "sessionID": "ses_fixture",
+          "assistantMessageID": "msg_fixture",
+          "agent": "build",
+          "model": {
+            "id": "model",
+            "providerID": "provider"
+          },
+          "started": 1
+        }
+      },
+      {
+        "type": "permission.asked",
+        "data": {
+          "id": "per_fixture",
+          "sessionID": "ses_fixture",
+          "action": "edit",
+          "resources": [
+            "src/main.py"
+          ]
+        }
+      },
+      {
+        "type": "form.created",
+        "data": {
+          "sessionID": "ses_fixture",
+          "form": {
+            "id": "frm_fixture",
+            "title": "Question",
+            "fields": []
+          }
+        }
+      },
+      {
+        "type": "form.created",
+        "data": {
+          "sessionID": "ses_fixture",
+          "form": {
+            "id": "frm_stale",
+            "title": "Question",
+            "fields": []
+          }
+        }
+      },
+      {
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_fixture",
+          "cost": 0.02,
+          "tokens": {
+            "input": 8,
+            "output": 3,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      },
+      {
+        "type": "session.status",
+        "data": {
+          "sessionID": "ses_fixture",
+          "status": {
+            "type": "busy"
+          }
+        }
+      },
+      {
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_fixture"
+        }
+      }
+    ]
+  }
+}

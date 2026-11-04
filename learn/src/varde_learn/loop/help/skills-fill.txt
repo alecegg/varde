@@ -1,0 +1,25 @@
+Record a baseline gap fill, or retire fills, in the changelog next to MANIFEST.json. Appends lines; edits no skill file.
+
+Usage: varde learn skills fill <SKILL> --baselines <DIR> (--step <STEP> | --path <PATH>) --evidence <ID>... --form <FORM> [OPTIONS]
+       varde learn skills fill <SKILL> --baselines <DIR> --retire <ID|all>
+       varde learn skills fill <SKILL> --baselines <DIR> --history
+
+Options:
+      --baselines <DIR>        Directory holding MANIFEST.json and changelog.jsonl (required)
+      --gen <GEN>              Baseline generation [default: newest entry of the skill]
+      --step <STEP>            How topic step the fill restores (<skill>/<step>)
+      --path <PATH>            Skill file the fill changes
+      --evidence <ID>          Friction item id filed with --target how/<skill>/<step> (repeatable; at least one)
+      --form <FORM>            text (the text came back) or how-line (only a how: line came back)
+      --commit <SHA>           Commit holding the text change [default: HEAD of --source]
+      --source <DIR>           Checkout holding the change; read for HEAD and the token growth
+      --tokens-added <N>       Token growth; default: the file (SKILL.md for a step) in --source against its slim copy
+      --window <WINDOW>        Demand window the numbers below come from (copy from `learn skills demand`)
+      --suspected-skips <N>    suspected_skips at fill time
+      --how-requests <N>       how requests at fill time
+      --retire <ID|all>        Append status retired for one fill id, or every active fill of the skill and generation
+      --history                List every fill of the skill, active and retired, across generations
+      --json                   Print machine-readable output
+  -h, --help                   Print help
+
+Commit the text change first, then record the fill with its commit. `measure baseline` then marks the file explained by the fill. A retire line repeats the fill with status retired and retired_at; readers take the last line per id. The changelog is append-only: reset, --to-baseline, accept and `measure baseline --record` never delete fills. A fill that re-adds a retired step or path gets a new id and `supersedes` the earlier id. `--history` shows id, step or path, evidence, commit, tokens_added, added_at, state, retired_at and supersedes for all fills; `skills candidates` and demand read active fills only.

@@ -1,0 +1,17 @@
+Read and maintain the global friction store
+
+Usage: varde learn friction <COMMAND>
+
+Commands:
+  list        List friction items with optional filters
+  add         Add a friction item or append an occurrence
+  show        Show an item and its occurrences and status history
+  set-status  Change an item's status and record the reason
+  export      Export every friction item as a Markdown file in a directory
+  import      Import legacy and exported friction Markdown files from a directory
+  adopt       Record an applied change and promote its friction items
+  recurrence  List adoptions whose friction recurred later
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

@@ -1,0 +1,10 @@
+{
+  "pair_id": "ef582ae60c658e430f017110",
+  "pair_group_id": "50385c958ed65d250251afe2",
+  "left_id": "595425d68ffe87644acffe08",
+  "right_id": "b8a6889ad5d385ada793dac3",
+  "left": "excellent.java",
+  "right": "poor.java",
+  "left_role": "excellent",
+  "right_role": "poor"
+}

@@ -1,0 +1,8 @@
+Archive every active agent-scope entry of an agent whose recorded model or
+harness version differs from the given ones. Files are kept; entries re-earn
+through `memory add`.
+
+Usage: varde learn memory reset --agent <A> --model <M> --harness-version <V> [--dry-run] [--json]
+
+Options:
+      --dry-run  Report what would be archived; write nothing

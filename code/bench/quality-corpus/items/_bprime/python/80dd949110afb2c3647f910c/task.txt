@@ -1,0 +1,2 @@
+Reduce a printed phone number to its digits, dropping a leading one when eleven digits remain and the next digit can start an area code.
+Input domain: printed numbers may hold digits, spaces, dashes, parentheses and plus signs; a leading one is dropped only when eleven digits remain and the second digit is two through nine.

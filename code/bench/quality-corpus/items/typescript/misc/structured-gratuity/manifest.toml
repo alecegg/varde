@@ -1,0 +1,4 @@
+category = "a"
+language = "typescript"
+pair_group_id = "2c656820be1bb9c755aa8cbc"
+dominant_defect = "unclear-names"

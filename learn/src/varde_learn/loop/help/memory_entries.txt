@@ -1,0 +1,64 @@
+=== search
+Search entries by text. Terms match word prefixes; hits are ranked (title, aliases and slug weigh more than body). Expired entries are hidden.
+
+Usage: varde learn memory search --text <TEXT> [--topic <TOPIC>] [--scope <SCOPE>] [--field <KEY=VALUE>]... [--limit <N>] [--json]
+
+Options:
+      --text <TEXT>         Words to search for
+      --topic <TOPIC>       Only entries with this topic
+      --scope <SCOPE>       Only this scope
+      --field <KEY=VALUE>   Only entries whose front-matter field equals the value (repeatable)
+      --limit <N>           Maximum hits [default: 20]
+      --json                Print machine-readable output
+  -h, --help                Print help
+
+=== update
+Replace an entry's text. `show` prints the version to pass; a changed file is rejected as a conflict (exit 1).
+
+Usage: varde learn memory update <ID> --expected-version <VERSION> (--text <TEXT> | --file <FILE>) [--json]
+
+Options:
+      --expected-version <VERSION>  Version last read with `show`
+      --text <TEXT>                 New text
+      --file <FILE>                 Read the new text from this file
+      --json                        Print machine-readable output
+  -h, --help                        Print help
+
+=== set-field
+Set one front-matter field. Unknown names are kept as extra fields. Lint errors reject the write.
+
+Usage: varde learn memory set-field <ID> <KEY> <VALUE> --expected-version <VERSION> [--json]
+
+Options:
+      --expected-version <VERSION>  Version last read with `show`
+      --json                        Print machine-readable output
+  -h, --help                        Print help
+
+=== delete
+Hard-delete one entry file by explicit call. Entries that link to it are reported. Prefer `retire`. Without --expected-version the current file is deleted with no conflict check.
+
+Usage: varde learn memory delete <ID> [--expected-version <VERSION>] [--json]
+
+Options:
+      --expected-version <VERSION>  Reject the delete when the file changed since this version
+      --json                        Print machine-readable output
+  -h, --help                        Print help
+
+=== map
+Print a deterministic map of the store grouped by scope and type. Writes a file only with --write.
+
+Usage: varde learn memory map [--write <FILE>] [--json]
+
+Options:
+      --write <FILE>  Write the map to this file
+      --json          Print machine-readable output
+  -h, --help          Print help
+
+=== lint
+Check every entry: errors (bad id, empty text, secret, long surfaced summary), warnings (long summary or body, unknown type, broken link, orphan) and unreadable files. Exits 2 when there are errors.
+
+Usage: varde learn memory lint [--json]
+
+Options:
+      --json  Print machine-readable output
+  -h, --help  Print help

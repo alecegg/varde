@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "seed": 1701,
+  "sets": [
+    {
+      "class_counts": {
+        "constructor": 59,
+        "dynamic": 3,
+        "higher_order": 59,
+        "imported": 60,
+        "member": 60,
+        "same_file": 59
+      },
+      "class_shortfalls": {
+        "dynamic": 47
+      },
+      "language": "go",
+      "path": "notes/restricted/call-audit/go-rust/go-test.jsonl",
+      "review_stubs_path": "notes/restricted/call-audit/go-rust/go-review-stubs.json",
+      "review_stubs_sha256": "29da4985e056f4309021ec0ff6c08982c2abcd81bdc51bcb7e349163e8ef5ab8",
+      "sha256": "2a08423153dee9ee851fba50d236bd64a4bfe82aa14c81bc544b4dd007c7693f",
+      "sites": 300,
+      "target_sites": 300
+    },
+    {
+      "class_counts": {
+        "constructor": 59,
+        "dynamic": 58,
+        "higher_order": 8,
+        "imported": 58,
+        "member": 59,
+        "same_file": 58
+      },
+      "class_shortfalls": {
+        "higher_order": 42
+      },
+      "language": "rust",
+      "path": "notes/restricted/call-audit/go-rust/rust-test.jsonl",
+      "review_stubs_path": "notes/restricted/call-audit/go-rust/rust-review-stubs.json",
+      "review_stubs_sha256": "fa3d5062eeb280f9e2d98826bde2b67c22b41126f2e1abc57fe5b42c5ebc26a4",
+      "sha256": "1f0bf726ec19538bde34b35a36f2419eca415355d3abf7a76b7ba59c88ba7114",
+      "sites": 300,
+      "target_sites": 300
+    }
+  ]
+}

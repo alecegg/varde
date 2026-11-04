@@ -1,0 +1,33 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "Src/Newtonsoft.Json/Utilities/StringUtils.cs"
+  ],
+  "changed_functions": [
+    "EndsWith",
+    "FormatWith",
+    "StartsWith",
+    "ToCamelCase"
+  ],
+  "child_sha": "750771e890721adff2636269bf59d9bfd4d92f60",
+  "file_licenses": {
+    "JamesNK/Newtonsoft.Json:Src/Newtonsoft.Json/Utilities/StringUtils.cs": "MIT"
+  },
+  "id": "5eb337075d2ce4fdb12f385e",
+  "intent": {
+    "linked_issues": [],
+    "message": "-Code cleanup"
+  },
+  "label_source": "developer-intent",
+  "language": "csharp",
+  "left": "a.cs",
+  "license": "MIT",
+  "pair_group_id": "refactor-0ba1ad625c9a14c1",
+  "parent_sha": "5a4875dcbd6dd2891b2226b5387f14597ce47cdb",
+  "pin_sha": "52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa",
+  "repo": "JamesNK/Newtonsoft.Json",
+  "right": "b.cs",
+  "split": "regression",
+  "upstream_url": "https://github.com/JamesNK/Newtonsoft.Json.git"
+}

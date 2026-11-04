@@ -1,0 +1,13 @@
+Manage session reader addresses
+
+Usage: varde msg address <COMMAND>
+
+Commands:
+  new     Issue a one-time address marker
+  bind    Redeem a marker for a session
+  refresh Refresh the current session wake context
+  unbind  Revoke the current address binding
+  list    Show current bindings
+
+Options:
+  -h, --help  Print help

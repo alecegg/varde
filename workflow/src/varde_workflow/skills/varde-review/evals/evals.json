@@ -1,0 +1,127 @@
+{
+  "skill_name": "varde-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Review this diff on the feature/auth branch against main — find bugs in the token handling changes.",
+      "expected_output": "Runs in default mode with active categories CORRECTNESS, CODE, and ARCHITECTURE, stating the resolved breadth and categories before proceeding. Creates the review folder under <working>/reviews/<YYYY-MM-DD>-<slug>/ with one review.md before reading code. Reads the diff and the surrounding code, whole files or dependents only for a changed contract or unresolved evidence, and writes findings into review.md (a category checklist, no per-category files) as they are found, each with Severity, a `Status` of `open` until fixed or deferred, and a repository-relative Location. Reports 'Review complete...' with finding counts. No source file is modified.",
+      "assertions": [
+        "Resolved breadth is the default three categories — exactly CORRECTNESS, CODE, ARCHITECTURE — stated before category work begins",
+        "No source file outside the review folder is modified (report-only)",
+        "Findings are written into the single review.md (no per-category files) with the required fields including `Status: open` and a repository-relative Location",
+        "The review folder and review.md are created before any code is read"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Review the error-handling in src/api and just go ahead and fix any bugs you find while you're in there.",
+      "expected_output": "Performs the structured review and writes the persisted findings first — report always precedes fix. Because fixing is requested, it then applies the fixes on that same review: the fix request authorizes routine fixes, so one Builder verifies each finding is real and applies every fix that keeps the intended behaviour with one reliable in-scope solution, recording `Status: fixed`. It returns every finding whose fix would change intended behaviour, and the parent shows them in one table for the user; each user-approved fix then runs as one bounded build, subject to verification. The Builder does not ask the user itself or apply an intended-behaviour change without the recorded decision. After the fix batch, the type check and tests run once per touched package with at most two repair rounds before findings are marked `fixed`. A fix that changes intended behaviour gets one fixes-only re-review; a local functionality-preserving fix gets a header-only re-check, not an automatic re-review loop.",
+      "assertions": [
+        "Findings are written to the review folder before any fix is applied — report precedes fix",
+        "Applies the fixes in the same session after writing the report",
+        "The fix request authorizes routine one-solution fixes that keep the intended behaviour; findings whose fix would change intended behaviour are grouped for the user",
+        "Findings whose fix would change intended behaviour are returned by the Builder and reach the parent's user decision before any further fix build; the Builder does not prompt the user",
+        "Routine one-solution fixes that keep the intended behaviour apply in one fix loop without a new human decision; user-approved intended-behaviour fixes go through one bounded build",
+        "Captured execution events show the batch check (type check and tests once per touched package, at most two repair rounds) before `fixed` is recorded",
+        "A behaviour-changing fix gets one fixes-only re-review; passing tests or coordinator prose alone do not prove re-review"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "`varde-build build` calls `varde-review fix` with `mode=build` and a `plan_context`. The parent has recorded explicit user approval of finding CORRECTNESS-001 and its concrete solution changing authorization logic, with traceable decision evidence, selected finding_ids=[CORRECTNESS-001], and a bounded independently approved contract covering the fix. Another authorization finding lacks matching approval.",
+      "expected_output": "Processes only selected CORRECTNESS-001 with its exact approved solution. Its recorded user decision approves the intended-behaviour change, so authorization logic alone does not cause repeated escalation. Spec-conflict, scope, ownership, independent review and verification checks still apply; failure retains decision history and returns the blocker to the parent. The unselected finding stays untouched.",
+      "assertions": [
+        "Only selected finding_ids are processed in the bounded fix",
+        "Concrete matching user approval covers the intended-behaviour change without clearing the recorded decision",
+        "Spec-conflict, scope, ownership, independent review and verification checks still apply",
+        "The unselected authorization finding remains untouched"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "During `varde-review fix`, the fix loop applies solutions for CORRECTNESS-002 and then CORRECTNESS-003, and the batch's single test run fails because of the CORRECTNESS-003 fix.",
+      "expected_output": "Type check and tests run once per touched package after the batch, not per finding. On failure it repairs the cause directly and reruns, at most two repair rounds, with no restore or reapply; if checks still fail after the second round it reports the failing checks and leaves the blocked findings blank. Each fixed finding still needs its defect-gone confirmation before `Status: fixed`.",
+      "assertions": [
+        "Type check and tests run once per touched package after the batch, not once per finding",
+        "A failing batch is repaired directly and rerun, with no restore or per-finding reapply and no more than two repair rounds; remaining failures are reported",
+        "The CORRECTNESS-002 fix stays in place and its defect is still confirmed gone before `Status: fixed`",
+        "No repo-wide `git stash` or `git checkout` is used, since that would also discard the unrelated successful fix"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "A bounded varde-review fix selects CORRECTNESS-001 (authorization logic), whose fix changes intended behaviour, but supplies no concrete approved solution or traceable user decision evidence. Should it apply?",
+      "expected_output": "Returns the finding to the parent before editing; the selection alone is insufficient approval. A mismatched solution likewise remains deferred. Preserve any prior decision history and continue unrelated eligible work; do not bypass the intended-behaviour approval rule or other gates.",
+      "assertions": [
+        "Missing or mismatched concrete approval is deferred before editing source",
+        "Selecting the finding alone is not treated as user approval of a solution",
+        "Recorded decision history is preserved when a finding is deferred"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "Fix the already recorded standalone review finding CORRECTNESS-001 in <working>/reviews/api/review.md. It has one settled, user-approved solution and location src/api/token.rs:42. No other finding is selected.",
+      "expected_output": "Read the named finding and make its single settled fix as one bounded change in the same turn. Keep the review folder, finding ID, concrete solution, and user decision evidence alongside the bounded change; create no report, no automated fix pass, and no plan or task file, and leave other findings untouched. After source verification, set only CORRECTNESS-001's Status to fixed, then the independent review or header re-check covers the change. Leave other findings unchanged.",
+      "assertions": [
+        "Fixes only the named finding in one bounded change, creating no new review folder or task file",
+        "The located finding in review.md, its concrete solution, and the user decision evidence stay with the bounded change",
+        "Only the selected finding's Status is updated after source verification",
+        "Verification runs before the finding is marked fixed, and the re-check confirms only the named fix; other findings stay untouched"
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Fix these review findings: one is plan-owned, and another standalone finding has two unresolved solution choices. Can the direct single-finding route process both?",
+      "expected_output": "No. The plan-owned finding keeps its plan task flow. The standalone finding needs a concrete solution decision before a bounded fix; the direct route does not process a batch, infer approval from the selection, or bypass the intended-behaviour approval rule.",
+      "assertions": [
+        "A plan-owned finding is fixed through its plan task, not directly (task file updated)",
+        "Unsettled standalone solutions return to triage",
+        "The direct route does not process multiple findings or bypass approval gates"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Simplify what I just changed in src/api/error.rs. Keep behavior.",
+      "expected_output": "Computes the change range, maps callers, tests, and existing helpers, edits only within the printed range, and verifies once. It reports the changed file and any obstacle without creating a findings store, and does not claim completion when verification was skipped.",
+      "assertions": [
+        "Simplifies inline without creating a review folder or findings store",
+        "The changed range and related callers, tests, and reusable helpers are checked before editing",
+        "Verification runs once after the scoped edits, and the result is reported",
+        "Obstacles are reported instead of claiming completed verification"
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "A report-first review of src/api has one standalone finding: CORRECTNESS-001 is Status: open and has one reliable solution that keeps the intended behaviour. The user asked to review the area and fix any obvious local bugs. What does the parent record before edits?",
+      "expected_output": "The standalone fix request approves the routine fix. The parent records the chosen solution and the user's review-and-fix request as decision evidence, then dispatches one bounded build with CORRECTNESS-001 selected. Its Builder processes only that ID. It does not edit source during triage.",
+      "assertions": [
+        "The user request is recorded as decision evidence alongside the concrete solution",
+        "The parent dispatches one bounded build for the selected finding after recording the decision",
+        "The Builder is limited to CORRECTNESS-001 and does not apply other findings",
+        "The workflow edits source only inside the bounded build, never during report or triage"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Review the diff on the current branch against main. Report any findings and your verdict.",
+      "expected_output": "Reports two open CORRECTNESS findings with `Severity: high`: `Low-quality test: tautology` identifies `src/number.test.mjs` and quotes `assert.equal(double(3), double(3))`; `Low-quality test: design assertion` identifies `src/number-design.test.mjs` and quotes `assert.equal(typeof NumberFormatter, \"function\")`. Sets `verdict: changes-requested`.",
+      "assertions": [
+        "Reports a CORRECTNESS finding titled `Low-quality test: tautology` for the added tautological test",
+        "Reports a CORRECTNESS finding titled `Low-quality test: design assertion` for the incidental class-presence assertion",
+        "Both findings have Severity: high and remain open",
+        "The verdict is changes-requested because both high-severity test-quality findings block approval"
+      ],
+      "setup_script": "evals/setup-test-quality.sh"
+    },
+    {
+      "id": 19,
+      "prompt": "A varde-review-ui report left VISUAL-001, a clipped narrow-viewport button, open with a saved before screenshot and the 390px viewport recorded. Fix it.",
+      "expected_output": "Fixes the selected VISUAL-001 finding: applies the one-solution fix inside a bounded build, then repeats the recorded route and viewport and inspects an after screenshot; passing DOM checks or tests alone are insufficient.",
+      "assertions": [
+        "Fixes the recorded finding without starting a new visual review",
+        "Applies the fix to only VISUAL-001",
+        "Re-checks the fix at the recorded viewport with an inspected after screenshot before marking it fixed"
+      ]
+    }
+  ]
+}

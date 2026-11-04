@@ -1,0 +1,38 @@
+[project]
+name = "varde"
+version = "0.1.0"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = ["varde-core", "varde-code", "varde-workflow", "varde-toz", "varde-learn", "varde-dev", "varde-visualize", "varde-design", "varde-data", "tree-sitter-language-pack==1.22.1"]
+
+[project.optional-dependencies]
+runner = ["wasmtime==49.0.0"]
+
+[project.entry-points."varde.skills"]
+app = "varde"
+
+[project.entry-points."varde.modules"]
+app = "varde.glue.module:register"
+autosave = "varde.setup.module:register"
+runner = "varde.setup.module:register_runner"
+serve = "varde.setup.module:register_serve"
+
+[project.scripts]
+varde = "varde.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "pyinstaller==6.22.3", "pyinstaller-hooks-contrib==2026.8", "pex==2.103.4"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider"
+markers = ["slow: integration, stress, scale, browser, or full-matrix test"]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "varde"
+wheel-exclude = ["**/evals", "**/evals/**", "**/*-workspace/**"]
+source-exclude = ["**/evals/**"]

@@ -1,0 +1,37 @@
+{
+  "current_mailman": "d40a82ce5619e264",
+  "events": [
+    {
+      "alive": true,
+      "at": "2026-10-24T13:21:20.907804Z",
+      "event": "send-liveness",
+      "message_id": "m-a0841245",
+      "to": "main",
+      "token_age_s": 42
+    },
+    {
+      "at": "2026-10-24T13:42:01.085070Z",
+      "event": "ended",
+      "expect_return_by": "",
+      "token_id": "7942d7c29b2339ca"
+    },
+    {
+      "at": "2026-10-24T13:50:32.037604Z",
+      "event": "waiting",
+      "expect_return_by": "2026-10-24T13:51:32.037604Z",
+      "token_id": "d40a82ce5619e264"
+    }
+  ],
+  "escalations": {
+    "m-02b075d6": {
+      "at": "2026-10-22T07:21:37.820393Z",
+      "outcome": "dropped",
+      "status": "reserved"
+    },
+    "m-a30be1fb": {
+      "at": "2026-10-18T19:36:27.038665Z",
+      "outcome": "escalated",
+      "status": "reserved"
+    }
+  }
+}

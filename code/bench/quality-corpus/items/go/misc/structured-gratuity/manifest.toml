@@ -1,0 +1,4 @@
+category = "a"
+language = "go"
+pair_group_id = "41f8a0794e1276dc12ae58a3"
+dominant_defect = "unclear-names"

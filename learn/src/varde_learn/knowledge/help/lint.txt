@@ -1,0 +1,31 @@
+Lint a Knowledge Bundle for structural health issues
+
+warnings such as orphan Concepts do not fail lint, while errors exit nonzero.
+
+Usage: varde learn knowledge lint [OPTIONS]
+
+Options:
+      --bundle <BUNDLE>
+          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde setup paths`) when omitted
+
+      --require-index
+          Also report directories with Concept files but no `index.md`
+
+      --limit <LIMIT>
+          Maximum records returned per collection
+          
+          [default: 100]
+
+      --offset <OFFSET>
+          Records skipped before returning results
+          
+          [default: 0]
+
+      --all
+          Return every record without pagination
+
+      --json
+          Machine-readable JSON output
+
+  -h, --help
+          Print help (see a summary with '-h')

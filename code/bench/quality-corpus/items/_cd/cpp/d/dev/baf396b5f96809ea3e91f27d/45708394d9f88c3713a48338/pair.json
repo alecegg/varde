@@ -1,0 +1,32 @@
+{
+  "behaviour_equivalent": false,
+  "category": "d",
+  "expected_direction": "invariant",
+  "id": "45708394d9f88c3713a48338",
+  "label_source": "construction",
+  "language": "cpp",
+  "left": "a.h",
+  "license": "MIT",
+  "mutant_file": "45708394d9f88c3713a48338-b.h",
+  "operator": "reorder-and-rename",
+  "provenance": {
+    "end_line": 230,
+    "file": "007-fmtlib_fmt-clzll.h",
+    "function": "clzll",
+    "license": "MIT",
+    "license_header": "",
+    "lines": 14,
+    "parse_language": "cpp",
+    "path": "include/fmt/format.h",
+    "pin_sha": "fdf31252e61ca7efe99af41bb4780353cc2253dd",
+    "repo": "fmtlib/fmt",
+    "start_line": 217,
+    "test_path": false
+  },
+  "right": "b.h",
+  "seed": 1601173636730472405,
+  "source_file": "45708394d9f88c3713a48338-a.h",
+  "split": "dev",
+  "status": "mutated",
+  "validation": "parse"
+}

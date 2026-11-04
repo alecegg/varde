@@ -1,0 +1,189 @@
+format_version = 1
+sample_seed = 17
+call_class_stratification = "audit.sample_sets: equal quotas across six call classes"
+calibration_role = "none"
+
+[[repo]]
+name = "pallets/flask"
+checkout_alias = "python-dev-flask"
+language = "python"
+url = "https://github.com/pallets/flask.git"
+sha = "d086db856be187255b8ec61ef409357393020f32"
+license = "BSD-3-Clause"
+license_file = "LICENSE.txt"
+kind = "library"
+role = "test-only"
+selection_source = "validation-plan-7"
+history_commits_observed = 5562
+history_oldest_observed = "2010-04-06"
+source_roots = ["src/flask"]
+environment = "Python 3 source; uv project metadata and checked-in uv.lock; no target install for local calls."
+
+[[repo]]
+name = "psf/requests"
+checkout_alias = "python-dev-requests"
+language = "python"
+url = "https://github.com/psf/requests.git"
+sha = "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60"
+license = "Apache-2.0"
+license_file = "LICENSE"
+kind = "library"
+role = "test-only"
+selection_source = "validation-plan-7"
+history_commits_observed = 6495
+history_oldest_observed = "2011-02-13"
+source_roots = ["src/requests"]
+environment = "Python 3 source; pyproject.toml; no target install for local calls."
+
+[[repo]]
+name = "django/django"
+checkout_alias = "python-test-django"
+language = "python"
+url = "https://github.com/django/django.git"
+sha = "d430084791a61b31cecec132bce3dca19194f7f2"
+license = "BSD-3-Clause"
+license_file = "LICENSE"
+kind = "library"
+role = "dev"
+selection_source = "validation-plan-7"
+history_commits_observed = 5000
+history_oldest_observed = "2021-09-21"
+source_roots = ["django"]
+environment = "Python 3 source; pyproject.toml; optional requirements install only if imported third-party context is needed."
+
+[[repo]]
+name = "pytest-dev/pytest"
+checkout_alias = "python-test-pytest"
+language = "python"
+url = "https://github.com/pytest-dev/pytest.git"
+sha = "cb6ff97bcb147f2bb5d9e0072c424dc03a452ba1"
+license = "MIT"
+license_file = "LICENSE"
+kind = "dev tool"
+role = "dev"
+selection_source = "validation-plan-7"
+history_commits_observed = 17824
+history_oldest_observed = "2007-01-24"
+source_roots = ["src"]
+environment = "Python 3 source; uv project metadata and uv.lock; no target install for local calls."
+
+[[repo]]
+name = "pandas-dev/pandas"
+checkout_alias = "python-test-pandas"
+language = "python"
+url = "https://github.com/pandas-dev/pandas.git"
+sha = "03e5d938adbd3ec9314c326b002170b73bde2c9f"
+license = "BSD-3-Clause"
+license_file = "LICENSE"
+kind = "library"
+role = "dev"
+selection_source = "validation-plan-7"
+history_commits_observed = 39510
+history_oldest_observed = "2009-07-31"
+source_roots = ["pandas"]
+environment = "Python 3 source; pyproject.toml and pixi.lock; do not build C/Cython extensions for source-level audit."
+
+[[repo]]
+name = "zulip/zulip"
+checkout_alias = "python-test-zulip"
+language = "python"
+url = "https://github.com/zulip/zulip.git"
+sha = "e45560dfcfc40c786c689b454ef6f4e7dc0f3eaf"
+license = "Apache-2.0"
+license_file = "LICENSE"
+kind = "end-user app"
+role = "test-only"
+selection_source = "user-approved-extra"
+history_commits_observed = 30386
+history_oldest_observed = "2021-04-16"
+source_roots = ["zerver"]
+environment = "Python 3 source; uv.lock and pyproject.toml; no service provisioning or DB needed for static local calls."
+
+[[repo]]
+name = "expressjs/express"
+checkout_alias = "ts-dev-express"
+language = "typescript"
+url = "https://github.com/expressjs/express.git"
+sha = "a419aa7350389a275ab45fde2e849ed1f02449ef"
+license = "MIT"
+license_file = "LICENSE"
+kind = "library"
+role = "test-only"
+selection_source = "validation-plan-7"
+history_commits_observed = 6181
+history_oldest_observed = "2009-06-26"
+source_roots = ["lib"]
+source_suffixes = [".js"]
+environment = "JavaScript source; no lockfile. Use repository-local declarations only and mark package calls unresolved/external."
+
+[[repo]]
+name = "vuejs/core"
+checkout_alias = "ts-dev-vue"
+language = "typescript"
+url = "https://github.com/vuejs/core.git"
+sha = "bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c"
+license = "MIT"
+license_file = "LICENSE"
+kind = "library"
+role = "test-only"
+selection_source = "validation-plan-7"
+history_commits_observed = 6500
+history_oldest_observed = "2019-10-06"
+source_roots = ["packages"]
+source_suffixes = [".ts", ".tsx", ".js", ".jsx"]
+config_files = ["tsconfig.json"]
+environment = "pnpm workspace with pnpm-lock.yaml; pnpm install --frozen-lockfile if external type packages are required."
+
+[[repo]]
+name = "typeorm/typeorm"
+checkout_alias = "ts-test-typeorm"
+language = "typescript"
+url = "https://github.com/typeorm/typeorm.git"
+sha = "fe92394287516feeada6e9c308ebe22deca2458e"
+license = "MIT"
+license_file = "LICENSE"
+kind = "library"
+role = "dev"
+selection_source = "validation-plan-7"
+history_commits_observed = 6086
+history_oldest_observed = "2016-02-21"
+source_roots = ["packages/typeorm/src", "packages/codemod/src"]
+source_suffixes = [".ts", ".tsx", ".js", ".jsx"]
+config_files = ["packages/typeorm/tsconfig.json"]
+environment = "pnpm workspace with pnpm-lock.yaml; pnpm install --frozen-lockfile if external type packages are required."
+
+[[repo]]
+name = "prettier/prettier"
+checkout_alias = "ts-test-prettier"
+language = "typescript"
+url = "https://github.com/prettier/prettier.git"
+sha = "344d6dc42c8057fbf5573326b52dbc8a43635e7e"
+license = "MIT"
+license_file = "LICENSE"
+kind = "dev tool"
+role = "dev"
+selection_source = "validation-plan-7"
+history_commits_observed = 10648
+history_oldest_observed = "2017-07-09"
+source_roots = ["src"]
+source_suffixes = [".ts", ".tsx", ".js", ".jsx"]
+config_files = ["tsconfig.json"]
+environment = "Yarn workspace with yarn.lock; yarn install --immutable if external type packages are required."
+
+[[repo]]
+name = "apache/superset"
+checkout_alias = "ts-test-superset"
+language = "typescript"
+url = "https://github.com/apache/superset.git"
+sha = "a5d29a9d27d2951e203ce65174d1af7cb5443d2f"
+license = "Apache-2.0"
+license_file = "LICENSE.txt"
+kind = "end-user app"
+role = "test-only"
+selection_source = "user-approved-extra"
+history_commits_observed = 23788
+history_oldest_observed = "2015-07-02"
+source_roots = ["superset-frontend/src"]
+source_suffixes = [".ts", ".tsx", ".js", ".jsx"]
+config_files = ["superset-frontend/tsconfig.json", "superset-frontend/package.json"]
+environment = "npm project with superset-frontend/package-lock.json; npm ci in the frontend subdirectory if external type packages are required."

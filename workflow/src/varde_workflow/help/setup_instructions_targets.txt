@@ -1,0 +1,6 @@
+Print the configured instruction targets
+
+Usage: varde setup instructions targets
+
+Options:
+  -h, --help  Print help

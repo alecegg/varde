@@ -1,0 +1,354 @@
+{
+  "completed_repositories": 13,
+  "languages": {
+    "cpp": {
+      "accepted": 130,
+      "commits_walked": 9185,
+      "filters": {
+        "file_limit": {
+          "evaluated": 501,
+          "passed": 310
+        },
+        "function_limit": {
+          "evaluated": 249,
+          "passed": 151
+        },
+        "generated": {
+          "evaluated": 151,
+          "passed": 151
+        },
+        "intent": {
+          "evaluated": 8232,
+          "passed": 501
+        },
+        "parent": {
+          "evaluated": 9185,
+          "passed": 8232
+        },
+        "parse": {
+          "evaluated": 310,
+          "passed": 249
+        },
+        "public_feature": {
+          "evaluated": 151,
+          "passed": 130
+        }
+      },
+      "intent_matches": 501,
+      "partial_repositories": 0,
+      "repositories": 2
+    },
+    "csharp": {
+      "accepted": 8,
+      "commits_walked": 1927,
+      "filters": {
+        "file_limit": {
+          "evaluated": 30,
+          "passed": 17
+        },
+        "function_limit": {
+          "evaluated": 13,
+          "passed": 9
+        },
+        "generated": {
+          "evaluated": 9,
+          "passed": 9
+        },
+        "intent": {
+          "evaluated": 1757,
+          "passed": 30
+        },
+        "parent": {
+          "evaluated": 1927,
+          "passed": 1757
+        },
+        "parse": {
+          "evaluated": 17,
+          "passed": 13
+        },
+        "public_feature": {
+          "evaluated": 9,
+          "passed": 8
+        }
+      },
+      "intent_matches": 30,
+      "partial_repositories": 1,
+      "repositories": 1
+    },
+    "go": {
+      "accepted": 204,
+      "commits_walked": 20981,
+      "filters": {
+        "file_limit": {
+          "evaluated": 557,
+          "passed": 391
+        },
+        "function_limit": {
+          "evaluated": 366,
+          "passed": 239
+        },
+        "generated": {
+          "evaluated": 239,
+          "passed": 235
+        },
+        "intent": {
+          "evaluated": 15537,
+          "passed": 557
+        },
+        "parent": {
+          "evaluated": 20981,
+          "passed": 15537
+        },
+        "parse": {
+          "evaluated": 391,
+          "passed": 366
+        },
+        "public_feature": {
+          "evaluated": 235,
+          "passed": 204
+        }
+      },
+      "intent_matches": 557,
+      "partial_repositories": 0,
+      "repositories": 2
+    },
+    "java": {
+      "accepted": 163,
+      "commits_walked": 17641,
+      "filters": {
+        "file_limit": {
+          "evaluated": 492,
+          "passed": 335
+        },
+        "function_limit": {
+          "evaluated": 324,
+          "passed": 176
+        },
+        "generated": {
+          "evaluated": 176,
+          "passed": 176
+        },
+        "intent": {
+          "evaluated": 17398,
+          "passed": 492
+        },
+        "parent": {
+          "evaluated": 17641,
+          "passed": 17398
+        },
+        "parse": {
+          "evaluated": 335,
+          "passed": 324
+        },
+        "public_feature": {
+          "evaluated": 176,
+          "passed": 163
+        }
+      },
+      "intent_matches": 492,
+      "partial_repositories": 0,
+      "repositories": 2
+    },
+    "python": {
+      "accepted": 617,
+      "commits_walked": 74536,
+      "filters": {
+        "file_limit": {
+          "evaluated": 1777,
+          "passed": 1206
+        },
+        "function_limit": {
+          "evaluated": 1099,
+          "passed": 790
+        },
+        "generated": {
+          "evaluated": 790,
+          "passed": 788
+        },
+        "intent": {
+          "evaluated": 70771,
+          "passed": 1777
+        },
+        "parent": {
+          "evaluated": 74536,
+          "passed": 70771
+        },
+        "parse": {
+          "evaluated": 1206,
+          "passed": 1099
+        },
+        "public_feature": {
+          "evaluated": 788,
+          "passed": 617
+        }
+      },
+      "intent_matches": 1777,
+      "partial_repositories": 0,
+      "repositories": 2
+    },
+    "rust": {
+      "accepted": 25,
+      "commits_walked": 14030,
+      "filters": {
+        "file_limit": {
+          "evaluated": 258,
+          "passed": 188
+        },
+        "function_limit": {
+          "evaluated": 44,
+          "passed": 25
+        },
+        "generated": {
+          "evaluated": 25,
+          "passed": 25
+        },
+        "intent": {
+          "evaluated": 11551,
+          "passed": 258
+        },
+        "parent": {
+          "evaluated": 14030,
+          "passed": 11551
+        },
+        "parse": {
+          "evaluated": 188,
+          "passed": 44
+        },
+        "public_feature": {
+          "evaluated": 25,
+          "passed": 25
+        }
+      },
+      "intent_matches": 258,
+      "partial_repositories": 0,
+      "repositories": 2
+    },
+    "typescript": {
+      "accepted": 269,
+      "commits_walked": 61831,
+      "filters": {
+        "file_limit": {
+          "evaluated": 1004,
+          "passed": 738
+        },
+        "function_limit": {
+          "evaluated": 511,
+          "passed": 296
+        },
+        "generated": {
+          "evaluated": 296,
+          "passed": 289
+        },
+        "intent": {
+          "evaluated": 44754,
+          "passed": 1004
+        },
+        "parent": {
+          "evaluated": 61831,
+          "passed": 44754
+        },
+        "parse": {
+          "evaluated": 738,
+          "passed": 511
+        },
+        "public_feature": {
+          "evaluated": 289,
+          "passed": 269
+        }
+      },
+      "intent_matches": 1004,
+      "partial_repositories": 0,
+      "repositories": 2
+    }
+  },
+  "pairs_repositories": 14,
+  "repositories": {
+    "JamesNK/Newtonsoft.Json": {
+      "accepted": 8,
+      "language": "csharp",
+      "pin_sha": "52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa",
+      "status": "complete"
+    },
+    "abseil/abseil-cpp": {
+      "accepted": 60,
+      "language": "cpp",
+      "pin_sha": "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c",
+      "status": "complete"
+    },
+    "apache/commons-lang": {
+      "accepted": 88,
+      "language": "java",
+      "pin_sha": "9c86ffe308e7c682df3b1cf76f27dfc5bb6a2243",
+      "status": "complete"
+    },
+    "clap-rs/clap": {
+      "accepted": 14,
+      "language": "rust",
+      "pin_sha": "ccc89b83875474399e9d9d70841163f6319d1a41",
+      "status": "complete"
+    },
+    "django/django": {
+      "accepted": 324,
+      "language": "python",
+      "pin_sha": "d430084791a61b31cecec132bce3dca19194f7f2",
+      "status": "complete"
+    },
+    "dotnet/roslyn": {
+      "accepted": 0,
+      "language": "csharp",
+      "pin_sha": "3645b6aa36ad41775a73e57a620787a3d38327a0",
+      "reason": "The mining process reached its 50-minute time budget before writing its final JSONL and stats; no Roslyn pair records were persisted.",
+      "status": "time-capped, partial"
+    },
+    "gin-gonic/gin": {
+      "accepted": 14,
+      "language": "go",
+      "pin_sha": "0f09c3a9b4626d9fe9979cf4d0521d6ae32ab646",
+      "status": "complete"
+    },
+    "google/guava": {
+      "accepted": 75,
+      "language": "java",
+      "pin_sha": "5e82f2f528fbbd970e00748025b48e3eb42ed702",
+      "status": "complete"
+    },
+    "microsoft/TypeScript": {
+      "accepted": 249,
+      "language": "typescript",
+      "pin_sha": "2e9fb00f5f5c9186d09aabd78cced5ce2497456d",
+      "status": "complete"
+    },
+    "nestjs/nest": {
+      "accepted": 20,
+      "language": "typescript",
+      "pin_sha": "2eb7be8dc3410ac5b89aa84fd334e6813b53059c",
+      "status": "complete"
+    },
+    "nlohmann/json": {
+      "accepted": 70,
+      "language": "cpp",
+      "pin_sha": "0e95fe8200adbf0e033d0c0818eea473e1d4d346",
+      "status": "complete"
+    },
+    "pandas-dev/pandas": {
+      "accepted": 293,
+      "language": "python",
+      "pin_sha": "03e5d938adbd3ec9314c326b002170b73bde2c9f",
+      "status": "complete"
+    },
+    "prometheus/prometheus": {
+      "accepted": 190,
+      "language": "go",
+      "pin_sha": "c052a79dc7fd0f2df2219ffe336f510b0d149b72",
+      "status": "complete"
+    },
+    "tokio-rs/tokio": {
+      "accepted": 11,
+      "language": "rust",
+      "pin_sha": "cdd9dae3aa5056e23dc4d5bc4f852ab8fbf27aff",
+      "status": "complete"
+    }
+  },
+  "target_per_language": 6,
+  "time_capped_repositories": 1
+}

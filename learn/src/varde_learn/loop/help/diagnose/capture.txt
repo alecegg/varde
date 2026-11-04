@@ -1,0 +1,18 @@
+Record one verified historical incident from a frozen evidence bundle; capture only evidence verified against its source
+
+Usage: varde learn sessions capture [OPTIONS] --json
+
+Options:
+      --file <incident.json>         Strict JSON file describing one incident and its frozen source anchor
+      --snapshot <SNAPSHOT>          Frozen evidence bundle to build the request from (use instead of --file)
+      --source-id <SOURCE_ID>        Source ID of the record to capture
+      --record-index <RECORD_INDEX>  Record index of the record to capture
+      --native-id <NATIVE_ID>        Native record ID; needed when source ID and record index match several records
+      --kind <KIND>                  Incident kind: failed-tool, repeated-work, or workflow-deviation
+      --evidence <EVIDENCE>          Observed evidence text (8 KiB limit)
+      --item-id <ITEM_ID>            Existing friction item ID
+      --item-source <ITEM_SOURCE>    Source of a new friction item
+      --item-title <ITEM_TITLE>      Title of a new friction item
+      --item-target <ITEM_TARGET>    Target path of a new friction item
+      --json                         Print the shared machine-readable output envelope
+  -h, --help                         Print help

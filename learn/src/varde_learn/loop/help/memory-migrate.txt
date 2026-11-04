@@ -1,0 +1,31 @@
+One-shot migration of memory-tier decisions into scoped entries.
+
+Reads memory_tier_decisions.jsonl in the learn store. Rows approved or applied
+for tier user become global entries; tier project becomes project entries;
+tier role rows are counted, not migrated. Pending and flagged rows are
+skipped. The log is renamed memory_tier_decisions.jsonl.migrated when every
+row was handled; it is never deleted.
+
+With --knowledge, migrate a knowledge bundle into project entries instead
+(surface: false, source knowledge:<bundle>:<slug>, relative links rewritten to
+new ids). It is a dry run unless --apply is given: counts per type, collisions,
+secret rejects (that file only) and links. --apply writes the entries and a
+record under <memory root>/.migrations/ (entries are written one by one, so a
+crash leaves entries without a record; run --apply again to finish). --undo
+removes only the files named in the record whose bytes still match, and keeps
+the record while changed files remain. The bundle is never edited. While a record
+exists, `knowledge` commands read the unified store only.
+
+Usage: varde learn memory migrate [OPTIONS]
+       varde learn memory migrate --knowledge <bundle> [--project-root <path>] [--apply | --undo] [--json]
+
+Options:
+  --dry-run              Report what would be written; write and rename nothing
+                         (not with --apply or --undo)
+  --project-root <path>  Project for project rows whose note path has no repository;
+                         with --knowledge, the repository that keys the entries
+  --knowledge <bundle>   Migrate this knowledge bundle (dry run by default)
+  --apply                With --knowledge: write the entries and the record
+  --undo                 With --knowledge: remove the migrated entries and the record
+  --json                 Print a JSON envelope
+  -h, --help             Print help

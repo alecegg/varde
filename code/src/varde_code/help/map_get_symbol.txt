@@ -1,0 +1,8 @@
+Query: get one symbol by name (+ optional file/kind). (see `get_symbol` help for inputs)
+
+Usage: varde map get_symbol [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, name, filePath?, kind?, includeBody? } Example: {"repoRoot":".","name":"authenticate","filePath":"src/auth.rs","includeBody":true}
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

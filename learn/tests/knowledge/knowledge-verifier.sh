@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/../../../core/tests/lib/repo.sh"
+skill="$(skill_dir varde-knowledge)"
+verifier="$skill/evals/verify-knowledge-eval.sh"
+
+# No evaluated run exists. Fixtures must never award behavioral PASS results
+# or emit undeclared assertions; an empty result delegates grading to the judge.
+for eval_id in 8 9; do
+  result="$(EVAL_ID="$eval_id" EVAL_SKILL_DIR="$skill" \
+    EVAL_SANDBOX_DIR="$skill" bash "$verifier")"
+  jq -e '.results == []' <<< "$result" >/dev/null || {
+    echo "FAIL: knowledge eval $eval_id grades static fixtures as run evidence" >&2
+    exit 1
+  }
+done
+
+echo 'PASS: session-notes assertions remain for session-evidence judging'
+
+fixture=$(mktemp -d "${TMPDIR:-/tmp}/knowledge-output.XXXXXX")
+trap 'rm -rf "$fixture"' EXIT
+for output_state in absent empty valid; do
+  if [[ "$output_state" != absent ]]; then mkdir -p "$fixture/knowledge/decision"; fi
+  if [[ "$output_state" == valid ]]; then
+    cat > "$fixture/knowledge/decision/occ.md" <<'NOTE'
+---
+type: decision
+description: Use OCC
+generated: { by: test, at: 2026-09-28T00:00:00Z }
+---
+## What
+OCC.
+## Why
+Concurrent writes.
+## Constraints
+Compare versions.
+NOTE
+  fi
+  result=$(cd "$fixture" && EVAL_ID=1 bash "$verifier")
+  expected=FAIL; [[ "$output_state" == valid ]] && expected=PASS
+  jq -e --arg verdict "$expected" '.results | length == 4 and all(.[]; .verdict == $verdict)' <<< "$result" >/dev/null
+done
+echo 'PASS: missing, empty, and valid knowledge output emit structured verdicts'

@@ -1,0 +1,2422 @@
+{
+  "counts": {
+    "calibration_by_group": {
+      "Bash": 3,
+      "C": 3,
+      "Dart": 2,
+      "Elixir": 2,
+      "Haskell": 2,
+      "Kotlin": 2,
+      "Lua": 2,
+      "PHP": 2,
+      "Python": 5,
+      "Ruby": 2,
+      "Scala": 2,
+      "Solidity": 2,
+      "Swift": 2,
+      "TypeScript/JavaScript": 8
+    },
+    "candidates_by_group": {
+      "Bash": 4,
+      "C": 4,
+      "C#": 3,
+      "C++": 4,
+      "Dart": 3,
+      "Elixir": 3,
+      "Go": 3,
+      "Haskell": 3,
+      "Java": 4,
+      "Kotlin": 3,
+      "Lua": 3,
+      "PHP": 3,
+      "Python": 10,
+      "Ruby": 3,
+      "Rust": 4,
+      "Scala": 3,
+      "Solidity": 3,
+      "Swift": 3,
+      "TypeScript/JavaScript": 15
+    },
+    "excluded": [
+      "junit-team/junit-framework"
+    ],
+    "total_candidates": 81,
+    "total_excluded": 1,
+    "total_verified": 80,
+    "verified_by_group": {
+      "Bash": 4,
+      "C": 4,
+      "C#": 3,
+      "C++": 4,
+      "Dart": 3,
+      "Elixir": 3,
+      "Go": 3,
+      "Haskell": 3,
+      "Java": 3,
+      "Kotlin": 3,
+      "Lua": 3,
+      "PHP": 3,
+      "Python": 10,
+      "Ruby": 3,
+      "Rust": 4,
+      "Scala": 3,
+      "Solidity": 3,
+      "Swift": 3,
+      "TypeScript/JavaScript": 15
+    },
+    "verified_by_language": {
+      "Bash": 4,
+      "C": 4,
+      "C#": 3,
+      "C++": 4,
+      "Dart": 3,
+      "Elixir": 3,
+      "Go": 3,
+      "Haskell": 3,
+      "Java": 3,
+      "JavaScript": 5,
+      "Kotlin": 3,
+      "Lua": 3,
+      "PHP": 3,
+      "Python": 10,
+      "Ruby": 3,
+      "Rust": 4,
+      "Scala": 3,
+      "Solidity": 3,
+      "Swift": 3,
+      "TSX": 3,
+      "TypeScript": 7
+    },
+    "verified_by_role": {
+      "calibration": 39,
+      "held-out": 16,
+      "mutation-base": 7,
+      "none": 4,
+      "pairs": 14
+    }
+  },
+  "excluded": [
+    {
+      "name": "junit-team/junit-framework",
+      "pin_sha": "58516a5a0f41c50d58578fc86e805151c7b4b25c",
+      "reason": "FetchError: EPL-2.0 is weak copyleft and is not in the permitted permissive set (validation-plan section 7: MIT, BSD, Apache-2.0, ISC, MPL-2.0 tolerated); license review not recorded, so the repository stays unverified and carries no role",
+      "spdx": "EPL-2.0",
+      "status": "unverified",
+      "url": "https://github.com/junit-team/junit-framework.git"
+    }
+  ],
+  "fetch_cache": "/Users/alec/.cache/varde/bench",
+  "manifest_digest": "d79f3d0ee696916022451bf1d04f694e79cc65bc33166573701ce5724104097b",
+  "repositories": [
+    {
+      "cache_bytes": 1927116,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Swift"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "3ef1fbd5fd9cb08a9e071d6c0c6f68322deda2b93a814e5135a7829495dae698",
+      "license_verified": true,
+      "name": "Alamofire/Alamofire",
+      "pin_sha": "bda9ed57d72988a3a2ada33d824583541f86eac6",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 22791271,
+      "snapshot_files": 571,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "fbfd41c8bdf2880951a870115e4d0c2b1e509fd8e31764853ee078c79d63fb3c",
+      "url": "https://github.com/Alamofire/Alamofire.git"
+    },
+    {
+      "cache_bytes": 2765557,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "C#"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "1a99e4b057fa759e4c45c45d4e2f6c3051b460723067143c70fe3ba5621d2b63",
+      "license_verified": true,
+      "name": "App-vNext/Polly",
+      "pin_sha": "3f3adad9d5af85658fc3585018f02a2d8c2173e8",
+      "reason": "",
+      "roles": [
+        "mutation-base"
+      ],
+      "snapshot_bytes": 9406797,
+      "snapshot_files": 1026,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "MIT",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "689eb38fc0c0500ed8c0349ecfb9a42fed73a4db2885d7a3e9ea650132faa597",
+      "url": "https://github.com/App-vNext/Polly.git"
+    },
+    {
+      "cache_bytes": 725645,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Rust"
+      ],
+      "license_file": "LICENSE-MIT",
+      "license_note": "",
+      "license_text_sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+      "license_verified": true,
+      "name": "BurntSushi/ripgrep",
+      "pin_sha": "3fce3b5bb0236da2df6d99672afb8a719642eca7",
+      "reason": "",
+      "roles": [
+        "mutation-base"
+      ],
+      "snapshot_bytes": 3255965,
+      "snapshot_files": 236,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "7cb1858ab02f644353ca7991527b7f86ad0f282d915ededce50d979e6c5089b6",
+      "url": "https://github.com/BurntSushi/ripgrep.git"
+    },
+    {
+      "cache_bytes": 8825551,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "C#"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "d7f83bbea3264a8e23d7739e44d9db1a4994b357274df6f00876eb2e623827ad",
+      "license_verified": true,
+      "name": "JamesNK/Newtonsoft.Json",
+      "pin_sha": "52fa3aef1f2cadcd3a3f874251eddc98d3efbbaa",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 16729609,
+      "snapshot_files": 1176,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "5174ce542513c6e09a4834c8cd34cff81be9087bea52f4cd5c39c99b19d6c772",
+      "url": "https://github.com/JamesNK/Newtonsoft.Json.git"
+    },
+    {
+      "cache_bytes": 6919761,
+      "fetch_license_check": "",
+      "languages": [
+        "Kotlin"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "86464d52caaea8fd1515c42229ffdda86a786e7b5152fee74cec7cfcff24918a",
+      "license_verified": true,
+      "name": "JetBrains/Exposed",
+      "pin_sha": "09f814c61c22851b76840ccb65c1ac2c4db97452",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 137764311,
+      "snapshot_files": 5942,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "c082cf925b83d3c838a0fc80ebd7fa1505ed8bcedda2ca5021b3e201d6e17d2c",
+      "url": "https://github.com/JetBrains/Exposed.git"
+    },
+    {
+      "cache_bytes": 5289771,
+      "fetch_license_check": "",
+      "languages": [
+        "Lua"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "4e6e46f363d4ea7445b311f6f81e8b6f0078c058fa7896ad70c7e32eb2de4d21",
+      "license_verified": true,
+      "name": "Kong/kong",
+      "pin_sha": "6605dd81630d5f239514cf0dcdf77b51b878bd24",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 17026300,
+      "snapshot_files": 2529,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "56464dad8800e5d27906e10df170b12a6e43a4b48790814a13429ddaa6381098",
+      "url": "https://github.com/Kong/kong.git"
+    },
+    {
+      "cache_bytes": 8529121,
+      "fetch_license_check": "",
+      "languages": [
+        "Kotlin"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "b1febe6399dffb10d19d35e7663ab16300c93cb0476a94115df1cc0097a8ffd8",
+      "license_verified": true,
+      "name": "Kotlin/kotlinx.coroutines",
+      "pin_sha": "7e0d1b3e9ca83652427ae00dda7d1673f058a743",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 13959348,
+      "snapshot_files": 1337,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "e6e1bb781f8bba35b9729f7988f3aa386e4f5cea79bc61a58fb27e4295a03ad6",
+      "url": "https://github.com/Kotlin/kotlinx.coroutines.git"
+    },
+    {
+      "cache_bytes": 5654711,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Lua"
+      ],
+      "license_file": "COPYING",
+      "license_note": "",
+      "license_text_sha256": "660773f53ed17cd0d8be7d67168c25e8cc664a506788c7b5971192bdd2994a9d",
+      "license_verified": true,
+      "name": "LuaRocks/luarocks",
+      "pin_sha": "f0916086ea5bc5e260cbe813bae222a0a149cdb3",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 12926687,
+      "snapshot_files": 513,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "ecf7e67bfed5211872ed79272dc4d84db3d917a478f5042c995837d5c3a5af8b",
+      "url": "https://github.com/LuaRocks/luarocks.git"
+    },
+    {
+      "cache_bytes": 6942740,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Solidity"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "20aebc68b11c063133aa2af0ef4bb29875477c6d16d715718f0daec563938b84",
+      "license_verified": true,
+      "name": "OpenZeppelin/openzeppelin-contracts",
+      "pin_sha": "b04d141ba4fec9b0f970ce4c7746b0a02e50000b",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 12680508,
+      "snapshot_files": 975,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "d88e00f3680d14b15ea46fd701edc038075ac3cb55d02bbb48ed9a9a596aecef",
+      "url": "https://github.com/OpenZeppelin/openzeppelin-contracts.git"
+    },
+    {
+      "cache_bytes": 2107751,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Haskell"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "1729d66741c5844f47962f91838bae897aa23d7e08272f5f012fca576288fafb",
+      "license_verified": true,
+      "name": "PostgREST/postgrest",
+      "pin_sha": "c042567494b1cbb5009005b82c78d9e5da8b4a2a",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 4517769,
+      "snapshot_files": 472,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "d2049ccfd176c5466a75ccbfa2d010d04183a9462787763f93c8a309840b0794",
+      "url": "https://github.com/PostgREST/postgrest.git"
+    },
+    {
+      "cache_bytes": 2805318,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Solidity"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "627432254a6c7a01368c6b72ad662a925aeb6370c53ce1139e183824f4bcecdc",
+      "license_verified": true,
+      "name": "Vectorized/solady",
+      "pin_sha": "2afba69bf67b78dd4abeadcc696052b3a6f71499",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 8369650,
+      "snapshot_files": 418,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "eabca9dac00054021b2fb317f0a8f1d059068f5ca8481849368506a941fceb06",
+      "url": "https://github.com/Vectorized/solady.git"
+    },
+    {
+      "cache_bytes": 8077606,
+      "fetch_license_check": "",
+      "languages": [
+        "C++"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747",
+      "license_verified": true,
+      "name": "abseil/abseil-cpp",
+      "pin_sha": "4cbb3d42f2b0c55908d262f19cbfdbb744bd4f8c",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 11753381,
+      "snapshot_files": 1608,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "e70d59cfe2574aae9240b70142765b1ee5c34ba3c8a0b06419258079ec6f7c8b",
+      "url": "https://github.com/abseil/abseil-cpp.git"
+    },
+    {
+      "cache_bytes": 14241942,
+      "fetch_license_check": "",
+      "languages": [
+        "Java"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "b1d2870f1a00e4d7f56576e5f0870cba109e041f8af66866cf5b499478e654e7",
+      "license_verified": true,
+      "name": "apache/commons-lang",
+      "pin_sha": "9c86ffe308e7c682df3b1cf76f27dfc5bb6a2243",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 10659821,
+      "snapshot_files": 718,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "5b9800a004ef206c84fcf5b50064e38f3679f607d4427800444e3057ed02f035",
+      "url": "https://github.com/apache/commons-lang.git"
+    },
+    {
+      "cache_bytes": 1780179,
+      "fetch_license_check": "",
+      "languages": [
+        "Swift"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "license_verified": true,
+      "name": "apple/swift-nio",
+      "pin_sha": "eabcc14f9dcb2bdba7efecdcc343e7bb5f29fce1",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 9280177,
+      "snapshot_files": 765,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "305e9dd87ff08618d4fda5700d8d0fcd93f026786b7b05866a0dd5d2bd319aca",
+      "url": "https://github.com/apple/swift-nio.git"
+    },
+    {
+      "cache_bytes": 4296798,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "JavaScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "82761059eaedacb3356803aea8a170d8298609f91b14fc32ee1bfb40d690183c",
+      "license_verified": true,
+      "name": "axios/axios",
+      "pin_sha": "326843a3902d73c9f6af9bad7b55e2412566a251",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 4607911,
+      "snapshot_files": 506,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "e10c8d8f5ef00e4a7376e21aa8f4858628cff61155b3e8576009a04b5aee1bef",
+      "url": "https://github.com/axios/axios.git"
+    },
+    {
+      "cache_bytes": 308568,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Bash"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "80c328583f55ee375a78beffb512550069d55add0a6fae979d881abe45a58f06",
+      "license_verified": true,
+      "name": "bats-core/bats-core",
+      "pin_sha": "f2a9f7449df1701429a2541499e925a5fa6966d2",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 702316,
+      "snapshot_files": 384,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "9319e866224e41167b012a8a980b1a3f21f7ec6f07bd12f0539f12279b450167",
+      "url": "https://github.com/bats-core/bats-core.git"
+    },
+    {
+      "cache_bytes": 15771636,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Rust"
+      ],
+      "license_file": "LICENSE-MIT",
+      "license_note": "",
+      "license_text_sha256": "6efb0476a1cc085077ed49357026d8c173bf33017278ef440f222fb9cbcb66e6",
+      "license_verified": true,
+      "name": "clap-rs/clap",
+      "pin_sha": "ccc89b83875474399e9d9d70841163f6319d1a41",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 3659306,
+      "snapshot_files": 645,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "a9df9d9e0eeab105603c72545ec9b59219aed0f2fd675a13bf75ed3cb4654b72",
+      "url": "https://github.com/clap-rs/clap.git"
+    },
+    {
+      "cache_bytes": 12054519,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TypeScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+      "license_verified": true,
+      "name": "colinhacks/zod",
+      "pin_sha": "680d19f7d1e042e55934209caeb79bc843b94f44",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 15547246,
+      "snapshot_files": 741,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "29ec96648d46ca280ba42c6d90a6156f5b1fa39db5b1ed6a550c1d16671eda0b",
+      "url": "https://github.com/colinhacks/zod.git"
+    },
+    {
+      "cache_bytes": 1720214,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "PHP"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "7855ac293067aebe7e51afdd23b9dea54b8be24187dbecc9b9142581c37f596c",
+      "license_verified": true,
+      "name": "composer/composer",
+      "pin_sha": "43f74517021a59ed4054a801c1472ef66355c49a",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 3066822,
+      "snapshot_files": 323,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "7b942894af0f59f1504f968f232ccaebbd7b23aec3eee2d65f70697487af2fe5",
+      "url": "https://github.com/composer/composer.git"
+    },
+    {
+      "cache_bytes": 5822010,
+      "fetch_license_check": "LICENSE text does not identify curl",
+      "languages": [
+        "C"
+      ],
+      "license_file": "COPYING",
+      "license_note": "",
+      "license_text_sha256": "82f2f4427d6545ee5aaac4f0b80428da6cc8ba41c2cf5da3a03680ec327b9681",
+      "license_verified": true,
+      "name": "curl/curl",
+      "pin_sha": "629646d9b798a90fdc6d35497c8cab2d7f196588",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 18559250,
+      "snapshot_files": 4589,
+      "spdx": "curl",
+      "spdx_corrected_from": "",
+      "spdx_declared": "curl",
+      "status": "verified",
+      "tree_digest": "ca2caa38f51c6fa067c273d897e47905a564c8a98c8dc6a2c74511274944ea1b",
+      "url": "https://github.com/curl/curl.git"
+    },
+    {
+      "cache_bytes": 1078888,
+      "fetch_license_check": "",
+      "languages": [
+        "Dart"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "3c32b53167c7dae9190c38dab5dd9fe1789c53623ebc7d1babcb29914c5b3f16",
+      "license_verified": true,
+      "name": "dart-lang/http",
+      "pin_sha": "6e91ce3e73ab079114de3684367318287b08d893",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 4943762,
+      "snapshot_files": 699,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "1ef19f8e8431135fea1cfc81d56bd4c59fad7b14bf5192c2f195356419a46ee9",
+      "url": "https://github.com/dart-lang/http.git"
+    },
+    {
+      "cache_bytes": 65536322,
+      "fetch_license_check": "",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "b846415d1b514e9c1dff14a22deb906d794bc546ca6129f950a18cd091e2a669",
+      "license_verified": true,
+      "name": "django/django",
+      "pin_sha": "d430084791a61b31cecec132bce3dca19194f7f2",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 46199072,
+      "snapshot_files": 7084,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "364e6ec2f30ef481c00dddccfa414d709425355e8548a8ce9058e4de8f52c106",
+      "url": "https://github.com/django/django.git"
+    },
+    {
+      "cache_bytes": 630408270,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "C#"
+      ],
+      "license_file": "License.txt",
+      "license_note": "",
+      "license_text_sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b",
+      "license_verified": true,
+      "name": "dotnet/roslyn",
+      "pin_sha": "3645b6aa36ad41775a73e57a620787a3d38327a0",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 457729262,
+      "snapshot_files": 35410,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "6e6c4e5ba261786b358783d9bdde67147b573a0e2f292830f29f3f0b4fc78db7",
+      "url": "https://github.com/dotnet/roslyn.git"
+    },
+    {
+      "cache_bytes": 638556,
+      "fetch_license_check": "",
+      "languages": [
+        "Elixir"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+      "license_verified": true,
+      "name": "elixir-ecto/ecto",
+      "pin_sha": "ad8fda5dea763fb2e9ddaf22d6e566066568e54e",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 2636572,
+      "snapshot_files": 158,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "4f9a3b52f15f57078f060d4057b6a310a162b12dcb753ce8e548f190147cd4f1",
+      "url": "https://github.com/elixir-ecto/ecto.git"
+    },
+    {
+      "cache_bytes": 4086204,
+      "fetch_license_check": "",
+      "languages": [
+        "Elixir"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+      "license_verified": true,
+      "name": "elixir-lang/elixir",
+      "pin_sha": "e8c706061f1e07d4e638b2f05da7067d476214bc",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 15102041,
+      "snapshot_files": 780,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "77088379ee2b6072f5df8d2d571d88b4c9d6854e80c7772f93aa4a08fbb9ee50",
+      "url": "https://github.com/elixir-lang/elixir.git"
+    },
+    {
+      "cache_bytes": 3944576,
+      "fetch_license_check": "",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "4ec59d544f12b5f539a3a716fd321ac58ccd8030b465221f2c880200cdf28d8d",
+      "license_verified": true,
+      "name": "encode/httpx",
+      "pin_sha": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 3321071,
+      "snapshot_files": 125,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "1645b6ef8649ae3edb20513a524964b4d7dd4f4e288407c42dcea22eedd16928",
+      "url": "https://github.com/encode/httpx.git"
+    },
+    {
+      "cache_bytes": 6850172,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "JavaScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "3b6be04f862a077a4b97929dbf247299360824d9365f8603c263769303ace18c",
+      "license_verified": true,
+      "name": "eslint/eslint",
+      "pin_sha": "e06fe87c41cc6210269260a097c61cefb92f456a",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 23735789,
+      "snapshot_files": 2362,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "8318cf4bb2cecca599f7cb48d517eabb3f5a9da01c1c16eb47284f5c912f0eb6",
+      "url": "https://github.com/eslint/eslint.git"
+    },
+    {
+      "cache_bytes": 35733051,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TSX"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "1352d204fdb90d5e482c13139d848bc2c9300a9a7de358a0a558a23e72d0d8be",
+      "license_verified": true,
+      "name": "excalidraw/excalidraw",
+      "pin_sha": "4c37956ba5f04ec342a9d9d5891a38f22c5b7b4e",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 56587252,
+      "snapshot_files": 1315,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "35bc5bce4db79211d29cfb914beeb8c0118fd36de9ab498b907260ebc9f97e8a",
+      "url": "https://github.com/excalidraw/excalidraw.git"
+    },
+    {
+      "cache_bytes": 234472,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "JavaScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "95a5762890e5c1c9808921cef095661fc482c5e1f0bba31446ac85595df6237c",
+      "license_verified": true,
+      "name": "expressjs/express",
+      "pin_sha": "a419aa7350389a275ab45fde2e849ed1f02449ef",
+      "reason": "",
+      "roles": [],
+      "snapshot_bytes": 710992,
+      "snapshot_files": 214,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "8c2b34b7a82ead00fbdc9d3d211a6d3b7ed0b5e815a7dea85a9703bf2fc0e081",
+      "url": "https://github.com/expressjs/express.git"
+    },
+    {
+      "cache_bytes": 5714229,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TypeScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "23c91863859171455a536380991b4160fee4e19e2d8dc353ecf7143cc4e53ca2",
+      "license_verified": true,
+      "name": "fastify/fastify",
+      "pin_sha": "e03b48ba3cd92dcbdafcb624579318e0f22176d2",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 3019062,
+      "snapshot_files": 396,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "fd5be24b050be34c49a3f6d24bea6748a04a8a2c98b06f479cd1de8d0cd94e34",
+      "url": "https://github.com/fastify/fastify.git"
+    },
+    {
+      "cache_bytes": 39080612,
+      "fetch_license_check": "",
+      "languages": [
+        "Dart"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "a598db94b6290ffbe10b5ecf911057b6a943351c727fdda9e5f2891d68700a20",
+      "license_verified": true,
+      "name": "flutter/flutter",
+      "pin_sha": "84a33147edb0a7bbd3c5b315d0e3e66cf71df3a1",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 159620694,
+      "snapshot_files": 16235,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "4e81d6df14993932f453a05a617ed6ca689233077fde7ba368809afef8f4198f",
+      "url": "https://github.com/flutter/flutter.git"
+    },
+    {
+      "cache_bytes": 846765,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "C++"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "a65fcc5a1095fc33cc37e4fff69366e49d7e92f613558a2b95ed1b70e33758b4",
+      "license_verified": true,
+      "name": "fmtlib/fmt",
+      "pin_sha": "fdf31252e61ca7efe99af41bb4780353cc2253dd",
+      "reason": "",
+      "roles": [
+        "mutation-base"
+      ],
+      "snapshot_bytes": 3160993,
+      "snapshot_files": 145,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "191d290e6df6c26c0ba71617624eab448dcb900d5936baf88a74a99b1e07e75c",
+      "url": "https://github.com/fmtlib/fmt.git"
+    },
+    {
+      "cache_bytes": 300623,
+      "fetch_license_check": "",
+      "languages": [
+        "Lua"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "license_verified": true,
+      "name": "folke/lazy.nvim",
+      "pin_sha": "306a05526ada86a7b30af95c5cc81ffba93fef97",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 2609514,
+      "snapshot_files": 97,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "525173d3d0a4c8db7c4aca54a772cbe2fa93623ea073b275cdf6e8938b331bcf",
+      "url": "https://github.com/folke/lazy.nvim.git"
+    },
+    {
+      "cache_bytes": 192652,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Solidity"
+      ],
+      "license_file": "LICENSE-MIT",
+      "license_note": "",
+      "license_text_sha256": "6d185dfe089d4de346d391fc5997fbd4739bad1d6556010413c10f420d704ecc",
+      "license_verified": true,
+      "name": "foundry-rs/forge-std",
+      "pin_sha": "b013eff2ac4fce26f34d789e6f5c49021c5ee817",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 1196505,
+      "snapshot_files": 72,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "a225d219e81b92fd9829bed02c07d0d300cdf2538eaae146da80fedc1c27c134",
+      "url": "https://github.com/foundry-rs/forge-std.git"
+    },
+    {
+      "cache_bytes": 3321727,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Go"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "b104efb2c7700691650f27034e8541c5ae0ed9af54d884287f19a7467ca2fe7f",
+      "license_verified": true,
+      "name": "gin-gonic/gin",
+      "pin_sha": "0f09c3a9b4626d9fe9979cf4d0521d6ae32ab646",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 886166,
+      "snapshot_files": 130,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "afde80837f81ae10bce1fb5e7e62f2f0a828cbe736cc6c73b71755cf0f396089",
+      "url": "https://github.com/gin-gonic/gin.git"
+    },
+    {
+      "cache_bytes": 24749811,
+      "fetch_license_check": "",
+      "languages": [
+        "Java"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "license_verified": true,
+      "name": "google/guava",
+      "pin_sha": "5e82f2f528fbbd970e00748025b48e3eb42ed702",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 35572982,
+      "snapshot_files": 3363,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "731d8a408c122afa7c342871442ac4530f20ae87e6d2a525a26ffb714e508970",
+      "url": "https://github.com/google/guava.git"
+    },
+    {
+      "cache_bytes": 351677,
+      "fetch_license_check": "",
+      "languages": [
+        "C++"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "ccc19f1da0798ed666609b65a5b44dd8b3abe6fc08b9c0592eb76e82e174db19",
+      "license_verified": true,
+      "name": "google/leveldb",
+      "pin_sha": "bb74ef739973a70ca9f0d90788a1da89b788c0ad",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 993828,
+      "snapshot_files": 152,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "5a91d2e85933901ef31ec727345c92c714f1cbdb781cd23dda0803bbb7f651a1",
+      "url": "https://github.com/google/leveldb.git"
+    },
+    {
+      "cache_bytes": 4208158,
+      "fetch_license_check": "",
+      "languages": [
+        "Haskell"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "3ebf245dffaa09950d4cc395360a262e94dd81f6893883ce9dae1b2a4514b58e",
+      "license_verified": true,
+      "name": "haskell/cabal",
+      "pin_sha": "f7ad3aa5ca69aa93cf2aae857bbde00d71ed38d6",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 16830226,
+      "snapshot_files": 5400,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "9bf22427576c1220e1c05b1fccaead54bebe264d805f801e4f3c8d30ecd285e1",
+      "url": "https://github.com/haskell/cabal.git"
+    },
+    {
+      "cache_bytes": 1442125,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "C"
+      ],
+      "license_file": "COPYING",
+      "license_note": "bundles notices for BSD-2-Clause, curl",
+      "license_text_sha256": "ad2b4a266b2268939c1446979759706077421cf906a203aa188c6f396e8cfd74",
+      "license_verified": true,
+      "name": "jqlang/jq",
+      "pin_sha": "633ae6058a05b0240c798f6b7b60d3b0a87cab8e",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 4946381,
+      "snapshot_files": 430,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "63832b96423869eb7c358d5ecc440d11ceac274a39f5144353c983ae06675ce4",
+      "url": "https://github.com/jqlang/jq.git"
+    },
+    {
+      "cache_bytes": 23410019,
+      "fetch_license_check": "",
+      "languages": [
+        "Kotlin"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "883b820629750db15375940d0581ea74bad8b685c8b0ef5b098c3cc631c74515",
+      "license_verified": true,
+      "name": "ktorio/ktor",
+      "pin_sha": "4016bdfe32256ff82723af7259e294908e48be75",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 76571727,
+      "snapshot_files": 3151,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "0992565a3e33858ed0a0bbb3952770a7592f54a5c2f9d4d343c2d7c039fd395f",
+      "url": "https://github.com/ktorio/ktor.git"
+    },
+    {
+      "cache_bytes": 8636256,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "PHP"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "7b4f9149597fbae2ce689bc9317d1869e17f1b3fa5f01c289998c108f8c37cf7",
+      "license_verified": true,
+      "name": "laravel/framework",
+      "pin_sha": "e51b5fe16d6f0e547137087e52c6106118c319f1",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 8614532,
+      "snapshot_files": 1935,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "27085689f1bf09b577b97898875f4778e01368f486420d75c1a4c45ddcf40eea",
+      "url": "https://github.com/laravel/framework.git"
+    },
+    {
+      "cache_bytes": 1733432,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "C"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c",
+      "license_verified": true,
+      "name": "libuv/libuv",
+      "pin_sha": "a267f5688be25e8d4628e296245a041adc2ca072",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 4748567,
+      "snapshot_files": 483,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "41c8790525da39c9c860f7178f2e730d38d26eb5a35904e31da9cfd14b1b3e5c",
+      "url": "https://github.com/libuv/libuv.git"
+    },
+    {
+      "cache_bytes": 850759,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "JavaScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
+      "license_verified": true,
+      "name": "lodash/lodash",
+      "pin_sha": "2b5e6f7399a7b48005140b5d5c6bc6c0e62919a8",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 4619643,
+      "snapshot_files": 160,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "9501441a6831e8ab5b6cae9ab94d7d27da33399d986f6fae3c4fa986b7dee92b",
+      "url": "https://github.com/lodash/lodash.git"
+    },
+    {
+      "cache_bytes": 2627730,
+      "fetch_license_check": "",
+      "languages": [
+        "Java"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "license_verified": true,
+      "name": "lysine-dev/okhttp",
+      "pin_sha": "a66e3d2277932963c75b0cb7502bf181f7863178",
+      "reason": "",
+      "roles": [
+        "mutation-base"
+      ],
+      "snapshot_bytes": 7914735,
+      "snapshot_files": 843,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "cd0bee2f52f881d8a373c46e940763c27ba8e74679c0a7a696e0b0ac9bbe9830",
+      "url": "https://github.com/lysine-dev/okhttp.git"
+    },
+    {
+      "cache_bytes": 10440571,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TSX"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "61c765e625bc25d55143f14de7554685c52f21d9e671d3d204304691a163d06a",
+      "license_verified": true,
+      "name": "mantinedev/mantine",
+      "pin_sha": "2d0a040f42011e791caf0bc56b9fbdd36ce55cef",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 21937476,
+      "snapshot_files": 6805,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "b83afabe877c313967e09442d399659d810fbb6e54827da992cd112de27411b1",
+      "url": "https://github.com/mantinedev/mantine.git"
+    },
+    {
+      "cache_bytes": 1152068474,
+      "fetch_license_check": "",
+      "languages": [
+        "TypeScript"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47",
+      "license_verified": true,
+      "name": "microsoft/TypeScript",
+      "pin_sha": "2e9fb00f5f5c9186d09aabd78cced5ce2497456d",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 216965943,
+      "snapshot_files": 67916,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "5f921f1f0d341fd79db2bdf193691e48c1827d792744d3cccc61febeef479744",
+      "url": "https://github.com/microsoft/TypeScript.git"
+    },
+    {
+      "cache_bytes": 66693621,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TypeScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "56967de93525b12a30717e4446ccef3bbe32fafdbe2350f143c1cc6971b19ed3",
+      "license_verified": true,
+      "name": "nestjs/nest",
+      "pin_sha": "2eb7be8dc3410ac5b89aa84fd334e6813b53059c",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 7601531,
+      "snapshot_files": 2584,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "1eea9f98fa89e31493a8c10983eefda077121b61d8c6f79215d79bf10031d0d4",
+      "url": "https://github.com/nestjs/nest.git"
+    },
+    {
+      "cache_bytes": 21846659,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "C++"
+      ],
+      "license_file": "LICENSE.MIT",
+      "license_note": "",
+      "license_text_sha256": "d64d1b4d948aa7751cfb613c02dc246aab7b358d760053e6580f01affe946906",
+      "license_verified": true,
+      "name": "nlohmann/json",
+      "pin_sha": "0e95fe8200adbf0e033d0c0818eea473e1d4d346",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 20489332,
+      "snapshot_files": 1207,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "4eb1f345b49c8fa7cd9943db57301ceb92508a1ef66c0fdb6d278da83cbd87f7",
+      "url": "https://github.com/nlohmann/json.git"
+    },
+    {
+      "cache_bytes": 623578,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Bash"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "681a12d1a1367b5890be9bc71a70466633d28fd32397be9b72d69d9bfb243492",
+      "license_verified": true,
+      "name": "nvm-sh/nvm",
+      "pin_sha": "b1b3a0038c0666c7436cb5d383608b4b72c8300b",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 1523835,
+      "snapshot_files": 467,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "4349bdac55f5288369f12686623dff9beedf262d8f68e80b7e5d729b4ca56760",
+      "url": "https://github.com/nvm-sh/nvm.git"
+    },
+    {
+      "cache_bytes": 3881746,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Bash"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "6772e603fd19666902ab7541f49f3d9e92637539fb0840605615d8c6d18fc3f6",
+      "license_verified": true,
+      "name": "ohmyzsh/ohmyzsh",
+      "pin_sha": "964ddf789b022b6958b27d02d7fa54f552de21e9",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 7650596,
+      "snapshot_files": 1183,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "edef2c1b6822382a38ef85b6d5de16e8fd9c7174a2ec6744987c7e5c037f5252",
+      "url": "https://github.com/ohmyzsh/ohmyzsh.git"
+    },
+    {
+      "cache_bytes": 3226164,
+      "fetch_license_check": "",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "9a8ad106a394e853bfe21f42f4e72d592819a22805d991b5f3275029292b658d",
+      "license_verified": true,
+      "name": "pallets/click",
+      "pin_sha": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 1687127,
+      "snapshot_files": 178,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "a76a55c4a333b13692661f4689ebc88d3eab74645cc94569075ca72f2158edbf",
+      "url": "https://github.com/pallets/click.git"
+    },
+    {
+      "cache_bytes": 847916,
+      "fetch_license_check": "",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "489a8e1108509ed98a37bb983e11e0f7e1d31f0bd8f99a79c8448e7ff37d07ea",
+      "license_verified": true,
+      "name": "pallets/flask",
+      "pin_sha": "d086db856be187255b8ec61ef409357393020f32",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 1785020,
+      "snapshot_files": 236,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "0bbfa2a1f90cf3fb408a91d6f7123d54d0be7f3b4dcc3c6d6c71004b4fe2a5b8",
+      "url": "https://github.com/pallets/flask.git"
+    },
+    {
+      "cache_bytes": 73867320,
+      "fetch_license_check": "",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae",
+      "license_verified": true,
+      "name": "pandas-dev/pandas",
+      "pin_sha": "03e5d938adbd3ec9314c326b002170b73bde2c9f",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 27528743,
+      "snapshot_files": 1625,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "bc56e21f93d5405ea517ec1962d9d6d70d3c98fd00a3aef0826291dad4ebcf54",
+      "url": "https://github.com/pandas-dev/pandas.git"
+    },
+    {
+      "cache_bytes": 1504543,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Elixir"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "41a686069f0199ff369d7e5277d5267385cc54d9199f1efc960bacbe2e799255",
+      "license_verified": true,
+      "name": "phoenixframework/phoenix",
+      "pin_sha": "1bae3a639f84cd97ccb6b984a8ef4fcdc7aa48ae",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 4406622,
+      "snapshot_files": 513,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "ff12e83d9c1757bc852f41f25bcae6a1c2df17a640af0e27e7f3e5a83f32d3a4",
+      "url": "https://github.com/phoenixframework/phoenix.git"
+    },
+    {
+      "cache_bytes": 4875394,
+      "fetch_license_check": "",
+      "languages": [
+        "Scala"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+      "license_verified": true,
+      "name": "playframework/playframework",
+      "pin_sha": "9f9c0cdc52e13b3c956739b4d93756ed3a32bbfc",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 12644612,
+      "snapshot_files": 2695,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "c8c743482587f40b1451e0de3173dd556e7515287697379c96f5e344e1586e3b",
+      "url": "https://github.com/playframework/playframework.git"
+    },
+    {
+      "cache_bytes": 8192513,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "JavaScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "b0f2417199889f1c0d28ec4e0244eacf1a15de5819d61f641dd7d8f45153ac9c",
+      "license_verified": true,
+      "name": "prettier/prettier",
+      "pin_sha": "344d6dc42c8057fbf5573326b52dbc8a43635e7e",
+      "reason": "",
+      "roles": [],
+      "snapshot_bytes": 25036574,
+      "snapshot_files": 9578,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "1e94c355e670587c21bd73455d799f507388a1b50ba2fb851becf474e618c70c",
+      "url": "https://github.com/prettier/prettier.git"
+    },
+    {
+      "cache_bytes": 29540941,
+      "fetch_license_check": "",
+      "languages": [
+        "Go"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "license_verified": true,
+      "name": "prometheus/prometheus",
+      "pin_sha": "c052a79dc7fd0f2df2219ffe336f510b0d149b72",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 30442022,
+      "snapshot_files": 1707,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "373db9df0ea655c339d5ab5effd7359fa989a7e96ac094db34559e65b2f0789c",
+      "url": "https://github.com/prometheus/prometheus.git"
+    },
+    {
+      "cache_bytes": 3205102,
+      "fetch_license_check": "",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b",
+      "license_verified": true,
+      "name": "psf/requests",
+      "pin_sha": "611c6162cbc4ac2020a2f91c7cfa4f3abf9bbb60",
+      "reason": "",
+      "roles": [],
+      "snapshot_bytes": 4451532,
+      "snapshot_files": 128,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "cb591687bf3f12dc2f6d9eb7809d999e9182afecc1dfad235e25b2b9b624bc7c",
+      "url": "https://github.com/psf/requests.git"
+    },
+    {
+      "cache_bytes": 16105282,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "a9e186f3ca16b5eef84318e7a701721351a00cb7b8ae3a4394b67b49e3529ef3",
+      "license_verified": true,
+      "name": "pydantic/pydantic",
+      "pin_sha": "5adfeaaaea947f81f0f01868604f219084ec151a",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 11594962,
+      "snapshot_files": 850,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "dfe29dc7d24c98e4072316d9383480b3b53ca7036d8353d8db93398611d26167",
+      "url": "https://github.com/pydantic/pydantic.git"
+    },
+    {
+      "cache_bytes": 1603632,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Bash"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "9cd5fbf638b670eec3ada2f21f3fa9614446ee094c2addfd5e0b0a887f45e66d",
+      "license_verified": true,
+      "name": "pyenv/pyenv",
+      "pin_sha": "702ac01121aa09a9c0bb563a13b19f1189e4ff01",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 8391730,
+      "snapshot_files": 1760,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "6a41134b92abd5f8d290da418772b653c6dc379f0d87c3c688d6092e2bde3a1a",
+      "url": "https://github.com/pyenv/pyenv.git"
+    },
+    {
+      "cache_bytes": 2029008,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "ca836a5f9ecca3b2f350230faa20a48fb8b145653b5568d784862df864706b9b",
+      "license_verified": true,
+      "name": "pytest-dev/pytest",
+      "pin_sha": "cb6ff97bcb147f2bb5d9e0072c424dc03a452ba1",
+      "reason": "",
+      "roles": [
+        "mutation-base"
+      ],
+      "snapshot_bytes": 7452811,
+      "snapshot_files": 728,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "6556dc97a205474668ed18119b76b81d8b62b52c20fd1a342b9b538a67604fe9",
+      "url": "https://github.com/pytest-dev/pytest.git"
+    },
+    {
+      "cache_bytes": 2591735,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "882115c95dfc2af1eeb6714f8ec6d5cbcabf667caff8729f42420da63f714e9f",
+      "license_verified": true,
+      "name": "python-attrs/attrs",
+      "pin_sha": "ee66e7274852438cc23d4240a1a9cd632fda8b52",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 2076121,
+      "snapshot_files": 141,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "5459107faebfdfcdf2f83d14b16cfc7f42c7799c2a300e754341de62d8465c4b",
+      "url": "https://github.com/python-attrs/attrs.git"
+    },
+    {
+      "cache_bytes": 13168773,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Ruby"
+      ],
+      "license_file": "MIT-LICENSE",
+      "license_note": "",
+      "license_text_sha256": "717ba1949502290f8e47688ae2e323acd06c8ca47aec9f7596b15f678c1af4a2",
+      "license_verified": true,
+      "name": "rails/rails",
+      "pin_sha": "e9aab74b131fbc15cd07332315b836c760fbf4f0",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 40276540,
+      "snapshot_files": 5020,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "e489d9e16fe43bffcf6cf1f4a5dc38cefab09951aa47fcd56efb475d104ea77b",
+      "url": "https://github.com/rails/rails.git"
+    },
+    {
+      "cache_bytes": 4067945,
+      "fetch_license_check": "",
+      "languages": [
+        "C"
+      ],
+      "license_file": "COPYING",
+      "license_note": "",
+      "license_text_sha256": "97f0a15b7bbae580d2609dad2e11f1956ae167be296ab60f4691ab9c30ee9828",
+      "license_verified": true,
+      "name": "redis/redis",
+      "pin_sha": "ae987404da76a8c288b3cb94bff8bf47ac1a6b2f",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 15564946,
+      "snapshot_files": 1584,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "a8a9accc37bac50ad044029a2c718328ffbf337e9d90d9793bb0fee4b61ca137",
+      "url": "https://github.com/redis/redis.git"
+    },
+    {
+      "cache_bytes": 15230871,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Dart"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "757d9c09a9a2a701144328c0fd596234ea287ff62952b39cd22f9ad4caed1171",
+      "license_verified": true,
+      "name": "rrousselGit/riverpod",
+      "pin_sha": "87aad84b1afcd592c7313768d23d391f1441d586",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 32463561,
+      "snapshot_files": 2116,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "212b84e3b460ca13313d72c0a69948ac44f519db2facdd63f219b0a2cad1ded9",
+      "url": "https://github.com/rrousselGit/riverpod.git"
+    },
+    {
+      "cache_bytes": 4265383,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Ruby"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "102cbdf7e36a90dea7e545c683cf457ea8b993bce627b417744609088fd8b377",
+      "license_verified": true,
+      "name": "rubocop/rubocop",
+      "pin_sha": "a3b99c7c5944cd203d79a0b6558e634ac656994f",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 16614614,
+      "snapshot_files": 2275,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "79b221feabe537e6ae233ce847d07c83f4458fcedd939d6b0d606129695b96ca",
+      "url": "https://github.com/rubocop/rubocop.git"
+    },
+    {
+      "cache_bytes": 10065189,
+      "fetch_license_check": "",
+      "languages": [
+        "Scala"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "license_verified": true,
+      "name": "scala/scala",
+      "pin_sha": "d47c7568353f5ad3a97229f55f87ec3204dec876",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 26532422,
+      "snapshot_files": 13609,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "03ff7964595d0b7b8c804b09ed9fec1f5bedbd4785ba5714bcd17f1456577d6b",
+      "url": "https://github.com/scala/scala.git"
+    },
+    {
+      "cache_bytes": 8875397,
+      "fetch_license_check": "",
+      "languages": [
+        "Python"
+      ],
+      "license_file": "COPYING",
+      "license_note": "",
+      "license_text_sha256": "50d6a9d340f19ab355609917993114daf5f47e3161067bcf34955bbd05cd9cb0",
+      "license_verified": true,
+      "name": "scikit-learn/scikit-learn",
+      "pin_sha": "85593ca7a07a9956ac891f6bfc3fedca53b74f72",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 23918370,
+      "snapshot_files": 1630,
+      "spdx": "BSD-3-Clause",
+      "spdx_corrected_from": "",
+      "spdx_declared": "BSD-3-Clause",
+      "status": "verified",
+      "tree_digest": "652fbcb7a256e96396d17f6a260a6ac8da2f30138c2d049241b6409ac94d2c78",
+      "url": "https://github.com/scikit-learn/scikit-learn.git"
+    },
+    {
+      "cache_bytes": 324420,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Rust"
+      ],
+      "license_file": "LICENSE-MIT",
+      "license_note": "",
+      "license_text_sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+      "license_verified": true,
+      "name": "serde-rs/serde",
+      "pin_sha": "0db9b3b504bcb0a7fa9cf001429869519afd3e9a",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 1388161,
+      "snapshot_files": 359,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "72682efbfde10cba69a12825abb6f7d82c52f7067cd53740139499d10e13a32d",
+      "url": "https://github.com/serde-rs/serde.git"
+    },
+    {
+      "cache_bytes": 18492367,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TSX"
+      ],
+      "license_file": "LICENSE.md",
+      "license_note": "",
+      "license_text_sha256": "1564074e13439397221ffd522e2e504d56561994a23d371aa5e3ad43e4f5423f",
+      "license_verified": true,
+      "name": "shadcn-ui/ui",
+      "pin_sha": "d2fba50ee5b9113008b5bb908563527b7efd2f27",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 51228524,
+      "snapshot_files": 6404,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "88e5464b4d415d5e2b6337d7e042e8b33b870dccae946105be45cd151a8136b9",
+      "url": "https://github.com/shadcn-ui/ui.git"
+    },
+    {
+      "cache_bytes": 377471,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Ruby"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "f2f60556a2d5c8d7ef9d54ec1c62152ff40d626b807aba5bdc5126f669ed500f",
+      "license_verified": true,
+      "name": "sinatra/sinatra",
+      "pin_sha": "cb22afd7902b566b6eaba6c4ea89739494a65d12",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 950171,
+      "snapshot_files": 292,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "8968bca5453d53cf1cec5108c4134c6516ae34b4c07e31977ed78e47292b3fd1",
+      "url": "https://github.com/sinatra/sinatra.git"
+    },
+    {
+      "cache_bytes": 2125779,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TypeScript"
+      ],
+      "license_file": "license",
+      "license_note": "",
+      "license_text_sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+      "license_verified": true,
+      "name": "sindresorhus/got",
+      "pin_sha": "05b4476913da39a47dd8e20d29e250f28b0a6dca",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 2581641,
+      "snapshot_files": 137,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "83a2823ebf51b4aa58b72fbdea3c843ced6da51641d5cec74d1be19f9f2aa733",
+      "url": "https://github.com/sindresorhus/got.git"
+    },
+    {
+      "cache_bytes": 260021,
+      "fetch_license_check": "",
+      "languages": [
+        "Go"
+      ],
+      "license_file": "LICENSE.txt",
+      "license_note": "",
+      "license_text_sha256": "5e3400b93bbb099e83e52bab885e7441750673c21f97988ca3f1240639b63283",
+      "license_verified": true,
+      "name": "spf13/cobra",
+      "pin_sha": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+      "reason": "",
+      "roles": [
+        "mutation-base"
+      ],
+      "snapshot_bytes": 705271,
+      "snapshot_files": 66,
+      "spdx": "Apache-2.0",
+      "spdx_corrected_from": "",
+      "spdx_declared": "Apache-2.0",
+      "status": "verified",
+      "tree_digest": "490831ff0e7e72d724b6610debc39f7593338d3957a9c4a52ba2f02e27c03b88",
+      "url": "https://github.com/spf13/cobra.git"
+    },
+    {
+      "cache_bytes": 22259045,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "PHP"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "18da7e490d2aa77197a0619b25bcc771a0110132a9d76071665718d3295e73cb",
+      "license_verified": true,
+      "name": "symfony/symfony",
+      "pin_sha": "1eae1802fba5e9247f682effedeadc76e467e6a0",
+      "reason": "",
+      "roles": [
+        "calibration"
+      ],
+      "snapshot_bytes": 76926317,
+      "snapshot_files": 6640,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "ddb4143fba388a3b57ae9a80b1af64a736433bf0b2171b50bb691fafea2dea02",
+      "url": "https://github.com/symfony/symfony.git"
+    },
+    {
+      "cache_bytes": 14988109,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Rust"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552",
+      "license_verified": true,
+      "name": "tokio-rs/tokio",
+      "pin_sha": "cdd9dae3aa5056e23dc4d5bc4f852ab8fbf27aff",
+      "reason": "",
+      "roles": [
+        "pairs"
+      ],
+      "snapshot_bytes": 6375392,
+      "snapshot_files": 886,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "e1af32a55e56c23233b89040f80987c68d0f188db97d8d2305c1223a5ada4b83",
+      "url": "https://github.com/tokio-rs/tokio.git"
+    },
+    {
+      "cache_bytes": 1535314,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Scala"
+      ],
+      "license_file": "COPYING",
+      "license_note": "bundles notices for Apache-2.0, BSD-2-Clause",
+      "license_text_sha256": "56976829a6edd3cdefbd6bf2c764f31cb1817dfd1d14d349a152044ef0155917",
+      "license_verified": true,
+      "name": "typelevel/cats",
+      "pin_sha": "4a2ea736632c64aaf2e4915e6922e3585379382f",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 4790868,
+      "snapshot_files": 962,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "629aa02f9bc74d2394faa887329f34fc7ebc21038409178fa90ae839990ba4d3",
+      "url": "https://github.com/typelevel/cats.git"
+    },
+    {
+      "cache_bytes": 3279840,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TypeScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "ad96032f32c48d3c8e1ec8918c94ec5bce32d23d80b80b03649dc7620569d173",
+      "license_verified": true,
+      "name": "typeorm/typeorm",
+      "pin_sha": "fe92394287516feeada6e9c308ebe22deca2458e",
+      "reason": "",
+      "roles": [],
+      "snapshot_bytes": 12853601,
+      "snapshot_files": 3817,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "67ff3d9811566122f80752c7e4d9dda8d34ce5cd690b418d98e5b11d6ea0fdb6",
+      "url": "https://github.com/typeorm/typeorm.git"
+    },
+    {
+      "cache_bytes": 598505,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Swift"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "eca7cc8beb0840e78a7007e9df1530132c1940d890006bbf0b51bdff089d927d",
+      "license_verified": true,
+      "name": "vapor/vapor",
+      "pin_sha": "4245e700c86970fb0cfc77035f50f17f88e4c3ef",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 2044429,
+      "snapshot_files": 893,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "fa6556007ad6511b00aa888d846c67904bd26ee59ee041a681ecd9034ba46402",
+      "url": "https://github.com/vapor/vapor.git"
+    },
+    {
+      "cache_bytes": 1909061,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "TypeScript"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "49190d1f742dd61e47fe816df4963e5186a2a62100d9122f9883a60ea32973ac",
+      "license_verified": true,
+      "name": "vuejs/core",
+      "pin_sha": "bf5f0dd877dd3c23ce85c2cbc1dd771567e84c8c",
+      "reason": "",
+      "roles": [
+        "mutation-base"
+      ],
+      "snapshot_bytes": 6508619,
+      "snapshot_files": 703,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "eca21343e008df096ba6ebe339cdc4ce98988a5fd7fccea07b267bfdb741ad4b",
+      "url": "https://github.com/vuejs/core.git"
+    },
+    {
+      "cache_bytes": 614110,
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "languages": [
+        "Haskell"
+      ],
+      "license_file": "LICENSE",
+      "license_note": "",
+      "license_text_sha256": "e65b625c104dbe1b961dccc759517381d82d15b6d34fc90ee829f6abb55f7ffc",
+      "license_verified": true,
+      "name": "yesodweb/yesod",
+      "pin_sha": "4d3fcc460fabc0b1f85ee4cc705cc79c5753ccfc",
+      "reason": "",
+      "roles": [
+        "held-out"
+      ],
+      "snapshot_bytes": 1660220,
+      "snapshot_files": 394,
+      "spdx": "MIT",
+      "spdx_corrected_from": "",
+      "spdx_declared": "MIT",
+      "status": "verified",
+      "tree_digest": "e3dc45ac4f6d136215654eaf554de91a5d0e1797725da93135e77be192040704",
+      "url": "https://github.com/yesodweb/yesod.git"
+    }
+  ],
+  "run": "cd-networked-run",
+  "run_date": "2026-10-17",
+  "spdx_corrections": [
+    {
+      "declared": "MIT",
+      "license_file": "LICENSE",
+      "name": "App-vNext/Polly",
+      "verified": "BSD-3-Clause"
+    }
+  ],
+  "validator_differences": [
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "Alamofire/Alamofire",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "App-vNext/Polly",
+      "spdx": "BSD-3-Clause"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE-MIT",
+      "name": "BurntSushi/ripgrep",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.md",
+      "name": "JamesNK/Newtonsoft.Json",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "COPYING",
+      "name": "LuaRocks/luarocks",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "OpenZeppelin/openzeppelin-contracts",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "PostgREST/postgrest",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.txt",
+      "name": "Vectorized/solady",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "axios/axios",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.md",
+      "name": "bats-core/bats-core",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE-MIT",
+      "name": "clap-rs/clap",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "colinhacks/zod",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "composer/composer",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify curl",
+      "license_file": "COPYING",
+      "name": "curl/curl",
+      "spdx": "curl"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "License.txt",
+      "name": "dotnet/roslyn",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "eslint/eslint",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "excalidraw/excalidraw",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "expressjs/express",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "fastify/fastify",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "fmtlib/fmt",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE-MIT",
+      "name": "foundry-rs/forge-std",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "gin-gonic/gin",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "COPYING",
+      "name": "jqlang/jq",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.md",
+      "name": "laravel/framework",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "libuv/libuv",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "lodash/lodash",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "mantinedev/mantine",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "nestjs/nest",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.MIT",
+      "name": "nlohmann/json",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.md",
+      "name": "nvm-sh/nvm",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.txt",
+      "name": "ohmyzsh/ohmyzsh",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.md",
+      "name": "phoenixframework/phoenix",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "prettier/prettier",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "pydantic/pydantic",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "pyenv/pyenv",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "pytest-dev/pytest",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "python-attrs/attrs",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "MIT-LICENSE",
+      "name": "rails/rails",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "rrousselGit/riverpod",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.txt",
+      "name": "rubocop/rubocop",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE-MIT",
+      "name": "serde-rs/serde",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE.md",
+      "name": "shadcn-ui/ui",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "sinatra/sinatra",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "license",
+      "name": "sindresorhus/got",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "symfony/symfony",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "tokio-rs/tokio",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "COPYING",
+      "name": "typelevel/cats",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "typeorm/typeorm",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "vapor/vapor",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "vuejs/core",
+      "spdx": "MIT"
+    },
+    {
+      "fetch_license_check": "LICENSE text does not identify MIT",
+      "license_file": "LICENSE",
+      "name": "yesodweb/yesod",
+      "spdx": "MIT"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+Extend a leased action
+
+Usage: varde msg relay renew <ACTION_ID> [--now <TIMESTAMP>]

@@ -1,0 +1,2 @@
+Sum every consecutive window of a fixed width over a sequence of integer samples.
+Input domain: samples are nonnegative integers in order and the width is an integer; a width below one or above the sample count yields no windows.

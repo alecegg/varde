@@ -1,0 +1,8 @@
+Test: run every rule's `[[rule.test]]` entries and report pass/fail. Self-contained — no DB, no prior `build`; exits non-zero when any test fails. (see `test` help for inputs)
+
+Usage: varde scan test [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { rulesDir? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

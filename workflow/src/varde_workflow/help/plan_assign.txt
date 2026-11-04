@@ -1,0 +1,11 @@
+Assign a plan to an orchestrator slot
+
+Usage: varde plan assign <PLAN> <SLOT>|--clear
+
+Arguments:
+  <PLAN>  Plan path or identifier
+  <SLOT>  Stable orchestrator slot
+
+Options:
+      --clear  Clear the slot assignment
+  -h, --help   Print help

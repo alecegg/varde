@@ -1,0 +1,111 @@
+[
+  {
+    "synced": true,
+    "returned": {
+      "id": "golden-09",
+      "idempotency_key": "sync-key",
+      "text": "Sync this",
+      "project": "workspace",
+      "state": "asking",
+      "notes_path": "<DATA>/workitem-notes/golden-09/request.md",
+      "planner_session": "planner-sync",
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [
+      {
+        "item_id": "golden-09",
+        "msg_id": "sync-question",
+        "payload": {
+          "work_item_event": "question",
+          "asked": "Proceed?"
+        },
+        "answer": null,
+        "answer_key": null
+      }
+    ],
+    "audit": [
+      {
+        "seq": 28,
+        "item_id": "golden-09",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 29,
+        "item_id": "golden-09",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 30,
+        "item_id": "golden-09",
+        "prior_state": "planning",
+        "new_state": "asking",
+        "detail": "question sync-question"
+      }
+    ]
+  },
+  {
+    "synced": true,
+    "returned": {
+      "id": "golden-09",
+      "idempotency_key": "sync-key",
+      "text": "Sync this",
+      "project": "workspace",
+      "state": "ready",
+      "notes_path": "<DATA>/workitem-notes/golden-09/request.md",
+      "planner_session": "planner-sync",
+      "plan_path": "<DATA>/plans/plan.md",
+      "plan_ready_id": "sync-ready",
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [
+      {
+        "item_id": "golden-09",
+        "msg_id": "sync-question",
+        "payload": {
+          "work_item_event": "question",
+          "asked": "Proceed?"
+        },
+        "answer": null,
+        "answer_key": null
+      }
+    ],
+    "audit": [
+      {
+        "seq": 28,
+        "item_id": "golden-09",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      },
+      {
+        "seq": 29,
+        "item_id": "golden-09",
+        "prior_state": "new",
+        "new_state": "planning",
+        "detail": "planner started"
+      },
+      {
+        "seq": 30,
+        "item_id": "golden-09",
+        "prior_state": "planning",
+        "new_state": "asking",
+        "detail": "question sync-question"
+      },
+      {
+        "seq": 31,
+        "item_id": "golden-09",
+        "prior_state": "asking",
+        "new_state": "ready",
+        "detail": "plan ready"
+      }
+    ]
+  }
+]

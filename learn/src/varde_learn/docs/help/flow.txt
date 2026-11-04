@@ -1,0 +1,11 @@
+Map how a skill loads its files: routes, token costs, structure and findings
+
+Usage: varde learn measure <SKILL> flow [OPTIONS]
+
+Arguments:
+  <SKILL>  Skill directory (holds a SKILL.md)
+
+Options:
+      --mermaid  Print a Mermaid diagram per skill
+      --json     Print the shared JSON envelope; `data` is the list of per-skill analyses
+  -h, --help     Print help

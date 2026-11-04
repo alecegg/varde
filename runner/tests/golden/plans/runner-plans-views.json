@@ -1,0 +1,369 @@
+{
+  "assigned": [
+    {
+      "assigned_to": "agent-1",
+      "branch": "worktree/assigned",
+      "depends_on": [
+        "base-plan"
+      ],
+      "gate": [],
+      "id": "assigned",
+      "shared": [
+        "uv.lock"
+      ],
+      "status": "active",
+      "title": "Assigned plan",
+      "type": "plan"
+    }
+  ],
+  "detail": {
+    "comments": [],
+    "group_name": "",
+    "id": "assigned",
+    "label": "Assigned plan",
+    "notes_status": "none",
+    "plan_text": "---\ntype: plan\nid: assigned\ntitle: Assigned plan\nstatus: active\nassigned_to: agent-1\nbranch: worktree/assigned\ndepends_on: [base-plan]\nshared: [uv.lock]\ngate: []\n---\n",
+    "review_status": "none",
+    "status": "active",
+    "tasks": [
+      {
+        "acceptance_criteria": [],
+        "id": "active",
+        "status": "done",
+        "title": "Active task"
+      }
+    ],
+    "title": "Assigned plan"
+  },
+  "queue": {
+    "categories": [
+      {
+        "id": "new-feature",
+        "limit": 2,
+        "next_up": null,
+        "priority_set": false,
+        "used": 0,
+        "waiting": []
+      },
+      {
+        "id": "fixes",
+        "limit": 1,
+        "next_up": null,
+        "priority_set": false,
+        "used": 0,
+        "waiting": []
+      },
+      {
+        "id": "friction",
+        "limit": 1,
+        "next_up": null,
+        "priority_set": false,
+        "used": 0,
+        "waiting": []
+      },
+      {
+        "id": "uncategorized",
+        "limit": 0,
+        "next_up": null,
+        "priority_set": false,
+        "used": 0,
+        "waiting": [
+          {
+            "group_name": "",
+            "id": "2026-10-23-date-suffix",
+            "label": "Date suffix",
+            "open_comments": 0,
+            "purpose": "",
+            "readiness": "draft",
+            "status": "backlog",
+            "task_count": 0,
+            "title": "Date suffix"
+          }
+        ]
+      }
+    ],
+    "hidden": [
+      {
+        "group_name": "",
+        "id": "assigned",
+        "label": "Assigned plan",
+        "reason": "active",
+        "status": "active",
+        "title": "Assigned plan"
+      },
+      {
+        "group_name": "",
+        "id": "duplicate-a",
+        "label": "Duplicate A",
+        "reason": "active",
+        "status": "active",
+        "title": "Duplicate A"
+      },
+      {
+        "group_name": "",
+        "id": "duplicate-b",
+        "label": "Duplicate B",
+        "reason": "active",
+        "status": "active",
+        "title": "Duplicate B"
+      },
+      {
+        "group_name": "",
+        "id": "nested",
+        "label": "Nested",
+        "reason": "active",
+        "status": "active",
+        "title": "Nested"
+      }
+    ],
+    "slots": {
+      "limit": 4,
+      "used": 0
+    }
+  },
+  "status": {
+    "backlog_count": 1,
+    "more_count": 0,
+    "plans": [
+      {
+        "assigned_to": "agent-1",
+        "awaiting_user": "Please approve the assigned plan.",
+        "children": [],
+        "done": 1,
+        "group": false,
+        "group_name": "",
+        "id": "assigned",
+        "label": "Assigned plan",
+        "merge": "none",
+        "merge_state": "absent",
+        "more_count": 0,
+        "now": "tasks complete",
+        "now_at": null,
+        "purpose": "",
+        "stalled": false,
+        "status": "active",
+        "title": "Assigned plan",
+        "total": 1,
+        "unit": "tasks"
+      },
+      {
+        "awaiting_user": null,
+        "children": [
+          {
+            "awaiting_user": null,
+            "children": [],
+            "done": 0,
+            "group": false,
+            "group_name": "",
+            "id": "tasks",
+            "label": "Task",
+            "merge": "none",
+            "merge_state": "absent",
+            "more_count": 0,
+            "now": "no tasks yet",
+            "now_at": null,
+            "purpose": "",
+            "stalled": false,
+            "status": "todo",
+            "title": "Task",
+            "total": 0,
+            "unit": "tasks"
+          }
+        ],
+        "done": 0,
+        "group": true,
+        "group_name": "",
+        "id": "nested",
+        "label": "Nested",
+        "merge": "none",
+        "merge_state": "absent",
+        "more_count": 0,
+        "now": "next: Task",
+        "now_at": null,
+        "purpose": "",
+        "stalled": false,
+        "status": "active",
+        "title": "Nested",
+        "total": 1,
+        "unit": "plans"
+      },
+      {
+        "awaiting_user": null,
+        "children": [],
+        "done": 0,
+        "group": false,
+        "group_name": "",
+        "id": "duplicate-a",
+        "label": "Duplicate A",
+        "merge": "none",
+        "merge_state": "absent",
+        "more_count": 0,
+        "now": "no tasks yet",
+        "now_at": null,
+        "purpose": "",
+        "stalled": false,
+        "status": "active",
+        "title": "Duplicate A",
+        "total": 0,
+        "unit": "tasks"
+      },
+      {
+        "awaiting_user": null,
+        "children": [],
+        "done": 0,
+        "group": false,
+        "group_name": "",
+        "id": "duplicate-b",
+        "label": "Duplicate B",
+        "merge": "none",
+        "merge_state": "absent",
+        "more_count": 0,
+        "now": "no tasks yet",
+        "now_at": null,
+        "purpose": "",
+        "stalled": false,
+        "status": "active",
+        "title": "Duplicate B",
+        "total": 0,
+        "unit": "tasks"
+      }
+    ],
+    "skipped": 2
+  },
+  "summary": {
+    "id": "assigned",
+    "owner": null,
+    "status": "active",
+    "title": "Assigned plan"
+  },
+  "tasks": [
+    {
+      "id": "active",
+      "status": "done",
+      "status_at": "2023-11-14T22:13:20Z",
+      "title": "Active task"
+    }
+  ],
+  "watch": {
+    "events": [
+      {
+        "detail": "1/1 tasks done",
+        "kind": "merge-ready",
+        "plan": "assigned"
+      },
+      {
+        "detail": "idle-no-handback; 1545785m idle without owner hand-back",
+        "kind": "stale",
+        "plan": "duplicate-a"
+      },
+      {
+        "detail": "idle-no-handback; 1545785m idle without owner hand-back",
+        "kind": "stale",
+        "plan": "duplicate-b"
+      },
+      {
+        "detail": "idle-no-handback; 1545785m idle without owner hand-back",
+        "kind": "stale",
+        "plan": "nested"
+      }
+    ],
+    "plans": [
+      {
+        "assigned_to": "agent-1",
+        "awaiting_user": "Please approve the assigned plan.",
+        "blocked_tasks": [],
+        "bucket": 0,
+        "detail": "1/1 tasks done",
+        "done": 1,
+        "id": "assigned",
+        "idle_no_handback": false,
+        "last_event_at": "2026-10-23T09:18:51.285562+00:00",
+        "merge_approved_at": null,
+        "merge_state": "absent",
+        "model": null,
+        "newest_activity": 1792747131.2855616,
+        "now_at": null,
+        "now_line": null,
+        "open_questions": 0,
+        "owner": null,
+        "stalled": false,
+        "state": "merge-ready",
+        "status": "active",
+        "total": 1,
+        "worktree": null
+      },
+      {
+        "assigned_to": null,
+        "awaiting_user": null,
+        "blocked_tasks": [],
+        "bucket": 77289,
+        "detail": "idle-no-handback; 1545785m idle without owner hand-back",
+        "done": 0,
+        "id": "duplicate-a",
+        "idle_no_handback": true,
+        "last_event_at": "2023-11-14T22:13:20+00:00",
+        "merge_approved_at": null,
+        "merge_state": "absent",
+        "model": null,
+        "newest_activity": 1700000000.0,
+        "now_at": null,
+        "now_line": null,
+        "open_questions": 0,
+        "owner": null,
+        "stalled": false,
+        "state": "stale",
+        "status": "active",
+        "total": 0,
+        "worktree": null
+      },
+      {
+        "assigned_to": null,
+        "awaiting_user": null,
+        "blocked_tasks": [],
+        "bucket": 77289,
+        "detail": "idle-no-handback; 1545785m idle without owner hand-back",
+        "done": 0,
+        "id": "duplicate-b",
+        "idle_no_handback": true,
+        "last_event_at": "2023-11-14T22:13:20+00:00",
+        "merge_approved_at": null,
+        "merge_state": "absent",
+        "model": null,
+        "newest_activity": 1700000000.0,
+        "now_at": null,
+        "now_line": null,
+        "open_questions": 0,
+        "owner": null,
+        "stalled": false,
+        "state": "stale",
+        "status": "active",
+        "total": 0,
+        "worktree": null
+      },
+      {
+        "assigned_to": null,
+        "awaiting_user": null,
+        "blocked_tasks": [],
+        "bucket": 77289,
+        "detail": "idle-no-handback; 1545785m idle without owner hand-back",
+        "done": 0,
+        "id": "nested",
+        "idle_no_handback": true,
+        "last_event_at": "2023-11-14T22:13:20+00:00",
+        "merge_approved_at": null,
+        "merge_state": "absent",
+        "model": null,
+        "newest_activity": 1700000000.0,
+        "now_at": null,
+        "now_line": null,
+        "open_questions": 0,
+        "owner": null,
+        "stalled": false,
+        "state": "stale",
+        "status": "active",
+        "total": 1,
+        "worktree": null
+      }
+    ]
+  }
+}

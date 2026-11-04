@@ -1,0 +1,25 @@
+/* 22-comment: stacked label, full-width textarea, counter, send row. The field
+   grows with its text (field-sizing, JS fallback in recap.js); 16px+ font, 44px+
+   controls, 2px focus ring with room to show, long unbroken text wraps. Tokens only. */
+.comment-field { display: flex; flex-direction: column; gap: var(--vd-space-2); min-inline-size: 0; }
+.comment-note { font-weight: 600; font-size: var(--vd-text-md); line-height: var(--vd-leading-heading); overflow-wrap: anywhere; }
+textarea.comment-text {
+  display: block; inline-size: 100%; max-inline-size: 100%; box-sizing: border-box;
+  min-block-size: 7rem; max-block-size: 24rem; padding: var(--vd-space-3);
+  font: inherit; font-size: max(1rem, 16px); line-height: var(--vd-leading-body, 1.5);
+  color: var(--vd-text); background: var(--vd-surface); border: 1px solid var(--vd-border-interactive);
+  border-radius: var(--vd-radius-l); resize: vertical; field-sizing: content;
+  overflow-wrap: anywhere; white-space: pre-wrap; scroll-margin-block: var(--vd-space-4);
+  transition: border-color var(--vd-dur) ease;
+}
+textarea.comment-text:focus-visible { outline: 2px solid var(--vd-focus-ring); outline-offset: 2px; border-color: var(--vd-border-selected); }
+textarea.comment-text[aria-invalid="true"], textarea.comment-text[aria-describedby$="-error"] { border-color: var(--vd-error); }
+textarea.comment-text:disabled, textarea.comment-text:read-only { background: var(--vd-readonly); color: var(--vd-text-secondary); cursor: default; resize: none; }
+@media (hover: hover) { textarea.comment-text:not(:disabled):not(:focus):hover { border-color: var(--vd-text); } }
+.comment-count { align-self: flex-end; font-size: var(--vd-text-sm); color: var(--vd-text-secondary); font-variant-numeric: tabular-nums; }
+.comment-announce { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.comment-send { margin-block-start: var(--vd-space-4); scroll-margin-block: var(--vd-space-3); }
+.comment-state { margin-inline-start: var(--vd-space-3); color: var(--vd-text-secondary); font-size: var(--vd-text-sm); }
+.comment-error { margin: var(--vd-space-2) 0 0; color: var(--vd-error); font-size: var(--vd-text-sm); overflow-wrap: anywhere; }
+.comment-error:empty { display: none; }
+@media (forced-colors: active) { textarea.comment-text { border-color: CanvasText; } textarea.comment-text:focus-visible { outline-color: Highlight; } }

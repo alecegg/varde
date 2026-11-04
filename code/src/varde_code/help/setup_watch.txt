@@ -1,0 +1,15 @@
+Optional: keep repo indexes current (not the default; indexes build on demand with `varde map build`). Foreground by default; --ensure installs persistent per-repo supervision and waits for initial readiness
+
+Usage: varde setup watch [OPTIONS]
+
+Options:
+      --repo <REPOS>               Explicit repo paths to watch (combined with `--config`'s `repos`/`parent_dirs`, if given). Also identifies which running watcher `--stop` targets
+      --config <CONFIG>            Path to a watch.toml config (defaults to `<varde config root>/code/watch.toml` (default `~/.config/varde/code/watch.toml`) if present and no `--repo` was given)
+      --debounce-ms <DEBOUNCE_MS>  Debounce window in milliseconds before an fs-event burst triggers a rebuild [default: 750]
+      --list                       List every running (or stale-locked) watcher instance as JSON and exit — does not start a watcher. Ignores `--repo`/`--config`
+      --ensure                     Register and start a host-supervised watcher for one repo
+      --stop                       Stop the watcher for the repo set given via `--repo`/`--config` and wait for its kernel ownership to release; exit without starting a watcher
+      --remove-index               Stop one repo watcher, then remove that repo's `varde map` index
+      --stop-all                   Stop every running watcher instance and exit — does not start a watcher. Ignores `--repo`/`--config`
+  -v, --verbose                    Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help                       Print help

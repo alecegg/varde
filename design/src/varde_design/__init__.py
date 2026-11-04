@@ -1,0 +1,1 @@
+"""varde-design package."""

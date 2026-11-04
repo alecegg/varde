@@ -1,0 +1,17 @@
+Measure skill trigger accuracy or skill-guided output quality.
+
+Every `eval` run launches one or more billed harness sessions (Claude, Codex, or opencode); provider usage and charges scale with `--runs`. Codex has no documented skill-invocation event: `eval trigger` falls back to a substring proxy for Codex, counting a trigger only when a completed command_execution contains the absolute `--skill-path`. Do not rely on the Codex proxy for prompts that ask to inspect the skill file itself.
+
+Output evaluation cost scales with harness calls per eval: runs × evals × 2 when baseline comparison is enabled, plus judging calls.
+
+Usage: varde learn measure <SKILL> <KIND>
+
+Commands:
+  trigger    Measure a skill description's trigger accuracy against queries
+  output     Measure skill-guided output quality against baseline runs
+  calibrate  Check whether declared mutations make a skill's evals fail
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')

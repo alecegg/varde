@@ -1,0 +1,47 @@
+# Protected-workflow quality gate for `varde scan` (GitHub Actions).
+#
+# PROTECTED WORKFLOW REQUIREMENT: run this from a protected workflow, for
+# example a required workflow or a ruleset-enforced check on the base branch.
+# A pull request's own workflow can drop the step or add `|| true`, so a gate
+# that lives only in the PR's workflow file is not a gate. Whoever controls
+# the base branch or CI controls the gate.
+#
+# rulesRef is the base ref: rules, thresholds and overrides are read from the
+# base branch, so a PR cannot loosen its own gate. A PR that edits them gets a
+# blocking `config-changed` diagnostic; merge such edits as their own change.
+#
+# Default severityThreshold is error, so `quality-function-cap` and
+# `quality-file-floor` block and the mean reports. To make the mean block too,
+# use the gateRules variant below (every selected finding blocks).
+name: varde-quality-gate
+on:
+  pull_request_target:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build index
+        run: varde map build --repo-root .
+      - name: Scan (default severityThreshold error)
+        run: |
+          varde scan --json '{"repoRoot":".","severityThreshold":"error","rulesRef":"origin/${{ github.base_ref }}"}' > scan.json || status=$?
+          cat scan.json
+          if grep -q 'quality-function-cap\|quality-file-floor' scan.json; then
+            cat <<'WORDING'
+          These findings fail the gate because `quality-function-cap` and `quality-file-floor` are errors by default. To fix: start with the worst functions and files listed above. To turn a rule down on purpose: set `[rules.quality-function-cap] severity = "warning"` and a `reason` in `.varde-code/overrides.toml`. Turning a rule down is a decision that should be recorded: it is reported by CI as a severity downgrade, `varde scan rules list` shows it, and the findings keep appearing on every run.
+          WORDING
+          fi
+          exit "${status:-0}"
+      # Variant: also block on the mean. gateRules and severityThreshold are
+      # mutually exclusive, and an `off` rule in gateRules is an invalid_input error.
+      #   varde scan --json '{"repoRoot":".","gateRules":["quality-scope-mean","quality-file-floor","quality-function-cap"],"rulesRef":"origin/${{ github.base_ref }}"}'
+      # Variant: limit floor and cap findings to files changed in the PR. The
+      # mean always covers the full scope. An unchanged file can start to
+      # violate (its callee changed) and stay hidden in this mode.
+      #   varde scan --json '{"repoRoot":".","rulesRef":"origin/${{ github.base_ref }}","changedSince":"origin/${{ github.base_ref }}"}'

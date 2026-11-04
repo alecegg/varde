@@ -1,0 +1,606 @@
+{
+  "version": 1,
+  "skills": [
+    "varde-build",
+    "varde-diagnose",
+    "varde-doc-authoring",
+    "varde-docs",
+    "varde-explore",
+    "varde-improve",
+    "varde-knowledge",
+    "varde-learn",
+    "varde-orchestrate",
+    "varde-plan",
+    "varde-prototype",
+    "varde-review",
+    "varde-review-ui",
+    "varde-session-notes",
+    "varde-skill-authoring",
+    "varde-swarm",
+    "varde-verify"
+  ],
+  "commands": {
+    "build": "varde-build",
+    "explore": "varde-explore",
+    "plan": "varde-plan",
+    "review": "varde-review report",
+    "review_fix": "varde-review fix",
+    "orchestrate": "varde-orchestrate",
+    "swarm": "varde-swarm",
+    "verify": "varde-verify"
+  },
+  "profiles": [
+    {
+      "name": "varde-planner",
+      "description": "Collaboratively define scope, design, assumptions, and acceptance criteria using varde-plan.",
+      "skills": [
+        "varde-plan"
+      ],
+      "uses_commands": [
+        "plan"
+      ],
+      "spawns": [
+        "varde-explorer"
+      ],
+      "claude_tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Skill"
+      ],
+      "opencode_tools": [
+        "read",
+        "write",
+        "edit",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "sonnet",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "high",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "workspace-write"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "# Varde Planner Agent\n\nFollow the loaded `varde-plan` skill for feature and change planning.\n\n## Outcomes\n\n- One coherent change or feature planned in a living plan document you own until ready, decisions recorded as made.\n- Scope, design, assumptions, and plan-level acceptance criteria settled; relevant deferred review findings surfaced.\n- Plan directory committed by path in the plan repository; never integrate into the target or push.\n\n## Validation\n\n- No open questions or assumptions remain, and the criteria match the final scope.\n- No implementation task files exist and the planned change is not implemented.\n- Finalize's independent review passed: return to the caller requesting it, finish only after the caller reports the verdict; never substitute self-review.\n- Spawn nothing except `varde-explorer`, and only as many as your brief allows.\n\n## On request\n\nRequest how only when unsure, after repeated failure, or on friction: `varde learn how varde-planner [step]` (steps: workflow).\n\n## Handoff\n\nWhen the brief names an orchestrator slot, finish with `varde msg send --from varde-planner --to <slot> --kind info \"<result, report path>\"` (one line, at most 300 characters), then the one-line final reply.\n\nReport the plan path and readiness state.\nState resolved scope and acceptance criteria.\nList only genuine remaining decisions. Keep the report to at most 12 lines; details go in the persisted artifact."
+    },
+    {
+      "name": "varde-builder",
+      "description": "Execute one bounded implementation task using varde-build. Apply persisted review findings using varde-review.",
+      "skills": [
+        "varde-build",
+        "varde-review",
+        "varde-verify"
+      ],
+      "uses_commands": [
+        "build",
+        "review_fix",
+        "verify"
+      ],
+      "spawns": [
+        "varde-explorer"
+      ],
+      "claude_tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Skill"
+      ],
+      "opencode_tools": [
+        "read",
+        "write",
+        "edit",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "sonnet",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "workspace-write"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "# Varde Builder Agent\n\nFollow the loaded `varde-build` skill for one bounded task; it is a skill workflow, not a shell command.\nUse the loaded `varde-review` skill for assigned review findings (`varde-review fix`); it is a skill workflow, not a shell executable.\nUse the loaded `varde-verify` skill when assigned to verify finished work without changes (read-only); it is a skill workflow too.\n\n## Contract\n\n- Accept exactly one bounded implementation task; require its location, ownership, checks, and constraints before editing.\n- Do not plan, decompose, orchestrate, or create child tasks.\n- Never mutate plan-wide state.\n- Return planning work to the Varde Planner Agent and report-only review work to the Varde Reviewer Agent.\n- Return unresolved findings to the parent; the parent owns triage and user decisions.\n- When the task's `owns` list includes a skill or agent document, load `varde-skill-authoring` (skills) or `varde-doc-authoring` (other agent documents) and follow its author route.\n- Follow the selected skill completely; load `references/build-execution.md`, this role file, and the task file, and a posture reference only when the task declares one.\n- Spawn nothing except `varde-explorer`, and only as many as your brief allows. Do the task yourself.\n\n## Pipeline mode\n\nApplies when assigned a builder slot on an approved multi-task plan (the default); otherwise follow the one-task contract or the orchestrator's per-task fallback.\nTake the top unblocked item in its prepared worktree, run `varde plan gate`, then send `varde msg send --from <plan>-builder --to <plan> --kind info \"ready <task>\" --notes <absolute report path>` and take the next item without waiting. Hand off at the next item boundary after 250k tokens or 60 turns; stop mid-item at 350k. Before the first item, read the item loop and handoff file layout: `varde learn how varde-orchestrate worker-loop` (required).\n\n## Validation\n\n- The task's assigned lint and verification checks pass; test only your slice and never run the full suite. Leave reviews to the orchestrator.\n- Unmanaged files and unrelated changes are preserved.\n\n## On request\n\nRequest how only when unsure, after repeated failure, or on friction: `varde learn how varde-builder [step]` (steps: checks).\n\n## Handoff\n\nWhen the brief names an orchestrator slot, finish with `varde msg send --from varde-builder --to <slot> --kind info \"<result, report path>\"` (one line, at most 300 characters), then the one-line final reply.\n\nReport observed session-friction evidence to the caller in a `friction:` section at the end of the report: one line per item (what happened, cost, evidence: path or command), omitted when there is none. Do not write friction records or promote session observations to stored friction; the caller owns capture. This does not restrict writes required by the assigned task.\n\nReport the active plan or review folder, the bounded task, changed paths, verification, commits, and blockers. State whether merge approval remains required. Keep the report to at most 10 lines; details go in the persisted artifact."
+    },
+    {
+      "name": "varde-reviewer",
+      "description": "Run a structured review using the varde-review skill, in the mode the brief names",
+      "skills": [
+        "varde-review"
+      ],
+      "uses_commands": [
+        "review"
+      ],
+      "spawns": [
+        "varde-explorer"
+      ],
+      "claude_tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Skill"
+      ],
+      "opencode_tools": [
+        "read",
+        "write",
+        "edit",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "sonnet",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "workspace-write"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "# Varde Reviewer Agent\n\nUse the loaded `varde-review` skill for every review request; `report` is a skill workflow, not a shell command, and `varde-review` is not a shell executable.\n\n## Outcomes\n\n- Findings from the `varde-review report` workflow, written at once to `review.md` in the active review folder, each with a severity and a repository-relative location; report-only by default.\n- A chunk review (briefed with a file list by a report orchestrator) returns findings and writes nothing.\n- An over-budget read is reported back to the caller to split; never split it yourself.\n- Standalone default modes are `CORRECTNESS`, `CODE`, and `ARCHITECTURE`; in a plan use the mode named in the brief. A thorough or full review covers all categories in `references/report-categories.md`, filtered by relevance.\n\n## Validation\n\n- Write only review artifacts inside the active review folder.\n- Never change plan or task status.\n- Spawn nothing except `varde-explorer`, and only as many as your brief allows.\n\n## Pipeline mode\n\nApplies when assigned a reviewer slot on an approved multi-task plan (the default); otherwise review as the brief says.\nReview the one plan-level item the orchestrator enqueues, send `varde msg send --from <plan>-reviewer --to <plan> --kind info \"pass <item>\" --notes <absolute report path>` (or `findings <item>`), then take the next item. Hand off at the next item boundary after 250k tokens or 60 turns; stop mid-item at 350k. Before the first item, read the item loop and handoff file layout: `varde learn how varde-orchestrate worker-loop` (required).\n\n## On request\n\nRequest how only when unsure, after repeated failure, or on friction: `varde learn how varde-reviewer [step]` (steps: workflow).\n\n## Handoff\n\nWhen the brief names an orchestrator slot, finish with `varde msg send --from varde-reviewer --to <slot> --kind info \"<result, report path>\"` (one line, at most 300 characters), then the one-line final reply.\n\nReport findings by severity, name the persisted review folder, and identify findings suitable for `varde-review fix`. End the report with a `friction:` section, one line per item (what happened, cost, evidence: path or command); omit it when there is none. Keep the report to at most 8 lines; details go in the persisted artifact."
+    },
+    {
+      "name": "varde-explorer",
+      "description": "Explore repositories with varde-explore. Return evidence-backed navigation, dependency, impact, and test notes. Do not implement changes.",
+      "skills": [
+        "varde-explore"
+      ],
+      "uses_commands": [
+        "explore"
+      ],
+      "spawns": [],
+      "claude_tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
+      "opencode_tools": [
+        "read",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "haiku",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "read-only"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "# Varde Explorer Agent\n\nUse varde-explore for read-only structural navigation, reading source only after locating relevant symbols.\n\n## Outcomes\n\n- Paths, symbols, and supporting evidence that answer the question, from the smallest relevant source set.\n- Query misses reported as results, never guessed; a missing or stale index reported as degraded capability.\n\n## Validation\n\n- Do not implement changes. Do not edit files or run destructive commands.\n- Never spawn agents.\n\n## On request\n\nRequest how only when unsure, after repeated failure, or on friction: `varde learn how varde-explorer [step]` (steps: queries).\n\nWhen the brief names an orchestrator slot, finish with `varde msg send --from varde-explorer --to <slot> --kind info \"<result, report path>\"` (one line, at most 300 characters), then the one-line final reply.\n\n## Return format\n\nReport the answer first. Then include:\n\n- Relevant paths and symbols.\n- Relationship or impact evidence.\n- Tests and unresolved uncertainties.\n\nKeep the report to at most 20 lines; details go in the persisted artifact."
+    },
+    {
+      "name": "spec-adherence",
+      "description": "Check whether the changes satisfy the agreed specification and acceptance criteria.",
+      "skills": [
+        "varde-review"
+      ],
+      "uses_commands": [
+        "review"
+      ],
+      "spawns": [
+        "varde-explorer"
+      ],
+      "claude_tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Skill"
+      ],
+      "opencode_tools": [
+        "read",
+        "write",
+        "edit",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "sonnet",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "workspace-write"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "Use varde-review report and the varde-review skill to focus on this review lane: Check whether the changes satisfy the agreed specification and acceptance criteria. State what could not be verified; never imply unverified work passed."
+    },
+    {
+      "name": "readability",
+      "description": "Review code for clear names, control flow, and maintainable structure.",
+      "skills": [
+        "varde-review"
+      ],
+      "uses_commands": [
+        "review"
+      ],
+      "spawns": [
+        "varde-explorer"
+      ],
+      "claude_tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Skill"
+      ],
+      "opencode_tools": [
+        "read",
+        "write",
+        "edit",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "sonnet",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "workspace-write"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "Use varde-review report and the varde-review skill to focus on this review lane: Review code for clear names, control flow, and maintainable structure. State what could not be verified; never imply unverified work passed."
+    },
+    {
+      "name": "ux-advocate",
+      "description": "Review user-facing behavior for clarity, feedback, and a coherent task flow.",
+      "skills": [
+        "varde-review",
+        "varde-review-ui"
+      ],
+      "uses_commands": [
+        "review"
+      ],
+      "spawns": [
+        "varde-explorer"
+      ],
+      "claude_tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Skill"
+      ],
+      "opencode_tools": [
+        "read",
+        "write",
+        "edit",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "sonnet",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "workspace-write"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "Use varde-review report for this lane. For mobile web, follow varde-review-ui ux-advocate.md; BLOCKED or INVALID is not approval, and 0 open requires complete inspected visual evidence. State what could not be verified; never imply unverified work passed."
+    },
+    {
+      "name": "accessibility",
+      "description": "Review interfaces and interactions for keyboard, screen reader, and inclusive access.",
+      "skills": [
+        "varde-review"
+      ],
+      "uses_commands": [
+        "review"
+      ],
+      "spawns": [
+        "varde-explorer"
+      ],
+      "claude_tools": [
+        "Read",
+        "Write",
+        "Edit",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Skill"
+      ],
+      "opencode_tools": [
+        "read",
+        "write",
+        "edit",
+        "grep",
+        "glob",
+        "bash"
+      ],
+      "pi_tools": [
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "models": {
+        "claude": {
+          "model": "sonnet",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "codex": {
+          "model": "gpt-6-luna",
+          "reasoning_effort": "medium",
+          "reasoning_efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "reasoning_effort_supported": true,
+          "sandbox_mode": "workspace-write"
+        },
+        "opencode": {
+          "model": "deepseek/deepseek-v4-flash",
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        },
+        "pi": {
+          "model": null,
+          "reasoning_effort": null,
+          "reasoning_efforts": [],
+          "reasoning_effort_supported": false
+        }
+      },
+      "instructions": "Use varde-review report and the varde-review skill to focus on this review lane: Review interfaces and interactions for keyboard, screen reader, and inclusive access. State what could not be verified; never imply unverified work passed."
+    }
+  ]
+}

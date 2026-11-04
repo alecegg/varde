@@ -1,0 +1,1980 @@
+{
+  "schema_version": 1,
+  "languages": [
+    "python",
+    "typescript",
+    "java",
+    "csharp",
+    "go",
+    "rust",
+    "cpp"
+  ],
+  "language_subsets": {
+    "python": [
+      "scoreboard",
+      "shipping-quote",
+      "csv-summary",
+      "invoice-aging",
+      "shipment-state",
+      "text-template"
+    ],
+    "typescript": [
+      "price-order",
+      "shipment-state",
+      "retry-policy",
+      "invoice-aging",
+      "text-template",
+      "scoreboard"
+    ],
+    "java": [
+      "price-order",
+      "csv-summary",
+      "shipment-state",
+      "retry-policy",
+      "inventory-adjustment",
+      "text-template"
+    ],
+    "csharp": [
+      "price-order",
+      "shipping-quote",
+      "retry-policy",
+      "inventory-adjustment",
+      "reservation-calendar",
+      "invoice-aging"
+    ],
+    "go": [
+      "price-order",
+      "shipping-quote",
+      "csv-summary",
+      "shipment-state",
+      "inventory-adjustment",
+      "reservation-calendar"
+    ],
+    "rust": [
+      "price-order",
+      "shipping-quote",
+      "retry-policy",
+      "reservation-calendar",
+      "invoice-aging",
+      "scoreboard"
+    ],
+    "cpp": [
+      "price-order",
+      "csv-summary",
+      "text-template",
+      "inventory-adjustment",
+      "reservation-calendar",
+      "scoreboard"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "price-order",
+      "pair_group": "price-order",
+      "behaviour": "Calculate the subtotal, discount, tax, and total for a list of order items.",
+      "input_domain": "Items contain exact decimal prices >= 0 and positive integer quantities; calculate the raw subtotal, apply a 10% discount only when subtotal > 100, then calculate 8% tax on the discounted subtotal. Round subtotal, discount, tax, and total independently at their final field boundary to two decimals, half up away from zero; the supplied cases avoid exact half-cent ties. Total is the discounted subtotal plus the rounded tax.",
+      "difficulty": "moderate",
+      "over_comfort_monolith": true,
+      "idiom_tags": [],
+      "cases": [
+        {
+          "input": [
+            [
+              10,
+              2
+            ]
+          ],
+          "expected": {
+            "subtotal": 20,
+            "discount": 0,
+            "tax": 1.6,
+            "total": 21.6
+          }
+        },
+        {
+          "input": [
+            [
+              100,
+              1
+            ]
+          ],
+          "expected": {
+            "subtotal": 100,
+            "discount": 0,
+            "tax": 8,
+            "total": 108
+          }
+        },
+        {
+          "input": [
+            [
+              101,
+              1
+            ]
+          ],
+          "expected": {
+            "subtotal": 101,
+            "discount": 10.1,
+            "tax": 7.27,
+            "total": 98.17
+          }
+        },
+        {
+          "input": [
+            [
+              25,
+              4
+            ]
+          ],
+          "expected": {
+            "subtotal": 100,
+            "discount": 0,
+            "tax": 8,
+            "total": 108
+          }
+        },
+        {
+          "input": [
+            [
+              12.5,
+              3
+            ],
+            [
+              4,
+              2
+            ]
+          ],
+          "expected": {
+            "subtotal": 45.5,
+            "discount": 0,
+            "tax": 3.64,
+            "total": 49.14
+          }
+        },
+        {
+          "input": [],
+          "expected": {
+            "subtotal": 0,
+            "discount": 0,
+            "tax": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": [
+            [
+              0,
+              3
+            ]
+          ],
+          "expected": {
+            "subtotal": 0,
+            "discount": 0,
+            "tax": 0,
+            "total": 0
+          }
+        },
+        {
+          "input": [
+            [
+              50,
+              2
+            ],
+            [
+              5,
+              1
+            ]
+          ],
+          "expected": {
+            "subtotal": 105,
+            "discount": 10.5,
+            "tax": 7.56,
+            "total": 102.06
+          }
+        },
+        {
+          "input": [
+            [
+              1.25,
+              4
+            ],
+            [
+              2.1,
+              3
+            ]
+          ],
+          "expected": {
+            "subtotal": 11.3,
+            "discount": 0,
+            "tax": 0.9,
+            "total": 12.2
+          }
+        },
+        {
+          "input": [
+            [
+              19.99,
+              6
+            ]
+          ],
+          "expected": {
+            "subtotal": 119.94,
+            "discount": 11.99,
+            "tax": 8.64,
+            "total": 116.59
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipping-quote",
+      "pair_group": "shipping-quote",
+      "behaviour": "Calculate a parcel shipping charge from its weight, destination zone, and delivery speed.",
+      "input_domain": "Weight is a positive exact decimal number of kilograms; zone is local, domestic, or international with a rate of 4, 7, or 15 per kilogram; speed is standard or express. Multiply the raw weight by the zone rate, multiply express by 1.5, then round up the final charge to the next whole unit. Weight is at most 1,000,000 kilograms.",
+      "difficulty": "moderate",
+      "over_comfort_monolith": false,
+      "idiom_tags": [],
+      "cases": [
+        {
+          "input": {
+            "weight": 1,
+            "zone": "local",
+            "speed": "standard"
+          },
+          "expected": 4
+        },
+        {
+          "input": {
+            "weight": 1.2,
+            "zone": "local",
+            "speed": "standard"
+          },
+          "expected": 5
+        },
+        {
+          "input": {
+            "weight": 2,
+            "zone": "domestic",
+            "speed": "standard"
+          },
+          "expected": 14
+        },
+        {
+          "input": {
+            "weight": 1,
+            "zone": "international",
+            "speed": "standard"
+          },
+          "expected": 15
+        },
+        {
+          "input": {
+            "weight": 1,
+            "zone": "local",
+            "speed": "express"
+          },
+          "expected": 6
+        },
+        {
+          "input": {
+            "weight": 1.1,
+            "zone": "local",
+            "speed": "express"
+          },
+          "expected": 7
+        },
+        {
+          "input": {
+            "weight": 3,
+            "zone": "domestic",
+            "speed": "express"
+          },
+          "expected": 32
+        },
+        {
+          "input": {
+            "weight": 0.5,
+            "zone": "international",
+            "speed": "express"
+          },
+          "expected": 12
+        },
+        {
+          "input": {
+            "weight": 2.25,
+            "zone": "international",
+            "speed": "standard"
+          },
+          "expected": 34
+        },
+        {
+          "input": {
+            "weight": 4,
+            "zone": "local",
+            "speed": "standard"
+          },
+          "expected": 16
+        }
+      ]
+    },
+    {
+      "id": "csv-summary",
+      "pair_group": "csv-summary",
+      "behaviour": "Summarize valid sales rows by product, returning total quantity and revenue for each product in name order.",
+      "input_domain": "Rows contain a nonempty ASCII product name, positive integer quantity, and finite nonnegative exact decimal unit price. If any row is invalid, return {\"error\":\"invalid_row\"} and no partial summary. Combine exact case-sensitive product names, sum raw revenue, round each final product revenue half up away from zero to two decimals, and sort names by ordinal ASCII order; supplied cases avoid half-cent ties.",
+      "difficulty": "advanced",
+      "over_comfort_monolith": true,
+      "idiom_tags": [
+        "templates",
+        "generic-aggregation"
+      ],
+      "cases": [
+        {
+          "input": [
+            {
+              "product": "Tea",
+              "quantity": 2,
+              "unit_price": 3
+            }
+          ],
+          "expected": [
+            {
+              "product": "Tea",
+              "quantity": 2,
+              "revenue": 6
+            }
+          ]
+        },
+        {
+          "input": [],
+          "expected": []
+        },
+        {
+          "input": [
+            {
+              "product": "Pen",
+              "quantity": 3,
+              "unit_price": 1.2
+            },
+            {
+              "product": "Book",
+              "quantity": 1,
+              "unit_price": 8
+            }
+          ],
+          "expected": [
+            {
+              "product": "Book",
+              "quantity": 1,
+              "revenue": 8
+            },
+            {
+              "product": "Pen",
+              "quantity": 3,
+              "revenue": 3.6
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "Tea",
+              "quantity": 1,
+              "unit_price": 2
+            },
+            {
+              "product": "Tea",
+              "quantity": 4,
+              "unit_price": 2.5
+            }
+          ],
+          "expected": [
+            {
+              "product": "Tea",
+              "quantity": 5,
+              "revenue": 12
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "A",
+              "quantity": 1,
+              "unit_price": 0
+            }
+          ],
+          "expected": [
+            {
+              "product": "A",
+              "quantity": 1,
+              "revenue": 0
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "z",
+              "quantity": 2,
+              "unit_price": 1.11
+            },
+            {
+              "product": "a",
+              "quantity": 2,
+              "unit_price": 1.11
+            }
+          ],
+          "expected": [
+            {
+              "product": "a",
+              "quantity": 2,
+              "revenue": 2.22
+            },
+            {
+              "product": "z",
+              "quantity": 2,
+              "revenue": 2.22
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "Mug",
+              "quantity": 2,
+              "unit_price": 4.5
+            },
+            {
+              "product": "Mug",
+              "quantity": 1,
+              "unit_price": 4.5
+            },
+            {
+              "product": "Bag",
+              "quantity": 1,
+              "unit_price": 7
+            }
+          ],
+          "expected": [
+            {
+              "product": "Bag",
+              "quantity": 1,
+              "revenue": 7
+            },
+            {
+              "product": "Mug",
+              "quantity": 3,
+              "revenue": 13.5
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "x",
+              "quantity": 10,
+              "unit_price": 0.05
+            }
+          ],
+          "expected": [
+            {
+              "product": "x",
+              "quantity": 10,
+              "revenue": 0.5
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "same",
+              "quantity": 1,
+              "unit_price": 1
+            },
+            {
+              "product": "Same",
+              "quantity": 1,
+              "unit_price": 2
+            }
+          ],
+          "expected": [
+            {
+              "product": "Same",
+              "quantity": 1,
+              "revenue": 2
+            },
+            {
+              "product": "same",
+              "quantity": 1,
+              "revenue": 1
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "K",
+              "quantity": 7,
+              "unit_price": 2.35
+            }
+          ],
+          "expected": [
+            {
+              "product": "K",
+              "quantity": 7,
+              "revenue": 16.45
+            }
+          ]
+        },
+        {
+          "input": [
+            {
+              "product": "",
+              "quantity": 1,
+              "unit_price": 2
+            }
+          ],
+          "expected": {
+            "error": "invalid_row"
+          }
+        }
+      ]
+    },
+    {
+      "id": "retry-policy",
+      "pair_group": "retry-policy",
+      "behaviour": "Return the scheduled retry delays for a failed operation, capped by the configured maximum delay.",
+      "input_domain": "Attempt count is an integer from 0 through 20; initial delay and maximum are positive finite numbers no greater than 1,000,000; multiplier is finite and from 1 through 10. Any invalid field returns {\"error\":\"invalid_policy\"}. Otherwise retry i uses min(initial * multiplier^(i-1), maximum), for i from 1 through attempt count.",
+      "difficulty": "moderate",
+      "over_comfort_monolith": true,
+      "idiom_tags": [
+        "error-handling",
+        "result-types"
+      ],
+      "cases": [
+        {
+          "input": {
+            "attempts": 0,
+            "initial": 1,
+            "multiplier": 2,
+            "maximum": 10
+          },
+          "expected": []
+        },
+        {
+          "input": {
+            "attempts": 1,
+            "initial": 1,
+            "multiplier": 2,
+            "maximum": 10
+          },
+          "expected": [
+            1
+          ]
+        },
+        {
+          "input": {
+            "attempts": 4,
+            "initial": 1,
+            "multiplier": 2,
+            "maximum": 10
+          },
+          "expected": [
+            1,
+            2,
+            4,
+            8
+          ]
+        },
+        {
+          "input": {
+            "attempts": 5,
+            "initial": 1,
+            "multiplier": 2,
+            "maximum": 10
+          },
+          "expected": [
+            1,
+            2,
+            4,
+            8,
+            10
+          ]
+        },
+        {
+          "input": {
+            "attempts": 3,
+            "initial": 5,
+            "multiplier": 3,
+            "maximum": 20
+          },
+          "expected": [
+            5,
+            15,
+            20
+          ]
+        },
+        {
+          "input": {
+            "attempts": 4,
+            "initial": 2,
+            "multiplier": 1,
+            "maximum": 9
+          },
+          "expected": [
+            2,
+            2,
+            2,
+            2
+          ]
+        },
+        {
+          "input": {
+            "attempts": 3,
+            "initial": 0.5,
+            "multiplier": 2,
+            "maximum": 5
+          },
+          "expected": [
+            0.5,
+            1,
+            2
+          ]
+        },
+        {
+          "input": {
+            "attempts": 2,
+            "initial": 10,
+            "multiplier": 2,
+            "maximum": 10
+          },
+          "expected": [
+            10,
+            10
+          ]
+        },
+        {
+          "input": {
+            "attempts": 3,
+            "initial": 3,
+            "multiplier": 1.5,
+            "maximum": 20
+          },
+          "expected": [
+            3,
+            4.5,
+            6.75
+          ]
+        },
+        {
+          "input": {
+            "attempts": 6,
+            "initial": 2,
+            "multiplier": 2,
+            "maximum": 9
+          },
+          "expected": [
+            2,
+            4,
+            8,
+            9,
+            9,
+            9
+          ]
+        },
+        {
+          "input": {
+            "attempts": 2,
+            "initial": 1,
+            "multiplier": 0.5,
+            "maximum": 10
+          },
+          "expected": {
+            "error": "invalid_policy"
+          }
+        },
+        {
+          "input": {
+            "attempts": 1,
+            "initial": 1,
+            "multiplier": 1,
+            "maximum": 0
+          },
+          "expected": {
+            "error": "invalid_policy"
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipment-state",
+      "pair_group": "shipment-state",
+      "behaviour": "Apply a shipment event and return the resulting status or a validation error.",
+      "input_domain": "Statuses are created, packed, shipped, delivered, cancelled; events are pack, ship, deliver, cancel. Allowed transitions are created→packed/cancelled, packed→shipped/cancelled, shipped→delivered; all other transitions return error `invalid_transition` without changing status. An unknown status or event also returns {\"error\":\"invalid_transition\"}.",
+      "difficulty": "moderate",
+      "over_comfort_monolith": true,
+      "idiom_tags": [
+        "error-handling",
+        "state-machine"
+      ],
+      "cases": [
+        {
+          "input": {
+            "status": "created",
+            "event": "pack"
+          },
+          "expected": {
+            "status": "packed"
+          }
+        },
+        {
+          "input": {
+            "status": "created",
+            "event": "cancel"
+          },
+          "expected": {
+            "status": "cancelled"
+          }
+        },
+        {
+          "input": {
+            "status": "packed",
+            "event": "ship"
+          },
+          "expected": {
+            "status": "shipped"
+          }
+        },
+        {
+          "input": {
+            "status": "packed",
+            "event": "cancel"
+          },
+          "expected": {
+            "status": "cancelled"
+          }
+        },
+        {
+          "input": {
+            "status": "shipped",
+            "event": "deliver"
+          },
+          "expected": {
+            "status": "delivered"
+          }
+        },
+        {
+          "input": {
+            "status": "created",
+            "event": "ship"
+          },
+          "expected": {
+            "error": "invalid_transition"
+          }
+        },
+        {
+          "input": {
+            "status": "delivered",
+            "event": "cancel"
+          },
+          "expected": {
+            "error": "invalid_transition"
+          }
+        },
+        {
+          "input": {
+            "status": "cancelled",
+            "event": "pack"
+          },
+          "expected": {
+            "error": "invalid_transition"
+          }
+        },
+        {
+          "input": {
+            "status": "packed",
+            "event": "deliver"
+          },
+          "expected": {
+            "error": "invalid_transition"
+          }
+        },
+        {
+          "input": {
+            "status": "shipped",
+            "event": "pack"
+          },
+          "expected": {
+            "error": "invalid_transition"
+          }
+        },
+        {
+          "input": {
+            "status": "created",
+            "event": "teleport"
+          },
+          "expected": {
+            "error": "invalid_transition"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reservation-calendar",
+      "pair_group": "reservation-calendar",
+      "behaviour": "Return the identifiers of available appointment slots after applying reservation overlap rules.",
+      "input_domain": "Slots have unique nonempty ASCII ids and integer start/end minutes in [0,1440]; reservations have integer start/end minutes in that range. Every interval must satisfy start < end or the result is {\"error\":\"invalid_interval\"}. Intervals are half-open [start,end), so touching endpoints do not overlap. A slot is unavailable if it overlaps any reservation. Return available ids ordered by start minute, then ordinal ASCII id.",
+      "difficulty": "advanced",
+      "over_comfort_monolith": true,
+      "idiom_tags": [
+        "ownership-lifetimes",
+        "collection-filtering"
+      ],
+      "cases": [
+        {
+          "input": {
+            "slots": [],
+            "reserved": []
+          },
+          "expected": []
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "A",
+                "start": 540,
+                "end": 600
+              }
+            ],
+            "reserved": []
+          },
+          "expected": [
+            "A"
+          ]
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "A",
+                "start": 540,
+                "end": 600
+              }
+            ],
+            "reserved": [
+              {
+                "start": 540,
+                "end": 600
+              }
+            ]
+          },
+          "expected": []
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "A",
+                "start": 480,
+                "end": 540
+              },
+              {
+                "id": "B",
+                "start": 540,
+                "end": 600
+              }
+            ],
+            "reserved": [
+              {
+                "start": 540,
+                "end": 570
+              }
+            ]
+          },
+          "expected": [
+            "A"
+          ]
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "A",
+                "start": 540,
+                "end": 600
+              }
+            ],
+            "reserved": [
+              {
+                "start": 570,
+                "end": 630
+              }
+            ]
+          },
+          "expected": []
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "B",
+                "start": 600,
+                "end": 660
+              },
+              {
+                "id": "A",
+                "start": 540,
+                "end": 600
+              }
+            ],
+            "reserved": [
+              {
+                "start": 700,
+                "end": 720
+              }
+            ]
+          },
+          "expected": [
+            "A",
+            "B"
+          ]
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "B",
+                "start": 540,
+                "end": 600
+              },
+              {
+                "id": "A",
+                "start": 540,
+                "end": 600
+              }
+            ],
+            "reserved": []
+          },
+          "expected": [
+            "A",
+            "B"
+          ]
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "A",
+                "start": 600,
+                "end": 600
+              }
+            ],
+            "reserved": []
+          },
+          "expected": {
+            "error": "invalid_interval"
+          }
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "A",
+                "start": 540,
+                "end": 600
+              }
+            ],
+            "reserved": [
+              {
+                "start": 800,
+                "end": 800
+              }
+            ]
+          },
+          "expected": {
+            "error": "invalid_interval"
+          }
+        },
+        {
+          "input": {
+            "slots": [
+              {
+                "id": "A",
+                "start": 0,
+                "end": 30
+              },
+              {
+                "id": "B",
+                "start": 1410,
+                "end": 1440
+              }
+            ],
+            "reserved": [
+              {
+                "start": 30,
+                "end": 60
+              }
+            ]
+          },
+          "expected": [
+            "A",
+            "B"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inventory-adjustment",
+      "pair_group": "inventory-adjustment",
+      "behaviour": "Apply stock movements to item quantities and report the final quantity for each item.",
+      "input_domain": "Starting stock contains nonnegative integer quantities through 1,000,000,000; signed movements contain integer quantities from -1,000,000,000 through 1,000,000,000, and an item absent from starting stock begins at zero. Add movements by item across the union of names. If any final quantity is negative, reject the whole request with {\"error\":\"insufficient_stock\"}; otherwise return an array of {item, quantity} records sorted by ordinal ASCII item name.",
+      "difficulty": "moderate",
+      "over_comfort_monolith": true,
+      "idiom_tags": [
+        "error-handling",
+        "transaction-safety"
+      ],
+      "cases": [
+        {
+          "input": {
+            "stock": {
+              "A": 2
+            },
+            "movements": {
+              "A": 1
+            }
+          },
+          "expected": [
+            {
+              "item": "A",
+              "quantity": 3
+            }
+          ]
+        },
+        {
+          "input": {
+            "stock": {
+              "A": 2
+            },
+            "movements": {
+              "A": -2
+            }
+          },
+          "expected": [
+            {
+              "item": "A",
+              "quantity": 0
+            }
+          ]
+        },
+        {
+          "input": {
+            "stock": {},
+            "movements": {}
+          },
+          "expected": []
+        },
+        {
+          "input": {
+            "stock": {
+              "B": 1,
+              "A": 4
+            },
+            "movements": {
+              "A": -1,
+              "B": 3
+            }
+          },
+          "expected": [
+            {
+              "item": "A",
+              "quantity": 3
+            },
+            {
+              "item": "B",
+              "quantity": 4
+            }
+          ]
+        },
+        {
+          "input": {
+            "stock": {
+              "A": 1
+            },
+            "movements": {
+              "A": -2
+            }
+          },
+          "expected": {
+            "error": "insufficient_stock"
+          }
+        },
+        {
+          "input": {
+            "stock": {
+              "A": 2,
+              "B": 1
+            },
+            "movements": {
+              "A": -1,
+              "B": -2
+            }
+          },
+          "expected": {
+            "error": "insufficient_stock"
+          }
+        },
+        {
+          "input": {
+            "stock": {
+              "A": 0
+            },
+            "movements": {
+              "B": 3
+            }
+          },
+          "expected": [
+            {
+              "item": "A",
+              "quantity": 0
+            },
+            {
+              "item": "B",
+              "quantity": 3
+            }
+          ]
+        },
+        {
+          "input": {
+            "stock": {
+              "A": 5
+            },
+            "movements": {
+              "A": 0
+            }
+          },
+          "expected": [
+            {
+              "item": "A",
+              "quantity": 5
+            }
+          ]
+        },
+        {
+          "input": {
+            "stock": {
+              "Z": 2,
+              "C": 1
+            },
+            "movements": {
+              "C": 2
+            }
+          },
+          "expected": [
+            {
+              "item": "C",
+              "quantity": 3
+            },
+            {
+              "item": "Z",
+              "quantity": 2
+            }
+          ]
+        },
+        {
+          "input": {
+            "stock": {
+              "A": 3
+            },
+            "movements": {
+              "A": -3,
+              "B": 1
+            }
+          },
+          "expected": [
+            {
+              "item": "A",
+              "quantity": 0
+            },
+            {
+              "item": "B",
+              "quantity": 1
+            }
+          ]
+        },
+        {
+          "input": {
+            "stock": {
+              "A": 1
+            },
+            "movements": {
+              "UNKNOWN": -1
+            }
+          },
+          "expected": {
+            "error": "insufficient_stock"
+          }
+        }
+      ]
+    },
+    {
+      "id": "invoice-aging",
+      "pair_group": "invoice-aging",
+      "behaviour": "Build an invoice aging report with each invoice bucket and fee, plus the balance total for each bucket.",
+      "input_domain": "Input is a list of invoices with unique nonempty ASCII ids, nonnegative exact-decimal balances, and integer days_overdue; positive days are overdue and zero or negative days are current. Buckets are current (<=0), 1-30, 31-60, 61-90, and over-90 days. Fees are 0%, 2%, 5%, 8%, and 10% of balance by bucket. Return invoice rows sorted by ordinal id, each with id, bucket, and fee rounded half up away from zero to two decimals, and totals by bucket rounded the same way; supplied amounts avoid half-cent ties. There are at most 1,000 invoices, and each balance is an exact decimal amount from 0 through 1,000,000 with at most two decimal places.",
+      "difficulty": "advanced",
+      "over_comfort_monolith": true,
+      "idiom_tags": [],
+      "cases": [
+        {
+          "input": [],
+          "expected": {
+            "invoices": [],
+            "totals": {
+              "current": 0,
+              "1-30": 0,
+              "31-60": 0,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 0,
+              "balance": 100
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "current",
+                "fee": 0
+              }
+            ],
+            "totals": {
+              "current": 100,
+              "1-30": 0,
+              "31-60": 0,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 1,
+              "balance": 100
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "1-30",
+                "fee": 2
+              }
+            ],
+            "totals": {
+              "current": 0,
+              "1-30": 100,
+              "31-60": 0,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 30,
+              "balance": 100
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "1-30",
+                "fee": 2
+              }
+            ],
+            "totals": {
+              "current": 0,
+              "1-30": 100,
+              "31-60": 0,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 31,
+              "balance": 200
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "31-60",
+                "fee": 10
+              }
+            ],
+            "totals": {
+              "current": 0,
+              "1-30": 0,
+              "31-60": 200,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 60,
+              "balance": 50
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "31-60",
+                "fee": 2.5
+              }
+            ],
+            "totals": {
+              "current": 0,
+              "1-30": 0,
+              "31-60": 50,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 61,
+              "balance": 100
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "61-90",
+                "fee": 8
+              }
+            ],
+            "totals": {
+              "current": 0,
+              "1-30": 0,
+              "31-60": 0,
+              "61-90": 100,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 90,
+              "balance": 50
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "61-90",
+                "fee": 4
+              }
+            ],
+            "totals": {
+              "current": 0,
+              "1-30": 0,
+              "31-60": 0,
+              "61-90": 50,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "A",
+              "days_overdue": 91,
+              "balance": 300
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "over-90",
+                "fee": 30
+              }
+            ],
+            "totals": {
+              "current": 0,
+              "1-30": 0,
+              "31-60": 0,
+              "61-90": 0,
+              "over-90": 300
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "B",
+              "days_overdue": -2,
+              "balance": 40
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "B",
+                "bucket": "current",
+                "fee": 0
+              }
+            ],
+            "totals": {
+              "current": 40,
+              "1-30": 0,
+              "31-60": 0,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        },
+        {
+          "input": [
+            {
+              "id": "B",
+              "days_overdue": -2,
+              "balance": 40
+            },
+            {
+              "id": "A",
+              "days_overdue": 31,
+              "balance": 80
+            },
+            {
+              "id": "C",
+              "days_overdue": 5,
+              "balance": 50
+            }
+          ],
+          "expected": {
+            "invoices": [
+              {
+                "id": "A",
+                "bucket": "31-60",
+                "fee": 4
+              },
+              {
+                "id": "B",
+                "bucket": "current",
+                "fee": 0
+              },
+              {
+                "id": "C",
+                "bucket": "1-30",
+                "fee": 1
+              }
+            ],
+            "totals": {
+              "current": 40,
+              "1-30": 50,
+              "31-60": 80,
+              "61-90": 0,
+              "over-90": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "text-template",
+      "pair_group": "text-template",
+      "behaviour": "Render a message template by replacing each known placeholder with its supplied value.",
+      "input_domain": "Replace each single-brace placeholder `{name}` whose name uses ASCII letters or underscores when a corresponding value exists; preserve unknown placeholders literally. Double braces `{{...}}` mark literal text and are never substituted, even when the enclosed name exists. Inserted values are not recursively processed. All non-placeholder characters are copied verbatim.",
+      "difficulty": "moderate",
+      "over_comfort_monolith": false,
+      "idiom_tags": [
+        "templates",
+        "formatting"
+      ],
+      "cases": [
+        {
+          "input": {
+            "template": "Hello {name}",
+            "values": {
+              "name": "Ada"
+            }
+          },
+          "expected": "Hello Ada"
+        },
+        {
+          "input": {
+            "template": "{a}-{b}",
+            "values": {
+              "a": "x",
+              "b": "y"
+            }
+          },
+          "expected": "x-y"
+        },
+        {
+          "input": {
+            "template": "plain text",
+            "values": {}
+          },
+          "expected": "plain text"
+        },
+        {
+          "input": {
+            "template": "{missing}",
+            "values": {}
+          },
+          "expected": "{missing}"
+        },
+        {
+          "input": {
+            "template": "{name}{name}",
+            "values": {
+              "name": "Jo"
+            }
+          },
+          "expected": "JoJo"
+        },
+        {
+          "input": {
+            "template": "{first_name}",
+            "values": {
+              "first_name": "Lin"
+            }
+          },
+          "expected": "Lin"
+        },
+        {
+          "input": {
+            "template": "{name}",
+            "values": {
+              "name": "{other}",
+              "other": "x"
+            }
+          },
+          "expected": "{other}"
+        },
+        {
+          "input": {
+            "template": "{a} {unknown} {b}",
+            "values": {
+              "a": "1",
+              "b": "2"
+            }
+          },
+          "expected": "1 {unknown} 2"
+        },
+        {
+          "input": {
+            "template": "",
+            "values": {
+              "x": "y"
+            }
+          },
+          "expected": ""
+        },
+        {
+          "input": {
+            "template": "{{name}} {name}",
+            "values": {
+              "name": "Ada"
+            }
+          },
+          "expected": "{{name}} Ada"
+        }
+      ]
+    },
+    {
+      "id": "scoreboard",
+      "pair_group": "scoreboard",
+      "behaviour": "Build a tournament table from match results and rank teams by points, goal difference, goals scored, and team name.",
+      "input_domain": "Input lists unique nonempty ASCII team names and matches with distinct known home/away teams and nonnegative integer scores. Any invalid match returns {\"error\":\"invalid_match\"}. A win earns 3 points, a draw 1 point per team, and a loss 0. Include teams with no matches. Each row contains team, played, wins, draws, losses, points, scored, conceded, and difference. Sort by points descending, difference descending, scored descending, then team name in ordinal ASCII ascending order. There are at most 100 teams and 1,000 matches, and each score is at most 1,000,000.",
+      "difficulty": "advanced",
+      "over_comfort_monolith": true,
+      "idiom_tags": [],
+      "cases": [
+        {
+          "input": {
+            "teams": [],
+            "matches": []
+          },
+          "expected": []
+        },
+        {
+          "input": {
+            "teams": [
+              "X"
+            ],
+            "matches": []
+          },
+          "expected": [
+            {
+              "team": "X",
+              "played": 0,
+              "wins": 0,
+              "draws": 0,
+              "losses": 0,
+              "points": 0,
+              "scored": 0,
+              "conceded": 0,
+              "difference": 0
+            }
+          ]
+        },
+        {
+          "input": {
+            "teams": [
+              "A",
+              "B"
+            ],
+            "matches": [
+              {
+                "home": "A",
+                "away": "B",
+                "home_score": 2,
+                "away_score": 1
+              }
+            ]
+          },
+          "expected": [
+            {
+              "team": "A",
+              "played": 1,
+              "wins": 1,
+              "draws": 0,
+              "losses": 0,
+              "points": 3,
+              "scored": 2,
+              "conceded": 1,
+              "difference": 1
+            },
+            {
+              "team": "B",
+              "played": 1,
+              "wins": 0,
+              "draws": 0,
+              "losses": 1,
+              "points": 0,
+              "scored": 1,
+              "conceded": 2,
+              "difference": -1
+            }
+          ]
+        },
+        {
+          "input": {
+            "teams": [
+              "B",
+              "A"
+            ],
+            "matches": [
+              {
+                "home": "B",
+                "away": "A",
+                "home_score": 1,
+                "away_score": 1
+              }
+            ]
+          },
+          "expected": [
+            {
+              "team": "A",
+              "played": 1,
+              "wins": 0,
+              "draws": 1,
+              "losses": 0,
+              "points": 1,
+              "scored": 1,
+              "conceded": 1,
+              "difference": 0
+            },
+            {
+              "team": "B",
+              "played": 1,
+              "wins": 0,
+              "draws": 1,
+              "losses": 0,
+              "points": 1,
+              "scored": 1,
+              "conceded": 1,
+              "difference": 0
+            }
+          ]
+        },
+        {
+          "input": {
+            "teams": [
+              "A",
+              "B",
+              "C"
+            ],
+            "matches": [
+              {
+                "home": "A",
+                "away": "B",
+                "home_score": 0,
+                "away_score": 2
+              },
+              {
+                "home": "B",
+                "away": "C",
+                "home_score": 1,
+                "away_score": 1
+              },
+              {
+                "home": "C",
+                "away": "A",
+                "home_score": 3,
+                "away_score": 0
+              }
+            ]
+          },
+          "expected": [
+            {
+              "team": "C",
+              "played": 2,
+              "wins": 1,
+              "draws": 1,
+              "losses": 0,
+              "points": 4,
+              "scored": 4,
+              "conceded": 1,
+              "difference": 3
+            },
+            {
+              "team": "B",
+              "played": 2,
+              "wins": 1,
+              "draws": 1,
+              "losses": 0,
+              "points": 4,
+              "scored": 3,
+              "conceded": 1,
+              "difference": 2
+            },
+            {
+              "team": "A",
+              "played": 2,
+              "wins": 0,
+              "draws": 0,
+              "losses": 2,
+              "points": 0,
+              "scored": 0,
+              "conceded": 5,
+              "difference": -5
+            }
+          ]
+        },
+        {
+          "input": {
+            "teams": [
+              "A",
+              "B",
+              "C"
+            ],
+            "matches": [
+              {
+                "home": "A",
+                "away": "B",
+                "home_score": 2,
+                "away_score": 0
+              },
+              {
+                "home": "A",
+                "away": "C",
+                "home_score": 1,
+                "away_score": 0
+              }
+            ]
+          },
+          "expected": [
+            {
+              "team": "A",
+              "played": 2,
+              "wins": 2,
+              "draws": 0,
+              "losses": 0,
+              "points": 6,
+              "scored": 3,
+              "conceded": 0,
+              "difference": 3
+            },
+            {
+              "team": "C",
+              "played": 1,
+              "wins": 0,
+              "draws": 0,
+              "losses": 1,
+              "points": 0,
+              "scored": 0,
+              "conceded": 1,
+              "difference": -1
+            },
+            {
+              "team": "B",
+              "played": 1,
+              "wins": 0,
+              "draws": 0,
+              "losses": 1,
+              "points": 0,
+              "scored": 0,
+              "conceded": 2,
+              "difference": -2
+            }
+          ]
+        },
+        {
+          "input": {
+            "teams": [
+              "Zulu",
+              "Alpha",
+              "Beta"
+            ],
+            "matches": [
+              {
+                "home": "Zulu",
+                "away": "Alpha",
+                "home_score": 1,
+                "away_score": 0
+              },
+              {
+                "home": "Beta",
+                "away": "Zulu",
+                "home_score": 0,
+                "away_score": 1
+              }
+            ]
+          },
+          "expected": [
+            {
+              "team": "Zulu",
+              "played": 2,
+              "wins": 2,
+              "draws": 0,
+              "losses": 0,
+              "points": 6,
+              "scored": 2,
+              "conceded": 0,
+              "difference": 2
+            },
+            {
+              "team": "Alpha",
+              "played": 1,
+              "wins": 0,
+              "draws": 0,
+              "losses": 1,
+              "points": 0,
+              "scored": 0,
+              "conceded": 1,
+              "difference": -1
+            },
+            {
+              "team": "Beta",
+              "played": 1,
+              "wins": 0,
+              "draws": 0,
+              "losses": 1,
+              "points": 0,
+              "scored": 0,
+              "conceded": 1,
+              "difference": -1
+            }
+          ]
+        },
+        {
+          "input": {
+            "teams": [
+              "A",
+              "B"
+            ],
+            "matches": [
+              {
+                "home": "A",
+                "away": "B",
+                "home_score": -1,
+                "away_score": 0
+              }
+            ]
+          },
+          "expected": {
+            "error": "invalid_match"
+          }
+        },
+        {
+          "input": {
+            "teams": [
+              "A"
+            ],
+            "matches": [
+              {
+                "home": "A",
+                "away": "Z",
+                "home_score": 0,
+                "away_score": 0
+              }
+            ]
+          },
+          "expected": {
+            "error": "invalid_match"
+          }
+        },
+        {
+          "input": {
+            "teams": [
+              "A",
+              "B"
+            ],
+            "matches": [
+              {
+                "home": "A",
+                "away": "A",
+                "home_score": 0,
+                "away_score": 0
+              }
+            ]
+          },
+          "expected": {
+            "error": "invalid_match"
+          }
+        }
+      ]
+    }
+  ],
+  "language_mapping_notes": [
+    "All identifier-like strings in task inputs use ASCII; compare them by ordinal byte/code-point order, without locale rules or Unicode normalization.",
+    "Monetary input decimals are exact decimal values. Round each monetary output only at its final field boundary, half up away from zero to two decimal places; the supplied cases avoid exact half-cent ties.",
+    "Time intervals use integer minutes from midnight and half-open ranges [start, end); touching endpoints do not overlap."
+  ]
+}

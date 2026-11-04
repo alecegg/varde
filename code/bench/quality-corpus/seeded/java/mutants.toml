@@ -1,0 +1,146 @@
+[run]
+java = { command = ["/opt/homebrew/bin/java", "-cp", "{root}", "BehaviourTest"] }
+
+[[mutants]]
+id = "discount-rate"
+description = "Order discount rate changes to 9%"
+find = "new BigDecimal(\"0.10\")"
+replace = "new BigDecimal(\"0.09\")"
+
+[[mutants]]
+id = "tax-rate"
+description = "Tax rate changes to 8%"
+find = "new BigDecimal(\"0.0825\")"
+replace = "new BigDecimal(\"0.08\")"
+
+[[mutants]]
+id = "group-rate"
+description = "Group discount changes to 4%"
+find = "new BigDecimal(\"0.95\")"
+replace = "new BigDecimal(\"0.96\")"
+
+[[mutants]]
+id = "free-tier"
+description = "Free shipping threshold changes to 101"
+find = "new BigDecimal(\"100.00\")"
+replace = "new BigDecimal(\"101.00\")"
+
+[[mutants]]
+id = "mid-tier"
+description = "Reduced shipping threshold changes to 51"
+find = "new BigDecimal(\"50.00\")"
+replace = "new BigDecimal(\"51.00\")"
+
+[[mutants]]
+id = "shipping-low"
+description = "Low shipping changes to 9"
+find = "new BigDecimal(\"8.00\")"
+replace = "new BigDecimal(\"9.00\")"
+
+[[mutants]]
+id = "shipping-mid"
+description = "Middle shipping changes to 6"
+find = "new BigDecimal(\"5.00\")"
+replace = "new BigDecimal(\"6.00\")"
+
+[[mutants]]
+id = "round-down"
+description = "Money rounds down"
+find = "RoundingMode.HALF_UP"
+replace = "RoundingMode.DOWN"
+
+[[mutants]]
+id = "whole-positive"
+description = "Whole-number check accepts signed values"
+find = "return value.matches(\"[0-9]+\");"
+replace = "return value.matches(\"[-+]?[0-9]+\");"
+
+[[mutants]]
+id = "amount-precision"
+description = "Prices allow three fractional digits"
+find = "value.matches(\"[0-9]+(\\\\.[0-9]{1,2})?\")"
+replace = "value.matches(\"[0-9]+(\\\\.[0-9]{1,3})?\")"
+
+[[mutants]]
+id = "empty-name"
+description = "Empty item names allowed"
+find = "&& !fields[1].isEmpty()"
+replace = "&& true"
+
+[[mutants]]
+id = "empty-group"
+description = "Empty group allowed"
+find = "&& !fields[4].isEmpty()"
+replace = "&& true"
+
+[[mutants]]
+id = "duplicate-sku"
+description = "Duplicate SKUs overwrite prior items"
+find = "if (stock == null || items.containsKey(values[0])) return null;"
+replace = "if (stock == null) return null;"
+
+[[mutants]]
+id = "zero-stock"
+description = "Zero inventory stock accepted"
+find = "return parsed > 0 ? parsed : null;"
+replace = "return parsed >= 0 ? parsed : null;"
+
+[[mutants]]
+id = "quantity-over-stock"
+description = "Orders may exceed stock"
+find = "quantity > item.stock"
+replace = "quantity > item.stock + 1"
+
+[[mutants]]
+id = "wrong-order-fields"
+description = "Order rows may have extra fields"
+find = "values.length != 2"
+replace = "values.length < 2"
+
+[[mutants]]
+id = "unknown-item"
+description = "Unknown item skipped as zero amount"
+find = "if (item == null || quantity == null || quantity > item.stock) return null;"
+replace = "if (item == null) return BigDecimal.ZERO;\n        if (quantity == null || quantity > item.stock) return null;"
+
+[[mutants]]
+id = "line-discount-order"
+description = "Group discount is skipped"
+find = "return \"A\".equals(item.group) ? cents(lineAmount.multiply(GROUP_A_RATE)) : lineAmount;"
+replace = "return lineAmount;"
+
+[[mutants]]
+id = "tax-before-discount"
+description = "Tax uses subtotal before order discount"
+find = "BigDecimal tax = cents(afterDiscount.multiply(TAX_RATE));"
+replace = "BigDecimal tax = cents(subtotal.multiply(TAX_RATE));"
+
+[[mutants]]
+id = "shipping-before-discount"
+description = "Shipping tiers use pre-discount subtotal"
+find = "BigDecimal shipping = shipping(afterDiscount);"
+replace = "BigDecimal shipping = shipping(subtotal);"
+
+[[mutants]]
+id = "free-boundary"
+description = "Free shipping starts strictly above the threshold"
+find = "amount.compareTo(FREE_SHIPPING_MINIMUM) >= 0"
+replace = "amount.compareTo(FREE_SHIPPING_MINIMUM) > 0"
+
+[[mutants]]
+id = "mid-boundary"
+description = "Middle shipping starts strictly above threshold"
+find = "amount.compareTo(REDUCED_SHIPPING_MINIMUM) >= 0"
+replace = "amount.compareTo(REDUCED_SHIPPING_MINIMUM) > 0"
+
+[[mutants]]
+id = "null-validation"
+description = "Null inputs are accepted"
+find = "if (inventoryText == null || orderText == null) return null;"
+replace = "if (inventoryText == null) return null;"
+
+[[mutants]]
+id = "total-omit-tax"
+description = "Total excludes tax"
+find = "afterDiscount.add(tax).add(shipping)"
+replace = "afterDiscount.add(shipping)"

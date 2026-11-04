@@ -1,0 +1,2 @@
+Group space separated words by the number of characters each word has.
+Input domain: words separated by single spaces, possibly with empty stretches between them; return the words for each length in the order they appear.

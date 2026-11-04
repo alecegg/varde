@@ -1,0 +1,216 @@
+{
+  "language": "rust",
+  "source": "fn c00_simple_if(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true; }; false }\nfn c01_nested_if(a: bool, b: bool, c: bool, d: bool) -> bool { if a { if b { return true; } }; false }\nfn c02_triple_nested_if(a: bool, b: bool, c: bool, d: bool) -> bool { if a { if b { if c { return true; } } }; false }\nfn c03_if_else(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true } else { return false }; false }\nfn c04_if_elif_else(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true } else if b { return false } else { return true }; false }\nfn c05_three_way_chain(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true } else if b { return false } else if c { return true } else { return false }; false }\nfn c06_and_sequence(a: bool, b: bool, c: bool, d: bool) -> bool { if a && b { return true; }; false }\nfn c07_or_sequence(a: bool, b: bool, c: bool, d: bool) -> bool { if a || b { return true; }; false }\nfn c08_mixed_boolean(a: bool, b: bool, c: bool, d: bool) -> bool { if a && b || c && d { return true; }; false }\nfn c09_assigned_boolean(a: bool, b: bool, c: bool, d: bool) -> bool { let value = a && b; return value; false }\nfn c10_while_loop(a: bool, b: bool, c: bool, d: bool) -> bool { while a { break; }; false }\nfn c11_for_loop(a: bool, b: bool, c: bool, d: bool) -> bool { for item in [a,b] { let _ = item; }; false }\nfn c12_if_with_loop(a: bool, b: bool, c: bool, d: bool) -> bool { if a { for item in [b,c] { let _ = item; } }; false }\nfn c13_nested_loops(a: bool, b: bool, c: bool, d: bool) -> bool { for item in [a,b] { while item { break; } }; false }\nfn c14_switch_or_match(a: bool, b: bool, c: bool, d: bool) -> bool { match a { true => return true, false => return false }; false }\nfn c15_switch_nested_if(a: bool, b: bool, c: bool, d: bool) -> bool { match a { true => if b { return true; }, false => return false }; false }\nfn c16_if_let_option(a: bool, b: bool, c: bool, d: bool) -> bool { if let Some(value) = maybe(a) { return value; }; false }fn c17_try_two_catches(a: bool, b: bool, c: bool, d: bool) -> bool { let first = maybe(a)?; let second = maybe(b)?; return first && second; false }\nfn c18_recursive_call(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true; } return c18_recursive_call(b, a, c, d); false }\nfn c19_conditional_expression(a: bool, b: bool, c: bool, d: bool) -> bool { return if a { true } else { false };; false }\nfn c20_nested_conditionals(a: bool, b: bool, c: bool, d: bool) -> bool { return if a { true } else { if b { false } else { true } };; false }\nfn c21_lambda_decision(a: bool, b: bool, c: bool, d: bool) -> bool { [a].iter().any(|value| if *value { true } else { false }); false }\nfn c22_if_lambda_decision(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return [b].iter().any(|value| if *value { true } else { false }); }; false }\nfn c23_nested_callable(a: bool, b: bool, c: bool, d: bool) -> bool { let inner = || { if a { true } else { false } }; return inner(); false }\nfn c24_comprehension(a: bool, b: bool, c: bool, d: bool) -> bool { let values: Vec<bool> = [a,b].into_iter().filter(|value| *value).collect(); return !values.is_empty(); false }\nfn c25_labeled_jump(a: bool, b: bool, c: bool, d: bool) -> bool { 'outer: loop { break 'outer; }; false }\nfn c26_null_shortcut(a: bool, b: bool, c: bool, d: bool) -> bool { return Some(a).unwrap_or(false); false }\nfn c27_language_idiom(a: bool, b: bool, c: bool, d: bool) -> bool { let value = maybe(a)?; return value; false }\nfn c28_loop_if_boolean(a: bool, b: bool, c: bool, d: bool) -> bool { for item in [a,b] { if item && a { return true; } }; false }\nfn c29_else_loop(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true; } else { while b { break; } }; false }\n",
+  "functions": [
+    {
+      "name": "c00_simple_if",
+      "construct": "simple_if",
+      "source": "fn c00_simple_if(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true; }; false }\n",
+      "expected": 1,
+      "derivation": "One top-level if adds one structural increment."
+    },
+    {
+      "name": "c01_nested_if",
+      "construct": "nested_if",
+      "source": "fn c01_nested_if(a: bool, b: bool, c: bool, d: bool) -> bool { if a { if b { return true; } }; false }\n",
+      "expected": 3,
+      "derivation": "The outer if adds 1; the nested if adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c02_triple_nested_if",
+      "construct": "triple_nested_if",
+      "source": "fn c02_triple_nested_if(a: bool, b: bool, c: bool, d: bool) -> bool { if a { if b { if c { return true; } } }; false }\n",
+      "expected": 6,
+      "derivation": "Three nested ifs add 1, 2, and 3 respectively."
+    },
+    {
+      "name": "c03_if_else",
+      "construct": "if_else",
+      "source": "fn c03_if_else(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true } else { return false }; false }\n",
+      "expected": 2,
+      "derivation": "The if and its else each add one; else is hybrid."
+    },
+    {
+      "name": "c04_if_elif_else",
+      "construct": "if_elif_else",
+      "source": "fn c04_if_elif_else(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true } else if b { return false } else { return true }; false }\n",
+      "expected": 3,
+      "derivation": "The if, else-if, and else each add one; else-if is hybrid."
+    },
+    {
+      "name": "c05_three_way_chain",
+      "construct": "three_way_chain",
+      "source": "fn c05_three_way_chain(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true } else if b { return false } else if c { return true } else { return false }; false }\n",
+      "expected": 4,
+      "derivation": "One if, two else-if branches, and one else add four total."
+    },
+    {
+      "name": "c06_and_sequence",
+      "construct": "and_sequence",
+      "source": "fn c06_and_sequence(a: bool, b: bool, c: bool, d: bool) -> bool { if a && b { return true; }; false }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator && sequence adds 1."
+    },
+    {
+      "name": "c07_or_sequence",
+      "construct": "or_sequence",
+      "source": "fn c07_or_sequence(a: bool, b: bool, c: bool, d: bool) -> bool { if a || b { return true; }; false }\n",
+      "expected": 2,
+      "derivation": "The if adds 1 and the same-operator || sequence adds 1."
+    },
+    {
+      "name": "c08_mixed_boolean",
+      "construct": "mixed_boolean",
+      "source": "fn c08_mixed_boolean(a: bool, b: bool, c: bool, d: bool) -> bool { if a && b || c && d { return true; }; false }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; &&, ||, && form three logical sequences, adding 3."
+    },
+    {
+      "name": "c09_assigned_boolean",
+      "construct": "assigned_boolean",
+      "source": "fn c09_assigned_boolean(a: bool, b: bool, c: bool, d: bool) -> bool { let value = a && b; return value; false }\n",
+      "expected": 1,
+      "derivation": "A binary logical sequence in an assignment adds one fundamental increment."
+    },
+    {
+      "name": "c10_while_loop",
+      "construct": "while_loop",
+      "source": "fn c10_while_loop(a: bool, b: bool, c: bool, d: bool) -> bool { while a { break; }; false }\n",
+      "expected": 1,
+      "derivation": "One top-level while adds one structural increment."
+    },
+    {
+      "name": "c11_for_loop",
+      "construct": "for_loop",
+      "source": "fn c11_for_loop(a: bool, b: bool, c: bool, d: bool) -> bool { for item in [a,b] { let _ = item; }; false }\n",
+      "expected": 1,
+      "derivation": "One top-level loop adds one structural increment."
+    },
+    {
+      "name": "c12_if_with_loop",
+      "construct": "if_with_loop",
+      "source": "fn c12_if_with_loop(a: bool, b: bool, c: bool, d: bool) -> bool { if a { for item in [b,c] { let _ = item; } }; false }\n",
+      "expected": 3,
+      "derivation": "The if adds 1; the loop nested inside it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c13_nested_loops",
+      "construct": "nested_loops",
+      "source": "fn c13_nested_loops(a: bool, b: bool, c: bool, d: bool) -> bool { for item in [a,b] { while item { break; } }; false }\n",
+      "expected": 3,
+      "derivation": "The outer loop adds 1; the inner loop adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c14_switch_or_match",
+      "construct": "switch_or_match",
+      "source": "fn c14_switch_or_match(a: bool, b: bool, c: bool, d: bool) -> bool { match a { true => return true, false => return false }; false }\n",
+      "expected": 1,
+      "derivation": "The switch/match/select construct adds one; its alternatives add no further points."
+    },
+    {
+      "name": "c15_switch_nested_if",
+      "construct": "switch_nested_if",
+      "source": "fn c15_switch_nested_if(a: bool, b: bool, c: bool, d: bool) -> bool { match a { true => if b { return true; }, false => return false }; false }\n",
+      "expected": 3,
+      "derivation": "The switch adds 1; the if nested in it adds 1 structural + 1 nesting."
+    },
+    {
+      "name": "c16_if_let_option",
+      "construct": "if_let_option",
+      "source": "fn c16_if_let_option(a: bool, b: bool, c: bool, d: bool) -> bool { if let Some(value) = maybe(a) { return value; }; false }",
+      "expected": 1,
+      "derivation": "The top-level if-let pattern is one structural if increment; the option match arm and return add none."
+    },
+    {
+      "name": "c17_try_two_catches",
+      "construct": "try_two_catches",
+      "source": "fn c17_try_two_catches(a: bool, b: bool, c: bool, d: bool) -> bool { let first = maybe(a)?; let second = maybe(b)?; return first && second; false }\n",
+      "expected": 1,
+      "derivation": "Two ? propagation expressions add nothing; the && sequence in the return adds one fundamental increment."
+    },
+    {
+      "name": "c18_recursive_call",
+      "construct": "recursive_call",
+      "source": "fn c18_recursive_call(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true; } return c18_recursive_call(b, a, c, d); false }\n",
+      "expected": 2,
+      "derivation": "The base-case if adds 1; one direct recursive call adds 1 fundamental recursion increment."
+    },
+    {
+      "name": "c19_conditional_expression",
+      "construct": "conditional_expression",
+      "source": "fn c19_conditional_expression(a: bool, b: bool, c: bool, d: bool) -> bool { return if a { true } else { false };; false }\n",
+      "expected": 2,
+      "derivation": "Rust if expression adds 1 and its else branch adds 1."
+    },
+    {
+      "name": "c20_nested_conditionals",
+      "construct": "nested_conditionals",
+      "source": "fn c20_nested_conditionals(a: bool, b: bool, c: bool, d: bool) -> bool { return if a { true } else { if b { false } else { true } };; false }\n",
+      "expected": 5,
+      "derivation": "The outer if-expression adds 1 and its else adds 1; the inner if in that else adds 1 + 1 nesting, and its else adds 1, totaling 5."
+    },
+    {
+      "name": "c21_lambda_decision",
+      "construct": "lambda_decision",
+      "source": "fn c21_lambda_decision(a: bool, b: bool, c: bool, d: bool) -> bool { [a].iter().any(|value| if *value { true } else { false }); false }\n",
+      "expected": 3,
+      "derivation": "The closure raises nesting by 1; its if expression and else add 2, for 3 total."
+    },
+    {
+      "name": "c22_if_lambda_decision",
+      "construct": "if_lambda_decision",
+      "source": "fn c22_if_lambda_decision(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return [b].iter().any(|value| if *value { true } else { false }); }; false }\n",
+      "expected": 5,
+      "derivation": "Outer if adds 1; closure if is nested in both the outer if and closure (+3), then its else adds 1."
+    },
+    {
+      "name": "c23_nested_callable",
+      "construct": "nested_callable",
+      "source": "fn c23_nested_callable(a: bool, b: bool, c: bool, d: bool) -> bool { let inner = || { if a { true } else { false } }; return inner(); false }\n",
+      "expected": 3,
+      "derivation": "Closure nesting adds 1 to its if; the if and else each add 1, totaling 3."
+    },
+    {
+      "name": "c24_comprehension",
+      "construct": "comprehension",
+      "source": "fn c24_comprehension(a: bool, b: bool, c: bool, d: bool) -> bool { let values: Vec<bool> = [a,b].into_iter().filter(|value| *value).collect(); return !values.is_empty(); false }\n",
+      "expected": 0,
+      "derivation": "The filter lambda contains no control-flow break; the collection pipeline is a sequence of calls."
+    },
+    {
+      "name": "c25_labeled_jump",
+      "construct": "labeled_jump",
+      "source": "fn c25_labeled_jump(a: bool, b: bool, c: bool, d: bool) -> bool { 'outer: loop { break 'outer; }; false }\n",
+      "expected": 2,
+      "derivation": "One loop adds 1; the labeled jump adds one fundamental increment."
+    },
+    {
+      "name": "c26_null_shortcut",
+      "construct": "null_shortcut",
+      "source": "fn c26_null_shortcut(a: bool, b: bool, c: bool, d: bool) -> bool { return Some(a).unwrap_or(false); false }\n",
+      "expected": 0,
+      "derivation": "The unwrap_or call expresses a fallback without a structural flow break; no cognitive increment is added."
+    },
+    {
+      "name": "c27_language_idiom",
+      "construct": "language_idiom",
+      "source": "fn c27_language_idiom(a: bool, b: bool, c: bool, d: bool) -> bool { let value = maybe(a)?; return value; false }\n",
+      "expected": 0,
+      "derivation": "The single ? propagation expression is not a listed flow-break increment; the call and return add none."
+    },
+    {
+      "name": "c28_loop_if_boolean",
+      "construct": "loop_if_boolean",
+      "source": "fn c28_loop_if_boolean(a: bool, b: bool, c: bool, d: bool) -> bool { for item in [a,b] { if item && a { return true; } }; false }\n",
+      "expected": 4,
+      "derivation": "Loop adds 1; nested if adds 1 + 1 nesting; its && sequence adds 1."
+    },
+    {
+      "name": "c29_else_loop",
+      "construct": "else_loop",
+      "source": "fn c29_else_loop(a: bool, b: bool, c: bool, d: bool) -> bool { if a { return true; } else { while b { break; } }; false }\n",
+      "expected": 4,
+      "derivation": "The if adds 1; its else adds 1. The loop in the else body is at nesting level 1, so it adds 1 structural + 1 nesting, totaling 4."
+    }
+  ]
+}

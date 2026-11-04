@@ -1,0 +1,23 @@
+Show or configure where working, knowledge, and learn memory live
+
+--json includes the resolved `working` and `knowledge` paths and `legacy_memory_bank`.
+Unconfigured projects use a user-level directory (builtin source): `$XDG_DATA_HOME` or `~/.local/share`, then `varde/projects/<repo>-<hash>/{working,knowledge}`.
+The hash follows the repository path: moving or re-cloning a repo orphans its default directory (the old one stays on disk). Pin paths with `set --project` to survive a move.
+Outside git, each subdirectory gets its own default directory (keyed by its own path).
+
+Usage: varde setup paths [OPTIONS] [COMMAND]
+
+Commands:
+  set    Record working, knowledge, toz, and/or global learn directories
+  unset  Remove working, knowledge, toz, and/or global learn directories from the user config
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --project <PROJECT>
+          Project root to resolve for (default: git worktree root, then configured project, else cwd)
+
+      --json
+          
+
+  -h, --help
+          Print help (see a summary with '-h')

@@ -1,0 +1,286 @@
+# Built-in rule set: SOLID (ported from a predecessor project's `solid.toml`)
+#
+# All five rules key off `entities.owner_type` (schema v10): a Function
+# entity's `owner_type` names the immediately enclosing class/interface, set
+# at extract time from a per-language `TYPE_SCOPES` stack (see
+# extract/mod.rs, extract/langs/mod.rs). That's the piece the predecessor
+# project got for free from `scan_entities.parent_id` and varde-code didn't
+# have before —
+# without it, "how many methods does this class/interface have" has no
+# answer from the flat entity list.
+#
+# `Implements`/`Extends` entities (kind 16/15) encode the relationship as
+# `name` = target type, `enclosing_function` = owner type — consistent
+# across every language extractor (see rust.rs/ts.rs/java.rs/cs.rs/
+# kotlin.rs/swift.rs/go.rs `push_type_ref`-style calls).
+#
+# Scope: the predecessor project's sixth SOLID rule, `solid-dip` (concrete-type parameter
+# dependency), is intentionally NOT ported here — it needs a parameter
+# *type* string, and `Parameter` entities don't carry one (only `name`).
+# That's the same shape of gap `owner_type` just closed, but for a
+# different field on a different entity kind; deferred as a follow-up
+# rather than bundled into this change.
+#
+# entity kind integers used below (see model.rs `EntityKind::as_i64`):
+#   0 = Function, 1 = Class, 2 = Interface, 15 = Extends, 16 = Implements.
+
+# LSP evidence uses single-line interface method spans as a shape signal.
+# It cannot inspect method bodies because entities do not persist body text.
+# Multi-line default bodies are therefore outside this measured shape, while
+# one-line bodies can still resemble declarations and require review.
+# Required methods are matched by name against the implementer's methods.
+[[rule]]
+id = "solid-lsp"
+kind = "sql"
+severity = "info"
+name = "Single-line interface coverage"
+description = "A resolved same-file class/interface relationship has fewer matching single-line interface declarations than the interface declares."
+message = "class '{class_name}' matches {class_methods}/{iface_methods} single-line declarations from '{interface_name}'; inspect the relationship"
+remediation = "inspect the resolved declarations and method bodies before changing the class or interface"
+fix = "Review the same-file declarations and matching method names in context. Single-line spans are only a shape signal, not proof of a contract violation."
+thresholds = { coverage_threshold = 0.7 }
+query = """
+SELECT file, line, start_byte, end_byte, start_col, end_line, end_col,
+  class_name, interface_name, class_methods, iface_methods, threshold FROM (
+  SELECT f.path AS file, imp.start_line AS line,
+    imp.start_byte AS start_byte, imp.end_byte AS end_byte, imp.start_col AS start_col,
+    imp.end_line AS end_line, imp.end_col AS end_col,
+    c.name AS class_name, iface.name AS interface_name,
+    (SELECT COUNT(*) FROM entities m WHERE m.kind = 0 AND m.owner_type = iface.name
+       AND m.file_id = iface.file_id
+       AND m.start_byte >= iface.start_byte AND m.end_byte <= iface.end_byte
+       AND m.end_line = m.start_line
+       AND EXISTS (SELECT 1 FROM entities cm WHERE cm.kind = 0
+         AND cm.owner_type = c.name AND cm.file_id = c.file_id
+         AND (cm.start_byte >= c.start_byte AND cm.end_byte <= c.end_byte
+           OR cm.start_byte >= imp.start_byte AND cm.end_byte <= imp.end_byte)
+         AND cm.name = m.name)) AS class_methods,
+    (SELECT COUNT(*) FROM entities m WHERE m.kind = 0 AND m.owner_type = iface.name
+       AND m.file_id = iface.file_id
+       AND m.start_byte >= iface.start_byte AND m.end_byte <= iface.end_byte
+       AND m.end_line = m.start_line) AS iface_methods,
+    :coverage_threshold AS threshold
+  FROM entities imp
+  JOIN files f ON f.id = imp.file_id
+  JOIN entities c ON c.kind = 1 AND c.file_id = imp.file_id
+    AND c.name = imp.enclosing_function
+  JOIN resolved_edges rel ON rel.kind = 3 AND rel.resolved = 1
+    AND rel.from_entity_id = c.id
+  JOIN entities iface ON iface.id = rel.to_entity_id AND iface.kind = 2
+    AND iface.name = imp.name
+  WHERE imp.kind = 16
+    AND f.is_test_path = 0
+    -- Ruby `include SomeModule` is mixin composition, not interface
+    -- implementation: the module's methods are copied into the includer, so a
+    -- 0/N "required methods implemented" score is expected, not an LSP
+    -- violation. Ruby has no interface construct, so this contract rule
+    -- doesn't apply — exclude `.rb`.
+    AND f.path NOT LIKE '%.rb'
+    AND rel.to_entity_id IS NOT NULL
+    AND iface.file_id = c.file_id
+    AND (SELECT COUNT(*) FROM entities same_c
+      WHERE same_c.kind = c.kind AND same_c.file_id = c.file_id
+        AND same_c.name = c.name) = 1
+    AND (SELECT COUNT(*) FROM entities same_iface
+      WHERE same_iface.kind = iface.kind AND same_iface.file_id = iface.file_id
+        AND same_iface.name = iface.name) = 1
+)
+WHERE iface_methods > 0 AND CAST(class_methods AS REAL) / iface_methods < threshold
+"""
+
+[[rule]]
+id = "solid-isp"
+kind = "sql"
+severity = "info"
+name = "Short implementation methods"
+description = "A resolved same-file interface has many methods and its implementation contains many short methods without indexed calls."
+message = "interface '{interface_name}' has {iface_method_count} methods; '{class_name}' has {empty_stubs}/{class_methods} short methods without indexed calls"
+remediation = "inspect the short method bodies and interface usage before considering smaller interfaces"
+fix = "Review short methods without indexed calls in context. Length and missing call entities do not prove empty bodies or an ISP violation."
+thresholds = { method_threshold = 7, empty_body_threshold = 0.3 }
+query = """
+SELECT file, line, start_byte, end_byte, start_col, end_line, end_col,
+  class_name, interface_name, iface_method_count, class_methods, empty_stubs, threshold FROM (
+  SELECT f.path AS file, imp.start_line AS line,
+    imp.start_byte AS start_byte, imp.end_byte AS end_byte, imp.start_col AS start_col,
+    imp.end_line AS end_line, imp.end_col AS end_col,
+    c.name AS class_name, iface.name AS interface_name,
+    (SELECT COUNT(*) FROM entities m WHERE m.kind = 0 AND m.owner_type = iface.name
+       AND m.file_id = iface.file_id
+       AND m.start_byte >= iface.start_byte AND m.end_byte <= iface.end_byte) AS iface_method_count,
+    (SELECT COUNT(*) FROM entities m WHERE m.kind = 0 AND m.owner_type = c.name
+       AND m.file_id = c.file_id
+       AND (m.start_byte >= c.start_byte AND m.end_byte <= c.end_byte
+         OR m.start_byte >= imp.start_byte AND m.end_byte <= imp.end_byte)) AS class_methods,
+    -- Empty-stub count: short (<=2 line) methods that ALSO contain no call.
+    -- The line-span alone can't tell a genuine no-op (`void Foo() {}`) from a
+    -- one-line *delegation* (`int Foo() => _inner.Foo();`) or a concise
+    -- forwarding body — both are one line, but the delegation does real work.
+    -- A delegation always contains a Call entity (kind 6) within its byte
+    -- span; a true empty stub does not. Requiring "no contained call" excludes
+    -- the delegation false positive (and also `throw new NotImplementedException()`
+    -- stubs, whose `new` is a call — an acceptable, conservative trade that
+    -- only lowers the count).
+    (SELECT COUNT(*) FROM entities m WHERE m.kind = 0 AND m.owner_type = c.name
+       AND m.file_id = c.file_id
+       AND (m.start_byte >= c.start_byte AND m.end_byte <= c.end_byte
+         OR m.start_byte >= imp.start_byte AND m.end_byte <= imp.end_byte)
+       AND (m.end_line - m.start_line + 1) <= 2
+       AND NOT EXISTS (
+         SELECT 1 FROM entities call
+         WHERE call.kind = 6 AND call.file_id = m.file_id
+           AND call.start_byte >= m.start_byte AND call.end_byte <= m.end_byte
+       )) AS empty_stubs,
+    :empty_body_threshold AS threshold
+  FROM entities imp
+  JOIN files f ON f.id = imp.file_id
+  JOIN entities c ON c.kind = 1 AND c.file_id = imp.file_id
+    AND c.name = imp.enclosing_function
+  JOIN resolved_edges rel ON rel.kind = 3 AND rel.resolved = 1
+    AND rel.from_entity_id = c.id
+  JOIN entities iface ON iface.id = rel.to_entity_id AND iface.kind = 2
+    AND iface.name = imp.name
+  WHERE imp.kind = 16
+    AND f.is_test_path = 0
+    -- Ruby mixins (`include`) aren't implemented interfaces (see solid-lsp);
+    -- excluded so a mixin's methods aren't scored as empty-stub obligations.
+    AND f.path NOT LIKE '%.rb'
+    AND (SELECT COUNT(*) FROM entities m WHERE m.kind = 0 AND m.owner_type = iface.name
+      AND m.file_id = iface.file_id
+      AND m.start_byte >= iface.start_byte AND m.end_byte <= iface.end_byte) > :method_threshold
+    AND iface.file_id = c.file_id
+    AND (SELECT COUNT(*) FROM entities same_c
+      WHERE same_c.kind = c.kind AND same_c.file_id = c.file_id
+        AND same_c.name = c.name) = 1
+    AND (SELECT COUNT(*) FROM entities same_iface
+      WHERE same_iface.kind = iface.kind AND same_iface.file_id = iface.file_id
+        AND same_iface.name = iface.name) = 1
+)
+WHERE class_methods > 0 AND CAST(empty_stubs AS REAL) / class_methods > threshold
+"""
+
+# Enforce a direct method-count budget; exceptions use explicit suppression.
+[[rule]]
+id = "fat-interface"
+kind = "sql"
+severity = "warning"
+name = "Type method budget"
+description = "A uniquely identified same-file type owns more direct indexed methods than its configured budget."
+message = "'{class_name}' declares {member_count} methods, exceeding threshold of {threshold}"
+remediation = "consider splitting the class or interface into smaller, focused types"
+thresholds = { max_members = 15 }
+query = """
+SELECT file, line, start_byte, end_byte, start_col, end_line, end_col,
+  class_name, member_count, threshold FROM (
+  SELECT f.path AS file, c.start_line AS line,
+    c.start_byte AS start_byte, c.end_byte AS end_byte, c.start_col AS start_col,
+    c.end_line AS end_line, c.end_col AS end_col,
+    c.name AS class_name,
+    -- AST ownership is unambiguous only with one same-file type declaration.
+    -- Associated Rust/Go methods can sit outside the declaration's span.
+    -- Nested local functions are not additional methods.
+    (SELECT COUNT(*) FROM entities m WHERE m.kind = 0 AND m.owner_type = c.name
+       AND m.file_id = c.file_id
+       AND NOT EXISTS (SELECT 1 FROM entities nested
+         WHERE nested.file_id = c.file_id AND nested.kind = 0
+           AND nested.id != m.id
+           AND nested.start_byte <= m.start_byte AND nested.end_byte >= m.end_byte)
+    ) AS member_count,
+    :max_members AS threshold
+  FROM entities c
+  JOIN files f ON f.id = c.file_id
+  WHERE c.kind IN (1, 2) AND f.is_test_path = 0 AND f.is_tooling_path = 0
+    AND (SELECT COUNT(*) FROM entities same_c
+      WHERE same_c.kind IN (1, 2) AND same_c.file_id = c.file_id
+        AND same_c.name = c.name) = 1
+    -- A Ruby `module` (kind 2) is a mixin, not a client-facing interface, and
+    -- idiomatically groups many related helpers (e.g. an ActiveSupport
+    -- concern) — not a "fat interface" smell. Ruby *classes* (kind 1) stay
+    -- eligible as fat classes.
+    AND NOT (c.kind = 2 AND f.path LIKE '%.rb')
+
+)
+WHERE member_count > threshold
+"""
+
+[[rule]]
+id = "too-many-interfaces"
+kind = "sql"
+severity = "warning"
+name = "Implemented contract budget"
+description = "A class exceeds its budget of resolved same-file interfaces declaring indexed methods."
+message = "class '{class_name}' implements {implements_count} interfaces, exceeding threshold of {threshold}"
+remediation = "consider reducing the number of implemented interfaces or splitting the class"
+thresholds = { max_interfaces = 3 }
+query = """
+SELECT f.path AS file, MIN(imp.start_line) AS line, c.name AS class_name,
+  COUNT(DISTINCT iface.id) AS implements_count, :max_interfaces AS threshold
+FROM entities imp
+JOIN files f ON f.id = imp.file_id
+JOIN entities c ON c.kind = 1 AND c.file_id = imp.file_id
+  AND c.name = imp.enclosing_function
+JOIN resolved_edges rel ON rel.kind = 3 AND rel.resolved = 1
+  AND rel.from_entity_id = c.id
+JOIN entities iface ON iface.id = rel.to_entity_id AND iface.kind = 2
+  AND iface.name = imp.name
+WHERE imp.kind = 16 AND f.is_test_path = 0 AND f.is_tooling_path = 0
+  -- Ruby `include`s are mixin composition (the recommended Ruby idiom), not
+  -- interface implementation — counting them as "implements N interfaces"
+  -- misapplies an OOP-interface smell. Ruby has no interface construct.
+  AND f.path NOT LIKE '%.rb'
+  AND EXISTS (SELECT 1 FROM entities method
+    WHERE method.kind = 0 AND method.file_id = iface.file_id
+      AND method.owner_type = iface.name
+      AND method.start_byte >= iface.start_byte AND method.end_byte <= iface.end_byte)
+  AND iface.file_id = c.file_id
+  AND (SELECT COUNT(*) FROM entities same_c
+    WHERE same_c.kind = c.kind AND same_c.file_id = c.file_id
+      AND same_c.name = c.name) = 1
+  AND (SELECT COUNT(*) FROM entities same_iface
+    WHERE same_iface.kind = iface.kind AND same_iface.file_id = iface.file_id
+      AND same_iface.name = iface.name) = 1
+GROUP BY c.id
+HAVING implements_count > :max_interfaces
+"""
+
+[[rule]]
+id = "deep-inheritance"
+kind = "sql"
+severity = "warning"
+name = "Inheritance depth budget"
+description = "A same-file class's resolved inheritance depth exceeds a configured threshold. The measured depth is a lower bound because traversal is bounded."
+message = "class '{class_name}' has inheritance depth of at least {chain_depth}, exceeding threshold of {threshold}"
+remediation = "inspect the resolved inheritance chain before considering composition or flattening"
+thresholds = { max_depth = 3 }
+query = """
+WITH RECURSIVE ancestry(start_id, start_file_id, current_id, depth, visited) AS (
+  SELECT c.id, c.file_id, c.id, 0, ('/' || c.id || '/')
+  FROM entities c
+  WHERE c.kind = 1
+    AND (SELECT COUNT(*) FROM entities same_c
+      WHERE same_c.kind = c.kind AND same_c.file_id = c.file_id
+        AND same_c.name = c.name) = 1
+  UNION ALL
+  SELECT a.start_id, a.start_file_id, e.to_entity_id, a.depth + 1,
+    a.visited || e.to_entity_id || '/'
+  FROM ancestry a
+  JOIN resolved_edges e ON e.kind = 2 AND e.resolved = 1
+    AND e.from_entity_id = a.current_id AND e.to_entity_id IS NOT NULL
+  JOIN entities target ON target.id = e.to_entity_id
+    AND target.kind = 1 AND target.file_id = a.start_file_id
+  WHERE a.depth < :max_depth + 1
+    AND instr(a.visited, '/' || e.to_entity_id || '/') = 0
+)
+SELECT f.path AS file, c.start_line AS line,
+  c.start_byte AS start_byte, c.end_byte AS end_byte, c.start_col AS start_col,
+  c.end_line AS end_line, c.end_col AS end_col,
+  c.name AS class_name,
+  MAX(a.depth) AS chain_depth, :max_depth AS threshold,
+  'lower_bound' AS depth_evidence
+FROM ancestry a
+JOIN entities c ON c.id = a.start_id
+JOIN files f ON f.id = a.start_file_id
+WHERE f.is_test_path = 0 AND f.is_tooling_path = 0
+GROUP BY a.start_id
+HAVING chain_depth > :max_depth
+"""

@@ -1,0 +1,16 @@
+language = "python"
+task = "Implement an inventory and order-processing module in `original.py`."
+authored_by = "codex gpt-6-luna seeded run 2026-10-22"
+biases = ["extract-everything", "inline-everything", "name-obsessed", "defensive-and-commented", "class/abstraction-heavy"]
+
+[hashes]
+"behaviour_test.py" = "97dd4841b963dd61cd3a4e4b098c5b011786d024f2a96e10e2d71870a1fa3815"
+"judge-classes.py" = "ef7e6f9176bfdff7fdfe3ca6b82f2f724819d316f79d5dccb62fc4192b7fc220"
+"judge-defensive.py" = "06cdfe9bd595e4cde2ed9a8b1d986b386a775adab14c0915840a4113c71c77a7"
+"judge-extract.py" = "c880650f6f2093c8b77bc33030b85bc470cd3754f0de2333c7fc74cc81dee8cb"
+"judge-inline.py" = "d4fcf97636e5f9b0c912b28c40b52b98e8ff390ae78abfec1cdebff607f3c407"
+"judge-names.py" = "ae04e30f0ddca3a7cc434280f14b6c1eedeffe16468eaa7732d8c4f146c541f6"
+"original.py" = "11d62ae3aaff2f4a13c5b73adb8d7f75659c9dc2629674716c327949dc64e972"
+"smoothed.py" = "394121ed69f82e21a1eeecff8120ab1c8349c0ccb49044164cfd4c2242b50335"
+"smoothing.md" = "a6ebf68ccf2d09b637ecadb3aec59bda9d780ba570582de0375cfb963a3d66fc"
+"task.md" = "49a568b80e93189e881c55afcafaf3dfd1b29a68966a2d821275b85deb1b5ed4"

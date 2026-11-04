@@ -1,0 +1,6 @@
+# Style decisions
+
+- **Granularity — `judge-inline.cs` wins.** Keeping parsing and pricing in one readable `Process` method makes this small module easy to follow. `judge-extract.cs` splits even simple steps into many single-use helpers, while the original's `Report` method had an appropriate separate responsibility.
+- **Naming length — `judge-names.cs` wins in moderation.** Names such as `discountedSubtotal`, `unitPrice`, and `seenSkus` explain the values better than terse names like `s`, `d`, and `h`. The full expansions such as `stockKeepingUnit` and `unroundedSubtotal` add length without improving clarity, so the result uses concise domain names.
+- **Commenting — `judge-inline.cs` wins.** The code is direct enough to explain itself, so comments are omitted. The defensive refactor's comments repeat nearby operations and its type checks against statically non-nullable string values are redundant.
+- **Abstraction level — `judge-inline.cs` wins, with small helpers from the original.** Calculation and validation stay in the public operations; `RoundMoney` and `FormatMoney` centralize repeated money rules. The classes refactor adds interfaces and policies without a second use, and also changes report newline behavior and omits rounding `UnitPrice`.

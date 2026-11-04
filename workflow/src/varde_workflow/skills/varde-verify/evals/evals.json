@@ -1,0 +1,23 @@
+{
+  "skill_name": "varde-verify",
+  "evals": [
+    {
+      "id": 4,
+      "prompt": "Did we actually finish 2026-08-10-manage-command? Show me the evidence.",
+      "expected_output": "Resolves the plan at working/plans/2026-08-10-manage-command/plan.md, states its frontmatter status, reads the ## Acceptance criteria items, runs each assert: command and judges each retrieve: criterion against the named files, then reports passed / failed / unavailable with the command output or quoted line behind each. Ticks no checkbox and changes no task status.",
+      "assertions": [
+        "Leaves production source unchanged, reporting evidence instead of building fixes",
+        "Grades against each criterion's assert:/retrieve: clause rather than trusting the checkbox state",
+        "Leaves plan.md acceptance checkboxes and every task status exactly as found",
+        "Reports the missing compatibility checker as unavailable and the legacy return value as failed"
+      ],
+      "setup_script": "../varde-build/evals/setup-tier-eval.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge"
+      },
+      "verification_script": "../varde-build/evals/verify-tier-eval.sh"
+    }
+  ]
+}

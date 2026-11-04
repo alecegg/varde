@@ -1,0 +1,22 @@
+[
+  {"query": "Record that we decided to use OCC instead of locks for bundle writes, so nobody re-litigates it next sprint.", "should_trigger": true},
+  {"query": "Find the knowledge note that explains how plan bundles differ from findings.", "should_trigger": true},
+  {"query": "The legacy-polling pattern note is obsolete but old plans link to it. Retire it.", "should_trigger": true},
+  {"query": "Reconcile the stale claim in the error-envelope pattern note against current code.", "should_trigger": true},
+  {"query": "Distill the finished plan's decisions into durable knowledge notes before we remove it.", "should_trigger": true},
+  {"query": "We're done for the day. Write session notes so the next session can pick up tomorrow.", "should_trigger": false},
+  {"query": "Resume from the session notes we left yesterday.", "should_trigger": false},
+  {"query": "Capture this friction item: the sandbox blocked a write.", "should_trigger": false},
+  {"query": "Update the README's API section for the v2 rename.", "should_trigger": false},
+  {"query": "Record the review finding about the missing null check.", "should_trigger": false},
+  {"query": "Add a skill-scope memory lesson so future agents run the lint before touching the loader.", "should_trigger": true},
+  {"query": "List what the project memory already says about the runner sandbox.", "should_trigger": true},
+  {"query": "Wrap up this finished plan: capture friction, knowledge, and notes in the right order.", "should_trigger": true},
+  {"query": "Promote this global lesson so the shared checkout gets it for review.", "should_trigger": true},
+  {"query": "The decision note for the tokenizer is outdated; check it against the code and stamp it.", "should_trigger": true},
+  {"query": "Which pattern notes cover error handling? Search the knowledge base.", "should_trigger": true},
+  {"query": "Add a status line to the session notes for the review we paused.", "should_trigger": false},
+  {"query": "Reconcile this friction item against the latest session evidence.", "should_trigger": false},
+  {"query": "Write a changelog entry for the 2.3 release.", "should_trigger": false},
+  {"query": "Plan the scope and acceptance criteria for the new importer.", "should_trigger": false}
+]

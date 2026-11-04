@@ -1,0 +1,33 @@
+{
+  "behaviour_equivalent": false,
+  "category": "c",
+  "changed_files": [
+    "clap_derive/src/derives/args.rs",
+    "tests/derive/flatten.rs"
+  ],
+  "changed_functions": [
+    "group_id",
+    "optional_flatten"
+  ],
+  "child_sha": "06d20499311b359ab73a52029d531e8e0006e59e",
+  "file_licenses": {
+    "clap-rs/clap:clap_derive/src/derives/args.rs": "MIT",
+    "clap-rs/clap:tests/derive/flatten.rs": "MIT"
+  },
+  "id": "db0a0e446790cd8c6cab8084",
+  "intent": {
+    "linked_issues": [],
+    "message": "feat(derive): Support 'Option' when flattening"
+  },
+  "label_source": "developer-intent",
+  "language": "rust",
+  "left": "a.rs",
+  "license": "MIT",
+  "pair_group_id": "refactor-c45ae71bde22ab4b",
+  "parent_sha": "33db640dd503a27daabbbff9ff1d7d0550ea551e",
+  "pin_sha": "ccc89b83875474399e9d9d70841163f6319d1a41",
+  "repo": "clap-rs/clap",
+  "right": "b.rs",
+  "split": "regression",
+  "upstream_url": "https://github.com/clap-rs/clap.git"
+}

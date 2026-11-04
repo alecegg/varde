@@ -1,0 +1,89 @@
+{
+  "skill_name": "varde-explain",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Teach me the src/core/auth/ module as a page I can open in a browser — I just inherited this codebase and need to understand how session validation flows.",
+      "expected_output": "Resolves to an area explanation from the directory-path target. Explores src/core/auth/ via Grep/Glob/Read for symbols and references plus git log for history, then writes a markdown page <working>/explanations/YYYY-MM-DD-<slug>.md and exports it with `varde learn docs build` to a static HTML file with no script. The exported path is reported to the user.",
+      "assertions": [
+        "One dated explanation page (.md) exists under the working explanations directory",
+        "The page has Background, Intuition, and How It Works headings",
+        "The page is exported with `varde learn docs build` and the export holds no script"
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      },
+      "verification_script": "evals/verify-explain-eval.sh"
+    },
+    {
+      "id": 2,
+      "prompt": "Explain payments as a page for the team.",
+      "expected_output": "The target 'payments' is ambiguous — it could be a git branch name (change explanation) or a feature-area keyword (area explanation). The skill confirms the target shape with the user before proceeding, asking inline in its message text as a numbered menu rather than via a harness-native question-prompt tool. It does not silently pick one and start exploring or writing the page.",
+      "assertions": [
+        "No explanation page is written for a chat response or unresolved ambiguity"
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      },
+      "verification_script": "evals/verify-explain-eval.sh"
+    },
+    {
+      "id": 3,
+      "prompt": "Walk me through the changes on the feature/rate-limiter branch versus main and give me a markdown write-up.",
+      "expected_output": "The named markdown format is answered in chat. The agent reads the feature/rate-limiter diff against main, grounds its explanation in changed hunks, and writes no page.",
+      "assertions": [
+        "No explanation page is written for a chat response or unresolved ambiguity"
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      },
+      "verification_script": "evals/verify-explain-eval.sh"
+    },
+    {
+      "id": 5,
+      "prompt": "How does the retry logic in the job queue actually work?",
+      "expected_output": "The agent answers in chat because the user asks how the retry logic works, not for a page. It reads the job queue source and cites evidence for the mechanism; no page is written.",
+      "assertions": [
+        "No explanation page is written for a chat response or unresolved ambiguity"
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      },
+      "verification_script": "evals/verify-explain-eval.sh"
+    },
+    {
+      "id": 7,
+      "prompt": "Write a page comparing middleware versus route handlers for session validation, with a recommendation.",
+      "expected_output": "The user explicitly requests an options page. The agent compares the named alternatives and writes a dated markdown page with Options, Tradeoffs, and Recommendation headings, exported with `varde learn docs build`.",
+      "assertions": [
+        "One dated options page (.md) exists under the working explanations directory",
+        "The page has Options, Tradeoffs, and Recommendation headings",
+        "The page is exported with `varde learn docs build` and the export holds no script"
+      ],
+      "setup_script": "evals/setup-explore-fixture.sh",
+      "env": {
+        "VARDE_CONFIG_DIR": "{sandbox}/.varde-eval-config",
+        "VARDE_WORKING_DIR": "{sandbox}/working",
+        "VARDE_KNOWLEDGE_DIR": "{sandbox}/knowledge",
+        "VARDE_LEARN_STORE": "{sandbox}/.varde-eval-learn"
+      },
+      "verification_script": "evals/verify-explain-eval.sh"
+    }
+  ]
+}

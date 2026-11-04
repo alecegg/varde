@@ -1,0 +1,2 @@
+imported: golden.md - Golden
+Import report: 1 total, 1 imported, 0 would import, 0 skipped.

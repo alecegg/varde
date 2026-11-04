@@ -1,0 +1,12 @@
+Summarize recent repository sessions with token, time, and waste metrics
+
+Usage: varde learn sessions summary --harness <codex|claude|opencode|all> --repository <ROOT> [OPTIONS] [--json]
+
+Options:
+      --harness <HARNESS>  Session source [possible values: codex, claude, opencode, all]
+      --repository <ROOT>  Repository root used to filter sessions
+      --limit <LIMIT>      Maximum sessions (1 to 10) [default: 5]
+      --new                Skip sessions already marked as analyzed
+      --mark               Mark sessions analyzed successfully; failed inspections remain new
+      --json               Print the shared machine-readable output envelope
+  -h, --help               Print help

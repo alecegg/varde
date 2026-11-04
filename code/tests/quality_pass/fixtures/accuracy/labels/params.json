@@ -1,0 +1,268 @@
+{
+  "params/cpp/basics.cpp": {
+    "fixtures.zero": 0,
+    "fixtures.one": 1,
+    "fixtures.two": 2,
+    "fixtures.grouped": 3,
+    "fixtures.defaulted": 1,
+    "fixtures.variadic": 2,
+    "fixtures.no_values": 0,
+    "fixtures.pointer_value": 1,
+    "fixtures.reference_value": 1,
+    "fixtures.callback": 2,
+    "fixtures.name": 3,
+    "fixtures.initial": 3
+  },
+  "params/cpp/methods.cpp": {
+    "Store.Store": 0,
+    "Store.get": 1,
+    "Store.put": 2,
+    "Store.size": 0,
+    "Store.pair": 2,
+    "Store.scale": 3,
+    "Warehouse.Warehouse": 1,
+    "Warehouse.slots": 0,
+    "Store.extra": 1,
+    "fixtures.consume": 2,
+    "fixtures.total": 3
+  },
+  "params/cpp/templates.cpp": {
+    "fixtures.maximum": 2,
+    "fixtures.map_all": 3,
+    "fixtures.count_all": 1,
+    "Box.Box": 1,
+    "Box.get": 0,
+    "Box.set": 2,
+    "fixtures.both": 2
+  },
+  "params/csharp/Basics.cs": {
+    "Basics.Basics": 2,
+    "Basics.Zero": 0,
+    "Basics.One": 1,
+    "Basics.Two": 2,
+    "Basics.Defaulted": 2,
+    "Basics.Params": 2,
+    "Basics.StaticOne": 1,
+    "Basics.Generic": 1,
+    "Basics.Tuple": 1,
+    "Basics.Flags": 3,
+    "Basics.Describe": 3
+  },
+  "params/csharp/Generics.cs": {
+    "Generics.Identity": 1,
+    "Generics.Map": 2,
+    "Generics.Pair": 3,
+    "Generics.Count": 2,
+    "Generics.TryPick": 3,
+    "Generics.Consume": 4
+  },
+  "params/csharp/Methods.cs": {
+    "Extensions.Count": 1,
+    "Extensions.Join": 3,
+    "Store.Store": 0,
+    "Store.Get": 1,
+    "Store.Put": 2,
+    "Store.Pair": 2,
+    "Store.Merge": 3,
+    "Store.Scale": 3
+  },
+  "params/go/basics.go": {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "grouped": 3,
+    "unnamed": 2,
+    "variadic": 2,
+    "onlyVariadic": 1,
+    "pointers": 2,
+    "callback": 2,
+    "channels": 2,
+    "joined": 3,
+    "four": 4
+  },
+  "params/go/generics.go": {
+    "Identity": 1,
+    "Map": 2,
+    "Pair": 2,
+    "Zero": 0,
+    "Reduce": 3,
+    "Filtered": 3
+  },
+  "params/go/methods.go": {
+    "Get": 2,
+    "Put": 2,
+    "receiverOnly": 0,
+    "valueReceiver": 1,
+    "grouped": 3,
+    "NewStore": 1,
+    "OpenStore": 3,
+    "merge": 2,
+    "scale": 3
+  },
+  "params/java/Basics.java": {
+    "Basics.Basics": 2,
+    "Basics.zero": 0,
+    "Basics.one": 1,
+    "Basics.two": 2,
+    "Basics.varargs": 2,
+    "Basics.staticZero": 0,
+    "Basics.annotated": 1,
+    "Basics.generic": 1,
+    "Basics.genericPair": 2,
+    "Basics.annotatedTwo": 2
+  },
+  "params/java/Generics.java": {
+    "Generics.pair": 2,
+    "Generics.max": 2,
+    "Generics.wildcard": 1,
+    "Generics.nested": 2,
+    "Generics.apply": 2,
+    "Generics.arrays": 2
+  },
+  "params/java/Nested.java": {
+    "Inner.method": 2,
+    "Nested.outer": 1,
+    "Local.run": 1,
+    "Nested.run": 0,
+    "Handler.handle": 2
+  },
+  "params/java/Records.java": {
+    "Point.Point": 2,
+    "Point.sum": 0,
+    "Point.origin": 0,
+    "Point.shift": 2,
+    "Pair.Pair": 1,
+    "Pair.total": 0
+  },
+  "params/javascript/shapes.js": {
+    "noArgs": 0,
+    "one": 1,
+    "two": 2,
+    "defaults": 2,
+    "rest": 2,
+    "arrow": 3,
+    "arrowOne": 1,
+    "destructured": 1,
+    "arrayPattern": 1,
+    "nested": 0,
+    "inner": 2,
+    "annotatedish": 2,
+    "four": 4
+  },
+  "params/python/async_shapes.py": {
+    "fetch": 2,
+    "gather": 2,
+    "generate": 3,
+    "send": 1,
+    "pipeline": 1,
+    "configure": 1,
+    "mixed": 5,
+    "inner_await": 3
+  },
+  "params/python/methods.py": {
+    "Store.__init__": 2,
+    "Store.get": 2,
+    "Store.put": 3,
+    "Store.items": 1,
+    "Store.from_config": 2,
+    "Store.parse": 1,
+    "outer": 1,
+    "helper": 2,
+    "Widget.__init__": 4
+  },
+  "params/python/shapes.py": {
+    "no_args": 0,
+    "one": 1,
+    "two": 2,
+    "with_defaults": 3,
+    "varargs": 2,
+    "kwargs": 2,
+    "both": 3,
+    "keyword_only": 2,
+    "positional_only": 2,
+    "mixed": 6,
+    "annotated": 2,
+    "nested_default": 3
+  },
+  "params/python/typing_shapes.py": {
+    "convert": 2,
+    "merge": 3,
+    "pick": 2,
+    "callback": 3,
+    "positional": 4,
+    "defaults_in_tail": 4,
+    "star_only": 3,
+    "plain": 0,
+    "unpack": 2
+  },
+  "params/rust/basics.rs": {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "borrow": 1,
+    "generic": 1,
+    "slice": 1,
+    "tuple": 1,
+    "named": 3,
+    "fallback": 2
+  },
+  "params/rust/generics.rs": {
+    "identity": 1,
+    "pair": 2,
+    "mapped": 2,
+    "borrowed": 1,
+    "zero": 0,
+    "grouped": 3
+  },
+  "params/rust/methods.rs": {
+    "Store.new": 0,
+    "Store.shared": 0,
+    "Store.mutable": 1,
+    "Store.owned": 0,
+    "Store.pair": 2,
+    "Store.scale": 3,
+    "Load.load": 1,
+    "Loader.load": 1,
+    "Loader.extra": 2
+  },
+  "params/typescript/generics.ts": {
+    "pair": 2,
+    "constrained": 1,
+    "options": 2,
+    "callback": 2,
+    "union": 2,
+    "tuple": 1,
+    "defaultsMixed": 3
+  },
+  "params/typescript/methods.ts": {
+    "Store.constructor": 2,
+    "Store.get": 1,
+    "Store.put": 2,
+    "Store.items": 0,
+    "Store.fromConfig": 1,
+    "arrowOne": 1,
+    "arrowTwo": 2,
+    "arrowRest": 1,
+    "outer": 1,
+    "helper": 2
+  },
+  "params/typescript/shapes.ts": {
+    "noArgs": 0,
+    "one": 1,
+    "two": 2,
+    "withDefaults": 3,
+    "optional": 2,
+    "rest": 2,
+    "destructured": 1,
+    "arrayPattern": 1,
+    "generic": 1,
+    "annotated": 2,
+    "thisParam": 1,
+    "noTypeHints": 2
+  },
+  "params/typescript/tsx_shapes.tsx": {
+    "Badge": 1,
+    "List": 1,
+    "Wrapped": 1
+  }
+}

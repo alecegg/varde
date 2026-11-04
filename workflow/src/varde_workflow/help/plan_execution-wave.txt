@@ -1,0 +1,12 @@
+Select the next advisory execution wave without mutation
+
+Usage: varde plan execution-wave [OPTIONS] <PLAN_DIR>
+
+Arguments:
+  <PLAN_DIR>  
+
+Options:
+      --repo-root <REPO_ROOT>      
+      --max-workers <MAX_WORKERS>  Maximum parallel tasks (defaults to [orchestration] builders)
+      --json                       
+  -h, --help                       Print help

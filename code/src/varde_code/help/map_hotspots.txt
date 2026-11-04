@@ -1,0 +1,8 @@
+Query: risk hotspots ranked by complexity + churn. (see `hotspots` help for inputs)
+
+Usage: varde map hotspots [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, resultsLimit?, resultsOffset?, fullResults? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

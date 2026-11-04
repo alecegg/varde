@@ -1,0 +1,3 @@
+{
+  "wrap-in-class": "Java functions are already class methods; adding another class layer would change nesting and access semantics."
+}

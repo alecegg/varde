@@ -1,0 +1,10 @@
+{
+  "pair_id": "b71e4c9a2d580316af4e92c1",
+  "pair_group_id": "6c1f4a90d3b27e5814a2c6f8",
+  "left_id": "08f3a71cd94b2e5601fa83b7",
+  "right_id": "34d8b0c65e1f9a7240cb5d16",
+  "left": "excellent.cs",
+  "right": "poor.cs",
+  "left_role": "excellent",
+  "right_role": "poor"
+}

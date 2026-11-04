@@ -1,0 +1,12 @@
+Reply to a page comment
+
+Usage: varde learn docs reply [OPTIONS] --note <NOTE> <DOC> <COMMENT_ID>
+
+Arguments:
+  <DOC>         Markdown file whose comment log to append to
+  <COMMENT_ID>  Id of the comment to answer; an unknown id is an error
+
+Options:
+      --note <NOTE>  Reply text
+      --json         Print the shared JSON envelope instead of text
+  -h, --help         Print help

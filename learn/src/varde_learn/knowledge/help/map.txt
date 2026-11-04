@@ -1,0 +1,15 @@
+Generate deterministic root and type discovery maps
+
+Writes the root `index.md` and one `index.md` per Concept type in the bundle.
+
+Usage: varde learn knowledge map [OPTIONS]
+
+Options:
+      --bundle <BUNDLE>
+          Knowledge Bundle root directory (holds the Concept `.md` files). Defaults to the project's resolved `<knowledge>` directory (same resolution as `varde setup paths`) when omitted
+
+      --json
+          Machine-readable JSON output
+
+  -h, --help
+          Print help (see a summary with '-h')

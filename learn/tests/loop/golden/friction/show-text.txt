@@ -1,0 +1,10 @@
+1 golden [promoted] Golden (pytest)
+Target: docs/guide.md
+Tags: golden
+Repository: /repo
+Occurrences (0/2)
+- 1 at 2025-01-01T00:00:00.000Z: first evidence
+- 2 at 2025-01-01T00:00:06.000Z: again
+Status history (0/2)
+- 1 open -> resolved at 2025-01-01T00:00:02.000Z: fixed
+- 2 resolved -> promoted at 2025-01-01T00:00:03.000Z: Recorded adoption 1

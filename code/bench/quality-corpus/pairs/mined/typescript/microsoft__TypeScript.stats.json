@@ -1,0 +1,39 @@
+{
+  "accepted": 249,
+  "commits_walked": 39580,
+  "filters": {
+    "file_limit": {
+      "evaluated": 927,
+      "passed": 682
+    },
+    "function_limit": {
+      "evaluated": 458,
+      "passed": 274
+    },
+    "generated": {
+      "evaluated": 274,
+      "passed": 267
+    },
+    "intent": {
+      "evaluated": 31779,
+      "passed": 927
+    },
+    "parent": {
+      "evaluated": 39580,
+      "passed": 31779
+    },
+    "parse": {
+      "evaluated": 682,
+      "passed": 458
+    },
+    "public_feature": {
+      "evaluated": 267,
+      "passed": 249
+    }
+  },
+  "intent_matches": 927,
+  "language": "typescript",
+  "pin_sha": "2e9fb00f5f5c9186d09aabd78cced5ce2497456d",
+  "records_bytes": 237442,
+  "repository": "microsoft/TypeScript"
+}

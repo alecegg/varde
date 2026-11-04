@@ -1,0 +1,3 @@
+End the current mailman wait
+
+Usage: varde msg relay end --as <MAILMAN_TOKEN> [--now <TIMESTAMP>]

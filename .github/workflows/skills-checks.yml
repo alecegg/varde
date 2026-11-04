@@ -1,0 +1,48 @@
+name: Skills checks
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "core/**"
+      - "toz/**"
+      - "learn/**"
+      - "code/**"
+      - "workflow/**"
+      - "dev/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
+      - ".github/workflows/skills-checks.yml"
+  push:
+    paths:
+      - "app/**"
+      - "core/**"
+      - "toz/**"
+      - "learn/**"
+      - "code/**"
+      - "workflow/**"
+      - "dev/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "justfile"
+      - ".github/workflows/skills-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: 0.12.19
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - run: uv sync --locked --all-packages --all-groups
+      - run: just test-skills
+      - run: just test-agents

@@ -1,0 +1,11 @@
+Merge a plan branch into main once the user approved it
+
+Usage: varde plan merge <PLAN>
+
+Run from a checkout on main. Refuses when the user has no approval record for the plan.
+
+Arguments:
+  <PLAN>  Plan path or identifier
+
+Options:
+  -h, --help  Print help

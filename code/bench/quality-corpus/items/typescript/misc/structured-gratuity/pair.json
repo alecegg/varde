@@ -1,0 +1,11 @@
+{
+  "pair_id": "a630c40d7b3199e8ca7a6bd1",
+  "pair_group_id": "2c656820be1bb9c755aa8cbc",
+  "left_id": "c6aa79b64d1f8146b92d53a1",
+  "right_id": "3e5129baac69192ae7f21b9d",
+  "left": "good.ts",
+  "right": "bad.ts",
+  "left_role": "good",
+  "right_role": "bad",
+  "dominant_defect": "unclear-names"
+}

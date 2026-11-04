@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Merge a worktree's branch back into the target branch.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: worktree-merge.sh <id> [into]
+
+Merges worktree/<id> or Paseo's <id> branch into <into> (default: the branch
+currently checked out in this checkout). An explicit <into> must name that
+checked-out branch. Does NOT commit on the caller's behalf — the worktree must
+be clean. Merging into main or another target requires explicit user approval.
+
+Exit codes:
+  0  merged cleanly; clean task worktree and branch removed after merge to main
+  1  usage error
+  2  branch has no commits ahead of its base — nothing to merge
+  3  merge conflict — resolve via varde learn how varde-orchestrate integration, then finish the
+     merge manually; do NOT run worktree-cleanup.sh until it's resolved
+  4  target rejected: source branch is missing, <into> does not resolve, <into>
+     does not name the currently checked-out branch, or the merge failed for
+     a reason other than conflict
+  5  task worktree has uncommitted changes — the task did not complete;
+     or the current checkout has uncommitted changes; caller decides
+EOF
+}
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+  usage >&2
+  exit 1
+fi
+
+id="$1"
+git check-ref-format "refs/heads/${id}" >/dev/null 2>&1 || {
+  echo "error: invalid worktree id or branch '${id}'" >&2
+  exit 4
+}
+branch="worktree/${id}"
+plain_exists=false
+task_exists=false
+git show-ref --verify --quiet "refs/heads/${id}" && plain_exists=true
+git show-ref --verify --quiet "refs/heads/${branch}" && task_exists=true
+if [[ "$plain_exists" == true && "$task_exists" == true ]]; then
+  echo "error: both ${id} and ${branch} branches exist; refusing ambiguous merge" >&2
+  exit 4
+fi
+if [[ "$task_exists" != true ]]; then
+  branch="$id"
+fi
+into="${2:-$(git rev-parse --abbrev-ref HEAD)}"
+current_ref="$(git symbolic-ref --quiet HEAD 2>/dev/null || true)"
+target_branch="${current_ref#refs/heads/}"
+
+if [[ $# -eq 2 ]]; then
+  target_ref="$(git rev-parse --symbolic-full-name "${into}" 2>/dev/null || true)"
+  if [[ -z "${current_ref}" || ( "${into}" != "HEAD" && "${target_ref}" != "${current_ref}" ) ]]; then
+    echo "error: target ${into} is not the currently checked-out branch" >&2
+    exit 4
+  fi
+fi
+
+if [[ -n "$(git status --short)" ]]; then
+  echo "error: current checkout has uncommitted changes — commit or stash them before merging" >&2
+  exit 5
+fi
+
+source_ref="refs/heads/${branch}"
+worktree_path="$(git worktree list --porcelain | awk -v source_ref="$source_ref" '
+  $1 == "worktree" { path = substr($0, 10) }
+  $1 == "branch" && $2 == source_ref { print path; exit }
+')"
+
+git rev-parse --verify --quiet "${branch}^{commit}" >/dev/null || { echo "error: branch ${branch} does not exist" >&2; exit 4; }
+git rev-parse --verify --quiet "${into}^{commit}" >/dev/null || { echo "error: target ${into} does not resolve" >&2; exit 4; }
+if [[ -n "$worktree_path" && -d "$worktree_path" ]] && [[ -n "$(git -C "$worktree_path" status --porcelain)" ]]; then
+  echo "error: task worktree for ${branch} has uncommitted changes — the task did not complete" >&2
+  exit 5
+fi
+
+merge_base="$(git merge-base "${into}" "${branch}")"
+if [[ "$(git rev-parse "${branch}")" == "${merge_base}" ]]; then
+  echo "error: ${branch} has no commits ahead of ${into} — nothing to merge" >&2
+  exit 2
+fi
+
+if git merge --no-ff --no-edit "${branch}"; then
+  echo "merged ${branch} into ${into}"
+  # Keep task refs while folding into a plan branch; integration still needs
+  # them for verification and recovery. Clean after the final merge to main.
+  if [[ "$target_branch" == main ]]; then
+    "$SCRIPT_DIR/worktree-cleanup.sh" "$id"
+  fi
+  exit 0
+else
+  if ! git diff --name-only --diff-filter=U | grep . >/dev/null; then
+    echo "error: merge failed without conflicts" >&2
+    exit 4
+  fi
+  echo "conflict merging ${branch} into ${into} — see varde learn how varde-orchestrate integration" >&2
+  exit 3
+fi

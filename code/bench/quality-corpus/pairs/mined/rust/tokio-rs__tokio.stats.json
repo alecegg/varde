@@ -1,0 +1,39 @@
+{
+  "accepted": 11,
+  "commits_walked": 4804,
+  "filters": {
+    "file_limit": {
+      "evaluated": 88,
+      "passed": 56
+    },
+    "function_limit": {
+      "evaluated": 18,
+      "passed": 11
+    },
+    "generated": {
+      "evaluated": 11,
+      "passed": 11
+    },
+    "intent": {
+      "evaluated": 4613,
+      "passed": 88
+    },
+    "parent": {
+      "evaluated": 4804,
+      "passed": 4613
+    },
+    "parse": {
+      "evaluated": 56,
+      "passed": 18
+    },
+    "public_feature": {
+      "evaluated": 11,
+      "passed": 11
+    }
+  },
+  "intent_matches": 88,
+  "language": "rust",
+  "pin_sha": "cdd9dae3aa5056e23dc4d5bc4f852ab8fbf27aff",
+  "records_bytes": 12885,
+  "repository": "tokio-rs/tokio"
+}

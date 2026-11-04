@@ -1,0 +1,2 @@
+Merge overlapping and touching closed integer ranges into the shortest covering list.
+Input domain: ranges are two element arrays with a start not above the end, given in any order; touching ranges count as overlapping.

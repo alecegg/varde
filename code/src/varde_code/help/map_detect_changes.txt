@@ -1,0 +1,8 @@
+Query: symbols changed between git states. (see `detect_changes` help for inputs)
+
+Usage: varde map detect_changes [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot|dbPath, diffMode, range? }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

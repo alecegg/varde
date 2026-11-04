@@ -1,0 +1,2 @@
+Compute the remaining allowance after subtracting recorded expenses from a starting amount.
+Input domain: Starting amount and each expense are nonnegative integers; return starting amount minus the sum of expenses.

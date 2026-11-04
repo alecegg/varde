@@ -1,0 +1,9 @@
+# varde-generated-agent: workflow/src/varde_workflow/agents/capabilities.json
+name = "readability"
+description = "Review code for clear names, control flow, and maintainable structure."
+model = "gpt-6-luna"
+model_reasoning_effort = "medium"
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Use varde-review report and the varde-review skill to focus on this review lane: Review code for clear names, control flow, and maintainable structure. State what could not be verified; never imply unverified work passed.
+"""

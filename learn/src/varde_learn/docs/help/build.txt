@@ -1,0 +1,13 @@
+Export a markdown file as one self-contained HTML file with no script
+
+Usage: varde learn docs build --out <FILE> <DOC>
+
+Arguments:
+  <DOC>  Markdown file to export
+
+Options:
+      --out <FILE>  Path of the HTML file to write
+  -h, --help        Print help
+
+The CSS is inline. Input widgets are read-only; they show the question and choices,
+and nothing is collected offline. Comments are not included.

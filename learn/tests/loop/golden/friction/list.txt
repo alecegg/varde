@@ -1,0 +1,1 @@
+{"data":{"items":[{"created_at":"2025-01-01T00:00:00.000Z","id":1,"repo_root":"/repo","slug":"golden","source":"pytest","status":"open","tags":["golden"],"target":"docs/guide.md","title":"Golden"}]},"envelope_version":1,"meta":{"limit":100,"next_offset":null,"offset":0,"total":1,"truncated":false},"ok":true,"outcome":"success","schema_version":1}

@@ -1,0 +1,2 @@
+Convert a duration written with hour and minute parts, such as 1h30m, into whole minutes.
+Input domain: lowercase strings of the form [<hours>h][<minutes>m] with one or both parts present; empty text means zero minutes.

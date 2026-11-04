@@ -1,0 +1,12 @@
+[
+  {"query": "I just hit an obstacle: the focused check failed because a fixture path was missing and cost me a rerun. Log it as friction.", "should_trigger": true},
+  {"query": "Friction item 42 says the upload timeout is still a problem, but the retry fix landed last week. Reconcile it against the current check.", "should_trigger": true},
+  {"query": "We adopted the checkout-retry improvement last month. Has that friction recurred since?", "should_trigger": true},
+  {"query": "Record a friction item: the sandbox blocked writes to the worktree three times today.", "should_trigger": true},
+  {"query": "Mark friction item 17 as resolved now that the named command passes.", "should_trigger": true},
+  {"query": "Look over yesterday's session transcript and tell me where the agent wasted the most time.", "should_trigger": false},
+  {"query": "Run a multi-session retrospective over the last week of repository sessions.", "should_trigger": false},
+  {"query": "Review the recurring friction and propose a small improvement to the build skill.", "should_trigger": false},
+  {"query": "Write a knowledge note recording our decision to use OCC for bundle writes.", "should_trigger": false},
+  {"query": "Create a trigger query set for the varde-plan description.", "should_trigger": false}
+]

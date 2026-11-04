@@ -1,0 +1,76 @@
+version = 1
+max_no_progress_restarts = 3
+startup_timeout_s = 30
+startup_kill_timeout_s = 300
+stall_after_s = 600
+
+[runner]
+require_user_pairing = false
+
+[limits]
+max_live_instances = 8
+
+[claude_cli]
+enabled = true
+
+[codex_app_server]
+enabled = true
+
+[pi_rpc]
+enabled = true
+
+[pi_durable]
+enabled = false
+provider = "anthropic"
+model = "anthropic/claude-sonnet-4-5"
+key_env = "ANTHROPIC_API_KEY"
+
+[opencode_http]
+enabled = true
+
+[types.standard]
+harness = "claude-cli"
+model = "claude-sonnet-5-5"
+reasoning_effort = "medium"
+
+[[types.standard.fallback]]
+harness = "opencode-http"
+model = "opencode-go/deepseek-v4.1-flash"
+reasoning_effort = "high"
+
+[types.heavy]
+harness = "claude-cli"
+model = "claude-sonnet-5-5"
+reasoning_effort = "high"
+
+[[types.heavy.fallback]]
+harness = "opencode-http"
+model = "opencode-go/deepseek-v4.1-flash"
+reasoning_effort = "high"
+
+[roles.orchestrator]
+type = "standard"
+
+[roles.planner]
+type = "standard"
+
+[roles.builder]
+type = "light"
+
+[roles.explorer]
+type = "light"
+
+[roles.reviewer]
+type = "standard"
+
+[roles.judge]
+type = "standard"
+
+[roles.guard]
+type = "light"
+enabled = false
+
+[policy]
+never_models = ["*-sol"]
+allow_fallback_only_on = ["provider_limit"]
+create_paseo_projects = false

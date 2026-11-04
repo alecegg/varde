@@ -1,0 +1,4 @@
+{
+  "output": "Set owner for <TMP>/working/plans/group/nested/plan.md.\n",
+  "bytes": "---\ntype: plan\nid: nested\ntitle: Nested\nstatus: active\nowner: codex:agent-1\n---\n"
+}

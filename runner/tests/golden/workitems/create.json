@@ -1,0 +1,52 @@
+[
+  {
+    "returned": {
+      "id": "golden-01",
+      "idempotency_key": "create-key",
+      "text": "A deterministic request",
+      "project": "workspace",
+      "state": "new",
+      "notes_path": "<DATA>/workitem-notes/golden-01/request.md",
+      "planner_session": null,
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 1,
+        "item_id": "golden-01",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      }
+    ]
+  },
+  {
+    "returned": {
+      "id": "golden-01",
+      "idempotency_key": "create-key",
+      "text": "A deterministic request",
+      "project": "workspace",
+      "state": "new",
+      "notes_path": "<DATA>/workitem-notes/golden-01/request.md",
+      "planner_session": null,
+      "plan_path": null,
+      "plan_ready_id": null,
+      "launch_request_id": null,
+      "launch_request_notes": null
+    },
+    "questions": [],
+    "audit": [
+      {
+        "seq": 1,
+        "item_id": "golden-01",
+        "prior_state": null,
+        "new_state": "new",
+        "detail": "submitted"
+      }
+    ]
+  }
+]

@@ -1,0 +1,16 @@
+Inspect one local session or page a frozen evidence bundle
+
+Usage: varde learn sessions show [SESSION] [OPTIONS]
+
+Options:
+      --harness <HARNESS>              Native session format to inspect [possible values: codex, claude, opencode]
+      --current                        Inspect the verified session identified by the harness environment
+      --session <SESSION>              Canonical harness session/thread ID
+      --path <PATH>                    Explicit native transcript file
+      --snapshot-in <SNAPSHOT_IN>      Page a frozen normalized evidence bundle without reading live sources
+      --snapshot-out <SNAPSHOT_OUT>    Create a bounded normalized evidence bundle without overwriting an existing path
+      --cutoff-anchor <CUTOFF_ANCHOR>  JSON file identifying a verified pre-orchestration source record
+      --offset <OFFSET>                Number of normalized evidence records to skip [default: 0]
+      --limit <LIMIT>                  Maximum evidence records to return (1 to 1000) [default: 100]
+      --json                           Print the shared machine-readable output envelope
+  -h, --help                           Print help

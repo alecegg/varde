@@ -1,0 +1,8 @@
+Query: test files covering a given file. (see `tests_for_file` help for inputs)
+
+Usage: varde map tests_for_file [OPTIONS] --json <JSON>
+
+Options:
+      --json <JSON>  JSON object: { repoRoot, dbPath?, filePath }
+  -v, --verbose      Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help         Print help

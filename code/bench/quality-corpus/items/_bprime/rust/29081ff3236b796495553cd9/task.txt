@@ -1,0 +1,2 @@
+Capitalise the first character of every space separated word and lower the remaining characters.
+Input domain: words separated by single spaces; empty words from repeated separators stay empty, and non-ASCII first characters uppercase by the standard rule.

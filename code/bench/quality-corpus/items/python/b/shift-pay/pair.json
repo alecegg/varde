@@ -1,0 +1,82 @@
+{
+  "pair_group_id": "bf71353531753d679da2ae49",
+  "task": "shift-pay",
+  "language": "python",
+  "pairs": [
+    {
+      "pair_id": "e2c9e9691382f1ddd10711f1",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "8c00eb1e5bf6c910d97f2193",
+      "left": "sensible.py",
+      "right": "monolith.py",
+      "left_role": "sensible",
+      "right_role": "over-monolith"
+    },
+    {
+      "pair_id": "c298063b15daa42c4f52da9c",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "7a1a52db6eda1f0c67bdb479",
+      "left": "sensible.py",
+      "right": "tiny.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "fa0462d7547ed58aee0c1e45",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "b2ec148743d84e8357efc1cc",
+      "left": "sensible.py",
+      "right": "padded.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "88a133df011b6684e3ff5704",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "c9eeba0e66c1058e30a5e171",
+      "left": "sensible.py",
+      "right": "sizematched.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "ca94da5db819e42a7c4b677b",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "2752ace1d85a376a699a2984",
+      "left": "sensible.py",
+      "right": "namematched.py",
+      "left_role": "sensible",
+      "right_role": "over-split"
+    },
+    {
+      "pair_id": "a6581ac02a92f20bd0a0f76ba76a7bd0",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "c0fa15cee56a22c8eae51022c4b50fe2",
+      "left": "sensible.py",
+      "right": "alt-pipeline.py",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "c9e77da274b8ca02a1eb7fea105447c4",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "912c9f7f3cf8cf9f305b83cb672ff67c",
+      "left": "sensible.py",
+      "right": "alt-table.py",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    },
+    {
+      "pair_id": "c8a2bd1c4651bca472b4e19a93c500fa",
+      "left_id": "7a173da86c45262d5c097a98",
+      "right_id": "99d92d76c4559259130ec16062c299ee",
+      "left": "sensible.py",
+      "right": "alt-class.py",
+      "left_role": "sensible",
+      "right_role": "alt-good",
+      "preference_neutral": true
+    }
+  ]
+}

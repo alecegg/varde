@@ -1,0 +1,21 @@
+Report each skill's slim baseline, gap fills and drift against MANIFEST.json
+
+Usage: varde learn measure <SKILL> baseline [OPTIONS] --baselines <DIR>
+
+Arguments:
+  <SKILL>  Skill to report on
+
+Options:
+      --baselines <DIR>  Directory holding MANIFEST.json and changelog.jsonl (or one <gen>/ subdirectory of each); required
+      --repo <DIR>       Git checkout for tag and commit reads [default: .]
+      --source <DIR>     Read skills and how topics from this checkout (<module>/src/<pkg>/skills and how) instead of installed providers; also the git checkout
+      --check            Exit 1 when any skill drifts or its tree hash differs from the baseline
+      --record           Write a baseline entry for <SKILL> from --source: files, how topics, tree_hash, slim/ copy; adds topics SKILL.md does not point at to <SOURCE>/core/how-unpointed.txt when that dir exists
+      --gen <GEN>        Generation to record (with --record)
+      --tag <TAG>        Git tag to record [default: skills-nohow-<SKILL>]
+      --commit <SHA>     Commit to record [default: HEAD of --source]
+      --provisional      Mark the recorded entry provisional
+      --json             Print the shared JSON envelope instead of text
+  -h, --help             Print help
+
+Drift is set when a skill file or how topic differs from the newest baseline entry and no active fill in changelog.jsonl names that file or step with a commit that touches it. Read-only except --record. Text and JSON report tree_hash_match: whether the current skill tree (SKILL.md, references, assets, step_tools, how/) hashes to the entry's tree_hash, so a reset is verified in one command.

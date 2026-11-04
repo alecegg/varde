@@ -1,0 +1,65 @@
+{
+  "skill_name": "varde-review-ui",
+  "evals": [
+    {
+      "id": 7,
+      "prompt": "Run visual QA on https://example.test/app and report any visible layout defects. Playwright MCP is available; the page has a desktop card overlap and a clipped narrow-viewport button.",
+      "expected_output": "Navigates and inspects actual screenshots at desktop and narrow sizes, saves images in a standard review folder, and writes distinct VISUAL findings with required fields and screenshot locations. It makes no fixes.",
+      "assertions": [
+        "Opens the URL and uses Playwright MCP navigation, snapshot, resize, and screenshot tools",
+        "Creates a standard review folder with saved images and VISUAL findings in the review format",
+        "Makes no source edits"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Run visual QA on this iOS .app bundle and its supplied deep link. xcrun simctl is installed, but no simulator tap CLI exists. The first simctl call fails because CoreSimulatorService is blocked by the sandbox.",
+      "expected_output": "Reads the app bundle identifier, retries the same failed simctl command once with escalated access, and, if access succeeds, selects/boots a simulator, waits for bootstatus, installs and launches the app, opens the supplied deep link, and saves/inspects screenshots. It does not invent a simctl tap command. If access still fails it stops and names CoreSimulatorService and /sandbox; gesture-only coverage is reported unavailable.",
+      "assertions": [
+        "Uses verified simctl boot/bootstatus/install/launch/openurl/io screenshot syntax and no imaginary tap command",
+        "Retries the same sandbox-denied command once with escalation and names CoreSimulatorService and /sandbox if it remains blocked",
+        "Reports untested gesture paths explicitly without claiming a live visual pass"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Run visual QA on the running macOS app named Notes. A visible window is present and screencapture is installed, but no window ID or UI control tool is available.",
+      "expected_output": "Uses screencapture interactive window selection for the named visible app window, inspects and saves the image in a standard review folder, and writes any observed visual findings in the normal format. It names interaction limits because no verified UI control tool exists; if Screen Recording permission denies capture it stops and names that permission.",
+      "assertions": [
+        "Does not treat the app name as a numeric screencapture window ID",
+        "Uses screencapture -i -w when a numeric window ID is unavailable",
+        "Does not claim interaction coverage without a verified control tool or report a screenshot that could not be captured"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Run visual QA on this project. No URL, run command, iOS bundle, bundle identifier, or running macOS app was supplied.",
+      "expected_output": "Asks the user for one target and stops before creating a review or guessing how to start the app.",
+      "assertions": [
+        "Requests a URL, run command, app bundle/identifier, or running app name",
+        "Does not guess a target from repository files or create an empty review"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "Run visual QA on https://example.test/app. CUA browser tools are available, but no Playwright MCP tools exist. The documented CUA API supports navigation, page inspection, interaction, and inspectable screenshots that can be saved in the review folder. No viewport resize operation is available. Review only; do not fix.",
+      "expected_output": "Reads the selected CUA tool documentation and reviews reachable states at the current viewport. Saves and inspects screenshots in a standard review folder and writes observed findings. Does not stop for missing Playwright tool names, invent APIs, resize the viewport through an unsupported operation, or claim narrow-screen coverage. Reports responsive coverage untested and actual viewport or unknown. No source fixes.",
+      "assertions": [
+        "Uses documented available CUA capabilities despite absent Playwright tool names",
+        "Saves and inspects actual screenshots before writing visual findings",
+        "Reports responsive coverage untested because resizing is unavailable rather than refusing all visual review",
+        "Preserves report-only scope and records actual viewport or unknown without inventing APIs"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Run visual QA on https://example.test/app. Browser navigation and DOM inspection are available, but no screenshot capability can provide an image that can be inspected and saved in the review folder.",
+      "expected_output": "Names the missing inspectable, persistable screenshot capability and stops before creating a review. Does not treat DOM inspection or successful navigation as visual evidence, invent a capture API, or claim visual findings.",
+      "assertions": [
+        "Stops before creating a review because essential inspectable and persistable screenshot evidence is unavailable",
+        "Names the missing capability rather than declaring a particular provider unavailable",
+        "Does not substitute DOM inspection for actual image evidence or invent capture APIs"
+      ]
+    }
+  ]
+}

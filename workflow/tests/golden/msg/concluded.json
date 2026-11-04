@@ -1,0 +1,9 @@
+{
+  "classification": "intentional-change",
+  "current_location": {
+    ".cache/inbox/relay/state.json": ""
+  },
+  "design_location": {
+    ".cache/inbox/state.json": "{\"concluded_addresses\":[\"finished-plan\"]}"
+  }
+}

@@ -1,0 +1,1 @@
+{"data":{"error":{"code":"store_item_not_found","message":"friction item `missing` was not found"}},"envelope_version":1,"meta":{"truncated":false},"ok":false,"outcome":"tool-error","schema_version":1}

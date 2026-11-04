@@ -1,0 +1,3 @@
+# tiny
+
+Committed code fixture.

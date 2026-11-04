@@ -1,0 +1,13 @@
+Validate an agent handoff without changing it
+
+Usage: varde plan handoff-check [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>  Handoff Markdown file
+
+Options:
+      --root <DIR>  Resolve Reading list paths from this directory (default: current directory)
+      --json        Print the validation result as JSON
+  -h, --help        Print help
+
+Checks the nine sections, their order and size limits. Missing paths in the Reading list are warnings. Candidate lines use `- [global|project|role] text — why`; untagged candidates use `project`.

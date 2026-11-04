@@ -1,0 +1,25 @@
+Map a git diff to a plan's tasks and blocks and flag drift
+
+Usage: varde learn docs recap [OPTIONS] --base <BASE> <PLAN>
+
+Arguments:
+  <PLAN>  Plan markdown file; task files are read from tasks/*.md beside it
+
+Options:
+      --base <BASE>  Git ref to diff from (run in the repository to diff)
+      --head <HEAD>  Git ref to diff to (default HEAD)
+      --json         Print the recap as JSON
+  -h, --help         Print help
+
+Each changed file maps to the tasks whose `owns` entries match it (renames map both
+paths), else to the plan's `shared:` list. An entry ending in `/` or a bare path
+without glob characters owns that path and everything below it; other entries are
+globs where `*` stays in a segment and `**` crosses segments. A task links to a block
+through `blocks: [id]` in its task file or a block `covers = ["<task id>"]` (the task
+file name or its leading token, such as t6a). No model is called; output is sorted.
+
+Drift: `unplanned` (changed file with no task or shared match), `untouched` (owned
+path with no change), `unverified` (typed block with no changed file). Rows carry
+added and removed line ranges and size-capped zero-context hunk text.
+
+To write the recap as a page, follow the recipe in `varde learn docs blocks --help`.

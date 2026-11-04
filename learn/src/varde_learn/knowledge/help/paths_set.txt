@@ -1,0 +1,14 @@
+Record working, knowledge, toz, and/or global learn directories
+
+Usage: varde setup paths set [OPTIONS]
+
+Options:
+      --working <WORKING>      Directory for working memory (plans, session notes, reviews)
+      --knowledge <KNOWLEDGE>  Directory for knowledge memory (durable notes, specs, contracts)
+      --toz <TOZ>              Directory for the toz output-capture store
+      --learn <LEARN>          Global friction store directory (always writes `[default]`)
+      --memory <MEMORY>        Scoped memory store directory (always writes `[default]`; use a subdirectory such as `agent-memory/memory`)
+      --default                Apply to every project (`[default]`) instead of one project root
+      --project <PROJECT>      Project root the setting applies to (default: git worktree root, then configured project, else cwd)
+      --json                   
+  -h, --help                   Print help

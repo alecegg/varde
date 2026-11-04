@@ -1,0 +1,10 @@
+Extract, resolve, and persist a repo's index so the query subcommands (symbols_in_file, find_pattern's DB-backed peers, etc.) can read it. Run on the main checkout, on demand; worktrees have no index. Writes to `<varde config root>/code/repos/<name>-<hash>/index.db` (default: `~/.config/varde/code/repos/<name>-<hash>/index.db`)
+
+Usage: varde map build [OPTIONS] --repo-root <REPO_ROOT>
+
+Options:
+      --repo-root <REPO_ROOT>  Path to the repo root to index
+      --force                  Skip incremental detection and force a full rebuild
+      --changed-files          Include the full list of reparsed file paths in the JSON result. Off by default: the result carries `changedFilesCount` and a small `changedFilesSample` instead, so a large rebuild doesn't dump hundreds of paths an agent rarely needs inline
+  -v, --verbose                Enable verbose logging (only applies when RUST_LOG is unset)
+  -h, --help                   Print help

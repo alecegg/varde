@@ -1,0 +1,24 @@
+[project]
+name = "varde-learn"
+version = "0.1.0"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = ["varde-core", "varde-data", "PyYAML>=6,<7", "tomlkit>=0.13,<1"] # PyYAML: import task reads Markdown frontmatter; tomlkit: comment-preserving config.toml editing
+
+[project.entry-points."varde.skills"]
+learn = "varde_learn"
+
+[project.entry-points."varde.modules"]
+learn = "varde_learn.module:register"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+wheel-exclude = ["**/evals", "**/evals/**", "**/*-workspace/**"]
+source-exclude = ["**/evals/**"]
+module-name = "varde_learn"
+
+[dependency-groups]
+dev = ["playwright>=1.50,<2"]

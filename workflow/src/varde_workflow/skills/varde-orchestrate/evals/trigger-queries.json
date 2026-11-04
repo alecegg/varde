@@ -1,0 +1,12 @@
+[
+  {"query": "Build the existing 2026-09-20-retry-policy plan, which already has settled scope and tasks.", "should_trigger": true},
+  {"query": "Run the approved notifications plan end to end, dispatching its tasks and reviewing the result.", "should_trigger": true},
+  {"query": "Resume the plan from yesterday and keep building out the remaining tasks.", "should_trigger": true},
+  {"query": "Coordinate the builders on this approved six-task plan and finish it.", "should_trigger": true},
+  {"query": "Execute the tasks in 2026-10-06-parallel-wave in waves and then show me the finish choice.", "should_trigger": true},
+  {"query": "Implement this one task from the plan file.", "should_trigger": false},
+  {"query": "Define scope and acceptance criteria for adding rate limiting to the API.", "should_trigger": false},
+  {"query": "Run these four related plans in parallel with one orchestrator each as a swarm.", "should_trigger": false},
+  {"query": "Verify the finished plan against its criteria without changing anything.", "should_trigger": false},
+  {"query": "Fix the small typo in the retry policy docs.", "should_trigger": false}
+]

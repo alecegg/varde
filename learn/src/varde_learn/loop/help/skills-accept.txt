@@ -1,0 +1,10 @@
+Apply the stored diff of a proposal after checking the pre-image hashes.
+
+Usage: varde learn skills accept <ID> [OPTIONS]
+
+Options:
+      --root <DIR>  Write repo skill sources: DIR is a package root holding skills/<skill> and how/<skill> (repeatable). Paths outside the roots are refused. Without it only synced installed skills are written
+      --json        Print machine-readable output
+  -h, --help        Print help
+
+A baseline-restore proposal (`skills reset --to-baseline`) is checked after writing: the skill tree must hash to the baseline tree_hash, else the files are restored and nothing is applied. For an installed skill the sidecar loop-hash then takes that hash, also when the skill had hand edits. Otherwise a skill with hand edits keeps its sidecar and is listed as `hand-edited, loop-hash not recorded`.
