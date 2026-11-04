@@ -129,8 +129,7 @@ read access to that location.
 
 Sandboxed clients that call the workspace API need loopback HTTP access to the
 runner. They do not need access to `~/.paseo/worktrees` for native workspaces;
-the existing Paseo grant remains for Paseo-managed workers until that
-integration is removed.
+the Paseo grant applies only if you use the optional Paseo backend.
 
 ## Pi Durable real-provider smoke
 
@@ -403,7 +402,7 @@ for 64 or more files). Under the Claude sandbox the pool cannot be created
 output is identical; the build is about 3 to 4 times slower. No permission
 change is needed. Run unsandboxed to measure parallel timings.
 
-The `varde-runner` Paseo adapter starts a Node sidecar and connects to it over a
+The optional `varde-runner` Paseo adapter (not required by Varde) starts a Node sidecar and connects to it over a
 Unix domain socket. Its client then connects to the Paseo daemon over loopback
 WebSocket (default `127.0.0.1:6767`). Permit Unix socket creation and loopback
 connections for runner adapter checks. Integration tests must set `PASEO_HOME`
@@ -480,7 +479,7 @@ stored under
 
 ### Paseo sidecar dependencies
 
-Before running Paseo adapter checks, install the sidecar's pinned Node
+Only if you use the optional Paseo adapter, install the sidecar's pinned Node
 dependencies from the repository root with
 `npm ci --ignore-scripts --prefix runner/sidecar`.
 The dashboard UI also installs its pinned dependencies with
