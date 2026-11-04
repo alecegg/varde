@@ -67,7 +67,7 @@ unified store; `search` without `--text`, `map` and `lint` still read the bundle
 ## Set up and migrate
 
 1. Point the memory root at a subdirectory, never the repository top:
-   `varde setup paths set --memory <agent-memory>/memory`. Check with
+   `varde setup paths set --memory <memory-dir>/memory`. Check with
    `varde setup paths --json`. This command writes the user config; run it yourself.
 2. Entries already under `<data>/varde/memory` are not moved by step 1. Move them by
    hand into the new root, or they vanish from the pointer.

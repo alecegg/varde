@@ -744,7 +744,7 @@ Live updates refresh only the blocks whose content hash changed.
 (`--skip-serve` skips it; the PEX excludes `varde-serve`), runs `uv tool install` with `UV_TOOL_DIR` and
 `UV_TOOL_BIN_DIR` set to the release directory, and runs
 `uv run --project runner varde-runner service stop|start` to stop and start
-the LaunchAgent. Run it from `/Users/alec/source/varde`: a
+the LaunchAgent. Run it from the main checkout: a
 hook blocks `uv tool install` from linked worktrees. Inside the sandbox,
 `uv` needs network or `--offline`, and the release and link paths need write
 access. The sandbox write allowlist includes `~/.local/share/varde` and

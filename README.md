@@ -6,56 +6,50 @@ This repository is a Python workspace of twelve modules. See [AGENTS.md](AGENTS.
 
 ## Install from a release
 
-Python 3.14 or newer must be on your `PATH`.
+- Built for: macOS arm64 (wheels are `macosx_11_0_arm64`).
+- Needs: CPython 3.14 or newer on your `PATH`.
+- Other platforms: build your own with `uv run --locked python app/pex/build.py <dir>`.
 
 1. Download `varde.pex` from the [latest release](https://github.com/alecegg/varde/releases/latest).
-2. Make it executable and check the version:
+2. Make it executable and put it on your `PATH` as `varde`:
 
-```sh
-chmod +x varde.pex
-./varde.pex --version
-```
+   ```sh
+   chmod +x varde.pex
+   mv varde.pex ~/.local/bin/varde
+   ```
 
-This prints `varde 1.0.0`. Put the file on your `PATH` as `varde` to use it everywhere. The PEX does not include `varde-serve`; install from a checkout to get it.
+3. Check the version; it prints `varde 1.0.0`:
+
+   ```sh
+   varde --version
+   ```
+
+The PEX does not include `varde-serve`; install from a checkout to get it.
 
 ## Install from a checkout
 
-The project pins Python 3.14.7 (`.python-version`) and uv 0.12.19 (`pyproject.toml`). Run this from the main checkout, not a linked worktree:
+Requires uv 0.12.19 (pinned in `pyproject.toml`); the project pins Python 3.14.7 (`.python-version`). Run this from the main checkout, not a linked worktree:
 
 ```sh
 python3 runner/deploy/deploy.py
 ```
 
-It installs the CLI and `varde-serve`, swaps them in atomically, and restarts the runner. Do not run `uv tool install --force` on a live install, because `varde` is missing while it runs. See [runner/deploy/README.md](runner/deploy/README.md).
+It installs the CLI and `varde-serve`, swaps them in atomically, and restarts the runner (`--skip-runner` skips the restart). Do not run `uv tool install --force` on a live install, because `varde` is missing while it runs. See [runner/deploy/README.md](runner/deploy/README.md).
 
 ## First commands
 
 ```sh
-varde --version          # varde 1.0.0
-varde setup sync --dry-run   # preview the skills and agents it would install
-varde setup sync         # install them for the detected harnesses
-varde --help             # list command groups
+varde --version              # varde 1.0.0
+varde setup sync --dry-run   # preview what it would install
+varde setup sync             # install for the detected harnesses
 ```
 
-Main command groups:
+`varde setup sync`:
 
-- `map`, `scan`, `edit`: code index, rule scans, AST edits.
-- `plan`, `run`, `msg`: plans and reviews, output capture, agent messages.
-- `learn`, `design`, `setup`: learning loop, design checks, install.
-- `runner`, `serve`: runner switch, local daemon.
+- Links skills and agents into each detected harness's directories (default link mode: symlink).
+- In a git main checkout, also adds a managed pointer block to `AGENTS.md` and builds repo-map packs (`--no-packs` skips the packs).
 
-Run `varde <group> --help` for each.
-
-## Modules
-
-| Module | Purpose |
-| --- | --- |
-| `core`, `data` | Shared files, storage contracts, config and locking |
-| `toz`, `code` | Command-output capture; code index, scans and edits |
-| `learn` | Sessions, friction, knowledge and docs upkeep |
-| `workflow` | Plans, builds, reviews and orchestration |
-| `design`, `visualize`, `dev` | Design checks, charts and pages, prototyping |
-| `app`, `runner`, `serve` | The `varde` CLI, the agent runner, the local daemon and API |
+See `varde --help` for the command groups and [AGENTS.md](AGENTS.md) for the module table and layer rules.
 
 ## Development
 
@@ -65,10 +59,9 @@ Run commands from the repository root.
 just test-fast           # non-slow tests for every module
 just test-changed        # changed modules and the modules above them
 just test-baseline       # every test, including slow ones
-VARDE_TEST_JOBS=1 just test-baseline   # reliable full run
 ```
 
-Use `VARDE_TEST_JOBS=1` for a full run, because concurrent modules make the Chromium page tests flaky.
+`VARDE_TEST_JOBS=1 just test-baseline` runs the modules in sequence.
 
 - `uv run pytest <module>/tests` runs one module.
 - `just hooks` installs the git hooks.
