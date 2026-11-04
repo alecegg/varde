@@ -66,3 +66,7 @@ just test-baseline       # every test, including slow ones
 - `uv run pytest <module>/tests` runs one module.
 - `just hooks` installs the git hooks.
 - [AGENTS.md](AGENTS.md) lists every check.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
