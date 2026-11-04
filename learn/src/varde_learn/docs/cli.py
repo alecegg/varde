@@ -282,7 +282,7 @@ def run(argv: list[str], io: object | None = None) -> int:
         return 0
     command = args.pop(0)
     if command in {"--version", "-V"}:
-        print("varde learn docs 1.0.0")
+        print("varde learn docs 1.0.1")
         return 0
     if command in {"-h", "--help"}:
         print(help_text("doc"), end="")

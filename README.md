@@ -18,7 +18,7 @@ This repository is a Python workspace of twelve modules. See [AGENTS.md](AGENTS.
    mv varde.pex ~/.local/bin/varde
    ```
 
-3. Check the version; it prints `varde 1.0.0`:
+3. Check the version; it prints `varde 1.0.1`:
 
    ```sh
    varde --version
@@ -39,7 +39,7 @@ It installs the CLI and `varde-serve`, swaps them in atomically, and restarts th
 ## First commands
 
 ```sh
-varde --version              # varde 1.0.0
+varde --version              # varde 1.0.1
 varde setup sync --dry-run   # preview what it would install
 varde setup sync             # install for the detected harnesses
 ```

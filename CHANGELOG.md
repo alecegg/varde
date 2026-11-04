@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- README and docs refreshed for the public release.
+- MIT LICENSE added.
+- Baseline and release tooling unchanged.
+
 ## 1.0.0
 
 First release of the rewritten project. It replaces the earlier 1.x and 2.x releases, which were removed; the entries below record the history that led here.
